@@ -15,7 +15,7 @@ Current progression:
 
 I handwrote majorities of the code with *some* support of ai, mostly on writing unit tests and documentations.
 
-I'm still learning `pyo3` hence I leaned to AI a bit on part of the codes that I am not sure how to do yet, namely `QuestionProxy`, `ResponseProxy`, and `ChoiceProxy` on the rust side (`survey.rs`). These three structs are mainly used for providing a temporary view/write access to python's `__getattr__`, `__setattr__`, `__getitem__` and `__setitem__`, they aren't really getting used in the main stuff.
+I'm still learning `pyo3` hence I leaned to AI a bit on part of the codes that I am not sure how to do yet, namely `QuestionProxy`, `ResponseProxy`, and `ChoiceProxy` on the rust side (`survey.rs`). These three structs are mainly used for providing a temporary view/write access to python's `__getattr__`, `__setattr__`, `__getitem__` and `__setitem__`, they aren't really getting used in the main stuff. Also, `build.rs` is generated, the entire file is there just so that i can run `cargo test`. I've no idea why it didn't allow me to run `cargo test`, don't know how to fix it my self, so asked ai for help.
 
 ## Python
 

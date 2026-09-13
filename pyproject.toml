@@ -5,6 +5,7 @@ build-backend = "maturin"
 [tool.maturin]
 python-source = "python"
 module-name = "triple_s._triple_s"
+features = ["extension-module"]
 
 [project]
 name = "triple_s"
