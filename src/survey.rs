@@ -696,6 +696,44 @@ impl Response {
             Self::Multiple { .. } => "Multiple",
         }
     }
+
+    pub fn sss_classic_type_name(&self) -> String {
+        let type_str = self.type_name().to_uppercase();
+        format!("T {}", type_str)
+    }
+
+    pub fn sss_classic_response_value(&self) -> String {
+        match self {
+            Self::Single { item } => {
+                let content = item.iter().map(|(_, value)| value.to_sss_clasic())
+                .collect::<Vec<String>>()
+                .join("\n");
+            
+                ["VALUES".to_string(), content, "END VALUES".to_string()].join("\n")
+            }
+            Self::Multiple { item, spread } => {
+                let content = item.iter().map(|(_, value)| value.to_sss_clasic())
+                .collect::<Vec<String>>()
+                .join("\n");
+                let spread = spread.to_sss_clasic();
+                [spread, "VALUES".to_string(), content, "END VALUES".to_string()].join("\n")
+            }
+            Self::Character(length) => {
+                format!("SIZE {}", length)
+            }
+            Self::Quantity { min, max } => {
+                [
+                    "VALUES".to_string(), 
+                    format!("{} TO {}", min, max), 
+                    "END VALUES".to_string()
+                ].join("\n")
+            }
+            // other response types are not in native SSS survey, but very commonly used by
+            // places that implements their own variations of sss file.
+            // hence we don't convert these.
+            _ => "".into()
+        }
+    }
 }
 
 #[pymethods]
@@ -778,6 +816,10 @@ impl Choice {
             label: label.into(),
             filter: filter.map(|val| val.into()),
         }
+    }
+
+    pub fn to_sss_clasic(&self) -> String {
+        format!(r#"{} "{}""#, &self.code, &self.label.replace(r#"""#, r#"{"}"#))
     }
 }
 
@@ -877,6 +919,10 @@ impl Location {
         let (from, to) = parse_range_string::<u64>(line, "to")?;
         Ok(Self { from, to })
     }
+
+    pub fn to_sss_clasic(&self) -> String {
+        format!("POSITION {} TO {}", &self.from, &self.to)
+    }
 }
 
 #[pymethods]
@@ -945,6 +991,10 @@ impl Spread {
             num_subfields: from,
             width: to,
         })
+    }
+
+    pub fn to_sss_clasic(&self) -> String {
+        format!("SPREAD {} OF {}", &self.num_subfields, &self.width)
     }
 }
 
