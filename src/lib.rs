@@ -47,7 +47,7 @@ pub fn read_sss(sss_path: &str) -> PyResult<Survey> {
 
 /// A Python module implemented in Rust.
 #[pymodule]
-mod triple_s {
+mod _triple_s {
     use super::*;
 
     #[pymodule_export]

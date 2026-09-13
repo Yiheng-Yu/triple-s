@@ -2,6 +2,10 @@
 requires = ["maturin>=1.9.4,<2"]
 build-backend = "maturin"
 
+[tool.maturin]
+python-source = "python"
+module-name = "triple_s._triple_s"
+
 [project]
 name = "triple_s"
 requires-python = ">=3.9"
@@ -11,3 +15,6 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
+
+[project.optional-dependencies]
+pandas = ["pandas>=2.0"]

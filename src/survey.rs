@@ -6,13 +6,14 @@ use strum::EnumString;
 
 use crate::error::{self, BadLine, IoError};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[pyclass]
+/// A Triple-S survey containing metadata, a title, and its record.
 pub struct Survey {
     #[pyo3(get, set)]
-    pub meta: Meta,
-    #[pyo3(get, set)]
     pub title: String,
+    #[pyo3(get, set)]
+    pub meta: Meta,
     #[pyo3(get, set)]
     pub record: Record,
 }
@@ -27,40 +28,258 @@ impl Survey {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[pymethods]
+impl Survey {
+    #[new]
+    #[pyo3(signature = (title, meta=None, record=None))]
+    fn __new__(title: &str, meta: Option<Meta>, record: Option<Record>) -> Self {
+        Self {
+            title: title.to_string(),
+            meta: meta.unwrap_or_default(),
+            record: record.unwrap_or_default(),
+        }
+    }
+
+    /// Initialize a survey from its required metadata and record.
+    #[pyo3(signature = (title, meta=None, record=None))]
+    fn __init__(
+        slf: &Bound<'_, Self>,
+        title: &str,
+        meta: Option<Meta>,
+        record: Option<Record>,
+    ) {
+        *slf.borrow_mut() = Self {
+            title: title.to_string(),
+            meta: meta.unwrap_or_default(),
+            record: record.unwrap_or_default(),
+        };
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "Survey(title={:?}, meta={}, record={})",
+            self.title,
+            self.meta.__repr__(),
+            self.record.__repr__()
+        )
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
+    }
+
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
 #[pyclass(from_py_object)]
+/// Optional metadata associated with a Triple-S survey.
 pub struct Meta {
+    #[pyo3(get, set)]
     pub version: Option<String>,
+    #[pyo3(get, set)]
     pub date: Option<String>,
+    #[pyo3(get, set)]
     pub time: Option<String>,
+    #[pyo3(get, set)]
     pub origin: Option<String>,
+    #[pyo3(get, set)]
     pub user: Option<String>,
+    #[pyo3(get, set)]
     pub style: Option<String>,
+    #[pyo3(get, set)]
     pub note: Option<String>,
     // Optional between VERSION and SURVEY. This statement is used to indicate that some aspect of the
     // SSS definition meets a defined standard that may reduce the amount of checking required by an
     // import program
+    #[pyo3(get, set)]
     pub standard: Option<String>,
 }
 
-#[derive(Debug, Default, Clone)]
-#[pyclass(from_py_object)]
-pub struct Record {
-    pub id: String,
-    pub variable: Vec<Question>,
+#[pymethods]
+impl Meta {
+    #[new]
+    #[pyo3(signature = (*, version = None, date = None, time = None, origin = None, user = None, style = None, note = None, standard = None))]
+    fn __new__(
+        version: Option<String>,
+        date: Option<String>,
+        time: Option<String>,
+        origin: Option<String>,
+        user: Option<String>,
+        style: Option<String>,
+        note: Option<String>,
+        standard: Option<String>,
+    ) -> Self {
+        Self {
+            version,
+            date,
+            time,
+            origin,
+            user,
+            style,
+            note,
+            standard,
+        }
+    }
+
+    /// Initialize optional survey metadata.
+    #[pyo3(signature = (*, version = None, date = None, time = None, origin = None, user = None, style = None, note = None, standard = None))]
+    fn __init__(
+        slf: &Bound<'_, Self>,
+        version: Option<String>,
+        date: Option<String>,
+        time: Option<String>,
+        origin: Option<String>,
+        user: Option<String>,
+        style: Option<String>,
+        note: Option<String>,
+        standard: Option<String>,
+    ) {
+        *slf.borrow_mut() = Self {
+            version,
+            date,
+            time,
+            origin,
+            user,
+            style,
+            note,
+            standard,
+        };
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "Meta(version={:?}, date={:?}, time={:?}, origin={:?}, user={:?}, style={:?}, note={:?}, standard={:?})",
+            self.version,
+            self.date,
+            self.time,
+            self.origin,
+            self.user,
+            self.style,
+            self.note,
+            self.standard
+        )
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
+    }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 #[pyclass(from_py_object)]
+/// A survey record containing an identifier and ordered questions.
+pub struct Record {
+    #[pyo3(get, set)]
+    pub id: String,
+    #[pyo3(get, set)]
+    pub content: Vec<Question>,
+}
+
+#[pymethods]
+impl Record {
+    #[new]
+    #[pyo3(signature = (content, *, id = ""))]
+    fn __new__(content: Vec<Question>, id: &str) -> Self {
+        Self {
+            id: id.to_owned(),
+            content,
+        }
+    }
+
+    /// Initialize a record with required questions and an optional identifier.
+    #[pyo3(signature = (content, *, id = ""))]
+    fn __init__(slf: &Bound<'_, Self>, content: Vec<Question>, id: &str) {
+        *slf.borrow_mut() = Self {
+            id: id.to_owned(),
+            content,
+        };
+    }
+
+    fn __repr__(&self) -> String {
+        const MAX_QUESTIONS: usize = 5;
+        let content = if self.content.len() > MAX_QUESTIONS {
+            let questions = self.content[..MAX_QUESTIONS]
+                .iter()
+                .map(Question::__repr__)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("[{}, ...]", questions)
+        } else {
+            let questions = self
+                .content
+                .iter()
+                .map(Question::__repr__)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("[{}]", questions)
+        };
+        format!("Record(id={:?}, content={})", self.id, content)
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+#[pyclass(from_py_object)]
+/// A survey question with its location and response definition.
 pub struct Question {
+    #[pyo3(get, set)]
     pub name: String,
+    #[pyo3(get, set)]
     pub title: String,
+    #[pyo3(get, set)]
     pub location: Location,
+    #[pyo3(get, set)]
     pub response: Response,
 }
 
-#[derive(Debug, Clone)]
-#[pyclass]
+#[pymethods]
+impl Question {
+    #[new]
+    #[pyo3(signature = (location, response, *, name = "", title = ""))]
+    fn __new__(location: Location, response: Response, name: &str, title: &str) -> Self {
+        Self {
+            name: name.to_owned(),
+            title: title.to_owned(),
+            location,
+            response,
+        }
+    }
+
+    /// Initialize a question with its required location and response.
+    #[pyo3(signature = (location, response, *, name = "", title = ""))]
+    fn __init__(
+        slf: &Bound<'_, Self>,
+        location: Location,
+        response: Response,
+        name: &str,
+        title: &str,
+    ) {
+        *slf.borrow_mut() = Self {
+            name: name.to_owned(),
+            title: title.to_owned(),
+            location,
+            response,
+        };
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            r#"Question(name="{}", title="{}", location={}, response={:?})"#,
+            self.name, self.title, self.location.__repr__(), self.response.__repr__()
+        )
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[pyclass(from_py_object)]
+/// A response definition for a survey question.
 pub enum Response {
     Quantity {
         min: f64,
@@ -97,24 +316,107 @@ impl Response {
     }
 }
 
-#[derive(Debug, Clone)]
+#[pymethods]
+impl Response {
+    fn __repr__(&self) -> String {
+        match self {
+            Self::Quantity { min, max } => {
+                format!("Response.Quantity(min={}, max={})", min, max)
+            }
+            Self::Character(length) => format!("Response.Character({})", length),
+            Self::Note(note) => format!("Response.Note({:?})", note),
+            Self::Single { item } => {
+                format!("Response.Single(item={})", format_choices(item))
+            }
+            Self::Multiple { item, spread } => format!(
+                "Response.Multiple(item={}, spread={:?})",
+                format_choices(item),
+                spread
+            ),
+        }
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
+fn format_choices(item: &BTreeMap<u64, Choice>) -> String {
+    const MAX_CHOICES: usize = 5;
+    if item.len() > MAX_CHOICES {
+        let choices = item
+            .values()
+            .take(MAX_CHOICES)
+            .map(Choice::__repr__)
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("({}, ...)", choices)
+    } else {
+        let choices = item
+            .values()
+            .map(Choice::__repr__)
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("({})", choices)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 #[pyclass(from_py_object)]
+/// A coded answer choice.
 pub struct Choice {
-    pub index: u64,
+    #[pyo3(get, set)]
+    pub code: u64,
+    #[pyo3(get, set)]
     pub label: String,
+    #[pyo3(get, set)]
     pub filter: Option<String>,
 }
 
 impl Choice {
-    pub fn new<T>(index: u64, label: impl Into<String>, filter: Option<T>) -> Self
+    pub fn new<T>(code: u64, label: impl Into<String>, filter: Option<T>) -> Self
     where
         T: Into<String>,
     {
         Self {
-            index: index,
+            code,
             label: label.into(),
             filter: filter.map(|val| val.into()),
         }
+    }
+}
+
+#[pymethods]
+impl Choice {
+    #[new]
+    #[pyo3(signature = (code, *, label = "", filter = None))]
+    fn __new__(code: u64, label: &str, filter: Option<String>) -> Self {
+        Self {
+            code,
+            label: label.to_owned(),
+            filter,
+        }
+    }
+
+    /// Initialize a coded answer choice.
+    #[pyo3(signature = (code, *, label = "", filter = None))]
+    fn __init__(slf: &Bound<'_, Self>, code: u64, label: &str, filter: Option<String>) {
+        *slf.borrow_mut() = Self {
+            code,
+            label: label.to_owned(),
+            filter,
+        };
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "Choice(code={}, label={:?}, filter={:?})",
+            self.code, self.label, self.filter
+        )
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
     }
 }
 
@@ -157,10 +459,13 @@ fn parse_classic_response_kind(line: &str) -> Result<Response, IoError> {
     Ok(instance)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[pyclass(from_py_object)]
+/// A one-based inclusive field position in a data record.
 pub struct Location {
+    #[pyo3(get, set)]
     pub from: u64,
+    #[pyo3(get, set)]
     pub to: u64,
 }
 
@@ -174,6 +479,27 @@ impl Location {
     pub fn parse_line(line: &str) -> Result<Self, IoError> {
         let (from, to) = parse_range_string::<u64>(line, "to")?;
         Ok(Self { from: from, to: to })
+    }
+}
+
+#[pymethods]
+impl Location {
+    #[new]
+    fn __new__(from: u64, to: u64) -> Self {
+        Self { from, to }
+    }
+
+    /// Initialize a field position.
+    fn __init__(slf: &Bound<'_, Self>, from: u64, to: u64) {
+        *slf.borrow_mut() = Self { from, to };
+    }
+
+    fn __repr__(&self) -> String {
+        format!("Location(from={}, to={})", self.from, self.to)
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
     }
 }
 
@@ -194,10 +520,13 @@ impl Location {
 /// width derived from the <position> element by num_subfields. Note that
 /// for csv Data Files the width attribute must always be specified as it cannot
 /// be determined from the overall width defined in the <position> element.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[pyclass(from_py_object)]
+/// The number and width of subfields used by a multiple response.
 pub struct Spread {
+    #[pyo3(get, set)]
     pub num_subfields: u64,
+    #[pyo3(get, set)]
     pub width: u64,
 }
 
@@ -217,6 +546,36 @@ impl Spread {
             num_subfields: from,
             width: to,
         })
+    }
+}
+
+#[pymethods]
+impl Spread {
+    #[new]
+    fn __new__(num_subfields: u64, width: u64) -> Self {
+        Self {
+            num_subfields,
+            width,
+        }
+    }
+
+    /// Initialize a multiple-response spread.
+    fn __init__(slf: &Bound<'_, Self>, num_subfields: u64, width: u64) {
+        *slf.borrow_mut() = Self {
+            num_subfields,
+            width,
+        };
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "Spread(num_subfields={}, width={})",
+            self.num_subfields, self.width
+        )
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
     }
 }
 
@@ -268,8 +627,8 @@ pub fn read_sss_classic(lines: std::io::Lines<BufReader<File>>) -> Result<Survey
             SSSClassicLineType::Title => survey.title = value,
             SSSClassicLineType::RecordStart => survey.record.id = value,
             SSSClassicLineType::QuestionStart => {
-                survey.record.variable.push(Question::default());
-                current_question = Some(survey.record.variable.len() - 1);
+                survey.record.content.push(Question::default());
+                current_question = Some(survey.record.content.len() - 1);
                 in_values = false;
             }
             SSSClassicLineType::End(end_kind) => {
@@ -387,7 +746,7 @@ fn question_mut<'a>(
         .ok_or_else(|| IoError::internal(format!("Line outside a variable: '{}'", line)))?;
     survey
         .record
-        .variable
+        .content
         .get_mut(index)
         .ok_or_else(|| IoError::internal("Invalid current question"))
 }
@@ -608,9 +967,9 @@ mod test {
         assert_eq!(survey.meta.style, None);
         assert_eq!(survey.title, "Customer Experience Survey - HTML Test");
         assert_eq!(survey.record.id, "A");
-        assert_eq!(survey.record.variable.len(), 24);
+        assert_eq!(survey.record.content.len(), 24);
 
-        let quantity = &survey.record.variable[0];
+        let quantity = &survey.record.content[0];
         assert_eq!(quantity.name, "RESPID");
         assert_eq!(quantity.title, "Respondent identifier");
         assert_eq!((quantity.location.from, quantity.location.to), (1, 6));
@@ -622,7 +981,7 @@ mod test {
             }
         ));
 
-        let single = &survey.record.variable[1];
+        let single = &survey.record.content[1];
         assert_eq!(single.name, "AGE");
         assert_eq!(single.location.from, 7);
         assert!(matches!(
@@ -630,13 +989,13 @@ mod test {
             Response::Single { item }
                 if item.len() == 8
                     && item.get(&8).is_some_and(|choice| {
-                        choice.index == 8
+                        choice.code == 8
                             && choice.label == "Prefer not to say"
                             && choice.filter.as_deref() == Some("SPECIAL")
                     })
         ));
 
-        let multiple = &survey.record.variable[4];
+        let multiple = &survey.record.content[4];
         assert_eq!(multiple.name, "FEATURES2");
         assert_eq!(
             (multiple.location.from, multiple.location.to),
@@ -650,7 +1009,7 @@ mod test {
                     && spread.width == 3
         ));
 
-        let character = &survey.record.variable[8];
+        let character = &survey.record.content[8];
         assert_eq!(character.name, "COMMENTS");
         assert_eq!(
             character.title,
@@ -662,7 +1021,7 @@ mod test {
         );
         assert!(matches!(character.response, Response::Character(1000)));
 
-        let logical = &survey.record.variable[12];
+        let logical = &survey.record.content[12];
         assert_eq!(logical.name, "HELP");
         assert_eq!(logical.location.from, 3243);
         assert!(matches!(

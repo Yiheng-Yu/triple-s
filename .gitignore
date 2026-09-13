@@ -1,5 +1,9 @@
 /target
-/python
+/python/*
+/python/bin/*
+/python/etc/*
+/python/lib/*
+!/python/triple_s/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
