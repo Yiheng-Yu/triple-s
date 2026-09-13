@@ -438,15 +438,55 @@ pub struct Meta {
     pub style: Option<String>,
     /// A note associated with the definition file.
     #[pyo3(get, set)]
-    pub note: Option<String>,
+    pub note: Vec<String>,
     /// A declared standard, such as `NAMES`, that the definition conforms to.
     #[pyo3(get, set)]
     pub standard: Option<String>,
 }
 
+impl Meta {
+    pub fn to_sss_clasic(&self) -> String {
+        let mut content = Vec::new();
+        if let Some(value) = self.version.as_ref() {
+            content.push(format!("VERSION {}", value))
+        };
+
+        if let Some(value) = self.date.as_ref() {
+            content.push(format!(r#"DATE "{}""#, value.replace(r#"""#, r#"{"}"#)))
+        };
+
+        if let Some(value) = self.time.as_ref() {
+            content.push(format!(r#"TIME "{}""#, value.replace(r#"""#, r#"{"}"#)))
+        };
+
+        if let Some(value) = self.origin.as_ref() {
+            content.push(format!(r#"ORIGIN "{}""#, value.replace(r#"""#, r#"{"}"#)))
+        };
+
+        if let Some(value) = self.user.as_ref() {
+            content.push(format!(r#"USER "{}""#, value.replace(r#"""#, r#"{"}"#)))
+        };
+
+        if let Some(value) = self.style.as_ref() {
+            content.push(format!(r#"STYLE "{}""#, value.replace(r#"""#, r#"{"}"#)))
+        };
+
+        let _ = self.note.iter().map(|value| {
+            content.push(format!(r#"NOTE "{}""#, value.replace(r#"""#, r#"{"}"#)));
+        });
+
+        if let Some(value) = self.standard.as_ref() {
+            content.push(format!(r#"STANDARD "{}""#, value.replace(r#"""#, r#"{"}"#)))
+        };
+
+        content.join("\n")
+    }
+}
+
 #[pymethods]
 impl Meta {
     #[new]
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (*, version = None, date = None, time = None, origin = None, user = None, style = None, note = None, standard = None))]
     fn __new__(
         version: Option<String>,
@@ -455,7 +495,7 @@ impl Meta {
         origin: Option<String>,
         user: Option<String>,
         style: Option<String>,
-        note: Option<String>,
+        note: Option<Vec<String>>,
         standard: Option<String>,
     ) -> Self {
         Self {
@@ -465,7 +505,7 @@ impl Meta {
             origin,
             user,
             style,
-            note,
+            note: note.unwrap_or_default(),
             standard,
         }
     }
@@ -480,7 +520,7 @@ impl Meta {
         origin: Option<String>,
         user: Option<String>,
         style: Option<String>,
-        note: Option<String>,
+        note: Option<Vec<String>>,
         standard: Option<String>,
     ) {
         *slf.borrow_mut() = Self {
@@ -490,7 +530,7 @@ impl Meta {
             origin,
             user,
             style,
-            note,
+            note: note.unwrap_or_default(),
             standard,
         };
     }
@@ -705,14 +745,14 @@ impl Response {
     pub fn sss_classic_response_value(&self) -> String {
         match self {
             Self::Single { item } => {
-                let content = item.iter().map(|(_, value)| value.to_sss_clasic())
+                let content = item.values().map(|value| value.to_sss_clasic())
                 .collect::<Vec<String>>()
                 .join("\n");
             
                 ["VALUES".to_string(), content, "END VALUES".to_string()].join("\n")
             }
             Self::Multiple { item, spread } => {
-                let content = item.iter().map(|(_, value)| value.to_sss_clasic())
+                let content = item.values().map(|value| value.to_sss_clasic())
                 .collect::<Vec<String>>()
                 .join("\n");
                 let spread = spread.to_sss_clasic();
@@ -819,7 +859,7 @@ impl Choice {
     }
 
     pub fn to_sss_clasic(&self) -> String {
-        format!(r#"{} "{}""#, &self.code, &self.label.replace(r#"""#, r#"{"}"#))
+        format!(r#"{} "{}""#, self.code, self.label.replace(r#"""#, r#"{"}"#))
     }
 }
 
@@ -921,7 +961,7 @@ impl Location {
     }
 
     pub fn to_sss_clasic(&self) -> String {
-        format!("POSITION {} TO {}", &self.from, &self.to)
+        format!("POSITION {} TO {}", self.from, self.to)
     }
 }
 
@@ -994,7 +1034,7 @@ impl Spread {
     }
 
     pub fn to_sss_clasic(&self) -> String {
-        format!("SPREAD {} OF {}", &self.num_subfields, &self.width)
+        format!("SPREAD {} OF {}", self.num_subfields, self.width)
     }
 }
 
@@ -1071,7 +1111,7 @@ pub fn read_sss_classic(lines: std::io::Lines<BufReader<File>>) -> Result<Survey
             SSSClassicLineType::User => survey.meta.user = Some(value),
             SSSClassicLineType::Version => survey.meta.version = Some(value),
             SSSClassicLineType::Standard => survey.meta.standard = Some(value),
-            SSSClassicLineType::Note => survey.meta.note = Some(value),
+            SSSClassicLineType::Note => survey.meta.note.push(value),
             SSSClassicLineType::Style => survey.meta.style = Some(value),
             SSSClassicLineType::Title => survey.title = value,
             SSSClassicLineType::RecordStart => survey.record.id = value,
@@ -1410,8 +1450,8 @@ mod test {
         );
         assert_eq!(survey.meta.standard.as_deref(), Some("NAMES"));
         assert_eq!(
-            survey.meta.note.as_deref(),
-            Some("HTML markup is stored inside SSS text strings.")
+            survey.meta.note,
+            vec!["HTML-rich Triple-S survey example".to_string(), "HTML markup is stored inside SSS text strings.".to_string(),]
         );
         assert_eq!(survey.meta.style, None);
         assert_eq!(survey.title, "Customer Experience Survey - HTML Test");
