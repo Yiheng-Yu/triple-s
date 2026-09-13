@@ -1,0 +1,13 @@
+[package]
+name = "triple_s"
+version = "0.1.0"
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "triple_s"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = {git = "https://github.com/pyo3/pyo3",features = ["extension-module"]}
+strum = { version = "0.28", features = ["derive"] }
