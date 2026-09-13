@@ -117,7 +117,7 @@ class Meta:
 
 
 class Survey:
-    """A Triple-S survey containing metadata, title, and respondent record."""
+    """Survey. More details can be found on: https://triple-s.org/documentation/manuals/"""
 
     title: str
     meta: Meta

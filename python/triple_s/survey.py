@@ -177,18 +177,7 @@ class Question:
 
 
 class Survey:
-    """A convenient Python wrapper around a Triple-S survey.
-
-    Questions can be accessed by name or zero-based position. The returned
-    object is an internal live view, so nested assignments update this survey:
-
-    .. code-block:: python
-
-        survey["Q1"].text = "Updated question"
-        survey["Q1"].response[1].label = "Yes"
-
-    The Rust object is kept in ``_survey`` for the extension boundary and is
-    not intended as part of the public API.
+    """A Triple-S survey.
     """
 
     def __init__(

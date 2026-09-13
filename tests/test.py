@@ -4,4 +4,4 @@ from triple_s import *
 path = "tests/sss_classic.sss"
 survey = triple_s.read_sss(path)
 
-print(survey[3].codes.pandas)
+print(help(Survey))
