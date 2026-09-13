@@ -875,7 +875,7 @@ impl std::default::Default for Location {
 impl Location {
     pub fn parse_line(line: &str) -> Result<Self, IoError> {
         let (from, to) = parse_range_string::<u64>(line, "to")?;
-        Ok(Self { from: from, to: to })
+        Ok(Self { from, to })
     }
 }
 

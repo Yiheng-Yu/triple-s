@@ -8,6 +8,8 @@ module-name = "triple_s._triple_s"
 
 [project]
 name = "triple_s"
+description = "Read classic Triple-S survey definition files from Python."
+readme = "README.md"
 requires-python = ">=3.9"
 version = "0.1.0"
 classifiers = [
@@ -19,3 +21,6 @@ classifiers = [
 dependencies = [
     "pandas>=3.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/Yiheng-Yu/triple-s"
