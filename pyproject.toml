@@ -16,5 +16,6 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 
-[project.optional-dependencies]
-pandas = ["pandas>=2.0"]
+dependencies = [
+    "pandas>=3.0",
+]

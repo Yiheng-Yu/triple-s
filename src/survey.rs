@@ -8,12 +8,18 @@ use crate::error::{self, BadLine, IoError};
 
 #[derive(Debug, Clone, PartialEq)]
 #[pyclass]
-/// A Triple-S survey containing metadata, a title, and its record.
+/// A Triple-S survey definition.
+///
+/// The definition file describes the file metadata, survey title, respondent
+/// record, and the variables contained in that record.
 pub struct Survey {
+    /// The survey title from the optional `TITLE` statement.
     #[pyo3(get, set)]
     pub title: String,
+    /// File-level metadata such as version, creation date, and origin.
     #[pyo3(get, set)]
     pub meta: Meta,
+    /// The respondent record and its ordered variable definitions.
     #[pyo3(get, set)]
     pub record: Record,
 }
@@ -68,29 +74,372 @@ impl Survey {
         self == other
     }
 
+    fn __getitem__(
+        slf: PyRef<'_, Self>,
+        py: Python<'_>,
+        index: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<QuestionProxy>> {
+        let question_index = if let Ok(name) = index.extract::<String>() {
+            slf.record
+                .content
+                .iter()
+                .position(|question| question.name.to_uppercase() == name.to_uppercase())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(format!("unknown question: {name}"))
+                })?
+        } else if let Ok(position) = index.extract::<usize>() {
+            if position >= slf.record.content.len() {
+                return Err(pyo3::exceptions::PyIndexError::new_err(format!(
+                    "question index out of range: {position}"
+                )));
+            }
+            position
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "survey indices must be strings or integers",
+            ));
+        };
+
+        Py::new(
+            py,
+            QuestionProxy {
+                survey: slf.into(),
+                question_index,
+            },
+        )
+    }
+}
+
+#[pyclass]
+/// A live proxy to a question inside a [`Survey`] so that one can do:
+///
+/// survey['q1'].text = "new question text"
+pub struct QuestionProxy {
+    /// The survey that owns the question.
+    survey: Py<Survey>,
+    /// The zero-based position of the question in the record.
+    question_index: usize,
+}
+
+impl QuestionProxy {
+    fn with_question<T>(&self, f: impl FnOnce(&Question) -> T) -> PyResult<T> {
+        Python::attach(|py| {
+            let survey = self.survey.bind(py).borrow();
+            let question =
+                survey
+                    .record
+                    .content
+                    .get(self.question_index)
+                    .ok_or_else(|| {
+                        pyo3::exceptions::PyReferenceError::new_err(
+                            "question no longer exists",
+                        )
+                    })?;
+            Ok(f(question))
+        })
+    }
+
+    fn with_question_mut<T>(&self, f: impl FnOnce(&mut Question) -> T) -> PyResult<T> {
+        Python::attach(|py| {
+            let mut survey = self.survey.bind(py).borrow_mut();
+            let question = survey
+                .record
+                .content
+                .get_mut(self.question_index)
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyReferenceError::new_err("question no longer exists")
+                })?;
+            Ok(f(question))
+        })
+    }
+}
+
+#[pymethods]
+impl QuestionProxy {
+    #[getter]
+    fn name(&self) -> PyResult<String> {
+        self.with_question(|question| question.name.clone())
+    }
+
+    #[setter]
+    fn set_name(&self, value: String) -> PyResult<()> {
+        self.with_question_mut(|question| question.name = value)
+    }
+
+    #[getter]
+    fn text(&self) -> PyResult<String> {
+        self.with_question(|question| question.text.clone())
+    }
+
+    #[setter]
+    fn set_text(&self, value: String) -> PyResult<()> {
+        self.with_question_mut(|question| question.text = value)
+    }
+
+    #[getter]
+    fn location(&self) -> PyResult<Location> {
+        self.with_question(|question| question.location.clone())
+    }
+
+    #[setter]
+    fn set_location(&self, value: Location) -> PyResult<()> {
+        self.with_question_mut(|question| question.location = value)
+    }
+
+    #[getter]
+    fn response(&self, py: Python<'_>) -> PyResult<Py<ResponseProxy>> {
+        self.with_question(|_| ())?;
+        Py::new(
+            py,
+            ResponseProxy {
+                survey: self.survey.clone_ref(py),
+                question_index: self.question_index,
+            },
+        )
+    }
+
+    #[setter]
+    fn set_response(&self, value: Response) -> PyResult<()> {
+        self.with_question_mut(|question| question.response = value)
+    }
+
+    fn __repr__(&self) -> PyResult<String> {
+        self.with_question(Question::__repr__)
+    }
+}
+
+#[pyclass]
+/// A live proxy to a question's [`Response`] definition to achieve this api:
+///
+/// survey['question'].response[3].label = "new label"
+pub struct ResponseProxy {
+    /// The survey that owns the response.
+    survey: Py<Survey>,
+    /// The zero-based position of the question in the record.
+    question_index: usize,
+}
+
+impl ResponseProxy {
+    fn with_response<T>(&self, f: impl FnOnce(&Response) -> T) -> PyResult<T> {
+        Python::attach(|py| {
+            let survey = self.survey.bind(py).borrow();
+            let question =
+                survey
+                    .record
+                    .content
+                    .get(self.question_index)
+                    .ok_or_else(|| {
+                        pyo3::exceptions::PyReferenceError::new_err(
+                            "question no longer exists",
+                        )
+                    })?;
+            Ok(f(&question.response))
+        })
+    }
+}
+
+#[pymethods]
+impl ResponseProxy {
+    fn __getitem__(
+        &self,
+        py: Python<'_>,
+        index: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<ChoiceProxy>> {
+        let code = index.extract::<u64>().map_err(|_| {
+            pyo3::exceptions::PyTypeError::new_err("choice indices must be integers")
+        })?;
+
+        self.with_response(|response| match response {
+            Response::Single { item } | Response::Multiple { item, .. } => {
+                if !item.contains_key(&code) {
+                    return Err(pyo3::exceptions::PyKeyError::new_err(code.to_string()));
+                }
+                Ok(())
+            }
+            _ => Err(pyo3::exceptions::PyTypeError::new_err(
+                "only Single and Multiple responses contain choices",
+            )),
+        })??;
+
+        Py::new(
+            py,
+            ChoiceProxy {
+                survey: self.survey.clone_ref(py),
+                question_index: self.question_index,
+                code,
+            },
+        )
+    }
+
+    fn __repr__(&self) -> PyResult<String> {
+        self.with_response(Response::__repr__)
+    }
+}
+
+#[pyclass]
+/// A live proxy to a coded choice in a `Single` or `Multiple` response.
+///
+/// Changing `code` moves the choice to the corresponding `BTreeMap` key.
+pub struct ChoiceProxy {
+    /// The survey that owns the choice.
+    survey: Py<Survey>,
+    /// The zero-based position of the question in the record.
+    question_index: usize,
+    /// The current code and map key for the choice.
+    code: u64,
+}
+
+impl ChoiceProxy {
+    fn with_choice<T>(&self, f: impl FnOnce(&Choice) -> T) -> PyResult<T> {
+        Python::attach(|py| {
+            let survey = self.survey.bind(py).borrow();
+            let question =
+                survey
+                    .record
+                    .content
+                    .get(self.question_index)
+                    .ok_or_else(|| {
+                        pyo3::exceptions::PyReferenceError::new_err(
+                            "question no longer exists",
+                        )
+                    })?;
+            let item = match &question.response {
+                Response::Single { item } | Response::Multiple { item, .. } => item,
+                _ => {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "only Single and Multiple responses contain choices",
+                    ));
+                }
+            };
+            let choice = item.get(&self.code).ok_or_else(|| {
+                pyo3::exceptions::PyReferenceError::new_err("choice no longer exists")
+            })?;
+            Ok(f(choice))
+        })
+    }
+
+    fn with_choice_mut<T>(&self, f: impl FnOnce(&mut Choice) -> T) -> PyResult<T> {
+        Python::attach(|py| {
+            let mut survey = self.survey.bind(py).borrow_mut();
+            let question = survey
+                .record
+                .content
+                .get_mut(self.question_index)
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyReferenceError::new_err("question no longer exists")
+                })?;
+            let item = match &mut question.response {
+                Response::Single { item } | Response::Multiple { item, .. } => item,
+                _ => {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "only Single and Multiple responses contain choices",
+                    ));
+                }
+            };
+            let choice = item.get_mut(&self.code).ok_or_else(|| {
+                pyo3::exceptions::PyReferenceError::new_err("choice no longer exists")
+            })?;
+            Ok(f(choice))
+        })
+    }
+}
+
+#[pymethods]
+impl ChoiceProxy {
+    #[getter]
+    fn code(&self) -> PyResult<u64> {
+        self.with_choice(|choice| choice.code)
+    }
+
+    #[setter]
+    fn set_code(&mut self, value: u64) -> PyResult<()> {
+        if value == self.code {
+            return Ok(());
+        }
+
+        Python::attach(|py| {
+            let mut survey = self.survey.bind(py).borrow_mut();
+            let question = survey
+                .record
+                .content
+                .get_mut(self.question_index)
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyReferenceError::new_err("question no longer exists")
+                })?;
+            let item = match &mut question.response {
+                Response::Single { item } | Response::Multiple { item, .. } => item,
+                _ => {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "only Single and Multiple responses contain choices",
+                    ));
+                }
+            };
+            if item.contains_key(&value) {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "a choice with that code already exists",
+                ));
+            }
+            let mut choice = item.remove(&self.code).ok_or_else(|| {
+                pyo3::exceptions::PyReferenceError::new_err("choice no longer exists")
+            })?;
+            choice.code = value;
+            item.insert(value, choice);
+            self.code = value;
+            Ok(())
+        })
+    }
+
+    #[getter]
+    fn label(&self) -> PyResult<String> {
+        self.with_choice(|choice| choice.label.clone())
+    }
+
+    #[setter]
+    fn set_label(&self, value: String) -> PyResult<()> {
+        self.with_choice_mut(|choice| choice.label = value)
+    }
+
+    #[getter]
+    fn filter(&self) -> PyResult<Option<String>> {
+        self.with_choice(|choice| choice.filter.clone())
+    }
+
+    #[setter]
+    fn set_filter(&self, value: Option<String>) -> PyResult<()> {
+        self.with_choice_mut(|choice| choice.filter = value)
+    }
+
+    fn __repr__(&self) -> PyResult<String> {
+        self.with_choice(Choice::__repr__)
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 #[pyclass(from_py_object)]
-/// Optional metadata associated with a Triple-S survey.
+/// Optional metadata describing the definition file.
 pub struct Meta {
+    /// The Triple-S version used by the definition file, such as `1.1`.
     #[pyo3(get, set)]
     pub version: Option<String>,
+    /// The date on which the definition file was created.
     #[pyo3(get, set)]
     pub date: Option<String>,
+    /// The time at which the definition file was created.
     #[pyo3(get, set)]
     pub time: Option<String>,
+    /// The originating program and operating system.
     #[pyo3(get, set)]
     pub origin: Option<String>,
+    /// The user who created the definition file.
     #[pyo3(get, set)]
     pub user: Option<String>,
+    /// An implementation-specific style value, when supplied.
     #[pyo3(get, set)]
     pub style: Option<String>,
+    /// A note associated with the definition file.
     #[pyo3(get, set)]
     pub note: Option<String>,
-    // Optional between VERSION and SURVEY. This statement is used to indicate that some aspect of the
-    // SSS definition meets a defined standard that may reduce the amount of checking required by an
-    // import program
+    /// A declared standard, such as `NAMES`, that the definition conforms to.
     #[pyo3(get, set)]
     pub standard: Option<String>,
 }
@@ -167,10 +516,12 @@ impl Meta {
 
 #[derive(Debug, Default, Clone, PartialEq)]
 #[pyclass(from_py_object)]
-/// A survey record containing an identifier and ordered questions.
+/// A respondent record definition containing an identifier and variables.
 pub struct Record {
+    /// The record identifier, a single alphabetic character in Triple-S 1.1.
     #[pyo3(get, set)]
     pub id: String,
+    /// Variables in their definition-file order.
     #[pyo3(get, set)]
     pub content: Vec<Question>,
 }
@@ -223,14 +574,23 @@ impl Record {
 
 #[derive(Debug, Default, Clone, PartialEq)]
 #[pyclass(from_py_object)]
-/// A survey question with its location and response definition.
+/// A survey variable.
 pub struct Question {
+    /// Name of a question, used as question id (i.e., 'Q1', 'Q2')
     #[pyo3(get, set)]
     pub name: String,
+    /// question text
     #[pyo3(get, set)]
-    pub title: String,
+    pub text: String,
+
+    #[pyo3(get, set)]
+    pub filter: Option<String>,
+
+    /// data location
     #[pyo3(get, set)]
     pub location: Location,
+
+    /// question responses
     #[pyo3(get, set)]
     pub response: Response,
 }
@@ -238,37 +598,49 @@ pub struct Question {
 #[pymethods]
 impl Question {
     #[new]
-    #[pyo3(signature = (location, response, *, name = "", title = ""))]
-    fn __new__(location: Location, response: Response, name: &str, title: &str) -> Self {
+    #[pyo3(signature = (name, *, location = None, response = None, text = "", filter = None))]
+    fn __new__(
+        name: &str,
+        location: Option<Location>,
+        response: Option<Response>,
+        text: &str,
+        filter: Option<&str>,
+    ) -> Self {
         Self {
             name: name.to_owned(),
-            title: title.to_owned(),
-            location,
-            response,
+            text: text.to_owned(),
+            location: location.unwrap_or_default(),
+            response: response.unwrap_or_default(),
+            filter: filter.map(|s| s.to_string()),
         }
     }
 
-    /// Initialize a question with its required location and response.
-    #[pyo3(signature = (location, response, *, name = "", title = ""))]
+    /// Initialize a question with a required name and optional definition fields.
+    #[pyo3(signature = (name, *, location = None, response = None, text = "", filter = None))]
     fn __init__(
         slf: &Bound<'_, Self>,
-        location: Location,
-        response: Response,
         name: &str,
-        title: &str,
+        location: Option<Location>,
+        response: Option<Response>,
+        text: &str,
+        filter: Option<&str>,
     ) {
         *slf.borrow_mut() = Self {
             name: name.to_owned(),
-            title: title.to_owned(),
-            location,
-            response,
+            text: text.to_owned(),
+            location: location.unwrap_or_default(),
+            response: response.unwrap_or_default(),
+            filter: filter.map(|s| s.to_string()),
         };
     }
 
     fn __repr__(&self) -> String {
         format!(
-            r#"Question(name="{}", title="{}", location={}, response={:?})"#,
-            self.name, self.title, self.location.__repr__(), self.response.__repr__()
+            r#"Question(name="{}", text="{}", location={}, response={:?})"#,
+            self.name,
+            self.text,
+            self.location.__repr__(),
+            self.response.__repr__()
         )
     }
 
@@ -279,19 +651,29 @@ impl Question {
 
 #[derive(Debug, Clone, PartialEq)]
 #[pyclass(from_py_object)]
-/// A response definition for a survey question.
+/// The type-specific definition of a survey variable.
 pub enum Response {
+    /// A numeric variable with an inclusive legal range.
     Quantity {
+        /// The smallest legal numeric value.
         min: f64,
+        /// The largest legal numeric value.
         max: f64,
     },
+    /// A free-form character variable with the maximum field length.
     Character(usize),
+    /// A free-form note/text variable.
     Note(String),
+    /// A categorical variable allowing one response.
     Single {
+        /// Category choices keyed by their positive integer values.
         item: BTreeMap<u64, Choice>,
     },
+    /// A categorical variable allowing multiple responses.
     Multiple {
+        /// Category choices keyed by their positive integer values.
         item: BTreeMap<u64, Choice>,
+        /// The optional subfield layout used by spread-format data.
         spread: Spread,
     },
 }
@@ -318,6 +700,16 @@ impl Response {
 
 #[pymethods]
 impl Response {
+    #[getter]
+    fn choices(&self) -> Vec<Choice> {
+        match self {
+            Self::Single { item } | Self::Multiple { item, .. } => {
+                item.values().cloned().collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+
     fn __repr__(&self) -> String {
         match self {
             Self::Quantity { min, max } => {
@@ -363,12 +755,15 @@ fn format_choices(item: &BTreeMap<u64, Choice>) -> String {
 
 #[derive(Debug, Clone, PartialEq)]
 #[pyclass(from_py_object)]
-/// A coded answer choice.
+/// A labelled category value in a `SINGLE` or `MULTIPLE` variable.
 pub struct Choice {
+    /// The positive integer category value.
     #[pyo3(get, set)]
     pub code: u64,
+    /// The optional human-readable category label.
     #[pyo3(get, set)]
     pub label: String,
+    /// The optional `SPECIAL` marker, such as for missing or unknown values.
     #[pyo3(get, set)]
     pub filter: Option<String>,
 }
@@ -461,10 +856,12 @@ fn parse_classic_response_kind(line: &str) -> Result<Response, IoError> {
 
 #[derive(Debug, Clone, PartialEq)]
 #[pyclass(from_py_object)]
-/// A one-based inclusive field position in a data record.
+/// A one-based inclusive field position in a fixed-length data record.
 pub struct Location {
+    /// The first character position occupied by the variable.
     #[pyo3(get, set)]
     pub from: u64,
+    /// The last character position occupied by the variable.
     #[pyo3(get, set)]
     pub to: u64,
 }
@@ -522,10 +919,12 @@ impl Location {
 /// be determined from the overall width defined in the <position> element.
 #[derive(Debug, Clone, PartialEq)]
 #[pyclass(from_py_object)]
-/// The number and width of subfields used by a multiple response.
+/// The subfield layout for spread-format `MULTIPLE` responses.
 pub struct Spread {
+    /// The number of consecutive category subfields.
     #[pyo3(get, set)]
     pub num_subfields: u64,
+    /// The width, in characters, of each subfield.
     #[pyo3(get, set)]
     pub width: u64,
 }
@@ -657,7 +1056,7 @@ pub fn read_sss_classic(lines: std::io::Lines<BufReader<File>>) -> Result<Survey
             }
             SSSClassicLineType::Label => {
                 let question = question_mut(&mut survey, current_question, &line)?;
-                question.title = value;
+                question.text = value;
             }
             SSSClassicLineType::Location => {
                 if !in_values {
@@ -971,7 +1370,7 @@ mod test {
 
         let quantity = &survey.record.content[0];
         assert_eq!(quantity.name, "RESPID");
-        assert_eq!(quantity.title, "Respondent identifier");
+        assert_eq!(quantity.text, "Respondent identifier");
         assert_eq!((quantity.location.from, quantity.location.to), (1, 6));
         assert!(matches!(
             quantity.response,
@@ -1012,7 +1411,7 @@ mod test {
         let character = &survey.record.content[8];
         assert_eq!(character.name, "COMMENTS");
         assert_eq!(
-            character.title,
+            character.text,
             "<p>Please tell us about your experience.</p><p>You can include <strong>any comments</strong> that may help us improve.</p>"
         );
         assert_eq!(

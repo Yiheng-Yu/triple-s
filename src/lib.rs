@@ -9,11 +9,14 @@ use std::{
 use pyo3::{exceptions::PyOSError, prelude::*};
 pub use survey::{
     Choice,
+    ChoiceProxy,
     Location,
     Meta,
     Question,
+    QuestionProxy,
     Record,
     Response,
+    ResponseProxy,
     SSSType,
     Spread,
     Survey,
@@ -43,15 +46,24 @@ pub fn read_sss(sss_path: &str) -> PyResult<Survey> {
     }
 }
 
-
-
 /// A Python module implemented in Rust.
 #[pymodule]
 mod _triple_s {
     use super::*;
-
     #[pymodule_export]
-    use super::{Choice, Location, Meta, Question, Record, Response, Spread, Survey};
+    use super::{
+        Choice,
+        ChoiceProxy,
+        Location,
+        Meta,
+        Question,
+        QuestionProxy,
+        Record,
+        Response,
+        ResponseProxy,
+        Spread,
+        Survey,
+    };
 
     #[pyfunction]
     pub fn read_sss(sss_path: &str) -> PyResult<Survey> {
