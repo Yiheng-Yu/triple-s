@@ -6,14 +6,18 @@ from ._triple_s import (
     Meta,
     Record,
     Spread,
+    Question, 
+    Response, 
+    Survey
 )
 from ._triple_s import read_sss as _read_sss
-from .survey import Question, Response, Survey
+# from .survey import Question, Response, Survey
 
 
 def read_sss(path: str) -> Survey:
     """Read a Triple-S file and return a Python ``Survey`` wrapper."""
-    return Survey._from_rust(_read_sss(path))
+    # return Survey._from_rust(_read_sss(path))
+    return _read_sss(path)
 
 
 __all__ = [
