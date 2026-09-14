@@ -1,6 +1,6 @@
 # triple-s
 
-A parser for reading parsing [Triple-S](https://www.triple-s.org/) survey files (.sss), backend by rust via [PyO3](https://pyo3.rs/) and [maturin](https://maturin.rs/).
+A Rust parser for reading [Triple-S](https://www.triple-s.org/) survey files (.sss).
 
 Still a work in progress. The current plan is to complete support for *reading* triple-s files first, followed by implementing support for *writing* files later.
 
@@ -11,65 +11,8 @@ Current progression:
 | <1.2 (sss classic) | ✅ | ✅ |
 | >=1.2 | 🔧 | 🔧 |
 
-## Python
-
-### Getting started
-
-Install with:
-
-```bash
-pip install triple-s
-```
-
-#### Read a survey
-
-```python
-from triple_s import read_sss
-
-survey = read_sss("path/to/survey.sss")
-
-print(survey.title)
-```
-
-Accessing contents within a survey:
-
-```python
-print(len(survey))          # Number of variables
-print(survey["Q1"].text)    # Lookup by question name, case insensitive
-print(survey['q1'].text)    # this will also do
-print(survey[0].name)       # Or by zero-based position
-```
-
-Edit the loaded survey:
-
-```python
-question = survey["Q1"]
-print(question.text)
-response = question.response
-choice = response[1]
-print(choice.label)
-```
-
-Survey responses can be iterated or converted to a pandas `DataFrame`:
-
-```python
-choices = list(survey["Q1"].response)
-choices_table = survey["Q1"].response.pandas
-```
-
-`Single` and `Multiple` responses support lookup and assignment by choice code:
-
-```python
-response[1] = Choice(1, label="Updated label")
-```
-
-Exporting:
-Export to sss classic (sss 1.1):
-
-```python
-string = survey.to_string(classic=True)
-print(string)
-```
+Python bindings are intentionally not included yet. The `python/triple_s` package
+is reserved for a future binding layer over the Rust model.
 
 ## Rust
 
@@ -98,12 +41,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 ## Development
-
-Install the Python development dependencies and build the extension with:
-
-```bash
-maturin develop
-```
 
 Run the Rust tests with:
 

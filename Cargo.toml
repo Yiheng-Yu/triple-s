@@ -5,14 +5,9 @@ edition = "2024"
 description = "Read classic Triple-S survey definition files."
 repository = "https://github.com/Yiheng-Yu/triple-s"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
 name = "triple_s"
-crate-type = ["cdylib", "rlib"]
-
-[features]
-extension-module = ["pyo3/extension-module"]
+crate-type = ["rlib"]
 
 [dependencies]
-pyo3 = { git = "https://github.com/pyo3/pyo3" }
 strum = { version = "0.28", features = ["derive"] }
