@@ -119,6 +119,16 @@ impl Survey {
             },
         )
     }
+
+    #[pyo3(signature = (classic=None) )]
+    fn to_string(&self, classic: Option<bool>) -> PyResult<String> {
+        let classic = classic.unwrap_or_default();
+        if classic {
+            Ok(self.to_sss_clasic())
+        } else {
+            Err(pyo3::exceptions::PyNotImplementedError::new_err("Not implemented yet"))
+        }
+    }
 }
 
 #[pyclass]
