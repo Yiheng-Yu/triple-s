@@ -32,6 +32,17 @@ impl Survey {
             record: Record::default(),
         }
     }
+
+    pub fn to_sss_clasic(&self) -> String {
+        [
+            "SSS".to_string(),
+            self.meta.to_sss_clasic(),
+            "SURVEY".to_string(),
+            format!("TITLE {}", self.title),
+            self.record.to_sss_clasic(),
+            "END SURVEY".to_string(),
+        ].join("\n")
+    }
 }
 
 #[pymethods]
@@ -471,9 +482,9 @@ impl Meta {
             content.push(format!(r#"STYLE "{}""#, value.replace(r#"""#, r#"{"}"#)))
         };
 
-        let _ = self.note.iter().map(|value| {
+        for value in &self.note {
             content.push(format!(r#"NOTE "{}""#, value.replace(r#"""#, r#"{"}"#)));
-        });
+        }
 
         if let Some(value) = self.standard.as_ref() {
             content.push(format!(r#"STANDARD "{}""#, value.replace(r#"""#, r#"{"}"#)))
@@ -566,6 +577,19 @@ pub struct Record {
     pub content: Vec<Question>,
 }
 
+impl Record {
+    pub fn to_sss_clasic(&self) -> String {
+        [
+            format!("RECORD {}", self.id),
+            self.content.iter().enumerate()
+                .map(|(idx, question)| question.to_sss_clasic(idx))
+                .collect::<Vec<String>>()
+                .join("\n"),
+            "END RECORD".to_string()
+        ].join("\n")
+    }
+}
+
 #[pymethods]
 impl Record {
     #[new]
@@ -633,6 +657,19 @@ pub struct Question {
     /// question responses
     #[pyo3(get, set)]
     pub response: Response,
+}
+
+impl Question {
+    pub fn to_sss_clasic(&self, variabe_id: impl std::fmt::Display) -> String {
+        let mut content = vec![format!("VARIABLE {}", variabe_id)];
+        content.push(format!("NAME {}", self.name));
+        content.push(format!("LABEL {}", self.text));
+        content.push(self.response.sss_classic_type_name());
+        content.push(self.location.to_sss_clasic());
+        content.push(self.response.sss_classic_response_value());
+        content.push("END VARIABLE".to_string());
+        content.join("\n")
+    }
 }
 
 #[pymethods]
@@ -739,7 +776,7 @@ impl Response {
 
     pub fn sss_classic_type_name(&self) -> String {
         let type_str = self.type_name().to_uppercase();
-        format!("T {}", type_str)
+        format!("TYPE {}", type_str)
     }
 
     pub fn sss_classic_response_value(&self) -> String {
@@ -859,7 +896,16 @@ impl Choice {
     }
 
     pub fn to_sss_clasic(&self) -> String {
-        format!(r#"{} "{}""#, self.code, self.label.replace(r#"""#, r#"{"}"#))
+        let filter = self
+            .filter
+            .as_deref()
+            .map_or(String::new(), |filter| format!(" {}", filter));
+        format!(
+            r#"{} "{}"{}"#,
+            self.code,
+            self.label.replace(r#"""#, r#"{"}"#),
+            filter
+        )
     }
 }
 
@@ -1409,6 +1455,7 @@ mod test {
     use std::{
         fs::File,
         io::{BufRead, BufReader},
+        path::PathBuf,
     };
 
     use super::*;
@@ -1422,6 +1469,95 @@ mod test {
         let mut lines = BufReader::new(file).lines();
         assert_eq!(lines.next().unwrap().unwrap(), "SSS");
         read_sss_classic(lines).unwrap()
+    }
+
+    fn parse_serialized_survey(serialized: &str) -> Survey {
+        let path = PathBuf::from(std::env::temp_dir()).join(format!(
+            "triple_s_round_trip_{}.sss",
+            std::process::id()
+        ));
+        std::fs::write(&path, serialized).unwrap();
+        let file = File::open(&path).unwrap();
+        let mut lines = BufReader::new(file).lines();
+        assert_eq!(lines.next().unwrap().unwrap(), "SSS");
+        let survey = read_sss_classic(lines).unwrap();
+        std::fs::remove_file(path).unwrap();
+        survey
+    }
+
+    #[test]
+    fn round_trips_classic_serializers() {
+        let survey = Survey {
+            title: "Round-trip survey".to_string(),
+            meta: Meta {
+                version: Some("1.1".to_string()),
+                date: Some("14 September 2026".to_string()),
+                time: Some("01:15".to_string()),
+                origin: Some("triple-s".to_string()),
+                user: Some("tester".to_string()),
+                style: Some("standard".to_string()),
+                note: vec!["first note".to_string(), "second note".to_string()],
+                standard: Some("NAMES".to_string()),
+            },
+            record: Record {
+                id: "A".to_string(),
+                content: vec![
+                    Question {
+                        name: "AGE".to_string(),
+                        text: "Respondent age".to_string(),
+                        filter: None,
+                        location: Location { from: 1, to: 3 },
+                        response: Response::Quantity {
+                            min: 0.0,
+                            max: 120.0,
+                        },
+                    },
+                    Question {
+                        name: "COMMENT".to_string(),
+                        text: "A comment".to_string(),
+                        filter: None,
+                        location: Location { from: 4, to: 103 },
+                        response: Response::Character(100),
+                    },
+                    Question {
+                        name: "SATISFACTION".to_string(),
+                        text: "Satisfaction".to_string(),
+                        filter: None,
+                        location: Location { from: 104, to: 104 },
+                        response: Response::Single {
+                            item: BTreeMap::from([
+                                (1, Choice::new(1, "Low", None::<String>)),
+                                (
+                                    9,
+                                    Choice::new(9, "Unknown", Some("SPECIAL")),
+                                ),
+                            ]),
+                        },
+                    },
+                    Question {
+                        name: "FEATURES".to_string(),
+                        text: "Selected features".to_string(),
+                        filter: None,
+                        location: Location { from: 105, to: 110 },
+                        response: Response::Multiple {
+                            item: BTreeMap::from([
+                                (1, Choice::new(1, "Email", None::<String>)),
+                                (2, Choice::new(2, "Phone", None::<String>)),
+                            ]),
+                            spread: Spread {
+                                num_subfields: 2,
+                                width: 3,
+                            },
+                        },
+                    },
+                ],
+            },
+        };
+
+        let parsed = parse_serialized_survey(&survey.to_sss_clasic());
+        assert_eq!(parsed, survey);
+
+        println!("{}", survey.to_sss_clasic())
     }
 
     #[test]
