@@ -475,6 +475,7 @@ impl NumericSpecial {
 /// The type-specific definition of a survey variable.
 pub enum Response {
     /// A numeric variable with an inclusive legal range.
+    #[pyo3(constructor = (min=0.0, max=9999.999))]
     Quantity {
         /// The smallest legal numeric value.
         min: f64,
@@ -482,6 +483,7 @@ pub enum Response {
         max: f64,
     },
     /// A numeric variable with labelled special values.
+    #[pyo3(constructor = (min=0.0, max=9999.999, special=Vec::new()))]
     QuantitySpecial {
         /// The smallest legal numeric value.
         min: f64,
@@ -491,15 +493,19 @@ pub enum Response {
         special: Vec<NumericSpecial>,
     },
     /// A free-form character variable with the maximum field length.
+    #[pyo3(constructor = (_0))]
     Character(usize),
     /// A free-form note/text variable.
+    #[pyo3(constructor = (_0))]
     Note(String),
     /// A categorical variable allowing one response.
+    #[pyo3(constructor = (item=BTreeMap::new()))]
     Single {
         /// Category choices keyed by their positive integer values.
         item: BTreeMap<u64, Choice>,
     },
     /// A categorical variable allowing multiple responses.
+    #[pyo3(constructor = (item=BTreeMap::new(),spread=Spread::default()))]
     Multiple {
         /// Category choices keyed by their positive integer values.
         item: BTreeMap<u64, Choice>,
