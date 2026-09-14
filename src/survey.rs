@@ -120,6 +120,11 @@ impl Survey {
         )
     }
 
+    /// export survey to string
+    /// Kwargs:
+    ///     classic (bool *optional*): version of sss to export, default `False`
+    ///         True: exporting as sss classic (sss 1.1)
+    ///         False: export as sss xml (sss 1.2 onwards)
     #[pyo3(signature = (classic=None) )]
     fn to_string(&self, classic: Option<bool>) -> PyResult<String> {
         let classic = classic.unwrap_or_default();
