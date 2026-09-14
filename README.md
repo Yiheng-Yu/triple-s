@@ -64,6 +64,8 @@ choices = list(survey["Q1"].response)
 choices_table = survey["Q1"].response.pandas
 ```
 
+Exporting: work in progress
+
 ## Rust
 
 Add the crate to your project:
