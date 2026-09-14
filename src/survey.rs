@@ -350,17 +350,17 @@ impl Record {
         self == other
     }
 
-    fn __getitem__(&self, index: usize) -> PyResult<Question> {
-        self.content.get(index).cloned().ok_or_else(|| {
-            pyo3::exceptions::PyIndexError::new_err(format!(
-                "question index out of range: {index}"
-            ))
-        })
-    }
+    // fn __getitem__(&self, index: usize) -> PyResult<Question> {
+    //     self.content.get(index).cloned().ok_or_else(|| {
+    //         pyo3::exceptions::PyIndexError::new_err(format!(
+    //             "question index out of range: {index}"
+    //         ))
+    //     })
+    // }
 
-    fn __getitems__(&self, index: usize) -> PyResult<Question> {
-        self.__getitem__(index)
-    }
+    // fn __getitems__(&self, index: usize) -> PyResult<Question> {
+    //     self.__getitem__(index)
+    // }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -593,28 +593,28 @@ impl Response {
         }
     }
 
-    fn get_item(&self, index: u64) -> PyResult<Choice> {
-        match self {
-            Self::Single { item } | Self::Multiple { item, .. } => item
-                .get(&index)
-                .cloned()
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(index.to_string())),
-            _ => Err(pyo3::exceptions::PyTypeError::new_err(
-                "only Single and Multiple responses contain choices",
-            )),
-        }
-    }
+    // fn get_item(&self, index: u64) -> PyResult<Choice> {
+    //     match self {
+    //         Self::Single { item } | Self::Multiple { item, .. } => item
+    //             .get(&index)
+    //             .cloned()
+    //             .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(index.to_string())),
+    //         _ => Err(pyo3::exceptions::PyTypeError::new_err(
+    //             "only Single and Multiple responses contain choices",
+    //         )),
+    //     }
+    // }
 }
 
 #[pymethods]
 impl Response {
-    fn __getitem__(&self, index: u64) -> PyResult<Choice> {
-        self.get_item(index)
-    }
+    // fn __getitem__(&self, index: u64) -> PyResult<Choice> {
+    //     self.get_item(index)
+    // }
 
-    fn __getitems__(&self, index: u64) -> PyResult<Choice> {
-        self.get_item(index)
-    }
+    // fn __getitems__(&self, index: u64) -> PyResult<Choice> {
+    //     self.get_item(index)
+    // }
 
     #[getter]
     fn choices(&self) -> Vec<Choice> {
