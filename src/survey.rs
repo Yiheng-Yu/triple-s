@@ -6,8 +6,8 @@ use strum::EnumString;
 
 use crate::error::{self, BadLine, IoError};
 
-#[derive(Debug, PartialEq)]
-#[pyclass(sequence, from_py_object)]
+#[derive(Debug, PartialEq, Clone)]
+#[pyclass(from_py_object)]
 /// A Triple-S survey definition.
 ///
 /// The definition file describes the file metadata, survey title, respondent
@@ -277,7 +277,7 @@ impl Meta {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, PartialEq)]
 #[pyclass(from_py_object)]
 /// A respondent record definition containing an identifier and variables.
 pub struct Record {
@@ -286,7 +286,7 @@ pub struct Record {
     pub id: String,
     /// Variables in their definition-file order.
     #[pyo3(get, set)]
-    pub content: Vec<Py<Question>>,
+    pub content: Vec<Question>,
 }
 
 impl Record {
@@ -309,7 +309,7 @@ impl Record {
 impl Record {
     #[new]
     #[pyo3(signature = (content, *, id = ""))]
-    fn __new__(content: Vec<Py<Question>>, id: &str) -> Self {
+    fn __new__(content: Vec<Question>, id: &str) -> Self {
         Self {
             id: id.to_owned(),
             content,
@@ -318,7 +318,7 @@ impl Record {
 
     /// Initialize a record with required questions and an optional identifier.
     #[pyo3(signature = (content, *, id = ""))]
-    fn __init__(slf: &Bound<'_, Self>, content: Vec<Py<Question>>, id: &str) {
+    fn __init__(slf: &Bound<'_, Self>, content: Vec<Question>, id: &str) {
         *slf.borrow_mut() = Self {
             id: id.to_owned(),
             content,
@@ -327,39 +327,39 @@ impl Record {
 
     fn __repr__(&self) -> String {
         const MAX_QUESTIONS: usize = 5;
-        todo!()
-        // let content = if self.content.len() > MAX_QUESTIONS {
-        //     let questions = self.content.get(..MAX_QUESTIONS)
-        //         // .iter()
-        //         .iter()
-        //         .map(Question::__repr__)
-        //         .collect::<Vec<_>>()
-        //         .join(", ");
-        //     format!("[{}, ...]", questions)
-        // } else {
-        //     let questions = self
-        //         .content
-        //         .iter()
-        //         .map(Question::__repr__)
-        //         .collect::<Vec<_>>()
-        //         .join(", ");
-        //     format!("[{}]", questions)
-        // };
-        // format!("Record(id={:?}, content={})", self.id, content)
+        let content = if self.content.len() > MAX_QUESTIONS {
+            let questions = self.content[..MAX_QUESTIONS]
+                // .iter()
+                .iter()
+                .map(Question::__repr__)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("[{}, ...]", questions)
+        } else {
+            let questions = self
+                .content
+                .iter()
+                .map(Question::__repr__)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("[{}]", questions)
+        };
+        format!("Record(id={:?}, content={})", self.id, content)
     }
 
-    fn __getitem__(&self, index: usize) -> PyResult<&Py<Question>> {
-        self.content
-            .get(index)
-            .ok_or_else(|| {
-                pyo3::exceptions::PyIndexError::new_err(
-                    format!("question index out of range: {index}")
-                )
-            })
-    }
+    // fn __getitem__(&self, index: usize) -> PyResult<Question> {
+    //     self.content
+    //         .get(index)
+    //         .cloned()
+    //         .ok_or_else(|| {
+    //             pyo3::exceptions::PyIndexError::new_err(
+    //                 format!("question index out of range: {index}")
+    //             )
+    //         })
+    // }
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 #[pyclass(from_py_object)]
 /// A survey variable.
 pub struct Question {
