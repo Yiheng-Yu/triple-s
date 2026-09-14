@@ -1,22 +1,16 @@
 mod survey;
-
 use pyo3::prelude::*;
 
-/// A Python module implemented in Rust.
-#[pymodule]
-mod triple_s {
-    use pyo3::prelude::*;
 
-    /// Formats the sum of two numbers as string.
-    #[pyfunction]
-    fn sum_as_string(a: usize, b: usize) -> PyResult<String> {
-        Ok((a + b).to_string())
+#[pymodule(gil_used = false)]
+pub mod triple_s {
+    use super::*;
+
+    #[pymodule_export]
+    pub use super::survey::PySurvey;
+
+    #[pymodule_init]
+    fn init(_m: &Bound<'_, PyModule>) -> PyResult<()> {
+        Ok(())
     }
-}
-
-#[cfg(test)]
-mod test {
-    /// just testing if external crate gets properlly imported or not
-    #[test]
-    fn test_init() {}
 }

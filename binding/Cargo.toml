@@ -9,7 +9,10 @@ name = "triple_s"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = "0.29.0"
+pyo3 = { version = "0.29.2", features = ["py-clone", "experimental-inspect"] }
 
 [dependencies.triple_s]
 path = ".."
+
+[features]
+abi3 = ["pyo3/abi3", "pyo3/abi3-py310"]

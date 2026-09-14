@@ -2,12 +2,9 @@ extern crate triple_s as tris;
 
 use pyo3::prelude::*;
 
-#[pyclass]
-pub struct Survey {
-    inner: tris::Survey
-}
+// need to learn how to properly do this
 
-#[pyclass(dict, module="triple_s", name="Choice")]
-pub struct PyChoice {
-    inner: tris::Choice
+#[pyclass(dict, module="triple_s", name="Survey")]
+pub struct PySurvey {
+    inner: tris::Survey
 }
