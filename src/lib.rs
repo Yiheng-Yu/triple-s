@@ -21,6 +21,8 @@ pub use survey::{
 
 #[pyfunction]
 pub fn read_sss(sss_path: &str) -> PyResult<Survey> {
+    println!("TODO: NEED TO LOOK INTO HOW TO PROPERLY DO SETATTR & GETITEM IN PYO3!");
+    
     // TODO: Read non-utf8 files!!
     let input = File::open(sss_path)
         .map_err(error::IoError::from)
