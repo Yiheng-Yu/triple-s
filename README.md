@@ -8,7 +8,7 @@ Current progression:
 
 | SSS version | Read | Write |
 | --- | --- | --- |
-| <1.2 (sss classic) | ✅ | 🔧 |
+| <1.2 (sss classic) | ✅ | ✅ |
 | >=1.2 | 🔧 | 🔧 |
 
 ## AI usage desclaimer
