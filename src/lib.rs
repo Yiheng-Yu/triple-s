@@ -24,6 +24,7 @@ pub use survey::{
 
 #[pyfunction]
 pub fn read_sss(sss_path: &str) -> PyResult<Survey> {
+    // TODO: Read non-utf8 files!!
     let input = File::open(sss_path)
         .map_err(error::IoError::from)
         .map_err(|error| PyOSError::new_err(error.to_string()))?;

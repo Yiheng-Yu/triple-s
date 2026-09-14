@@ -9,7 +9,10 @@ fn main() {
 
     let python = std::env::var("PYO3_PYTHON").unwrap_or_else(|_| "python3".to_owned());
     let output = Command::new(&python)
-        .args(["-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR') or '')"])
+        .args([
+            "-c",
+            "import sysconfig; print(sysconfig.get_config_var('LIBDIR') or '')",
+        ])
         .output()
         .unwrap_or_else(|error| panic!("failed to query Python library directory: {error}"));
 
