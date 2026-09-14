@@ -7,7 +7,7 @@ use strum::EnumString;
 use crate::error::{self, BadLine, IoError};
 
 #[derive(Debug, Clone, PartialEq)]
-#[pyclass]
+#[pyclass(sequence)]
 /// A Triple-S survey definition.
 ///
 /// The definition file describes the file metadata, survey title, respondent
@@ -86,40 +86,17 @@ impl Survey {
         self == other
     }
 
-    fn __getitem__(
-        slf: PyRef<'_, Self>,
-        py: Python<'_>,
-        index: &Bound<'_, PyAny>,
-    ) -> PyResult<Py<QuestionProxy>> {
-        let question_index = if let Ok(name) = index.extract::<String>() {
-            slf.record
-                .content
-                .iter()
-                .position(|question| question.name.to_uppercase() == name.to_uppercase())
-                .ok_or_else(|| {
-                    pyo3::exceptions::PyKeyError::new_err(format!("unknown question: {name}"))
-                })?
-        } else if let Ok(position) = index.extract::<usize>() {
-            if position >= slf.record.content.len() {
-                return Err(pyo3::exceptions::PyIndexError::new_err(format!(
-                    "question index out of range: {position}"
-                )));
-            }
-            position
-        } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err(
-                "survey indices must be strings or integers",
-            ));
-        };
+    // fn __getitem__(&self, index: usize) -> PyResult<Question> {
+    //     self.record.content.get(index).cloned().ok_or_else(|| {
+    //         pyo3::exceptions::PyIndexError::new_err(format!(
+    //             "question index out of range: {index}"
+    //         ))
+    //     })
+    // }
 
-        Py::new(
-            py,
-            QuestionProxy {
-                survey: slf.into(),
-                question_index,
-            },
-        )
-    }
+    // fn __getitems__(&self, index: usize) -> PyResult<Question> {
+    //     self.__getitem__(index)
+    // }
 
     /// export survey to string
     /// Kwargs:
@@ -136,310 +113,6 @@ impl Survey {
                 "Not implemented yet",
             ))
         }
-    }
-}
-
-#[pyclass]
-/// A live proxy to a question inside a [`Survey`] so that one can do:
-///
-/// survey['q1'].text = "new question text"
-pub struct QuestionProxy {
-    /// The survey that owns the question.
-    survey: Py<Survey>,
-    /// The zero-based position of the question in the record.
-    question_index: usize,
-}
-
-impl QuestionProxy {
-    fn with_question<T>(&self, f: impl FnOnce(&Question) -> T) -> PyResult<T> {
-        Python::attach(|py| {
-            let survey = self.survey.bind(py).borrow();
-            let question =
-                survey
-                    .record
-                    .content
-                    .get(self.question_index)
-                    .ok_or_else(|| {
-                        pyo3::exceptions::PyReferenceError::new_err(
-                            "question no longer exists",
-                        )
-                    })?;
-            Ok(f(question))
-        })
-    }
-
-    fn with_question_mut<T>(&self, f: impl FnOnce(&mut Question) -> T) -> PyResult<T> {
-        Python::attach(|py| {
-            let mut survey = self.survey.bind(py).borrow_mut();
-            let question = survey
-                .record
-                .content
-                .get_mut(self.question_index)
-                .ok_or_else(|| {
-                    pyo3::exceptions::PyReferenceError::new_err("question no longer exists")
-                })?;
-            Ok(f(question))
-        })
-    }
-}
-
-#[pymethods]
-impl QuestionProxy {
-    #[getter]
-    fn name(&self) -> PyResult<String> {
-        self.with_question(|question| question.name.clone())
-    }
-
-    #[setter]
-    fn set_name(&self, value: String) -> PyResult<()> {
-        self.with_question_mut(|question| question.name = value)
-    }
-
-    #[getter]
-    fn text(&self) -> PyResult<String> {
-        self.with_question(|question| question.text.clone())
-    }
-
-    #[setter]
-    fn set_text(&self, value: String) -> PyResult<()> {
-        self.with_question_mut(|question| question.text = value)
-    }
-
-    #[getter]
-    fn location(&self) -> PyResult<Location> {
-        self.with_question(|question| question.location.clone())
-    }
-
-    #[setter]
-    fn set_location(&self, value: Location) -> PyResult<()> {
-        self.with_question_mut(|question| question.location = value)
-    }
-
-    #[getter]
-    fn response(&self, py: Python<'_>) -> PyResult<Py<ResponseProxy>> {
-        self.with_question(|_| ())?;
-        Py::new(
-            py,
-            ResponseProxy {
-                survey: self.survey.clone_ref(py),
-                question_index: self.question_index,
-            },
-        )
-    }
-
-    #[setter]
-    fn set_response(&self, value: Response) -> PyResult<()> {
-        self.with_question_mut(|question| question.response = value)
-    }
-
-    fn __repr__(&self) -> PyResult<String> {
-        self.with_question(Question::__repr__)
-    }
-}
-
-#[pyclass]
-/// A live proxy to a question's [`Response`] definition to achieve this api:
-///
-/// survey['question'].response[3].label = "new label"
-pub struct ResponseProxy {
-    /// The survey that owns the response.
-    survey: Py<Survey>,
-    /// The zero-based position of the question in the record.
-    question_index: usize,
-}
-
-impl ResponseProxy {
-    fn with_response<T>(&self, f: impl FnOnce(&Response) -> T) -> PyResult<T> {
-        Python::attach(|py| {
-            let survey = self.survey.bind(py).borrow();
-            let question =
-                survey
-                    .record
-                    .content
-                    .get(self.question_index)
-                    .ok_or_else(|| {
-                        pyo3::exceptions::PyReferenceError::new_err(
-                            "question no longer exists",
-                        )
-                    })?;
-            Ok(f(&question.response))
-        })
-    }
-}
-
-#[pymethods]
-impl ResponseProxy {
-    fn __getitem__(
-        &self,
-        py: Python<'_>,
-        index: &Bound<'_, PyAny>,
-    ) -> PyResult<Py<ChoiceProxy>> {
-        let code = index.extract::<u64>().map_err(|_| {
-            pyo3::exceptions::PyTypeError::new_err("choice indices must be integers")
-        })?;
-
-        self.with_response(|response| match response {
-            Response::Single { item } | Response::Multiple { item, .. } => {
-                if !item.contains_key(&code) {
-                    return Err(pyo3::exceptions::PyKeyError::new_err(code.to_string()));
-                }
-                Ok(())
-            }
-            _ => Err(pyo3::exceptions::PyTypeError::new_err(
-                "only Single and Multiple responses contain choices",
-            )),
-        })??;
-
-        Py::new(
-            py,
-            ChoiceProxy {
-                survey: self.survey.clone_ref(py),
-                question_index: self.question_index,
-                code,
-            },
-        )
-    }
-
-    fn __repr__(&self) -> PyResult<String> {
-        self.with_response(Response::__repr__)
-    }
-}
-
-#[pyclass]
-/// A live proxy to a coded choice in a `Single` or `Multiple` response.
-///
-/// Changing `code` moves the choice to the corresponding `BTreeMap` key.
-pub struct ChoiceProxy {
-    /// The survey that owns the choice.
-    survey: Py<Survey>,
-    /// The zero-based position of the question in the record.
-    question_index: usize,
-    /// The current code and map key for the choice.
-    code: u64,
-}
-
-impl ChoiceProxy {
-    fn with_choice<T>(&self, f: impl FnOnce(&Choice) -> T) -> PyResult<T> {
-        Python::attach(|py| {
-            let survey = self.survey.bind(py).borrow();
-            let question =
-                survey
-                    .record
-                    .content
-                    .get(self.question_index)
-                    .ok_or_else(|| {
-                        pyo3::exceptions::PyReferenceError::new_err(
-                            "question no longer exists",
-                        )
-                    })?;
-            let item = match &question.response {
-                Response::Single { item } | Response::Multiple { item, .. } => item,
-                _ => {
-                    return Err(pyo3::exceptions::PyTypeError::new_err(
-                        "only Single and Multiple responses contain choices",
-                    ));
-                }
-            };
-            let choice = item.get(&self.code).ok_or_else(|| {
-                pyo3::exceptions::PyReferenceError::new_err("choice no longer exists")
-            })?;
-            Ok(f(choice))
-        })
-    }
-
-    fn with_choice_mut<T>(&self, f: impl FnOnce(&mut Choice) -> T) -> PyResult<T> {
-        Python::attach(|py| {
-            let mut survey = self.survey.bind(py).borrow_mut();
-            let question = survey
-                .record
-                .content
-                .get_mut(self.question_index)
-                .ok_or_else(|| {
-                    pyo3::exceptions::PyReferenceError::new_err("question no longer exists")
-                })?;
-            let item = match &mut question.response {
-                Response::Single { item } | Response::Multiple { item, .. } => item,
-                _ => {
-                    return Err(pyo3::exceptions::PyTypeError::new_err(
-                        "only Single and Multiple responses contain choices",
-                    ));
-                }
-            };
-            let choice = item.get_mut(&self.code).ok_or_else(|| {
-                pyo3::exceptions::PyReferenceError::new_err("choice no longer exists")
-            })?;
-            Ok(f(choice))
-        })
-    }
-}
-
-#[pymethods]
-impl ChoiceProxy {
-    #[getter]
-    fn code(&self) -> PyResult<u64> {
-        self.with_choice(|choice| choice.code)
-    }
-
-    #[setter]
-    fn set_code(&mut self, value: u64) -> PyResult<()> {
-        if value == self.code {
-            return Ok(());
-        }
-
-        Python::attach(|py| {
-            let mut survey = self.survey.bind(py).borrow_mut();
-            let question = survey
-                .record
-                .content
-                .get_mut(self.question_index)
-                .ok_or_else(|| {
-                    pyo3::exceptions::PyReferenceError::new_err("question no longer exists")
-                })?;
-            let item = match &mut question.response {
-                Response::Single { item } | Response::Multiple { item, .. } => item,
-                _ => {
-                    return Err(pyo3::exceptions::PyTypeError::new_err(
-                        "only Single and Multiple responses contain choices",
-                    ));
-                }
-            };
-            if item.contains_key(&value) {
-                return Err(pyo3::exceptions::PyValueError::new_err(
-                    "a choice with that code already exists",
-                ));
-            }
-            let mut choice = item.remove(&self.code).ok_or_else(|| {
-                pyo3::exceptions::PyReferenceError::new_err("choice no longer exists")
-            })?;
-            choice.code = value;
-            item.insert(value, choice);
-            self.code = value;
-            Ok(())
-        })
-    }
-
-    #[getter]
-    fn label(&self) -> PyResult<String> {
-        self.with_choice(|choice| choice.label.clone())
-    }
-
-    #[setter]
-    fn set_label(&self, value: String) -> PyResult<()> {
-        self.with_choice_mut(|choice| choice.label = value)
-    }
-
-    #[getter]
-    fn filter(&self) -> PyResult<Option<String>> {
-        self.with_choice(|choice| choice.filter.clone())
-    }
-
-    #[setter]
-    fn set_filter(&self, value: Option<String>) -> PyResult<()> {
-        self.with_choice_mut(|choice| choice.filter = value)
-    }
-
-    fn __repr__(&self) -> PyResult<String> {
-        self.with_choice(Choice::__repr__)
     }
 }
 
@@ -605,7 +278,7 @@ impl Meta {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-#[pyclass(from_py_object)]
+#[pyclass(from_py_object, sequence)]
 /// A respondent record definition containing an identifier and variables.
 pub struct Record {
     /// The record identifier, a single alphabetic character in Triple-S 1.1.
@@ -675,6 +348,18 @@ impl Record {
 
     fn __eq__(&self, other: &Self) -> bool {
         self == other
+    }
+
+    fn __getitem__(&self, index: usize) -> PyResult<Question> {
+        self.content.get(index).cloned().ok_or_else(|| {
+            pyo3::exceptions::PyIndexError::new_err(format!(
+                "question index out of range: {index}"
+            ))
+        })
+    }
+
+    fn __getitems__(&self, index: usize) -> PyResult<Question> {
+        self.__getitem__(index)
     }
 }
 
@@ -790,7 +475,7 @@ impl NumericSpecial {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-#[pyclass(from_py_object)]
+#[pyclass(from_py_object, sequence)]
 /// The type-specific definition of a survey variable.
 pub enum Response {
     /// A numeric variable with an inclusive legal range.
@@ -907,10 +592,30 @@ impl Response {
             _ => "".into(),
         }
     }
+
+    fn get_item(&self, index: u64) -> PyResult<Choice> {
+        match self {
+            Self::Single { item } | Self::Multiple { item, .. } => item
+                .get(&index)
+                .cloned()
+                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(index.to_string())),
+            _ => Err(pyo3::exceptions::PyTypeError::new_err(
+                "only Single and Multiple responses contain choices",
+            )),
+        }
+    }
 }
 
 #[pymethods]
 impl Response {
+    fn __getitem__(&self, index: u64) -> PyResult<Choice> {
+        self.get_item(index)
+    }
+
+    fn __getitems__(&self, index: u64) -> PyResult<Choice> {
+        self.get_item(index)
+    }
+
     #[getter]
     fn choices(&self) -> Vec<Choice> {
         match self {

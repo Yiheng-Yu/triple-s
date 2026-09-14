@@ -43,12 +43,11 @@ print(survey[0].name)       # Or by zero-based position
 Edit the loaded survey:
 
 ```python
-survey["q1"].title = "New title"
 question = survey["Q1"]
-question.text = "Updated question text"
-question.response
-question.responses
-question.codes
+print(question.text)
+response = question.response
+choice = response[1]
+print(choice.label)
 ```
 
 Survey responses can be iterated or converted to a pandas `DataFrame`:
@@ -56,6 +55,12 @@ Survey responses can be iterated or converted to a pandas `DataFrame`:
 ```python
 choices = list(survey["Q1"].response)
 choices_table = survey["Q1"].response.pandas
+```
+
+`Single` and `Multiple` responses support lookup and assignment by choice code:
+
+```python
+response[1] = Choice(1, label="Updated label")
 ```
 
 Exporting:
@@ -111,12 +116,6 @@ cargo test
 The public `read_sss` function currently parses the classic text Triple-S
 format. XML fixtures are included in the repository, but XML parsing is not
 currently exposed by `read_sss`.
-
-## AI usage
-
-I handwrote majorities of the code with *some* support of ai, mostly on writing unit tests and documentations.
-
-I'm still learning `pyo3` hence I leaned to AI a bit on part of the codes that I am not sure how to do yet, namely `QuestionProxy`, `ResponseProxy`, and `ChoiceProxy` on the rust side (`survey.rs`). These three structs are mainly used for providing a temporary view/write access to python's `__getattr__`, `__setattr__`, `__getitem__` and `__setitem__`, they aren't really getting used in the main stuff. Also, `build.rs` is generated, the entire file is there just so that i can run `cargo test`. I've no idea why it didn't allow me to run `cargo test`, don't know how to fix it my self, so asked ai for help.
 
 ## License
 
