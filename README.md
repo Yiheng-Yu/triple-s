@@ -1,6 +1,6 @@
 # triple-s
 
-A Rust parser for reading [Triple-S](https://www.triple-s.org/) survey files (.sss).
+A parser for reading parsing [Triple-S](https://www.triple-s.org/) survey files (.sss), backend by rust via [PyO3](https://pyo3.rs/) and [maturin](https://maturin.rs/).
 
 Still a work in progress. The current plan is to complete support for *reading* triple-s files first, followed by implementing support for *writing* files later.
 
@@ -11,8 +11,76 @@ Current progression:
 | <1.2 (sss classic) | ✅ | ✅ |
 | >=1.2 | 🔧 | 🔧 |
 
-Python bindings are intentionally not included yet. The `python/triple_s` package
-is reserved for a future binding layer over the Rust model.
+## AI usage desclaimer
+
+I handwrote majorities of the code with *some* support of ai, mostly on writing unit tests and documentations.
+
+I'm still learning `pyo3` hence I leaned to AI a bit on part of the codes that I am not sure how to do yet, namely `QuestionProxy`, `ResponseProxy`, and `ChoiceProxy` on the rust side (`survey.rs`). These three structs are mainly used for providing a temporary view/write access to python's `__getattr__`, `__setattr__`, `__getitem__` and `__setitem__`, they aren't really getting used in the main stuff. Also, `build.rs` is generated, the entire file is there just so that i can run `cargo test`. I've no idea why it didn't allow me to run `cargo test`, don't know how to fix it my self, so asked ai for help.
+
+## Python
+
+### Getting started
+
+Install with:
+
+```bash
+pip install triple-s
+```
+
+#### Read a survey
+
+```python
+from triple_s import read_sss
+
+survey = read_sss("path/to/survey.sss")
+
+print(survey.title)
+```
+
+Accessing contents within a survey:
+
+```python
+# Lookup by question name, case insensitive
+print(survey["Q1"].label)
+print(survey['q1'].label)  # this will also do
+```
+
+Edit the loaded survey:
+
+```python
+survey["q1"].title = "New title"
+question = survey["Q1"]
+question.text = "Updated question text"
+```
+
+Survey can be iterated:
+
+```python
+for question in survey:
+    print(question.name)
+```
+
+Survey responses can be converted to `pd.DataFrame`:
+
+```python
+choices_table = survey["Q1"].response.pandas
+```
+
+#### Exporting
+
+Export instance to sss classic (sss 1.1):
+
+```python
+string = survey.to_sss_classic()
+print(string)
+```
+
+Alternatively, insead of the entire survey, you can also export individual survey components (i.e., individual questions, question response, data location) as well:
+
+```python
+question_string = survey.record[3].to_sss_classic()
+print(question_string)
+```
 
 ## Rust
 
@@ -41,6 +109,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 ## Development
+
+Install the Python development dependencies and build the extension with:
+
+```bash
+maturin develop
+```
 
 Run the Rust tests with:
 

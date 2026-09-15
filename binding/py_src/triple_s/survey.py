@@ -29,8 +29,16 @@ class Survey:
     def meta(self, value: rs.Meta) -> None:
         self._survey.meta = value
 
-    def __getitem__(self, index: int) -> "Question":
-        return Question(self._survey.record[index])
+    def __getitem__(self, index: int | str) -> "Question":
+        if isinstance(index, int):
+            return Question(self._survey.record[index])
+        elif isinstance(index, str):
+            for question in self._survey.record:
+                if question.name.lower() == index.lower():
+                    return Question(question)
+            return IndexError(index)
+        else:
+            return TypeError(f"Unsupported type: {type(index)}. Expect one of: [int, str]")
 
     def to_sss_classic(self) -> str:
         return self._survey.to_sss_classic()
