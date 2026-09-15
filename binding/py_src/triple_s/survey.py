@@ -79,7 +79,7 @@ class Question:
     def filter(self, value: str) -> None:
         self._question.filter = value
 
-    @property
+    # @property
     def kind(self) -> rs.Kind:
         # todo: create a setter for this!
         return self._question.kind
