@@ -2,14 +2,18 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Survey {
-    pub title: String,
+    pub title: Option<String>,
     pub meta: Meta,
     pub record: Record,
 }
 
 impl Survey {
     pub fn empty() -> Self {
-        Self { title: String::new(), meta: Meta::default(), record: Record::default() }
+        Self {
+            title: None,
+            meta: Meta::default(),
+            record: Record::default(),
+        }
     }
 }
 
@@ -49,16 +53,32 @@ pub struct NumericSpecial {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Response {
-    Quantity { min: f64, max: f64 },
-    QuantitySpecial { min: f64, max: f64, special: Vec<NumericSpecial> },
+    Quantity {
+        min: f64,
+        max: f64,
+    },
+    QuantitySpecial {
+        min: f64,
+        max: f64,
+        special: Vec<NumericSpecial>,
+    },
     Character(usize),
     Note(String),
-    Single { item: BTreeMap<u64, Choice> },
-    Multiple { item: BTreeMap<u64, Choice>, spread: Spread },
+    Single {
+        item: BTreeMap<u64, Choice>,
+    },
+    Multiple {
+        item: BTreeMap<u64, Choice>,
+        spread: Spread,
+    },
 }
 
 impl Default for Response {
-    fn default() -> Self { Self::Single { item: BTreeMap::new() } }
+    fn default() -> Self {
+        Self::Single {
+            item: BTreeMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -70,21 +90,40 @@ pub struct Choice {
 
 impl Choice {
     pub fn new<T>(code: u64, label: impl Into<String>, filter: Option<T>) -> Self
-    where T: Into<String> {
-        Self { code, label: label.into(), filter: filter.map(Into::into) }
+    where
+        T: Into<String>,
+    {
+        Self {
+            code,
+            label: label.into(),
+            filter: filter.map(Into::into),
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Location { pub from: u64, pub to: u64 }
+pub struct Location {
+    pub from: u64,
+    pub to: u64,
+}
 
 impl Default for Location {
-    fn default() -> Self { Self { from: 1, to: 1 } }
+    fn default() -> Self {
+        Self { from: 1, to: 1 }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Spread { pub num_subfields: u64, pub width: u64 }
+pub struct Spread {
+    pub num_subfields: u64,
+    pub width: u64,
+}
 
 impl Default for Spread {
-    fn default() -> Self { Self { num_subfields: 999, width: 999 } }
+    fn default() -> Self {
+        Self {
+            num_subfields: 999,
+            width: 999,
+        }
+    }
 }

@@ -11,6 +11,9 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dynamic = ["version"]
+dependencies = [
+    "pandas>=3.0.0"
+]
 
 [tool.maturin]
 python-source = "py_src"
