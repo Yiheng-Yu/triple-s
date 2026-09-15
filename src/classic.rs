@@ -769,7 +769,6 @@ mod tests {
     fn test_single_code_question_write() {
         let lines = create_example_single_code_iterator();
         let survey = read_sss_classic(lines).unwrap();
-
         let question = survey.get_question("AGE").unwrap();
         
         let sss_output = question.to_sss_classic().trim().to_string();
@@ -797,4 +796,51 @@ mod tests {
     }
 
     // todo! finish this unit tests
+    fn create_example_multi_code_iterator() -> impl Iterator<Item = Result<String, IoError>> {
+        let content = r#"
+        VARIABLE 1
+        NAME "K2"
+        LABEL "I AM A QUESTION LABEL"
+        TYPE MULTIPLE
+        POSITION 1147 TO 1155
+        SPREAD 7 OF 2
+        VALUES
+        1 "Under 18"
+        2 "18 to 24"
+        3 "25 to 34"
+        4 "35 to 44"
+        5 "45 to 54"
+        6 "55 to 64"
+        7 "65 or older"
+        8 "Prefer not to say" SPECIAL
+        END VALUES
+        END VARIABLE"#;
+        put_into_record(content)
+    }
+
+    #[test]
+    fn test_multi_code_question_read() {
+        let lines = create_example_multi_code_iterator();
+        let survey = read_sss_classic(lines).unwrap();
+        assert_eq!(survey.record.content.len(), 1);
+
+        let question = survey.get_question("K2").unwrap();
+        assert_eq!(question.name, "K2");
+        assert_eq!(question.text, "I AM A QUESTION LABEL");
+        assert_eq!(question.response.is_categorical(), true);
+    }
+
+    #[test]
+    fn test_multi_code_question_write() {
+        let lines = create_example_multi_code_iterator();
+        let survey = read_sss_classic(lines).unwrap();
+        assert_eq!(survey.record.content.len(), 1);
+
+        let question = survey.get_question("K2").unwrap();
+        let sss_output = question.to_sss_classic().trim().to_string();
+        assert!(sss_output.starts_with(r#"NAME "K2""#));
+        assert!(sss_output.contains(r#"LABEL "I AM A QUESTION LABEL""#));
+        assert_eq!(question.location.to_sss_classic(), "POSITION 1147 TO 1155")
+        // assert_eq!(question.response)
+    }
 }

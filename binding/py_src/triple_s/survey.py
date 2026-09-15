@@ -57,7 +57,7 @@ class Survey(Proxy):
     def __getitems__(self, index: int | str) -> "Question":
         if isinstance(index, int):
             item = self.__backend__.record[index]
-            if isisntance(item, rs.Question):
+            if isinstance(item, rs.Question):
                 print("ok!")
                 return Question(item)
             else:  # its an error
@@ -67,7 +67,7 @@ class Survey(Proxy):
         elif isinstance(index, str):
             for question in self.__backend__.record:
                 if question.name.lower() == index.lower():
-                    if isisntance(item, rs.Question):
+                    if isinstance(item, rs.Question):
                         return Question(item)
                     else:  # its an error
                         raise item

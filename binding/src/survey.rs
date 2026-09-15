@@ -58,6 +58,16 @@ impl PySurvey {
     fn to_sss_classic(&self) -> String {
         self.inner.to_sss_classic()
     }
+
+    fn get_question(survey: &Bound<'_, Self>, question_name: &str) -> PyResult<PyQuestion> {
+        let query = question_name.to_uppercase();
+        survey.borrow().inner.record.content
+        .iter()
+        .enumerate()
+        .find(|(_, question)| question.name.to_uppercase() == query)
+        .map(|(index, _)| PyQuestion::from_inner(survey, index))
+        .ok_or(exceptions::PyKeyError::new_err(question_name.to_string()))?
+    }
 }
 
 /// Content of a survey
