@@ -10,8 +10,6 @@ class Proxy:
         super().__init_subclass__(**kwargs)
         if cls.__doc__ is None:
             cls.__doc__ = cls.BACKEND.__doc__
-        else:
-            cls.__doc__ = cls.__doc__ + "\n" + cls.BACKEND.__doc__
         
     def __init__(self, inner: BACKEND):
         if not isinstance(inner, self.BACKEND):
@@ -20,7 +18,7 @@ class Proxy:
                 f"got {type(inner).__name__}"
             )
         self.__backend__ = inner
-            
+
     def __repr__(self) -> str:
         return repr(self.__backend__)
 

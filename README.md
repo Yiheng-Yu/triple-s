@@ -6,10 +6,11 @@ Still a work in progress. The current plan is to complete support for *reading* 
 
 Current progression:
 
-| SSS version | Read | Write |
+| Files | Read | Write |
 | --- | --- | --- |
-| <1.2 (sss classic) | ✅ | ✅ |
-| >=1.2 | 🔧 | 🔧 |
+| Triple-S 1.1 below (sss classic) | ✅ | ✅ |
+| Triple-S 1.1 above (sss xml) | 🔧 | 🔧 |
+| Processing `.asc` data file | 🔧 | 🔧 |
 
 ## Python
 
