@@ -698,9 +698,8 @@ impl Spread {
 
 #[cfg(test)]
 mod tests {
-    use crate::Response::Quantity;
 
-use super::*;
+    use super::*;
 
     /// used to trim whitespaces for string comparison
     fn normalize(s: &str) -> String {
@@ -873,6 +872,39 @@ use super::*;
         POSITION 1147 TO 1155
         POSITION 2399 TO 2408
             VALUES
+                0.00 TO 99.00
+            END VALUES
+        END VARIABLE"#;
+        put_into_record(content)
+    }
+
+    #[test]
+    fn test_quantity_question_float_read() {
+        let lines = create_example_float_quantity_iterator();
+        let survey = read_sss_classic(lines).unwrap();
+        assert_eq!(survey.record.content.len(), 1);
+
+        let question = survey.get_question("QUANTITY").unwrap();
+        assert_eq!(question.response.is_quantity(), true);
+
+        match &question.response {
+            Response::Quantity { min, max } => {
+                assert_eq!(min.clone(), 0.00);
+                assert_eq!(max.clone(), 99.00);
+            }
+            _ => panic!("Wrong kind of response received!")
+        }
+    }
+
+    fn create_example_float_quantity_with_special_iterator() -> impl Iterator<Item = Result<String, IoError>> {
+        let content = r#"
+        VARIABLE 1
+        NAME "QUANTITY"
+        LABEL "I AM A QUESTION LABEL"
+        TYPE QUANTITY
+        POSITION 1147 TO 1155
+        POSITION 2399 TO 2408
+            VALUES
                 0.00 TO 99.00 WITH
                 -999999.99 "Don't Know" SPECIAL
             END VALUES
@@ -881,8 +913,8 @@ use super::*;
     }
 
     #[test]
-    fn test_quantity_question_read() {
-        let lines = create_example_float_quantity_iterator();
+    fn test_quantity_question_float_special_read() {
+        let lines = create_example_float_quantity_with_special_iterator();
         let survey = read_sss_classic(lines).unwrap();
         assert_eq!(survey.record.content.len(), 1);
 
