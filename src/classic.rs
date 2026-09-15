@@ -861,4 +861,28 @@ mod tests {
         };
         assert_eq!(spread.to_sss_classic(), "SPREAD 5 OF 3")
     }
+
+    fn create_example_float_quantity_iterator() -> impl Iterator<Item = Result<String, IoError>> {
+        let content = r#"
+        VARIABLE 1
+        NAME "QUANTITY"
+        LABEL "I AM A QUESTION LABEL"
+        TYPE QUANTITY
+        POSITION 1147 TO 1155
+        SPREAD 7 OF 2
+        POSITION 2399 TO 2408
+            VALUES
+                0.00 TO 99.00 WITH
+                -999999.99 "Don't Know" SPECIAL
+            END VALUES
+        END VARIABLE"#;
+        put_into_record(content)
+    }
+
+    #[test]
+    fn test_quantity_question_read() {
+        let lines = create_example_multi_code_iterator();
+        let survey = read_sss_classic(lines).unwrap();
+        assert_eq!(survey.record.content.len(), 1);
+    }
 }
