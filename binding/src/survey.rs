@@ -50,6 +50,14 @@ impl PySurvey {
     fn record(survey: &Bound<'_, Self>) -> PyRecord {
         PyRecord::from_rust(survey)
     }
+
+    fn __repr__(&self) -> String {
+        format!(
+            r#"Survey(title="{}", version={})"#, 
+            self.inner.title.as_ref().map_or_default(|s| s.as_str()), 
+            self.inner.meta.version.as_ref().map_or_default(|s| s.as_str())
+        )
+    }
 }
 
 /// Content of a survey
@@ -86,11 +94,46 @@ impl PyRecord {
         Ok(())
     }
 
+    /// List of questions/ variables that the current survey instance contains
+    #[getter]
+    fn content(&self, py: Python<'_>) -> PyResult<Vec<PyQuestion>> {
+        let inner = self.inner.bind(py);
+        inner.borrow().inner.record.content.iter().enumerate()
+        .map(|(idx, _)| PyQuestion::from_inner(inner, idx))
+        .collect()
+    }
+
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<PyQuestion> {
         let inner = self.inner.bind(py);
         let content_length = inner.borrow().inner.record.content.len();
         let index = normalize_index(index, content_length)?; // also checks if index really exists, raise IndexError if otherwise
         PyQuestion::from_inner(inner, index)
+    }
+
+    fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+        Ok(self.inner.bind(py).borrow().inner.record.content.len())
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let inner = self.inner.bind(py);
+        let record = inner.borrow();
+
+        let content_length = record.inner.record.content.len();
+        // only show first x amount of members
+        let read_length = content_length.min(15);
+
+        let mut question_string = Vec::new();
+        for index in 0..read_length {
+            let question = self.__getitem__(py, index as isize)?
+                .__repr__(py)?;
+            question_string.push(question);
+        };
+        if read_length < content_length {
+            question_string.push("...".into())
+        };
+        let question_string = question_string.join(",\n\t\t");
+        let current_id = &record.inner.record.id;
+        Ok(format!("Record(\n\tid=\"{}\",\n\tcontent=[\n\t\t{}\n\t]\n)", current_id, question_string))
     }
 }
 

@@ -10,6 +10,8 @@ class Proxy:
         super().__init_subclass__(**kwargs)
         if cls.__doc__ is None:
             cls.__doc__ = cls.BACKEND.__doc__
+        else:
+            cls.__doc__ = cls.__doc__ + "\n" + cls.BACKEND.__doc__
         
     def __init__(self, inner: BACKEND):
         if not isinstance(inner, self.BACKEND):
@@ -52,13 +54,23 @@ class Survey(Proxy):
         """Alias for `record`"""
         return self.record
         
-    def __getitem__(self, index: int | str) -> "Question":
+    def __getitems__(self, index: int | str) -> "Question":
         if isinstance(index, int):
-            return Question(self.__backend__.record[index])
+            item = self.__backend__.record[index]
+            if isisntance(item, rs.Question):
+                print("ok!")
+                return Question(item)
+            else:  # its an error
+                print("indexerror!")
+                raise item
+        
         elif isinstance(index, str):
             for question in self.__backend__.record:
                 if question.name.lower() == index.lower():
-                    return Question(question)
+                    if isisntance(item, rs.Question):
+                        return Question(item)
+                    else:  # its an error
+                        raise item
             return IndexError(index)
         else:
             return TypeError(f"Unsupported type: {type(index)}. Expect one of: [int, str]")
@@ -80,7 +92,11 @@ class Record(Proxy):
             return IndexError(index)
         else:
             return TypeError(f"Unsupported type: {type(index)}. Expect one of: [int, str]")
-
+    
+    @property
+    def content(self) -> list["Question"]:
+        return [Question(inner_question) for inner_question in self.__backend__.content]
+    
 class Question(Proxy):
     __slots__ = ("__backend__",)
     BACKEND = rs.Question
