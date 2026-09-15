@@ -84,6 +84,17 @@ impl Response {
     pub fn is_categorical(&self) -> bool {
         matches!(self, Self::Single { .. } | Self::Multiple { .. })
     }
+
+    /// returns lookup table of code number <-> code label
+    /// for single & multiple kinds of responses.
+    pub fn codeframe(&self) -> Option<&BTreeMap<u64, Choice>> {
+        match self {
+            Self::Single { item } | Self::Multiple { item, .. } => {
+                Some(item)
+            }
+            _ => None
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
