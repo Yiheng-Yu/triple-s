@@ -25,8 +25,12 @@ impl PySurvey {
 
 #[pymethods]
 impl PySurvey {
-    fn to_sss_classic(&self) -> String {
-        self.inner.to_sss_classic()
+    fn __repr__(&self) -> String {
+        format!(
+            r#"Survey(title="{}", version={})"#, 
+            self.inner.title.as_ref().map_or_default(|s| s.as_str()), 
+            self.inner.meta.version.as_ref().map_or_default(|s| s.as_str())
+        )
     }
 
     /// (Optional) Title of a survey.
@@ -51,12 +55,8 @@ impl PySurvey {
         PyRecord::from_rust(survey)
     }
 
-    fn __repr__(&self) -> String {
-        format!(
-            r#"Survey(title="{}", version={})"#, 
-            self.inner.title.as_ref().map_or_default(|s| s.as_str()), 
-            self.inner.meta.version.as_ref().map_or_default(|s| s.as_str())
-        )
+    fn to_sss_classic(&self) -> String {
+        self.inner.to_sss_classic()
     }
 }
 
