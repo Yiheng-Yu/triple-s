@@ -851,6 +851,14 @@ mod tests {
         assert!(sss_output.contains(r#"LABEL "I AM A QUESTION LABEL""#));
         assert_eq!(question.location.to_sss_classic(), "POSITION 1147 TO 1155");
         assert_eq!(question.response.get_spread().unwrap().to_sss_classic(), "SPREAD 7 OF 2");
-        // assert_eq!(question.response)
+    }
+
+    #[test]
+    fn test_sss_write_spread() {
+        let spread = Spread {
+            num_subfields: 5,
+            width: 3
+        };
+        assert_eq!(spread.to_sss_classic(), "SPREAD 5 OF 3")
     }
 }
