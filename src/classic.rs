@@ -698,7 +698,9 @@ impl Spread {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::Response::Quantity;
+
+use super::*;
 
     /// used to trim whitespaces for string comparison
     fn normalize(s: &str) -> String {
@@ -869,7 +871,6 @@ mod tests {
         LABEL "I AM A QUESTION LABEL"
         TYPE QUANTITY
         POSITION 1147 TO 1155
-        SPREAD 7 OF 2
         POSITION 2399 TO 2408
             VALUES
                 0.00 TO 99.00 WITH
@@ -881,8 +882,20 @@ mod tests {
 
     #[test]
     fn test_quantity_question_read() {
-        let lines = create_example_multi_code_iterator();
+        let lines = create_example_float_quantity_iterator();
         let survey = read_sss_classic(lines).unwrap();
         assert_eq!(survey.record.content.len(), 1);
+
+        let question = survey.get_question("QUANTITY").unwrap();
+        assert_eq!(question.response.is_quantity(), true);
+
+        match &question.response {
+            Response::QuantitySpecial { min, max, special } => {
+                assert_eq!(min.clone(), 0.00);
+                assert_eq!(max.clone(), 99.00);
+                println!("{:#?}", &special);
+            }
+            _ => panic!("Wrong kind of response received!")
+        }
     }
 }

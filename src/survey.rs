@@ -85,6 +85,10 @@ impl Response {
         matches!(self, Self::Single { .. } | Self::Multiple { .. })
     }
 
+    pub fn is_quantity(&self) -> bool {
+        matches!(self, Self::Quantity { .. }|Self::QuantitySpecial { .. })
+    }
+
     /// returns lookup table of code number <-> code label
     /// for single & multiple kinds of responses.
     pub fn codeframe(&self) -> Option<&BTreeMap<u64, Choice>> {
