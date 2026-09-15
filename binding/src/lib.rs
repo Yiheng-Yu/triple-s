@@ -12,6 +12,7 @@ pub mod triple_s {
         PyRecord,
         PyResponse,
         PySurvey,
+        PyProxy,
         read_sss,
     };
     use super::*;

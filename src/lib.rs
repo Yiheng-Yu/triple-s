@@ -9,17 +9,7 @@ use std::{
 
 pub use classic::{SSSClassicLineType, SSSType, read_sss_classic};
 pub use error::IoError;
-pub use survey::{
-    Choice,
-    Location,
-    Meta,
-    NumericSpecial,
-    Question,
-    Record,
-    Response,
-    Spread,
-    Survey,
-};
+pub use survey::{Choice, Location, Meta, Question, Record, Response, Spread, Survey};
 
 pub fn read_sss(sss_path: &str) -> Result<Survey, IoError> {
     let input: File = File::open(sss_path).map_err(IoError::from)?;

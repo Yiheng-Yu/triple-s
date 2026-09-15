@@ -39,6 +39,7 @@ impl From<strum::ParseError> for IoError {
     }
 }
 
+
 #[derive(Debug)]
 pub struct ErrorReadFile {
     message: String,

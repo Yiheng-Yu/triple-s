@@ -440,6 +440,20 @@ impl PyChoice {
             choice.filter = value.map(|s| s.to_string())
         })
     }
+
+    /// (Optional) indicator for special values (e.g. mannotationissing data codes).
+    /// Removed from SSS 1.2 onwards.
+    #[getter]
+    fn annotation(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        self.with_choice(py, |choice| choice.annotation.clone())
+    }
+
+    #[setter]
+    fn set_annotation(&self, py: Python<'_>, value: Option<&str>) -> PyResult<()> {
+        self.with_choice_mut(py, |choice| {
+            choice.annotation = value.map(|s| s.to_string())
+        })
+    }
 }
 
 /// Flag for indicating what response kind (i.e., single/ multiple etc.)
@@ -615,7 +629,12 @@ impl PyMeta {
     }
 }
 
-/// helper function that converts pyton index (can be negative) to rust index (usize)
+/// Just a dummy class used for creating a python parent class for inheritance
+#[pyclass(dict, module = "triple_s", name = "Proxy")]
+pub struct PyProxy {}
+
+
+/// helper functions that converts pyton index (can be negative) to rust index (usize)
 fn normalize_index(index: isize, total: usize) -> PyResult<usize> {
     let index = if index < 0 {
         total as isize + index
