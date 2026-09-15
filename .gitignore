@@ -77,3 +77,63 @@ docs/_build/
 
 # Pyenv
 .python-version
+
+binding//target
+# Byte-compiled / optimized / DLL files
+binding/__pycache__/
+binding/.pytest_cache/
+binding/*.py[cod]
+# C extensions
+binding/*.so
+# Distribution / packaging
+binding/.Python
+binding/.venv/
+binding/env/
+binding/bin/
+binding/build/
+binding/develop-eggs/
+binding/dist/
+binding/eggs/
+binding/lib/
+binding/lib64/
+binding/parts/
+binding/sdist/
+binding/var/
+binding/include/
+binding/man/
+binding/venv/
+binding/*.egg-info/
+binding/.installed.cfg
+binding/*.egg
+# Installer logs
+binding/pip-log.txt
+binding/pip-delete-this-directory.txt
+binding/pip-selfcheck.json
+# Unit test / coverage reports
+binding/htmlcov/
+binding/.tox/
+binding/.coverage
+binding/.cache
+binding/nosetests.xml
+binding/coverage.xml
+# Translations
+binding/*.mo
+# Mr Developer
+binding/.mr.developer.cfg
+binding/.project
+binding/.pydevproject
+# Rope
+binding/.ropeproject
+# Django stuff:
+binding/*.log
+binding/*.pot
+binding/.DS_Store
+# Sphinx documentation
+binding/docs/_build/
+# PyCharm
+binding/.idea/
+# VSCode
+binding/.vscode/
+
+# Pyenv
+binding/.python-version
