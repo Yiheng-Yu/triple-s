@@ -818,6 +818,15 @@ mod tests {
         put_into_record(content)
     }
 
+    impl Response {
+        pub fn get_spread(&self) -> Option<&Spread> {
+            match self {
+                Self::Multiple { item: _, spread } => Some(spread),
+                _ => None
+            }
+        }
+    }
+
     #[test]
     fn test_multi_code_question_read() {
         let lines = create_example_multi_code_iterator();
@@ -840,7 +849,8 @@ mod tests {
         let sss_output = question.to_sss_classic().trim().to_string();
         assert!(sss_output.starts_with(r#"NAME "K2""#));
         assert!(sss_output.contains(r#"LABEL "I AM A QUESTION LABEL""#));
-        assert_eq!(question.location.to_sss_classic(), "POSITION 1147 TO 1155")
+        assert_eq!(question.location.to_sss_classic(), "POSITION 1147 TO 1155");
+        assert_eq!(question.response.get_spread().unwrap().to_sss_classic(), "SPREAD 7 OF 2");
         // assert_eq!(question.response)
     }
 }
