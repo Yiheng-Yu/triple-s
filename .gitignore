@@ -5,7 +5,7 @@
 /python/lib/*
 !/python/triple_s/
 
-*code-workspace
+# *code-workspace
 
 /tests/read_non_utf8_test.rs
 
