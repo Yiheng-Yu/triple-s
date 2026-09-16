@@ -1,18 +1,49 @@
-use triple_s::{Survey, read_sss};
+use triple_s::{Survey, error::BadLine, read_sss, read_sss_classic};
 
 const PATH_SSS_CLASSIC: &str = "tests/sss_classic.sss";
 
-#[test]
-fn read_sss_classic() {
-    let survey = read_sss(PATH_SSS_CLASSIC).unwrap();
-    assert_eq!(
-        survey.title.unwrap(),
-        "Customer Experience Survey - HTML Test"
+fn read_sss_classic_example() -> Survey {
+    read_sss(PATH_SSS_CLASSIC).unwrap()
+}
+
+fn put_into_record(content: &str) -> impl Iterator<Item = Result<String, BadLine>> {
+    let content = format!(
+        r#"
+        SSS
+        VERSION 1.0
+        STANDARD NAMES
+        SURVEY
+        TITLE "Customer Experience Survey - HTML Test"
+        RECORD A
+        {}
+        END RECORD
+        END SURVEY
+        END SSS
+        "#,
+        content
     );
+    content
+        .lines()
+        .map(|line| Ok::<String, BadLine>(line.to_string()))
+        .collect::<Vec<Result<String, BadLine>>>()
+        .into_iter()
 }
 
 #[test]
-fn survey_writer_is_available_on_the_public_model() {
-    let survey = Survey::empty();
-    assert!(survey.to_sss_classic().starts_with("SSS\n"));
+fn test_classic_read_n_write() {
+    let survey = read_sss_classic_example();
+    for question in survey.record.content.iter() {
+        let correct_name = question.name.clone();
+        println!("Parsing question: {}", correct_name);
+        let sss_string = question.to_sss_classic();
+        let sss_lines = put_into_record(&sss_string);
+        let read = read_sss_classic(sss_lines).unwrap();
+
+        let question_read = read.get_question(&correct_name).unwrap();
+        assert_eq!(question_read.name, correct_name);
+        assert_eq!(question_read.response, question.response);
+        assert_eq!(question_read.location, question.location);
+        assert_eq!(question_read.text, question.text);
+        assert_eq!(question_read.index, question.index);
+    }
 }

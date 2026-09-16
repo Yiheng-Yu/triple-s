@@ -1,5 +1,7 @@
 use std::{collections::BTreeMap, fmt::Write};
 
+use rayon::prelude::*;
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct Survey {
     pub title: Option<String>,
@@ -20,8 +22,8 @@ impl Survey {
     pub fn get_question(&self, name: &str) -> Option<&Question> {
         self.record
             .content
-            .iter()
-            .find(|question| question.name.to_uppercase() == name.to_uppercase())
+            .par_iter()
+            .find_first(|question| question.name.to_uppercase() == name.to_uppercase())
     }
 
     pub fn to_sss_classic(&self) -> String {
@@ -88,10 +90,8 @@ impl Record {
     pub fn to_sss_classic(&self) -> String {
         let mut output = String::new();
         append_line(&mut output, format!("RECORD {}", self.id));
-        for (index, question) in self.content.iter().enumerate() {
-            append_line(&mut output, format!("VARIABLE {}", index + 1));
+        for question in self.content.iter() {
             output.push_str(&question.to_sss_classic());
-            append_line(&mut output, "END VARIABLE");
         }
         append_line(&mut output, "END RECORD");
         output
@@ -100,6 +100,7 @@ impl Record {
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Question {
+    pub index: u64,
     pub name: String,
     pub text: String,
     pub filter: Option<String>,
@@ -110,9 +111,11 @@ pub struct Question {
 impl Question {
     pub fn to_sss_classic(&self) -> String {
         let mut output = String::new();
+        append_line(&mut output, format!("VARIABLE {}", self.index));
         append_line(&mut output, format!("NAME {}", quote(&self.name)));
         append_line(&mut output, format!("LABEL {}", quote(&self.text)));
         append_line(&mut output, self.location.to_sss_classic());
+        append_line(&mut output, format!("END VARIABLE {}", self.index));
         output.push_str(&self.response.to_sss_classic());
         output
     }

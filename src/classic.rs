@@ -328,7 +328,6 @@ where
 
         let (kind, value) = SSSClassicLineType::parse_line(&line)
             .with_context(|| format!("Line number: {}", line_number))?;
-
         match kind {
             SSSClassicLineType::Empty
             | SSSClassicLineType::SurveyStart
@@ -344,25 +343,47 @@ where
             SSSClassicLineType::Title => survey.title = Some(value),
             SSSClassicLineType::RecordStart => survey.record.id = value,
             SSSClassicLineType::QuestionStart => {
-                survey.record.content.push(Question::default());
+                let question_index = value
+                    .parse::<u64>()
+                    .with_context(|| format!("Line number: {}", line_number))?;
+                survey.record.content.push(Question {
+                    index: question_index,
+                    name: "".into(),
+                    text: "".into(),
+                    filter: None,
+                    location: Location::default(),
+                    response: Response::Single {
+                        item: BTreeMap::default(),
+                    },
+                });
+
                 current = Some(survey.record.content.len() - 1);
                 in_values = false;
             }
-            SSSClassicLineType::End(end) => match end.to_ascii_uppercase().as_str() {
-                "VALUES" => in_values = false,
-                "VARIABLE" => {
-                    current = None;
-                    in_values = false;
+            SSSClassicLineType::End(end) => {
+                let to_match = end
+                    .to_ascii_uppercase()
+                    .split_whitespace()
+                    .next()
+                    .ok_or(BadLine::new("Unable to parse line"))
+                    .with_context(|| format!("Line number: {}", line_number))?
+                    .to_ascii_uppercase();
+
+                match to_match.as_str() {
+                    "VALUES" => in_values = false,
+                    "VARIABLE" => {
+                        in_values = false;
+                    }
+                    "RECORD" | "SURVEY" | "SSS" => break,
+                    _ => {
+                        return Err(error::UnexpectedLineKind::new(
+                            LineKind::Classic(SSSClassicLineType::End(end)),
+                            line,
+                        )
+                        .into());
+                    }
                 }
-                "RECORD" | "SURVEY" | "SSS" => break,
-                _ => {
-                    return Err(error::UnexpectedLineKind::new(
-                        LineKind::Classic(SSSClassicLineType::End(end)),
-                        line,
-                    )
-                    .into());
-                }
-            },
+            }
             SSSClassicLineType::ResponseStart => {
                 current
                     .ok_or_else(|| InternalError::new("VALUES outside a variable"))
@@ -1009,7 +1030,7 @@ mod tests {
         let question = survey.get_question("AGE").unwrap();
 
         let sss_output = question.to_sss_classic().trim().to_string();
-        assert!(sss_output.starts_with(r#"NAME "AGE""#));
+        assert!(sss_output.contains(r#"NAME "AGE""#));
         assert!(sss_output.contains(r#"LABEL "<p>What is your <strong>age</strong>?</p>""#));
         assert_eq!(
             normalize(&question.location.to_sss_classic()),
@@ -1086,7 +1107,7 @@ mod tests {
 
         let question = survey.get_question("K2").unwrap();
         let sss_output = question.to_sss_classic().trim().to_string();
-        assert!(sss_output.starts_with(r#"NAME "K2""#));
+        assert!(sss_output.contains(r#"NAME "K2""#));
         assert!(sss_output.contains(r#"LABEL "I AM A QUESTION LABEL""#));
         assert_eq!(
             question.location.to_sss_classic(),

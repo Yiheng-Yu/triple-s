@@ -3,6 +3,7 @@ use pyo3::prelude::*;
 
 #[pymodule(gil_used = false)]
 pub mod triple_s {
+
     #[pymodule_export]
     pub use super::survey::{
         Kind,
