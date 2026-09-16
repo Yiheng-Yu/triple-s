@@ -15,6 +15,9 @@ dependencies = [
     "pandas>=3.0.0"
 ]
 
+[project.optional-dependencies]
+testing = ["pytest",]
+
 [tool.maturin]
 python-source = "py_src"
 module-name = "triple_s.triple_s"

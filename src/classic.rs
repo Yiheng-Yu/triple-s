@@ -252,7 +252,7 @@ impl SSSClassicLineType {
                 let parsed = prefix
                     .parse::<Self>()
                     .with_context(|| format!("When parsing line: '{}'", line))?;
-                Ok((parsed, value.into()))
+                Ok((parsed, value))
             }
         }
     }

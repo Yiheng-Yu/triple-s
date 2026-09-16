@@ -1,102 +1,193 @@
 extern crate triple_s as tri;
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::Arc;
 
-use pyo3::{exceptions, prelude::*};
-
-pub use tri::Meta;
+use parking_lot::{MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock};
+use pyo3::{exceptions, prelude::*, types::PyDict};
 
 #[pyfunction]
 pub fn read_sss(path: &str) -> PyResult<PySurvey> {
     let survey = tri::read_sss(path)
         .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))?;
-    Ok(PySurvey::new(survey) )
+    Ok(PySurvey::from(survey))
 }
 
 /// Survey
 /// More detail can be found at: https://triple-s.org/documentation/manuals/
-#[pyclass(
-    dict, 
-    weakref, 
-    module = "triple_s", 
-    name = "Survey",
-    from_py_object
-)]
+#[pyclass(module = "triple_s", name = "Survey", from_py_object)]
 pub struct PySurvey {
+    // #[pyo3(get, set)]
+    // pub title: Option<String>,
+    // meta: Arc<RwLock<tri::Meta>>,
+    // record: Arc<RwLock<tri::Record>>,
     inner: Arc<RwLock<tri::Survey>>,
 }
 
 impl Clone for PySurvey {
     fn clone(&self) -> Self {
         Self {
-            inner: Arc::clone(&self.inner)
+            // title: self.title.clone(),
+            // meta: Arc::clone(&self.meta),
+            // record: Arc::clone(&self.record)
+            inner: Arc::clone(&self.inner),
+        }
+    }
+}
+
+impl From<tri::Survey> for PySurvey {
+    fn from(value: tri::Survey) -> Self {
+        Self {
+            // title: value.title,
+            // meta: Arc::new(RwLock::new(value.meta)),
+            // record: Arc::new(RwLock::new(value.record))
+            inner: Arc::new(RwLock::new(value)),
         }
     }
 }
 
 impl PySurvey {
-    fn new(survey: tri::Survey) -> Self {
-        Self { 
-            inner: Arc::new(RwLock::new(survey)),
-        }
+    /// Acquire the inner 'survey.meta' for reading; surfaces lock poisoning as a
+    /// `PyException` instead of panicking.
+    pub(crate) fn read_meta(&self) -> MappedRwLockReadGuard<'_, tri::Meta> {
+        parking_lot::RwLockReadGuard::map(self.inner.read(), |survey| &survey.meta)
     }
 
-    /// Acquire the inner survey for reading; surfaces lock poisoning as a
+    /// Acquire the inner 'survey.meta' for writing; surfaces lock poisoning as a
     /// `PyException` instead of panicking.
-    pub(crate) fn read_inner(&self) -> PyResult<RwLockReadGuard<'_, tri::Survey>> {
-        self.inner
-            .read()
-            .map_err(|_| exceptions::PyException::new_err("Survey RwLock is poisoned"))
+    pub(crate) fn write_meta(&self) -> MappedRwLockWriteGuard<'_, tri::Meta> {
+        parking_lot::RwLockWriteGuard::map(self.inner.write(), |survey| &mut survey.meta)
     }
 
-    /// Acquire the inner survey for writing; surfaces lock poisoning as a
+    /// Acquire the inner 'survey.record' for reading; surfaces lock poisoning as a
     /// `PyException` instead of panicking.
-    pub(crate) fn write_inner(&self) -> PyResult<RwLockWriteGuard<'_, tri::Survey>> {
-        self.inner
-            .write()
-            .map_err(|_| exceptions::PyException::new_err("Survey RwLock is poisoned"))
+    pub(crate) fn read_record(&self) -> MappedRwLockReadGuard<'_, tri::Record> {
+        parking_lot::RwLockReadGuard::map(self.inner.read(), |survey| &survey.record)
     }
+
+    /// Acquire the inner 'survey.record' for writing; surfaces lock poisoning as a
+    /// `PyException` instead of panicking.
+    pub(crate) fn write_record(&self) -> MappedRwLockWriteGuard<'_, tri::Record> {
+        parking_lot::RwLockWriteGuard::map(self.inner.write(), |survey| &mut survey.record)
+    }
+
+    /// Acquire the inner 'survey.question' for reading; surfaces lock poisoning as a
+    /// `PyException` instead of panicking.
+    pub(crate) fn read_question(
+        &self,
+        index: usize,
+    ) -> PyResult<MappedRwLockReadGuard<'_, tri::Question>> {
+        parking_lot::RwLockReadGuard::try_map(self.inner.read(), |survey| {
+            survey.record.content.get(index)
+        })
+        .map_err(|_| exceptions::PyIndexError::new_err(index))
+    }
+
+    /// Acquire the inner 'survey.question' for writing; surfaces lock poisoning as a
+    /// `PyException` instead of panicking.
+    pub(crate) fn write_question(
+        &self,
+        index: usize,
+    ) -> PyResult<MappedRwLockWriteGuard<'_, tri::Question>> {
+        parking_lot::RwLockWriteGuard::try_map(self.inner.write(), |survey| {
+            survey.record.content.get_mut(index)
+        })
+        .map_err(|_| exceptions::PyIndexError::new_err(index))
+    }
+
+    // pub(crate) fn read_content(self_: &Bound<'_, Self>) -> MappedRwLockReadGuard<'_, Vec<PyQuestion>> {
+    //     parking_lot::RwLockReadGuard::map(self_.inner.read(), |survey| {
+    //         &survey.record.content
+    //     })
+    // }
 }
 
 #[pymethods]
 impl PySurvey {
-    fn __repr__(&self) -> PyResult<String> {
-        let title = self.title()?.unwrap_or_default();
-        let version = self.read_inner()?
-            .meta
-            .version
-            .as_ref()
-            .map(|ver| ver.clone())
-            .unwrap_or_default();
-
-        Ok(format!(
-            r#"Survey(title="{}", version={})"#, 
-            title, 
-            version
-        ))
+    /// Export content back to sss classic
+    fn to_sss_classic(&self) -> String {
+        self.inner.read().to_sss_classic()
     }
 
-    /// (Optional) Title of a survey.
     #[getter]
-    fn title(&self) -> PyResult<Option<String>> {
-        Ok(self.read_inner()?.title.clone())
+    fn get_meta<'py>(inner: &Bound<'_, Self>) -> PyResult<PyMeta> {
+        Ok(PyMeta::from_rust(inner))
+    }
+
+    #[getter]
+    fn get_title<'py>(&self) -> Option<String> {
+        self.inner.read().title.clone()
     }
 
     #[setter]
-    fn set_title(&mut self, value: Option<&str>) -> PyResult<()> {
-        self.write_inner()?.title = value.map(|val| val.to_string());
-        Ok(())
+    fn set_title<'py>(&self, title: Option<String>) {
+        self.inner.write().title = title;
     }
 
-    // #[getter]
-    // fn meta<'py>(&self, py: Python<'py>) -> PyResult<PyRefMut<'py, Meta>> {
-    //     let instance = self.read_inner()?.meta;
-    //     Ok(instance.bind(py).borrow_mut())
-    // }
-
-
-    fn to_sss_classic(&self) -> PyResult<String> {
-        Ok(self.read_inner()?.to_sss_classic())
+    #[getter]
+    fn get_record<'py>(inner: &Bound<'_, Self>) -> PyResult<PyRecord> {
+        Ok(PyRecord::from_rust(inner))
     }
+}
+
+// /// Survey
+// /// More detail can be found at: https://triple-s.org/documentation/manuals/
+// #[pyclass(
+//     dict,
+//     weakref,
+//     module = "triple_s",
+//     name = "Survey",
+//     from_py_object
+// )]
+// pub struct PySurvey {
+//     inner: Arc<RwLock<tri::Survey>>,
+// }
+
+// impl Clone for PySurvey {
+//     fn clone(&self) -> Self {
+//         Self {
+//             inner: Arc::clone(&self.inner)
+//         }
+//     }
+// }
+
+// #[pymethods]
+// impl PySurvey {
+//     #[getter]
+//     fn meta(&self) -> PyResult<RwLockReadGuard<'_, tri::Meta>> {
+//         self.read_meta()
+//     }
+// }
+
+//     fn __repr__(&self) -> PyResult<String> {
+//         let title = self.title()?.unwrap_or_default();
+//         let version = self.read_inner()?
+//             .meta
+//             .version
+//             .as_ref()
+//             .map(|ver| ver.clone())
+//             .unwrap_or_default();
+
+//         Ok(format!(
+//             r#"Survey(title="{}", version={})"#,
+//             title,
+//             version
+//         ))
+//     }
+
+//     /// (Optional) Title of a survey.
+//     #[getter]
+//     fn title(&self) -> PyResult<Option<String>> {
+//         Ok(self.read_inner()?.title.clone())
+//     }
+
+//     #[setter]
+//     fn set_title(&mut self, value: Option<&str>) -> PyResult<()> {
+//         self.write_inner()?.title = value.map(|val| val.to_string());
+//         Ok(())
+//     }
+
+//     fn to_sss_classic(&self) -> PyResult<String> {
+//         Ok(self.read_inner()?.to_sss_classic())
+//     }
 
 //     fn get_question(survey: &Bound<'_, Self>, question_name: &str) -> PyResult<PyQuestion> {
 //         let query = question_name.to_uppercase();
@@ -107,239 +198,216 @@ impl PySurvey {
 //         .map(|(index, _)| PyQuestion::from_inner(survey, index))
 //         .ok_or(exceptions::PyKeyError::new_err(question_name.to_string()))?
 //     }
+// }
+
+/// Content of a survey
+#[pyclass(module = "triple_s", name = "Record")]
+pub struct PyRecord {
+    inner: Py<PySurvey>,
 }
 
-#[pyclass(dict, weakref, module = "triple_s", name = "Meta", from_py_object)]
-pub struct PyMeta {
-    inner: Arc<RwLock<tri::Meta>>
-}
-
-impl Clone for PyMeta {
-    fn clone(&self) -> Self {
+impl PyRecord {
+    pub fn from_rust(survey: &Bound<'_, PySurvey>) -> Self {
         Self {
-            inner: Arc::clone(&self.inner)
+            inner: survey.clone().unbind(),
         }
     }
+
+    pub fn len(&self, py: Python<'_>) -> usize {
+        self.inner.borrow(py).read_record().content.len()
+    }
+
+    // /// Acquire the inner question for reading; surfaces lock poisoning as a
+    // /// `PyException` instead of panicking.
+    // pub(crate) fn get_question_by_index(&self, index: usize) -> PyResult<PyQuestion> {
+    //     todo!()
+    //     // parking_lot::RwLockReadGuard::map(
+    //     //     self.inner.read(),
+    //     //     |survey|
+    //     //     &survey.record.content.get(index)
+    //     //     .ok_or_else(|| exceptions::PyIndexError::new_err(index))
+    //     // )
+    // }
 }
 
-impl PyMeta {
-    pub(crate) fn new(inner: tri::Meta) -> Self {
-        Self { inner: Arc::new(RwLock::new(inner)) }
+#[pymethods]
+impl PyRecord {
+    /// Export content back to sss classic
+    fn to_sss_classic(&self, py: Python<'_>) -> String {
+        self.inner.bind(py).borrow().read_record().to_sss_classic()
     }
 
-    /// Acquire the inner survey for reading; surfaces lock poisoning as a
-    /// `PyException` instead of panicking.
-    pub(crate) fn read_inner(&self) -> PyResult<RwLockReadGuard<'_, tri::Meta>> {
-        self.inner
-            .read()
-            .map_err(|_| exceptions::PyException::new_err("Survey RwLock is poisoned"))
+    /// One RECORD keyword appears after SURVEY (or after TITLE if present).
+    /// It is used to introduce the definition of the variables.
+    /// The record_id is any single character A to Z (or a to z).
+    /// The record_id can be used in conjunction with the variable_id (see the VARIABLE keyword later) to
+    /// generate a unique variable name on import.
+    /// For example: RECORD A
+    #[getter]
+    fn id(&self, py: Python<'_>) -> String {
+        self.inner.bind(py).borrow().read_record().id.clone()
     }
 
-    /// Acquire the inner survey for writing; surfaces lock poisoning as a
-    /// `PyException` instead of panicking.
-    pub(crate) fn write_inner(&self) -> PyResult<RwLockWriteGuard<'_, tri::Meta>> {
-        self.inner
-            .write()
-            .map_err(|_| exceptions::PyException::new_err("Survey RwLock is poisoned"))
+    #[setter]
+    fn set_id(&mut self, py: Python<'_>, value: String) -> PyResult<()> {
+        self.inner.bind(py).borrow_mut().write_record().id = value;
+        Ok(())
+    }
+
+    /// List of questions/ variables that the current survey instance contains
+    #[getter]
+    fn content(&self, py: Python<'_>) -> PyResult<Vec<PyQuestion>> {
+        Ok((0..self.len(py))
+            .map(|index| PyQuestion::from_inner(&self.inner, index))
+            .collect())
+    }
+
+    //     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<PyQuestion> {
+    //         let inner = self.inner.bind(py);
+    //         let content_length = inner.borrow().inner.record.content.len();
+    //         let index = normalize_index(index, content_length)?; // also checks if index really exists, raise IndexError if otherwise
+    //         PyQuestion::from_inner(inner, index)
+    //     }
+
+    //     fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
+    //         Ok(self.inner.bind(py).borrow().inner.record.content.len())
+    //     }
+
+    //     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+    //         let inner = self.inner.bind(py);
+    //         let record = inner.borrow();
+
+    //         let content_length = record.inner.record.content.len();
+    //         // only show first x amount of members
+    //         let read_length = content_length.min(15);
+
+    //         let mut question_string = Vec::new();
+    //         for index in 0..read_length {
+    //             let question = self.__getitem__(py, index as isize)?
+    //                 .__repr__(py)?;
+    //             question_string.push(question);
+    //         };
+    //         if read_length < content_length {
+    //             question_string.push("...".into())
+    //         };
+    //         let question_string = question_string.join(",\n\t\t");
+    //         let current_id = &record.inner.record.id;
+    //         Ok(format!("Record(\n\tid=\"{}\",\n\tcontent=[\n\t\t{}\n\t]\n)", current_id, question_string))
+    //     }
+}
+
+// #[pyclass(module = "triple_s", name = "Content")]
+// pub struct PyContent {
+//     inner: Vec<PyQuestion>
+// }
+
+#[pyclass(module = "triple_s", name = "Question")]
+pub struct PyQuestion {
+    inner: Py<PySurvey>,
+    index: usize,
+}
+
+impl PyQuestion {
+    pub fn from_inner(inner: &Py<PySurvey>, index: usize) -> Self {
+        Self {
+            inner: inner.clone(),
+            index,
+        }
+    }
+
+    fn with_question_read<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(MappedRwLockReadGuard<'_, tri::Question>) -> R,
+    ) -> PyResult<R> {
+        let inner = self.inner.bind(py).borrow();
+        let question = inner.read_question(self.index)?;
+        Ok(f(question))
+    }
+
+    fn with_question_write<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(MappedRwLockWriteGuard<'_, tri::Question>) -> R,
+    ) -> PyResult<R> {
+        let inner = self.inner.bind(py).borrow_mut();
+        let question = inner.write_question(self.index)?;
+        Ok(f(question))
     }
 }
 
-// /// Content of a survey
-// #[pyclass(module = "triple_s", name = "Record")]
-// pub struct PyRecord {
-//     inner: Py<PySurvey>,
-// }
+#[pymethods]
+impl PyQuestion {
+    fn to_sss_classic(&self, py: Python<'_>) -> PyResult<String> {
+        self.with_question_read(py, |question| question.to_sss_classic())
+    }
 
-// impl PyRecord {
-//     pub fn from_rust(survey: &Bound<'_, PySurvey>) -> Self {
-//         Self {
-//             inner: survey.clone().unbind(),
-//         }
-//     }
-// }
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let kind = self.kind(py)?;
+        let label = self.label(py)?;
+        let label = if label.chars().count() > 20 {
+            format!("{}…", label.chars().take(19).collect::<String>())
+        } else {
+            label
+        };
 
-// #[pymethods]
-// impl PyRecord {
-//     /// One RECORD keyword appears after SURVEY (or after TITLE if present).
-//     /// It is used to introduce the definition of the variables.
-//     /// The record_id is any single character A to Z (or a to z).
-//     /// The record_id can be used in conjunction with the variable_id (see the VARIABLE keyword later) to
-//     /// generate a unique variable name on import.
-//     /// For example: RECORD A
-//     #[getter]
-//     fn id(&self, py: Python<'_>) -> String {
-//         self.inner.bind(py).borrow().inner.record.id.clone()
-//     }
+        self.with_question_read(py, |question| {
+            format!(
+                r#"Question(name="{}", kind={}, label="{}")"#,
+                &question.name, kind, label
+            )
+        })
+    }
 
-//     #[setter]
-//     fn set_id(&mut self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.record.id = value.to_string();
-//         Ok(())
-//     }
+    #[getter]
+    fn name(&self, py: Python<'_>) -> PyResult<String> {
+        self.with_question_read(py, |question| question.name.clone())
+    }
 
-//     /// List of questions/ variables that the current survey instance contains
-//     #[getter]
-//     fn content(&self, py: Python<'_>) -> PyResult<Vec<PyQuestion>> {
-//         let inner = self.inner.bind(py);
-//         inner.borrow().inner.record.content.iter().enumerate()
-//         .map(|(idx, _)| PyQuestion::from_inner(inner, idx))
-//         .collect()
-//     }
+    #[setter]
+    fn set_name(&self, py: Python<'_>, value: &str) -> PyResult<()> {
+        self.with_question_write(py, |mut question| question.name = value.to_string())
+    }
 
-//     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<PyQuestion> {
-//         let inner = self.inner.bind(py);
-//         let content_length = inner.borrow().inner.record.content.len();
-//         let index = normalize_index(index, content_length)?; // also checks if index really exists, raise IndexError if otherwise
-//         PyQuestion::from_inner(inner, index)
-//     }
+    #[getter]
+    fn label(&self, py: Python<'_>) -> PyResult<String> {
+        self.with_question_read(py, |question| question.text.clone())
+    }
 
-//     fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
-//         Ok(self.inner.bind(py).borrow().inner.record.content.len())
-//     }
+    #[setter]
+    fn set_label(&self, py: Python<'_>, value: &str) -> PyResult<()> {
+        self.with_question_write(py, |mut question| question.text = value.to_string())
+    }
 
-//     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-//         let inner = self.inner.bind(py);
-//         let record = inner.borrow();
+    #[getter]
+    fn filter(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        self.with_question_read(py, |question| question.filter.clone())
+    }
 
-//         let content_length = record.inner.record.content.len();
-//         // only show first x amount of members
-//         let read_length = content_length.min(15);
+    #[setter]
+    fn set_filter(&self, py: Python<'_>, value: Option<&str>) -> PyResult<()> {
+        let value = value.map(|s| s.to_string());
+        self.with_question_write(py, |mut question| question.filter = value)
+    }
 
-//         let mut question_string = Vec::new();
-//         for index in 0..read_length {
-//             let question = self.__getitem__(py, index as isize)?
-//                 .__repr__(py)?;
-//             question_string.push(question);
-//         };
-//         if read_length < content_length {
-//             question_string.push("...".into())
-//         };
-//         let question_string = question_string.join(",\n\t\t");
-//         let current_id = &record.inner.record.id;
-//         Ok(format!("Record(\n\tid=\"{}\",\n\tcontent=[\n\t\t{}\n\t]\n)", current_id, question_string))
-//     }
-// }
+    #[getter]
+    fn kind(&self, py: Python<'_>) -> PyResult<Kind> {
+        self.with_question_read(py, |question| Kind::from_response(&question.response))
+    }
 
-// #[pyclass(module = "triple_s", name = "Question")]
-// pub struct PyQuestion {
-//     inner: Py<PySurvey>,
-//     index: usize,
-// }
+    //     #[getter]
+    //     fn response(question: &Bound<'_, Self>) -> PyResult<PyResponse> {
+    //         Ok(PyResponse::from_inner(question))
+    //     }
 
-// impl PyQuestion {
-//     pub fn from_inner(survey: &Bound<'_, PySurvey>, index: usize) -> PyResult<Self> {
-//         Ok(Self {
-//             inner: survey.clone().unbind(),
-//             index,
-//         })
-//     }
+    // #[getter]
+    // pub fn location(&self, py: Python<'_>) -> PyResult<tri::Location> {
+    //     self.with_question_read(py, |question| question.location.clone())
+    // }
 
-//     fn with_question<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&tri::Question) -> R,
-//     ) -> PyResult<R> {
-//         let survey = self.inner.bind(py).borrow();
-//         let question = survey
-//             .inner
-//             .record
-//             .content
-//             .get(self.index)
-//             .ok_or_else(|| exceptions::PyIndexError::new_err(self.index))?;
-//         Ok(f(question))
-//     }
-
-//     fn with_question_mut<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&mut tri::Question) -> R,
-//     ) -> PyResult<R> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         let question = survey
-//             .inner
-//             .record
-//             .content
-//             .get_mut(self.index)
-//             .ok_or_else(|| exceptions::PyIndexError::new_err(self.index))?;
-
-//         Ok(f(question))
-//     }
-// }
-
-// #[pymethods]
-// impl PyQuestion {
-//     fn to_sss_classic(&self, py: Python<'_>) -> PyResult<String> {
-//         self.with_question(py, tri::Question::to_sss_classic)
-//     }
-
-//     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-//         let kind = self.kind(py)?;
-//         let label = self.label(py)?;
-//         let label = if label.chars().count() > 20 {
-//             format!("{}…", label.chars().take(19).collect::<String>())
-//         } else {
-//             label
-//         };
-
-//         self.with_question(py, |question| {
-//             format!(
-//                 r#"Question(name="{}", kind={}, label="{}")"#,
-//                 &question.name, kind, label
-//             )
-//         })
-//     }
-
-//     #[getter]
-//     fn name(&self, py: Python<'_>) -> PyResult<String> {
-//         self.with_question(py, |question| question.name.clone())
-//     }
-
-//     #[setter]
-//     fn set_name(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         self.with_question_mut(py, |question| question.name = value.to_string())
-//     }
-
-//     #[getter]
-//     fn label(&self, py: Python<'_>) -> PyResult<String> {
-//         self.with_question(py, |question| question.text.clone())
-//     }
-
-//     #[setter]
-//     fn set_label(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         self.with_question_mut(py, |question| question.text = value.to_string())
-//     }
-
-//     #[getter]
-//     fn filter(&self, py: Python<'_>) -> PyResult<Option<String>> {
-//         self.with_question(py, |question| question.filter.clone())
-//     }
-
-//     #[setter]
-//     fn set_filter(&self, py: Python<'_>, value: Option<&str>) -> PyResult<()> {
-//         let value = value.map(|s| s.to_string());
-//         self.with_question_mut(py, |question| question.filter = value)
-//     }
-
-//     #[getter]
-//     fn kind(&self, py: Python<'_>) -> PyResult<Kind> {
-//         self.with_question(py, |question| Kind::from_response(&question.response))
-//     }
-
-//     #[getter]
-//     fn response(question: &Bound<'_, Self>) -> PyResult<PyResponse> {
-//         Ok(PyResponse::from_inner(question))
-//     }
-
-
-//     // #[getter]
-//     // pub location(&self, py: Python<'_>) -> PyResult<tri::Location> {
-//     //     self.with_question(py, |question| question.location
-//     // }
-
-//     // pub location: Location,
-//     // pub response: Response,
-// }
+    //     // pub location: Location,
+    //     // pub response: Response,
+}
 
 // #[pyclass(module = "triple_s", name = "Response")]
 // pub struct PyResponse {
@@ -418,7 +486,7 @@ impl PyMeta {
 //                     match na_value.as_ref() {
 //                         Some(value) => {
 //                             format!(
-//                                 r#"Quantity(min={}, max={}, na_value={}, na_label="{}")"#, 
+//                                 r#"Quantity(min={}, max={}, na_value={}, na_label="{}")"#,
 //                                 min, max, value, na_label.as_ref().map(|s| s.clone()).unwrap_or_default()
 //                             )
 //                         }
@@ -592,40 +660,40 @@ impl PyMeta {
 //     }
 // }
 
-// /// Flag for indicating what response kind (i.e., single/ multiple etc.)
-// #[pyclass(eq, module = "triple_s", name = "Kind")]
-// #[derive(PartialEq, Debug)]
-// pub enum Kind {
-//     Single,
-//     Multiple,
-//     Quantity,
-//     Character,
-//     Note,
-// }
+/// Flag for indicating what response kind (i.e., single/ multiple etc.)
+#[pyclass(eq, module = "triple_s", name = "Kind")]
+#[derive(PartialEq, Debug)]
+pub enum Kind {
+    Single,
+    Multiple,
+    Quantity,
+    Character,
+    Note,
+}
 
-// impl Kind {
-//     pub fn from_response(response: &tri::Response) -> Self {
-//         match response {
-//             tri::Response::Single { .. } => Kind::Single,
-//             tri::Response::Multiple { .. } => Kind::Multiple,
-//             tri::Response::Quantity { .. } => Kind::Quantity,
-//             tri::Response::Character(..) => Kind::Character,
-//             tri::Response::Note(..) => Kind::Note,
-//         }
-//     }
-// }
+impl Kind {
+    pub fn from_response(response: &tri::Response) -> Self {
+        match response {
+            tri::Response::Single { .. } => Kind::Single,
+            tri::Response::Multiple { .. } => Kind::Multiple,
+            tri::Response::Quantity { .. } => Kind::Quantity,
+            tri::Response::Character(..) => Kind::Character,
+            tri::Response::Note(..) => Kind::Note,
+        }
+    }
+}
 
-// impl std::fmt::Display for Kind {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         match self {
-//             Self::Single => write!(f, "Kind.Single"),
-//             Self::Multiple => write!(f, "Kind.Multiple"),
-//             Self::Quantity => write!(f, "Kind.Quantity"),
-//             Self::Character => write!(f, "Kind.Character"),
-//             Self::Note => write!(f, "Kind.Note"),
-//         }
-//     }
-// }
+impl std::fmt::Display for Kind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Single => write!(f, "Kind.Single"),
+            Self::Multiple => write!(f, "Kind.Multiple"),
+            Self::Quantity => write!(f, "Kind.Quantity"),
+            Self::Character => write!(f, "Kind.Character"),
+            Self::Note => write!(f, "Kind.Note"),
+        }
+    }
+}
 
 // /// Information about a survey instance, including creation date, user info etc.,
 // #[pyclass(module = "triple_s", name = "Meta")]
@@ -641,133 +709,176 @@ impl PyMeta {
 //     }
 // }
 
-// #[pymethods]
-// impl PyMeta {
-//     fn to_sss_classic(&self, py: Python<'_>) -> String {
-//         self.inner.bind(py).borrow().inner.meta.to_sss_classic()
-//     }
+#[pyclass(dict, weakref, module = "triple_s", name = "Meta", from_py_object)]
+pub struct PyMeta {
+    inner: Py<PySurvey>,
+}
 
-//     /// SSS Version
-//     #[getter]
-//     fn version(&self, py: Python<'_>) -> Option<String> {
-//         self.inner.bind(py).borrow().inner.meta.version.clone()
-//     }
+impl PyMeta {
+    fn from_rust(inner: &Bound<'_, PySurvey>) -> Self {
+        Self {
+            inner: inner.clone().unbind(),
+        }
+    }
+}
 
-//     #[setter]
-//     fn set_version(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.meta.version = Some(value.to_owned());
-//         Ok(())
-//     }
+impl Clone for PyMeta {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
 
-//     /// (Optional) The date the file was created.
-//     #[getter]
-//     fn date(&self, py: Python<'_>) -> Option<String> {
-//         self.inner.bind(py).borrow().inner.meta.date.clone()
-//     }
+#[pymethods]
+impl PyMeta {
+    /// Export meta back to sss classic
+    fn to_sss_classic(&self, py: Python<'_>) -> String {
+        self.inner.bind(py).borrow().read_meta().to_sss_classic()
+    }
 
-//     #[setter]
-//     fn set_date(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.meta.date = Some(value.to_owned());
-//         Ok(())
-//     }
+    fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
+        let dict = PyDict::new(py);
 
-//     /// (Optional) The time the file was created.
-//     #[getter]
-//     fn time(&self, py: Python<'_>) -> Option<String> {
-//         self.inner.bind(py).borrow().inner.meta.time.clone()
-//     }
+        if let Some(value) = self.version(py) {
+            dict.set_item("version", value)?;
+        };
 
-//     #[setter]
-//     fn set_time(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.meta.time = Some(value.to_owned());
-//         Ok(())
-//     }
+        if let Some(value) = self.date(py) {
+            dict.set_item("date", value)?;
+        };
 
-//     /// (Optional) The originating system (program and operating system), i.e., `Windows 95`
-//     #[getter]
-//     fn origin(&self, py: Python<'_>) -> Option<String> {
-//         self.inner.bind(py).borrow().inner.meta.origin.clone()
-//     }
+        if let Some(value) = self.time(py) {
+            dict.set_item("time", value)?;
+        };
 
-//     #[setter]
-//     fn set_origin(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.meta.origin = Some(value.to_owned());
-//         Ok(())
-//     }
+        if let Some(value) = self.origin(py) {
+            dict.set_item("origin", value)?;
+        };
 
-//     /// (Optional) Name of the user who created this file
-//     #[getter]
-//     fn user(&self, py: Python<'_>) -> Option<String> {
-//         self.inner.bind(py).borrow().inner.meta.user.clone()
-//     }
+        if let Some(value) = self.user(py) {
+            dict.set_item("user", value)?;
+        };
 
-//     #[setter]
-//     fn set_user(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.meta.user = Some(value.to_owned());
-//         Ok(())
-//     }
+        if let Some(value) = self.standard(py) {
+            dict.set_item("standard", value)?;
+        };
 
-//     #[getter]
-//     fn style(&self, py: Python<'_>) -> Option<String> {
-//         self.inner.bind(py).borrow().inner.meta.style.clone()
-//     }
+        Ok(dict.unbind())
+    }
 
-//     #[setter]
-//     fn set_style(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.meta.style = Some(value.to_owned());
-//         Ok(())
-//     }
+    /// SSS Version
+    #[getter]
+    fn version(&self, py: Python<'_>) -> Option<String> {
+        self.inner.bind(py).borrow().read_meta().version.clone()
+    }
 
-//     /// (Optional) can appear any number of times in the definition file wherever a keyword is expected
-//     /// (including between values specified in a VALUES block).
-//     /// The importing program does not interpret the contents of the note_text.
-//     /// It is recommended that the NOTE form be used where comments are to be inserted into the SSS definition file by an export program.
-//     #[getter]
-//     fn note(&self, py: Python<'_>) -> Vec<String> {
-//         self.inner.bind(py).borrow().inner.meta.note.clone()
-//     }
+    #[setter]
+    fn set_version(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+        self.inner.bind(py).borrow_mut().write_meta().version = value;
+        Ok(())
+    }
 
-//     #[setter]
-//     fn set_note(&self, py: Python<'_>, value: Vec<String>) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.meta.note = value;
-//         Ok(())
-//     }
+    /// (Optional) The date the file was created.
+    #[getter]
+    fn date(&self, py: Python<'_>) -> Option<String> {
+        self.inner.bind(py).borrow().read_meta().date.clone()
+    }
 
-//     /// This statement is used to indicate that some aspect of the SSS definition meets a defined standard
-//     /// that may reduce the amount of checking required by an import program.
-//     /// The only standard_option provided in version 1.1 is NAMES. The definition of SSS standard names is:
-//     /// - consist of 1-8 characters
-//     /// - consist of only the characters A-Z (and a-z) and 0-9
-//     /// - start with a letter (A-Z or a-z)
-//     /// - case insensitive (i.e. upper and lower case are equivalent)
-//     /// - unique within the survey (e.g. Q1 and Q001 are different, q1 and Q1 are the same)
-//     /// - appear as the "name_text" without leading, trailing, or embedded blanks
-//     /// If all variable names in the SSS definition file conform to this definition then the statement STANDARD
-//     /// NAMES should appear between the VERSION and SURVEY statements.
-//     #[getter]
-//     fn standard(&self, py: Python<'_>) -> Option<String> {
-//         self.inner.bind(py).borrow().inner.meta.standard.clone()
-//     }
+    #[setter]
+    fn set_date(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+        self.inner.bind(py).borrow_mut().write_meta().date = value;
+        Ok(())
+    }
 
-//     #[setter]
-//     fn set_standard(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.meta.standard = Some(value.to_owned());
-//         Ok(())
-//     }
-// }
+    /// (Optional) The time the file was created.
+    #[getter]
+    fn time(&self, py: Python<'_>) -> Option<String> {
+        self.inner.bind(py).borrow().read_meta().time.clone()
+    }
+
+    #[setter]
+    fn set_time(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+        self.inner.bind(py).borrow_mut().write_meta().time = value;
+        Ok(())
+    }
+
+    /// (Optional) The originating system (program and operating system), i.e., `Windows 95`
+    #[getter]
+    fn origin(&self, py: Python<'_>) -> Option<String> {
+        self.inner.bind(py).borrow().read_meta().origin.clone()
+    }
+
+    #[setter]
+    fn set_origin(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+        self.inner.bind(py).borrow_mut().write_meta().origin = value;
+        Ok(())
+    }
+
+    /// (Optional) Name of the user who created this file
+    #[getter]
+    fn user(&self, py: Python<'_>) -> Option<String> {
+        self.inner.bind(py).borrow().read_meta().user.clone()
+    }
+
+    #[setter]
+    fn set_user(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+        self.inner.bind(py).borrow_mut().write_meta().user = value;
+        Ok(())
+    }
+
+    #[getter]
+    fn style(&self, py: Python<'_>) -> Option<String> {
+        self.inner.bind(py).borrow().read_meta().style.clone()
+    }
+
+    #[setter]
+    fn set_style(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+        self.inner.bind(py).borrow_mut().write_meta().style = value;
+        Ok(())
+    }
+
+    /// (Optional) can appear any number of times in the definition file wherever a keyword is expected
+    /// (including between values specified in a VALUES block).
+    /// The importing program does not interpret the contents of the note_text.
+    /// It is recommended that the NOTE form be used where comments are to be inserted into the SSS definition file by an export program.
+    #[getter]
+    fn note(&self, py: Python<'_>) -> Vec<String> {
+        self.inner.bind(py).borrow().read_meta().note.clone()
+    }
+
+    #[setter]
+    fn set_note(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+        self.inner.bind(py).borrow_mut().write_meta().style = value;
+        Ok(())
+    }
+
+    /// This statement is used to indicate that some aspect of the SSS definition meets a defined standard
+    /// that may reduce the amount of checking required by an import program.
+    /// The only standard_option provided in version 1.1 is NAMES. The definition of SSS standard names is:
+    /// - consist of 1-8 characters
+    /// - consist of only the characters A-Z (and a-z) and 0-9
+    /// - start with a letter (A-Z or a-z)
+    /// - case insensitive (i.e. upper and lower case are equivalent)
+    /// - unique within the survey (e.g. Q1 and Q001 are different, q1 and Q1 are the same)
+    /// - appear as the "name_text" without leading, trailing, or embedded blanks
+    /// If all variable names in the SSS definition file conform to this definition then the statement STANDARD
+    /// NAMES should appear between the VERSION and SURVEY statements.
+    #[getter]
+    fn standard(&self, py: Python<'_>) -> Option<String> {
+        self.inner.bind(py).borrow().read_meta().standard.clone()
+    }
+
+    #[setter]
+    fn set_standard(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+        self.inner.bind(py).borrow_mut().write_meta().standard = value;
+        Ok(())
+    }
+}
 
 // /// Just a dummy class used for creating a python parent class for inheritance
 // #[pyclass(dict, module = "triple_s", name = "Proxy")]
 // pub struct PyProxy {}
-
 
 // /// helper functions that converts pyton index (can be negative) to rust index (usize)
 // fn normalize_index(index: isize, total: usize) -> PyResult<usize> {
