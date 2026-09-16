@@ -3,6 +3,8 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use pyo3::{exceptions, prelude::*};
 
+pub use tri::Meta;
+
 #[pyfunction]
 pub fn read_sss(path: &str) -> PyResult<PySurvey> {
     let survey = tri::read_sss(path)
@@ -33,7 +35,9 @@ impl Clone for PySurvey {
 
 impl PySurvey {
     fn new(survey: tri::Survey) -> Self {
-        Self { inner: Arc::new(RwLock::new(survey)) }
+        Self { 
+            inner: Arc::new(RwLock::new(survey)),
+        }
     }
 
     /// Acquire the inner survey for reading; surfaces lock poisoning as a
@@ -83,11 +87,11 @@ impl PySurvey {
         Ok(())
     }
 
-    #[getter]
-    fn meta(&self) -> PyResult<PyMeta> {
-    let instance = self.read_inner()?.meta;
-       Ok(PyMeta::new(instance))
-    }
+    // #[getter]
+    // fn meta<'py>(&self, py: Python<'py>) -> PyResult<PyRefMut<'py, Meta>> {
+    //     let instance = self.read_inner()?.meta;
+    //     Ok(instance.bind(py).borrow_mut())
+    // }
 
 
     fn to_sss_classic(&self) -> PyResult<String> {
