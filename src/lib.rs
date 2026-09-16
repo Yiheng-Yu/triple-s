@@ -1,25 +1,24 @@
 mod classic;
-mod error;
+pub mod error;
 mod survey;
-use anyhow::Result;
-
 use std::{
     fs::File,
     io::{BufRead, BufReader},
 };
 
+use anyhow::{Context, Result};
 pub use classic::{SSSClassicLineType, SSSType, read_sss_classic};
-pub use error::IoError;
 pub use survey::{Choice, Location, Meta, Question, Record, Response, Spread, Survey};
 
 pub fn read_sss(sss_path: &str) -> Result<Survey> {
-    let input: File = File::open(sss_path).map_err(IoError::from)?;
+    let input: File = File::open(sss_path).map_err(error::FileReadError::from)?;
     let mut lines = BufReader::new(input).lines();
     let first_line = lines
         .next()
-        .ok_or_else(|| IoError::internal("file seems to be empty."))??;
-    let sss_version = SSSType::parse(&first_line)?;
+        .ok_or(error::FileReadError::new("file seems to be empty"))?
+        .with_context(|| format!("When trying to read from: '{}'", sss_path))?;
 
+    let sss_version = SSSType::parse(&first_line)?;
     match sss_version {
         SSSType::Classic => {
             let survey = read_sss_classic(lines)?;

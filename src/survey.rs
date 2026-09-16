@@ -18,8 +18,10 @@ impl Survey {
 
     /// find question via question name, case insensitive
     pub fn get_question(&self, name: &str) -> Option<&Question> {
-        self.record.content.iter()
-            .find(|question| question.name.to_uppercase() == name.to_uppercase() )
+        self.record
+            .content
+            .iter()
+            .find(|question| question.name.to_uppercase() == name.to_uppercase())
     }
 
     pub fn to_sss_classic(&self) -> String {
@@ -126,7 +128,7 @@ pub enum Response {
         min: f64,
         max: f64,
         na_value: Option<f64>,
-        na_label: Option<String>
+        na_label: Option<String>,
     },
     Character(usize),
     Note(String),
@@ -160,28 +162,29 @@ impl Response {
     /// for single & multiple kinds of responses.
     pub fn codeframe(&self) -> Option<&BTreeMap<u64, Choice>> {
         match self {
-            Self::Single { item } | Self::Multiple { item, .. } => {
-                Some(item)
-            }
-            _ => None
+            Self::Single { item } | Self::Multiple { item, .. } => Some(item),
+            _ => None,
         }
     }
 
     pub fn to_sss_classic(&self) -> String {
         let mut output = String::new();
         match self {
-            Self::Quantity { min, max, na_value, na_label } => {
+            Self::Quantity {
+                min,
+                max,
+                na_value,
+                na_label,
+            } => {
                 append_line(&mut output, "TYPE QUANTITY");
                 append_line(&mut output, "VALUES");
-                
+
                 // append_line(&mut output, format_range(*min, *max, "TO"));
                 match na_value {
                     Some(na_value) => {
                         append_line(&mut output, format_range(*min, *max, "TO"));
-                        let na_label = na_label
-                            .as_ref()
-                            .map_or(r#""""#.into(), quote );
-                        let na_line = format!("{} {} SPECIAL",na_value, na_label);
+                        let na_label = na_label.as_ref().map_or(r#""""#.into(), quote);
+                        let na_line = format!("{} {} SPECIAL", na_value, na_label);
                         append_line(&mut output, na_line);
                     }
                     None => {
@@ -190,7 +193,6 @@ impl Response {
                         append_line(&mut output, range_line);
                     }
                 };
-
             }
             Self::Character(size) => {
                 append_line(&mut output, "TYPE CHARACTER");
@@ -237,7 +239,7 @@ impl Choice {
             code,
             label: label.into(),
             filter: filter.map(Into::into),
-            is_special: false
+            is_special: false,
         }
     }
 
@@ -255,7 +257,6 @@ impl Choice {
         self
     }
 }
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Location {
@@ -300,7 +301,6 @@ impl Spread {
     }
 }
 
-
 #[inline]
 fn quote(value: impl std::fmt::Display) -> String {
     format!(r#""{}""#, value)
@@ -335,12 +335,19 @@ mod test {
 
     #[test]
     fn test_write_spread() {
-        let instance = Spread { num_subfields: 5, width: 10 };
-        assert_eq!(instance.to_sss_classic(), format!("SPREAD {} OF {}", 5, 10));
+        let instance = Spread {
+            num_subfields: 5,
+            width: 10,
+        };
+        assert_eq!(
+            instance.to_sss_classic(),
+            format!("SPREAD {} OF {}", 5, 10)
+        );
     }
 
-    // #[test]
-    // fn test_write_location() {
-    //     let instance = Location {from: 0, to: 100};
-    // }
+    #[test]
+    fn test_write_location() {
+        let instance = Location { from: 0, to: 100 };
+        assert_eq!(instance.to_sss_classic(), "POSITION 0 TO 100");
+    }
 }

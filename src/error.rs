@@ -1,14 +1,15 @@
 use std::{error::Error, fmt};
 
-
 #[derive(Debug)]
 pub struct InternalError {
-    message: String
+    message: String,
 }
 
 impl InternalError {
     pub fn new(message: impl Into<String>) -> Self {
-        Self { message: message.into() }
+        Self {
+            message: message.into(),
+        }
     }
 }
 
@@ -20,53 +21,51 @@ impl fmt::Display for InternalError {
     }
 }
 
+// #[derive(Debug)]
+// pub enum IoError {
+//     Read(FileReadError),
+//     BadLine(BadLine),
+//     UnexpectedLineKind(UnexpectedLineKind),
+//     Internal(String),
+// }
+
+// impl Error for IoError {}
+
+// impl fmt::Display for IoError {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         match self {
+//             Self::Read(item) => item.fmt(f),
+//             Self::BadLine(item) => item.fmt(f),
+//             Self::UnexpectedLineKind(item) => item.fmt(f),
+//             Self::Internal(item) => write!(f, "InternalError: {}", item),
+//         }
+//     }
+// }
+
+// impl IoError {
+//     pub fn internal(message: impl Into<String>) -> Self {
+//         Self::Internal(message.into())
+//     }
+// }
+
+// impl From<std::io::Error> for IoError {
+//     fn from(value: std::io::Error) -> Self {
+//         Self::Read(FileReadError::from(value))
+//     }
+// }
+
+// impl From<strum::ParseError> for IoError {
+//     fn from(value: strum::ParseError) -> Self {
+//         BadLine::new(value.to_string()).into()
+//     }
+// }
 
 #[derive(Debug)]
-pub enum IoError {
-    Read(ErrorReadFile),
-    BadLine(BadLine),
-    UnexpectedLineKind(UnexpectedLineKind),
-    Internal(String),
-}
-
-impl Error for IoError {}
-
-impl fmt::Display for IoError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Read(item) => item.fmt(f),
-            Self::BadLine(item) => item.fmt(f),
-            Self::UnexpectedLineKind(item) => item.fmt(f),
-            Self::Internal(item) => write!(f, "InternalError: {}", item),
-        }
-    }
-}
-
-impl IoError {
-    pub fn internal(message: impl Into<String>) -> Self {
-        Self::Internal(message.into())
-    }
-}
-
-impl From<std::io::Error> for IoError {
-    fn from(value: std::io::Error) -> Self {
-        Self::Read(ErrorReadFile::from(value))
-    }
-}
-
-impl From<strum::ParseError> for IoError {
-    fn from(value: strum::ParseError) -> Self {
-        BadLine::new(value.to_string()).into()
-    }
-}
-
-
-#[derive(Debug)]
-pub struct ErrorReadFile {
+pub struct FileReadError {
     message: String,
 }
 
-impl ErrorReadFile {
+impl FileReadError {
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
@@ -74,21 +73,15 @@ impl ErrorReadFile {
     }
 }
 
-impl Error for ErrorReadFile {}
+impl Error for FileReadError {}
 
-impl From<std::io::Error> for ErrorReadFile {
+impl From<std::io::Error> for FileReadError {
     fn from(value: std::io::Error) -> Self {
         Self::new(value.to_string())
     }
 }
 
-impl From<ErrorReadFile> for IoError {
-    fn from(value: ErrorReadFile) -> Self {
-        IoError::Read(value)
-    }
-}
-
-impl fmt::Display for ErrorReadFile {
+impl fmt::Display for FileReadError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Error when reading sss file: {}", self.message)
     }
@@ -112,12 +105,6 @@ impl Error for BadLine {}
 impl From<std::io::Error> for BadLine {
     fn from(value: std::io::Error) -> Self {
         Self::new(value.to_string())
-    }
-}
-
-impl From<BadLine> for IoError {
-    fn from(value: BadLine) -> Self {
-        IoError::BadLine(value)
     }
 }
 
@@ -151,11 +138,5 @@ impl fmt::Display for UnexpectedLineKind {
             "Unexpected line kind. Line: '{}', kind: {:?}",
             self.line, self.kind
         )
-    }
-}
-
-impl From<UnexpectedLineKind> for IoError {
-    fn from(value: UnexpectedLineKind) -> Self {
-        Self::UnexpectedLineKind(value)
     }
 }
