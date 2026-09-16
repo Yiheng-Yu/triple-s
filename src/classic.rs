@@ -943,7 +943,7 @@ mod tests {
             .join("\n")
     }
 
-    fn put_into_record(content: &str) -> impl Iterator<Item = Result<String>> {
+    fn put_into_record(content: &str) -> impl Iterator<Item = Result<String, BadLine>> {
         let content = format!(
             r#"
         SSS
@@ -962,11 +962,11 @@ mod tests {
         content
             .lines()
             .map(|line| Ok::<String, BadLine>(line.to_string()))
-            .collect::<Vec<Result<String, BadLine>>()
+            .collect::<Vec<Result<String, BadLine>>>()
             .into_iter()
     }
 
-    fn create_example_single_code_iterator() -> impl Iterator<Item = Result<String>> {
+    fn create_example_single_code_iterator() -> impl Iterator<Item = Result<String, BadLine>> {
         let content = r#"
         VARIABLE 1
         NAME "AGE"
@@ -990,7 +990,7 @@ mod tests {
     #[test]
     fn test_single_code_question_read() {
         let lines = create_example_single_code_iterator();
-        let survey = read_sss_classic::<BadLine>(lines).unwrap();
+        let survey = read_sss_classic(lines).unwrap();
         assert_eq!(survey.record.content.len(), 1);
 
         let question = survey.get_question("AGE").unwrap();
@@ -1035,7 +1035,7 @@ mod tests {
     }
 
     // todo! finish this unit tests
-    fn create_example_multi_code_iterator() -> impl Iterator<Item = Result<String, IoError>> {
+    fn create_example_multi_code_iterator() -> impl Iterator<Item = Result<String, BadLine>> {
         let content = r#"
         VARIABLE 1
         NAME "K2"
@@ -1107,7 +1107,7 @@ mod tests {
         assert_eq!(spread.to_sss_classic(), "SPREAD 5 OF 3")
     }
 
-    fn create_example_float_quantity_iterator() -> impl Iterator<Item = Result<String, IoError>>
+    fn create_example_float_quantity_iterator() -> impl Iterator<Item = Result<String, BadLine>>
     {
         let content = r#"
         VARIABLE 1
@@ -1149,7 +1149,7 @@ mod tests {
     }
 
     fn create_example_float_quantity_with_special_iterator()
-    -> impl Iterator<Item = Result<String, IoError>> {
+    -> impl Iterator<Item = Result<String, BadLine>> {
         let content = r#"
         VARIABLE 1
         NAME "QUANTITY"
@@ -1193,7 +1193,7 @@ mod tests {
         }
     }
 
-    fn create_character_question_iterator() -> impl Iterator<Item = Result<String, IoError>> {
+    fn create_character_question_iterator() -> impl Iterator<Item = Result<String, BadLine>> {
         let content = r#"
         VARIABLE 12
             NAME "PRODUCTINFO"

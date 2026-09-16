@@ -21,45 +21,6 @@ impl fmt::Display for InternalError {
     }
 }
 
-// #[derive(Debug)]
-// pub enum IoError {
-//     Read(FileReadError),
-//     BadLine(BadLine),
-//     UnexpectedLineKind(UnexpectedLineKind),
-//     Internal(String),
-// }
-
-// impl Error for IoError {}
-
-// impl fmt::Display for IoError {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match self {
-//             Self::Read(item) => item.fmt(f),
-//             Self::BadLine(item) => item.fmt(f),
-//             Self::UnexpectedLineKind(item) => item.fmt(f),
-//             Self::Internal(item) => write!(f, "InternalError: {}", item),
-//         }
-//     }
-// }
-
-// impl IoError {
-//     pub fn internal(message: impl Into<String>) -> Self {
-//         Self::Internal(message.into())
-//     }
-// }
-
-// impl From<std::io::Error> for IoError {
-//     fn from(value: std::io::Error) -> Self {
-//         Self::Read(FileReadError::from(value))
-//     }
-// }
-
-// impl From<strum::ParseError> for IoError {
-//     fn from(value: strum::ParseError) -> Self {
-//         BadLine::new(value.to_string()).into()
-//     }
-// }
-
 #[derive(Debug)]
 pub struct FileReadError {
     message: String,
