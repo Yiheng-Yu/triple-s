@@ -230,7 +230,7 @@ pub struct Choice {
     pub filter: Option<String>,
     /// (Optional) indicator for special values (e.g. mannotationissing data codes).
     /// Removed from SSS 1.2 onwards.
-    is_special: bool,
+    pub is_special: bool,
 }
 
 impl Choice {
