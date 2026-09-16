@@ -1,5 +1,26 @@
 use std::{error::Error, fmt};
 
+
+#[derive(Debug)]
+pub struct InternalError {
+    message: String
+}
+
+impl InternalError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self { message: message.into() }
+    }
+}
+
+impl Error for InternalError {}
+
+impl fmt::Display for InternalError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "InternalError: {}", self.message)
+    }
+}
+
+
 #[derive(Debug)]
 pub enum IoError {
     Read(ErrorReadFile),

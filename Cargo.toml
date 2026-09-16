@@ -10,5 +10,6 @@ name = "triple_s"
 crate-type = ["rlib"]
 
 [dependencies]
+anyhow = { version = "1.0.104", features = ["backtrace"] }
 regex = "1.13.1"
 strum = { version = "0.28", features = ["derive"] }

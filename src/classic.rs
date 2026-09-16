@@ -1,4 +1,5 @@
-use std::{collections::BTreeMap, fmt::Write};
+use std::{collections::BTreeMap, };
+use anyhow::{Context, Result};
 
 use regex::Regex;
 use strum::EnumString;
@@ -6,13 +7,11 @@ use strum::EnumString;
 use crate::{
     Choice,
     Location,
-    Meta,
     Question,
-    Record,
     Response,
     Spread,
     Survey,
-    error::{self, BadLine, IoError},
+    error::{self, BadLine, IoError, InternalError},
 };
 
 #[derive(Debug, PartialEq)]
@@ -70,18 +69,34 @@ pub enum SSSClassicLineType {
     #[strum(serialize = "VALUES")]
     ResponseStart,
     End(String),
+
     /// field type to be determined by `Question` later on during parsing
     IntRange {
         from: i64,
         to: i64,
-        annotation: Option<String>,
+        has_na_value: bool
     },
     /// field type to be determined by `Question` later on during parsing
     FloatRange {
         from: f64,
         to: f64,
-        annotation: Option<String>,
+        /// to handle case like: `-10.0 TO 10.0 WITH`
+        has_na_value: bool
     },
+    /// line that looks like '9.9 "default value" SPECIAL
+    FloatLabelled {
+        value: f64,
+        label: String,
+        is_special: bool
+    },
+
+    /// line that looks like '9 "default value" SPECIAL
+    IntLabelled {
+        value: i64,
+        label: String,
+        is_special: bool
+    },
+
     Spread,
     Size(usize),
 }
@@ -94,15 +109,6 @@ fn unquote(value: &str) -> String {
         .to_string()
 }
 
-#[inline]
-fn quote(value: &str) -> String {
-    format!(r#""{}""#, value)
-}
-
-#[inline]
-fn line(output: &mut String, content: impl std::fmt::Display) {
-    writeln!(output, "{content}").expect("writing to a String shouldn't fail");
-}
 
 fn range<T>(value: &str, delimiter: &str) -> Result<(T, T), IoError>
 where
@@ -124,11 +130,12 @@ where
 }
 
 impl SSSClassicLineType {
-    pub fn parse_line(line: &str) -> Result<(Self, String), IoError> {
+    pub fn parse_line(line: &str) -> Result<(Self, String)> {
         let line = line.trim();
         if line.is_empty() {
             return Ok((Self::Empty, String::new()));
         }
+
         let mut fields = line.splitn(2, char::is_whitespace);
         let prefix = fields
             .next()
@@ -137,144 +144,60 @@ impl SSSClassicLineType {
                 line
             ))))?
             .trim();
-
         // value can be empty
         let value = fields.next().unwrap_or_default().trim();
-
+        
         // parse `Choice` or `Range` type, this bit of parsing is extremely annoying
-        // NOTE: The order of these regex matches are important don't move them around becuase it mese things up
-        let re_range_float = Regex::new(
-            r"^(?P<range>[0-9\-]+\.[0-9]+ TO [0-9\-]+\.[0-9]+)(?P<suffix>.*)$",
-        )
-        .map_err(|err| {
-            IoError::Internal(format!("Failed to create regex: {}", err))
-        })?;
-        if let Some(capture_float) = re_range_float.captures(line) {
-            if let Some(float_range) = capture_float.name("range") {
-                let (from, to) = range::<f64>(float_range.as_str(), "TO")?;
-                let content = capture_float
-                    .name("content")
-                    .map_or("", |matched| matched.as_str())
-                    .trim();
-                let (text, annotation) = parse_annotation_line(content)?;
-                return Ok((
-                    Self::FloatRange {
-                        from,
-                        to,
-                        annotation,
-                    },
-                    text.to_string(),
-                ));
-            } else {
-                return Err(BadLine::new(format!(
-                    "Unable to parse line due to regex error: '{}'",
-                    line
-                ))
-                .into());
+        if prefix.starts_with(['.', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-']) {
+            let pattern_range = Regex::new(r"(?P<from>[0-9\.\-]+) TO (?P<to>[0-9\.\-]+)")?;
+            let range_match = pattern_range.captures(line);
+            match range_match {
+                // example text: `10 TO 15`
+                Some(captured) => {
+                    let from = captured.name("from")
+                        .ok_or(BadLine::new(format!("Unable to get minimun quantity value from line: '{}'", line)))?
+                        .as_str();
+                    let to = captured.name("to")
+                        .ok_or(BadLine::new(format!("Unable to get maximum quantity value from line: '{}'", line)))?
+                        .as_str();
+                    let has_na_value = contains_na_value(line);
+                    let parsed = if is_float(from) {
+                        let from = parse_float_string(from)?;
+                        let to = parse_float_string(to)?;
+                        Self::FloatRange { from, to, has_na_value }
+                    } else {
+                        let from = parse_int_string(from)
+                            .with_context(|| format!("When parsing line: '{}'", line))?;
+                        let to = parse_int_string(to)
+                            .with_context(|| format!("When parsing line: '{}'", line))?;
+                        Self::IntRange { from, to, has_na_value }
+                    };
+
+                    return Ok((parsed, "".into()))
+                }
+                None => {
+                    // can be Choice/ Quantity with special value
+                    let (sanitised, is_special) = match value.strip_suffix("SPECIAL") {
+                        Some(stripped) => (stripped.trim(), true),
+                        None => (value.trim(), false)
+                    };
+
+                    let content = sanitised.strip_circumfix('"', '"')
+                        .map_or(sanitised.to_string(), |s| s.to_string());
+
+                    let parsed = if is_float(prefix) {
+                        let amount = parse_float_string(prefix)
+                            .with_context(|| format!("When parsing line: '{}'", line))?;
+                        Self::FloatLabelled { value: amount, label: content, is_special }
+                    } else {
+                        let amount = parse_int_string(prefix)
+                            .with_context(|| format!("When parsing line: '{}'", line))?;
+                        Self::IntLabelled { value: amount, label: content, is_special }
+                    };
+                    return Ok((parsed, "".into()))
+                }
             }
         };
-
-        let re_range_int = Regex::new(r"^(?P<range>[0-9\-]+ TO [0-9\-]+)(?P<content>.*)$")
-            .map_err(|err| {
-                IoError::Internal(format!("Failed to create regex: {}", err))
-            })?;
-        if let Some(capture_int) = re_range_int.captures(line) {
-            if let Some(int_range) = capture_int.name("range") {
-                let (from, to) = range::<i64>(int_range.as_str(), "TO")?;
-                let content = capture_int
-                    .name("content")
-                    .map_or("", |matched| matched.as_str())
-                    .trim();
-
-                let (text, annotation) = parse_annotation_line(content)?;
-                return Ok((
-                    Self::IntRange {
-                        from,
-                        to,
-                        annotation,
-                    },
-                    text.to_string(),
-                ));
-            } else {
-                return Err(BadLine::new(format!(
-                    "Unable to parse line due to regex error: '{}'",
-                    line
-                ))
-                .into());
-            }
-        };
-
-        let re_float_range_single = Regex::new(r"^(?P<range>[0-9\-]+\.[0-9]+)(?P<content>.*)$")
-            .map_err(|err| {
-                IoError::Internal(format!("Failed to create regex: {}", err))
-            })?;
-        if let Some(capture_float) = re_float_range_single.captures(line) {
-            if let Some(float_range) = capture_float.name("range") {
-                let from = float_range.as_str().parse::<f64>().map_err(|err| {
-                    BadLine::new(format!(
-                        "Error extracting range from line: `{}`, readon: {}",
-                        line,
-                        err
-                    ))
-                })?;
-                let content = capture_float
-                    .name("content")
-                    .map_or("", |matched| matched.as_str())
-                    .trim();
-                let (text, annotation) = parse_annotation_line(content)?;
-                return Ok((
-                    Self::FloatRange {
-                        from,
-                        to: from,
-                        annotation,
-                    },
-                    text.to_string(),
-                ));
-            } else {
-                return Err(BadLine::new(format!(
-                    "Unable to parse line due to regex error: '{}'",
-                    line
-                ))
-                .into());
-            }
-        };
-
-        let re_int_range_single = Regex::new(r"^(?P<range>[0-9\-]+)(?P<content>.*)$")
-            .map_err(|err| {
-                IoError::Internal(format!("Failed to create regex: {}", err))
-            })?;
-        if let Some(capture_int) = re_int_range_single.captures(line) {
-            if let Some(int_range) = capture_int.name("range") {
-                let from = int_range.as_str().parse::<i64>().map_err(|err| {
-                    BadLine::new(format!(
-                        "Error extracting code from line: `{}`, readon: {}",
-                        line,
-                        err
-                    ))
-                })?;
-
-                let content = capture_int
-                    .name("content")
-                    .map_or("", |matched| matched.as_str())
-                    .trim();
-                let (text, annotation) = parse_annotation_line(content)?;
-                return Ok((
-                    Self::IntRange {
-                        from,
-                        to: from,
-                        annotation,
-                    },
-                    text.to_string(),
-                ));
-            } else {
-                return Err(BadLine::new(format!(
-                    "Unable to parse line due to regex error: '{}'",
-                    line
-                ))
-                .into());
-            }
-        };
-
         let value = unquote(value);
         let kind = match prefix.to_ascii_uppercase().as_str() {
             "SURVEY" => Self::SurveyStart,
@@ -317,46 +240,37 @@ fn response_kind(value: &str) -> Result<Response, IoError> {
         "LOGICAL" => Ok(Response::Single {
             item: BTreeMap::from([
                 (
-                    0_u64,
-                    Choice {
-                        code: 0,
-                        label: "FALSE".to_string(),
-                        filter: None,
-                        annotation: None
-                    },
+                    0,
+                    Choice::new(0, "FALSE", None)
                 ),
                 (
-                    1_u64,
-                    Choice {
-                        code: 1,
-                        label: "TRUE".to_string(),
-                        filter: None,
-                        annotation: None
-                    },
-                ),
+                    1,
+                    Choice::new(1, "TRUE", None)
+                )
             ]),
         }),
-        "QUANTITY" => Ok(Response::Quantity { min: 0.0, max: 0.0 }),
+        "QUANTITY" => Ok(Response::Quantity { min: 0.0, max: 0.0, na_label: None, na_value: None }),
         "NOTE" => Ok(Response::Note(String::new())),
         _ => Err(BadLine::new(format!("Unknown response type: '{value}'")).into()),
     }
 }
 
-fn question_mut<'a>(
+fn get_question_mut<'a>(
     survey: &'a mut Survey,
     index: Option<usize>,
     line: &str,
-) -> Result<&'a mut Question, IoError> {
+) -> Result<&'a mut Question> {
     let index = index
-        .ok_or_else(|| IoError::internal(format!("Line outside a variable: '{line}'")))?;
-    survey
+        .ok_or_else(|| InternalError::new(format!("Line outside a variable: '{line}'")))?;
+    let question = survey
         .record
         .content
         .get_mut(index)
-        .ok_or_else(|| IoError::internal("Invalid current question"))
+        .ok_or_else(|| InternalError::new("Invalid current question"))?;
+    Ok(question)
 }
 
-pub fn read_sss_classic<I, E>(lines: I) -> Result<Survey, IoError>
+pub fn read_sss_classic<I, E>(lines: I) -> Result<Survey>
 where
     I: IntoIterator<Item = Result<String, E>>,
     IoError: From<E>,
@@ -404,17 +318,17 @@ where
                 in_values = true;
             }
             SSSClassicLineType::Name => {
-                question_mut(&mut survey, current, &line)?.name = value
+                get_question_mut(&mut survey, current, &line)?.name = value
             }
             SSSClassicLineType::Filter => {
-                question_mut(&mut survey, current, &line)?.filter = Some(value)
+                get_question_mut(&mut survey, current, &line)?.filter = Some(value)
             }
             SSSClassicLineType::Label => {
-                question_mut(&mut survey, current, &line)?.text = value
+                get_question_mut(&mut survey, current, &line)?.text = value
             }
             SSSClassicLineType::Location => {
                 if !in_values {
-                    question_mut(&mut survey, current, &line)?.location = Location {
+                    get_question_mut(&mut survey, current, &line)?.location = Location {
                         from: range(&value, "TO")?.0,
                         to: range(&value, "TO")?.1,
                     };
@@ -422,83 +336,21 @@ where
             }
             SSSClassicLineType::Size(size) => {
                 if let Response::Character(length) =
-                    &mut question_mut(&mut survey, current, &line)?.response
+                    &mut get_question_mut(&mut survey, current, &line)?.response
                 {
                     *length = size;
                 }
             }
             SSSClassicLineType::Kind => {
-                let question = question_mut(&mut survey, current, &line)?;
+                let question = get_question_mut(&mut survey, current, &line)?;
                 question.response = response_kind(&value)?;
                 if matches!(question.response, Response::Note(_)) {
                     question.response = Response::Note(question.text.clone());
                 }
             }
-            SSSClassicLineType::IntRange {
-                from,
-                to,
-                annotation,
-            } => {
-                let question = question_mut(&mut survey, current, &line)?;
-                match &mut question.response {
-                    Response::Single { item } | Response::Multiple { item,.. } => {
-                        if from >= 0 {
-                            let choice = Choice {code: from as u64, label: value, filter: None, annotation};
-                            item.insert( choice.code, choice);
-                        } else {
-                            return Err(BadLine::new(
-                        format!("Code index cannot be negative. Line received: '{}', question: {}", line, question.name)
-                            ).into())
-                        }
-                    }
-                    Response::Quantity {..} | Response::QuantitySpecial {..} => {
-                        match annotation {
-                            Some(content) => {
-                                question.response = Response::QuantitySpecial {
-                                    min: from as f64, max: to as f64, special: format!(r#""{}" {}"#, value, content)
-                                };
-                            }
-                            None => {
-                                question.response = Response::Quantity {
-                                    min: from as f64, max: to as f64
-                                };
-                            }
-                        }
-                    }
-                    _ => return Err(BadLine::new(
-                        format!("Wrong question type received for line `{value}`. Expect: Single/Multiple/Quantity. Actual: {:?}", question.response)
-                    ).into())
-                }
-            }
-            SSSClassicLineType::FloatRange {
-                from,
-                to,
-                annotation,
-            } => {
-                let question = question_mut(&mut survey, current, &line)?;
-                match &mut question.response {
-                    Response::Quantity {..} | Response::QuantitySpecial {..} => {
-                        match annotation {
-                            Some(content) => {
-                                question.response = Response::QuantitySpecial {
-                                    min: from, max: to, special: format!(r#""{}" {}"#, value, content)
-                                };
-                            }
-                            None => {
-                                question.response = Response::Quantity {
-                                    min: from, max: to
-                                };
-                            }
-                        }
-                    }
-                    _ => return Err(BadLine::new(
-                        format!("Wrong question type received for line `{value}`. Expect: Quantity. Actual: {:?}", question.response)
-                    ).into())
-                }
-            }
 
             SSSClassicLineType::Spread => {
-                match &mut question_mut(&mut survey, current, &line)?.response {
+                match &mut get_question_mut(&mut survey, current, &line)?.response {
                     Response::Multiple { spread, .. } => {
                         let (num_subfields, width) = range(&value, "OF")?;
                         *spread = Spread {
@@ -509,191 +361,121 @@ where
                     _ => return Err(BadLine::new("SPREAD requires MULTIPLE").into()),
                 }
             }
+
+            SSSClassicLineType::IntRange { from, to, has_na_value: _ } => {
+                let question = get_question_mut(&mut survey, current, &line)?;
+                match &mut question.response {
+                    Response::Quantity { min, max, na_value: _, na_label: _ } => {
+                        *min = from as f64;
+                        *max = to as f64;
+                    }
+                    _ => {
+                        let message = format!("Wrong question type received for line `{value}`. Expect: Quantity. Actual: {:?}", question.response);
+                        let error = InternalError::new(message);
+                        return Err(error).with_context(|| format!("When parsing line: {}", line))
+                    }
+                }
+            }
+
+            SSSClassicLineType::FloatRange { from, to, has_na_value: _ } => {
+                let question = get_question_mut(&mut survey, current, &line)?;
+                match &mut question.response {
+                    Response::Quantity { min, max, na_value: _, na_label: _ } => {
+                        *min = from;
+                        *max = to;
+                    }
+                    _ => {
+                        let message = format!("Wrong question type received for line `{value}`. Expect: Quantity. Actual: {:?}", question.response);
+                        let error = InternalError::new(message);
+                        return Err(error).with_context(|| format!("When parsing line: {}", line))
+                    }
+                }
+            }
+
+            SSSClassicLineType::IntLabelled { value, label, is_special } => {
+                let question = get_question_mut(&mut survey, current, &line)?;
+                match &mut question.response {
+                    Response::Single { item } | Response::Multiple { item, .. } => {
+                        let code = if value >= 0 {
+                            value as u64
+                        } else {
+                            let error = BadLine::new("Code number cannot be negative");
+                            return Err(error).with_context(||
+                                format!("When parsing line '{}' for question {}", line, question.name)
+                            )
+                        };
+                        let choice = Choice::new(code, label, None)
+                            ._set_special(is_special);
+                        item.insert(choice.code, choice);
+                    }
+                    Response::Quantity { min: _, max: _, na_value, na_label } => {
+                        if is_special {
+                            *na_value = Some(value as f64);
+                            *na_label = Some(label);
+                        } else {
+                            let message = format!("Undefined line: '{}'", line);
+                            let error = InternalError::new(message);
+                            return Err(error).with_context(|| 
+                                format!("When parsing line '{}' for question {}", line, question.name)
+                            )
+                        }
+                    }
+                    _ => {
+                        let message = format!("Wrong question type received for line `{value}`. Expect: Single/Multiple/Quantity. Actual: {:?}", question.response);
+                        let error = InternalError::new(message);
+                        return Err(error).with_context(|| format!("When parsing line: {}", line))
+                    }
+                }
+            }
+                SSSClassicLineType::FloatLabelled { value, label, is_special } => {
+                    let question = get_question_mut(&mut survey, current, &line)?;
+                    match &mut question.response {
+                        Response::Quantity { min: _, max: _, na_value, na_label } => {
+                        if is_special {
+                            *na_value = Some(value);
+                            *na_label = Some(label);
+                        } else {
+                            let message = format!("Undefined line: '{}'", line);
+                            let error = InternalError::new(message);
+                            return Err(error).with_context(|| 
+                                format!("When parsing line '{}' for question {}", line, question.name)
+                            )
+                        }
+                    }
+                    _ => {
+                        let message = format!("Wrong question type received for line `{value}`. Expect: Single/Multiple/Quantity. Actual: {:?}", question.response);
+                        let error = InternalError::new(message);
+                        return Err(error).with_context(|| format!("When parsing line: {}", line))
+                        }
+                    }
+                }
         }
     }
     Ok(survey)
 }
 
-impl Survey {
-    pub fn to_sss_classic(&self) -> String {
-        let mut output = String::from("SSS\n");
-        output.push_str(&self.meta.to_sss_classic());
-        line(&mut output, "SURVEY");
-        if let Some(title) = self.title.as_ref() {
-            line(&mut output, format!("TITLE {}", quote(title)));
-        }
-        output.push_str(&self.record.to_sss_classic());
-        line(&mut output, "END SURVEY");
-        line(&mut output, "END SSS");
-        output
-    }
+#[inline]
+fn is_float(text: &str) -> bool {
+    text.contains(".")
 }
 
-impl Meta {
-    pub fn to_sss_classic(&self) -> String {
-        let mut output = String::new();
-        if let Some(value) = &self.version {
-            line(&mut output, format!("VERSION {}", value));
-        }
-        for (name, value) in [
-            ("DATE", &self.date),
-            ("TIME", &self.time),
-            ("ORIGIN", &self.origin),
-            ("USER", &self.user),
-        ] {
-            if let Some(value) = value {
-                line(&mut output, format!("{name} {}", quote(value)));
-            }
-        }
-        for value in &self.note {
-            line(&mut output, format!("NOTE {}", quote(value)));
-        }
-        for (name, value) in [("STANDARD", &self.standard), ("STYLE", &self.style)] {
-            if let Some(value) = value {
-                line(&mut output, format!("{name} {}", quote(value)));
-            }
-        }
-        output
-    }
+#[inline]
+fn contains_na_value(text: &str) -> bool {
+    text.trim().ends_with(" WITH")
 }
 
-impl Record {
-    pub fn to_sss_classic(&self) -> String {
-        let mut output = String::new();
-        line(&mut output, format!("RECORD {}", self.id));
-        for (index, question) in self.content.iter().enumerate() {
-            line(&mut output, format!("VARIABLE {}", index + 1));
-            output.push_str(&question.to_sss_classic());
-            line(&mut output, "END VARIABLE");
-        }
-        line(&mut output, "END RECORD");
-        output
-    }
-}
-
-impl Question {
-    pub fn to_sss_classic(&self) -> String {
-        let mut output = String::new();
-        line(&mut output, format!("NAME {}", quote(&self.name)));
-        line(&mut output, format!("LABEL {}", quote(&self.text)));
-        line(&mut output, self.location.to_sss_classic());
-        output.push_str(&self.response.to_sss_classic());
-        output
-    }
-}
-
-impl Location {
-    pub fn to_sss_classic(&self) -> String {
-        if self.from == self.to {
-            format!("POSITION {}", self.from)
-        } else {
-            format!("POSITION {} TO {}", self.from, self.to)
-        }
-    }
-}
-
-impl Response {
-    pub fn to_sss_classic(&self) -> String {
-        let mut output = String::new();
-        match self {
-            Self::Quantity { min, max } => {
-                line(&mut output, "TYPE QUANTITY");
-                line(&mut output, "VALUES");
-                line(&mut output, format_range(*min, *max, "TO"));
-                line(&mut output, "END VALUES");
-            }
-            Self::QuantitySpecial { min, max, special } => {
-                line(&mut output, "TYPE QUANTITY");
-                line(&mut output, "VALUES");
-                let range_string = format_range(*min, *max, "TO");
-                let range_string = format!("{} {}", range_string, special);
-                line(&mut output, range_string);
-                line(&mut output, "END VALUES");
-            }
-            Self::Character(size) => {
-                line(&mut output, "TYPE CHARACTER");
-                line(&mut output, self.size_line(*size));
-            }
-            Self::Note(value) => {
-                line(&mut output, "TYPE NOTE");
-                line(&mut output, format!("LABEL {}", quote(value)));
-            }
-            Self::Single { item } => {
-                line(&mut output, "TYPE SINGLE");
-                write_choices(&mut output, item);
-            }
-            Self::Multiple { item, spread } => {
-                line(&mut output, "TYPE MULTIPLE");
-                line(&mut output, spread.to_sss_classic());
-                write_choices(&mut output, item);
-            }
-        }
-        output
-    }
-
-    fn size_line(&self, size: usize) -> String {
-        format!("SIZE {size}")
-    }
-}
-
-fn write_choices(output: &mut String, choices: &BTreeMap<u64, Choice>) {
-    line(output, "VALUES");
-    for choice in choices.values() {
-        line(output, choice.to_sss_classic());
-    }
-    line(output, "END VALUES");
-}
-
-fn format_range<T: std::fmt::Display>(from: T, to: T, delimiter: &str) -> String {
-    if from.to_string() == to.to_string() {
-        from.to_string()
+#[inline]
+fn parse_float_string(text: &str) -> Result<f64, std::num::ParseFloatError> {
+    if text.trim().starts_with(".") {
+        format!("0.{}", text).trim().parse::<f64>()
     } else {
-        format!("{from} {delimiter} {to}")
+        text.trim().parse::<f64>()
     }
 }
 
-fn parse_annotation_line(content: &str) -> Result<(&str, Option<String>), IoError> {
-    let (text, annotation) = if content.ends_with("SPECIAL") {
-        let text = content
-            .strip_suffix("SPECIAL")
-            .map_or(content, |trimmed| trimmed.trim());
-        (text, Some("SPECIAL".to_string()))
-    } else if content.ends_with("WITH") {
-        let text = content
-            .strip_suffix("WITH")
-            .map_or(content, |trimmed| trimmed.trim());
-        println!("{}", text);
-        (text, Some("WITH".to_string()))
-    } else {
-        (content, None)
-    };
-
-    let text = text.trim();
-    if text.is_empty() {
-        return Ok(("", annotation));
-    }
-
-    let stripped = text.strip_circumfix('"', '"').ok_or(BadLine::new(format!(
-        "Unable to parse line: '{}'",
-        content
-    )))?;
-    Ok((stripped, annotation))
-}
-
-impl Choice {
-    pub fn to_sss_classic(&self) -> String {
-        let suffix = self
-            .annotation
-            .as_ref()
-            .map_or_default(|s| format!(" {}", s));
-        format!("{} {}{}", self.code, quote(&self.label), suffix)
-    }
-}
-
-impl Spread {
-    pub fn to_sss_classic(&self) -> String {
-        format!("SPREAD {} OF {}", self.num_subfields, self.width)
-    }
+#[inline]
+fn parse_int_string(text: &str) -> Result<i64, std::num::ParseIntError> {
+    text.trim().parse::<i64>()
 }
 
 #[cfg(test)]
@@ -888,9 +670,11 @@ mod tests {
         assert_eq!(question.response.is_quantity(), true);
 
         match &question.response {
-            Response::Quantity { min, max } => {
+            Response::Quantity { min, max, na_value, na_label } => {
                 assert_eq!(min.clone(), 0.00);
                 assert_eq!(max.clone(), 99.00);
+                assert_eq!(na_value.as_ref(), None);
+                assert_eq!(na_label.as_ref(), None);
             }
             _ => panic!("Wrong kind of response received!")
         }
@@ -922,10 +706,11 @@ mod tests {
         assert_eq!(question.response.is_quantity(), true);
 
         match &question.response {
-            Response::QuantitySpecial { min, max, special } => {
+            Response::Quantity { min, max, na_value, na_label } => {
                 assert_eq!(min.clone(), 0.00);
                 assert_eq!(max.clone(), 99.00);
-                println!("{:#?}", &special);
+                assert_eq!(na_value.unwrap(), -999999.99);
+                assert_eq!(na_label.as_ref().map(|s| s.clone()), Some("Don't Know".to_string()));
             }
             _ => panic!("Wrong kind of response received!")
         }
