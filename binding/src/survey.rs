@@ -3,8 +3,6 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use pyo3::{exceptions, prelude::*};
 
-pub use tri::Meta;
-
 #[pyfunction]
 pub fn read_sss(path: &str) -> PyResult<PySurvey> {
     let survey = tri::read_sss(path)
@@ -87,12 +85,10 @@ impl PySurvey {
         Ok(())
     }
 
-    // #[getter]
-    // fn meta<'py>(&self, py: Python<'py>) -> PyResult<PyRefMut<'py, Meta>> {
-    //     let instance = self.read_inner()?.meta;
-    //     Ok(instance.bind(py).borrow_mut())
-    // }
-
+    #[getter]
+    fn meta<'py>(survey: &Bound<'_, Self>) -> PyMeta {
+        PyMeta::from_rust(survey)
+    }
 
     fn to_sss_classic(&self) -> PyResult<String> {
         Ok(self.read_inner()?.to_sss_classic())
@@ -107,41 +103,6 @@ impl PySurvey {
 //         .map(|(index, _)| PyQuestion::from_inner(survey, index))
 //         .ok_or(exceptions::PyKeyError::new_err(question_name.to_string()))?
 //     }
-}
-
-#[pyclass(dict, weakref, module = "triple_s", name = "Meta", from_py_object)]
-pub struct PyMeta {
-    inner: Arc<RwLock<tri::Meta>>
-}
-
-impl Clone for PyMeta {
-    fn clone(&self) -> Self {
-        Self {
-            inner: Arc::clone(&self.inner)
-        }
-    }
-}
-
-impl PyMeta {
-    pub(crate) fn new(inner: tri::Meta) -> Self {
-        Self { inner: Arc::new(RwLock::new(inner)) }
-    }
-
-    /// Acquire the inner survey for reading; surfaces lock poisoning as a
-    /// `PyException` instead of panicking.
-    pub(crate) fn read_inner(&self) -> PyResult<RwLockReadGuard<'_, tri::Meta>> {
-        self.inner
-            .read()
-            .map_err(|_| exceptions::PyException::new_err("Survey RwLock is poisoned"))
-    }
-
-    /// Acquire the inner survey for writing; surfaces lock poisoning as a
-    /// `PyException` instead of panicking.
-    pub(crate) fn write_inner(&self) -> PyResult<RwLockWriteGuard<'_, tri::Meta>> {
-        self.inner
-            .write()
-            .map_err(|_| exceptions::PyException::new_err("Survey RwLock is poisoned"))
-    }
 }
 
 // /// Content of a survey
@@ -627,142 +588,169 @@ impl PyMeta {
 //     }
 // }
 
-// /// Information about a survey instance, including creation date, user info etc.,
-// #[pyclass(module = "triple_s", name = "Meta")]
-// pub struct PyMeta {
-//     inner: Py<PySurvey>,
-// }
+/// Information about a survey instance, including creation date, user info etc.,
+#[pyclass(module = "triple_s", name = "Meta")]
+pub struct PyMeta {
+    inner: Py<PySurvey>,
+}
 
-// impl PyMeta {
-//     pub fn from_rust(survey: &Bound<'_, PySurvey>) -> Self {
-//         Self {
-//             inner: survey.clone().unbind(),
-//         }
-//     }
-// }
+impl PyMeta {
+    pub fn from_rust(survey: &Bound<'_, PySurvey>) -> Self {
+        Self {
+            inner: survey.clone().unbind(),
+        }
+    }
+}
 
-// #[pymethods]
-// impl PyMeta {
-//     fn to_sss_classic(&self, py: Python<'_>) -> String {
-//         self.inner.bind(py).borrow().inner.meta.to_sss_classic()
-//     }
+#[pymethods]
+impl PyMeta {
+    fn to_sss_classic(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(self.inner.bind(py).borrow()
+            .read_inner()?
+            .meta
+            .to_sss_classic())
+    }
 
-//     /// SSS Version
-//     #[getter]
-//     fn version(&self, py: Python<'_>) -> Option<String> {
-//         self.inner.bind(py).borrow().inner.meta.version.clone()
-//     }
+    /// SSS Version
+    #[getter]
+    fn version(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        Ok(self.inner.bind(py).borrow().read_inner()?
+            .meta
+            .version
+            .clone())
+    }
 
-//     #[setter]
-//     fn set_version(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.meta.version = Some(value.to_owned());
-//         Ok(())
-//     }
+    #[setter]
+    fn set_version(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+        let survey = self.inner.bind(py).borrow_mut();
+        survey.write_inner()?.meta.version = value;
+        Ok(())
+    }
 
-//     /// (Optional) The date the file was created.
-//     #[getter]
-//     fn date(&self, py: Python<'_>) -> Option<String> {
-//         self.inner.bind(py).borrow().inner.meta.date.clone()
-//     }
+    /// (Optional) The date the file was created.
+    #[getter]
+    fn date(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        Ok(self.inner.bind(py).borrow().read_inner()?
+            .meta
+            .date
+            .clone())
+    }
 
-//     #[setter]
-//     fn set_date(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.meta.date = Some(value.to_owned());
-//         Ok(())
-//     }
+    #[setter]
+    fn set_date(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+        let survey = self.inner.bind(py).borrow_mut();
+        survey.write_inner()?.meta.date = value;
+        Ok(())
+    }
 
-//     /// (Optional) The time the file was created.
-//     #[getter]
-//     fn time(&self, py: Python<'_>) -> Option<String> {
-//         self.inner.bind(py).borrow().inner.meta.time.clone()
-//     }
+    /// (Optional) The time the file was created.
+    #[getter]
+    fn time(&self, py: Python<'_>) -> PyResult<Option<String>> {
+         Ok(self.inner.bind(py).borrow().read_inner()?
+            .meta
+            .time
+            .clone())
+    }
 
-//     #[setter]
-//     fn set_time(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.meta.time = Some(value.to_owned());
-//         Ok(())
-//     }
+    #[setter]
+    fn set_time(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+        let survey = self.inner.bind(py).borrow_mut();
+        survey.write_inner()?.meta.time = value;
+        Ok(())
+    }
 
-//     /// (Optional) The originating system (program and operating system), i.e., `Windows 95`
-//     #[getter]
-//     fn origin(&self, py: Python<'_>) -> Option<String> {
-//         self.inner.bind(py).borrow().inner.meta.origin.clone()
-//     }
+    /// (Optional) The originating system (program and operating system), i.e., `Windows 95`
+    #[getter]
+    fn origin(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        Ok(self.inner.bind(py).borrow().read_inner()?
+            .meta
+            .origin
+            .clone())
+    }
 
-//     #[setter]
-//     fn set_origin(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.meta.origin = Some(value.to_owned());
-//         Ok(())
-//     }
+    #[setter]
+    fn set_origin(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+       let survey = self.inner.bind(py).borrow_mut();
+        survey.write_inner()?.meta.origin = value;
+        Ok(())
+    }
 
-//     /// (Optional) Name of the user who created this file
-//     #[getter]
-//     fn user(&self, py: Python<'_>) -> Option<String> {
-//         self.inner.bind(py).borrow().inner.meta.user.clone()
-//     }
+    /// (Optional) Name of the user who created this file
+    #[getter]
+    fn user(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        Ok(self.inner.bind(py).borrow().read_inner()?
+            .meta
+            .user
+            .clone())
+    }
 
-//     #[setter]
-//     fn set_user(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.meta.user = Some(value.to_owned());
-//         Ok(())
-//     }
+    #[setter]
+    fn set_user(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+        let survey = self.inner.bind(py).borrow_mut();
+        survey.write_inner()?.meta.user = value;
+        Ok(())
+    }
 
-//     #[getter]
-//     fn style(&self, py: Python<'_>) -> Option<String> {
-//         self.inner.bind(py).borrow().inner.meta.style.clone()
-//     }
+    #[getter]
+    fn style(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        Ok(self.inner.bind(py).borrow().read_inner()?
+            .meta
+            .style
+            .clone())
+    }
 
-//     #[setter]
-//     fn set_style(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.meta.style = Some(value.to_owned());
-//         Ok(())
-//     }
+    #[setter]
+    fn set_style(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+        let survey = self.inner.bind(py).borrow_mut();
+        survey.write_inner()?.meta.style = value;
+        Ok(())
+    }
 
-//     /// (Optional) can appear any number of times in the definition file wherever a keyword is expected
-//     /// (including between values specified in a VALUES block).
-//     /// The importing program does not interpret the contents of the note_text.
-//     /// It is recommended that the NOTE form be used where comments are to be inserted into the SSS definition file by an export program.
-//     #[getter]
-//     fn note(&self, py: Python<'_>) -> Vec<String> {
-//         self.inner.bind(py).borrow().inner.meta.note.clone()
-//     }
+    /// (Optional) can appear any number of times in the definition file wherever a keyword is expected
+    /// (including between values specified in a VALUES block).
+    /// The importing program does not interpret the contents of the note_text.
+    /// It is recommended that the NOTE form be used where comments are to be inserted into the SSS definition file by an export program.
+    #[getter]
+    fn note(&self, py: Python<'_>) -> PyResult<Vec<String>> {
+        Ok(self.inner.bind(py).borrow().read_inner()?
+            .meta
+            .note
+            .clone())
+    }
 
-//     #[setter]
-//     fn set_note(&self, py: Python<'_>, value: Vec<String>) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.meta.note = value;
-//         Ok(())
-//     }
+    #[setter]
+    fn set_note(&self, py: Python<'_>, value: Vec<String>) -> PyResult<()> {
+        let survey = self.inner.bind(py).borrow_mut();
+        survey.write_inner()?.meta.note = value;
+        Ok(())
+    }
 
-//     /// This statement is used to indicate that some aspect of the SSS definition meets a defined standard
-//     /// that may reduce the amount of checking required by an import program.
-//     /// The only standard_option provided in version 1.1 is NAMES. The definition of SSS standard names is:
-//     /// - consist of 1-8 characters
-//     /// - consist of only the characters A-Z (and a-z) and 0-9
-//     /// - start with a letter (A-Z or a-z)
-//     /// - case insensitive (i.e. upper and lower case are equivalent)
-//     /// - unique within the survey (e.g. Q1 and Q001 are different, q1 and Q1 are the same)
-//     /// - appear as the "name_text" without leading, trailing, or embedded blanks
-//     /// If all variable names in the SSS definition file conform to this definition then the statement STANDARD
-//     /// NAMES should appear between the VERSION and SURVEY statements.
-//     #[getter]
-//     fn standard(&self, py: Python<'_>) -> Option<String> {
-//         self.inner.bind(py).borrow().inner.meta.standard.clone()
-//     }
+    /// This statement is used to indicate that some aspect of the SSS definition meets a defined standard
+    /// that may reduce the amount of checking required by an import program.
+    /// The only standard_option provided in version 1.1 is NAMES. The definition of SSS standard names is:
+    /// - consist of 1-8 characters
+    /// - consist of only the characters A-Z (and a-z) and 0-9
+    /// - start with a letter (A-Z or a-z)
+    /// - case insensitive (i.e. upper and lower case are equivalent)
+    /// - unique within the survey (e.g. Q1 and Q001 are different, q1 and Q1 are the same)
+    /// - appear as the "name_text" without leading, trailing, or embedded blanks
+    /// If all variable names in the SSS definition file conform to this definition then the statement STANDARD
+    /// NAMES should appear between the VERSION and SURVEY statements.
+    #[getter]
+    fn standard(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        Ok(self.inner.bind(py).borrow().read_inner()?
+            .meta
+            .standard
+            .clone())
+    }
 
-//     #[setter]
-//     fn set_standard(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         let mut survey = self.inner.bind(py).borrow_mut();
-//         survey.inner.meta.standard = Some(value.to_owned());
-//         Ok(())
-//     }
-// }
+    #[setter]
+    fn set_standard(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+        let survey = self.inner.bind(py).borrow_mut();
+        survey.write_inner()?.meta.standard = value;
+        Ok(())
+    }
+}
 
 // /// Just a dummy class used for creating a python parent class for inheritance
 // #[pyclass(dict, module = "triple_s", name = "Proxy")]
