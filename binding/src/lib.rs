@@ -7,11 +7,11 @@ pub mod triple_s {
     #[pymodule_export]
     pub use super::survey::{
         Kind,
-        // PyChoice,
+        PyChoice,
         PyMeta,
         PyQuestion,
         PyRecord,
-        // PyResponse,
+        PyResponse,
         PySurvey,
         // PyProxy,
         read_sss,

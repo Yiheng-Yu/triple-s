@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use parking_lot::{MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock};
 use pyo3::{exceptions, prelude::*, types::PyDict};
+use tri::{Choice, Response};
 
 #[pyfunction]
 pub fn read_sss(path: &str) -> PyResult<PySurvey> {
@@ -395,10 +396,10 @@ impl PyQuestion {
         self.with_question_read(py, |question| Kind::from_response(&question.response))
     }
 
-    //     #[getter]
-    //     fn response(question: &Bound<'_, Self>) -> PyResult<PyResponse> {
-    //         Ok(PyResponse::from_inner(question))
-    //     }
+    #[getter]
+    fn response(question: &Bound<'_, Self>) -> PyResult<PyResponse> {
+        Ok(PyResponse::from_inner(question))
+    }
 
     // #[getter]
     // pub fn location(&self, py: Python<'_>) -> PyResult<tri::Location> {
@@ -409,256 +410,292 @@ impl PyQuestion {
     //     // pub response: Response,
 }
 
-// #[pyclass(module = "triple_s", name = "Response")]
-// pub struct PyResponse {
-//     inner: Py<PyQuestion>,
-// }
+#[pyclass(module = "triple_s", name = "Response")]
+pub struct PyResponse {
+    inner: Py<PyQuestion>,
+}
 
-// impl PyResponse {
-//     pub fn from_inner(question: &Bound<'_, PyQuestion>) -> Self {
-//         Self {
-//             inner: question.clone().unbind(),
-//         }
-//     }
+impl PyResponse {
+    pub fn from_inner(question: &Bound<'_, PyQuestion>) -> Self {
+        Self {
+            inner: question.clone().unbind(),
+        }
+    }
 
-//     fn with_response<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&tri::Response) -> R,
-//     ) -> PyResult<R> {
-//         let question = self.inner.bind(py).borrow();
+    fn with_response<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&tri::Response) -> R,
+    ) -> PyResult<R> {
+        let question = self.inner.bind(py).borrow();
 
-//         question.with_question(py, |question| f(&question.response))
-//     }
+        question.with_question_read(py, |question| f(&question.response))
+    }
 
-//     fn with_response_mut<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&mut tri::Response) -> R,
-//     ) -> PyResult<R> {
-//         let question = self.inner.bind(py).borrow();
+    fn with_response_mut<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut tri::Response) -> R,
+    ) -> PyResult<R> {
+        let question = self.inner.bind(py).borrow();
 
-//         question.with_question_mut(py, |question| f(&mut question.response))
-//     }
-// }
+        question.with_question_write(py, |mut question| f(&mut question.response))
+    }
+}
 
-// #[pymethods]
-// impl PyResponse {
-//     fn __getitem__(
-//         response: &Bound<'_, Self>,
-//         py: Python<'_>,
-//         index: isize,
-//     ) -> PyResult<PyChoice> {
-//         let question = response.borrow().inner.bind(py).borrow();
-//         let survey = question.inner.bind(py).borrow();
-//         let rust_question = survey
-//             .inner
-//             .record
-//             .content
-//             .get(question.index)
-//             .ok_or_else(|| exceptions::PyIndexError::new_err("question index out of range"))?;
+#[pymethods]
+impl PyResponse {
+    //     fn __getitem__(
+    //         response: &Bound<'_, Self>,
+    //         py: Python<'_>,
+    //         index: isize,
+    //     ) -> PyResult<PyChoice> {
+    //         let question = response.borrow().inner.bind(py).borrow();
+    //         let survey = question.inner.bind(py).borrow();
+    //         let rust_question = survey
+    //             .inner
+    //             .record
+    //             .content
+    //             .get(question.index)
+    //             .ok_or_else(|| exceptions::PyIndexError::new_err("question index out of range"))?;
 
-//         match &rust_question.response {
-//             tri::Response::Single { item } | tri::Response::Multiple { item, .. } => {
-//                 let keyname = index as u64;
-//                 if item.contains_key(&keyname) {
-//                     Ok(PyChoice::from_inner(response, keyname))
-//                 } else {
-//                     Err(exceptions::PyIndexError::new_err("index out of range"))
-//                 }
-//             }
-//             _ => {
-//                 let error_message =
-//                     "Only available for `Single` and `Multiple` type of questions."
-//                         .to_string();
-//                 let error = exceptions::PyTypeError::new_err(error_message);
-//                 Err(error)
-//             }
-//         }
-//     }
+    //         match &rust_question.response {
+    //             tri::Response::Single { item } | tri::Response::Multiple { item, .. } => {
+    //                 let keyname = index as u64;
+    //                 if item.contains_key(&keyname) {
+    //                     Ok(PyChoice::from_inner(response, keyname))
+    //                 } else {
+    //                     Err(exceptions::PyIndexError::new_err("index out of range"))
+    //                 }
+    //             }
+    //             _ => {
+    //                 let error_message =
+    //                     "Only available for `Single` and `Multiple` type of questions."
+    //                         .to_string();
+    //                 let error = exceptions::PyTypeError::new_err(error_message);
+    //                 Err(error)
+    //             }
+    //         }
+    //     }
 
-//     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-//         self.inner.bind(py).borrow().with_question(py, |question| {
-//             let value = match &question.response {
-//                 Response::Character(size) => format!("Character({})", size),
-//                 Response::Note(_) => "Note".to_string(),
-//                 Response::Quantity { min, max, na_value, na_label } => {
-//                     match na_value.as_ref() {
-//                         Some(value) => {
-//                             format!(
-//                                 r#"Quantity(min={}, max={}, na_value={}, na_label="{}")"#,
-//                                 min, max, value, na_label.as_ref().map(|s| s.clone()).unwrap_or_default()
-//                             )
-//                         }
-//                         None => format!("Quantity(min={}, max={})", min, max)
-//                     }
-//                 }
-//                 Response::Single { item } => {
-//                     format!("Single(item={})", format_response_items(item))
-//                 }
-//                 Response::Multiple { item, spread } => {
-//                     format!(
-//                         "Multiple(item={}, spread={:?})",
-//                         format_response_items(item),
-//                         spread
-//                     )
-//                 }
-//             };
-//             format!("Response.{}", value)
-//         })
-//     }
+    //     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+    //         self.inner.bind(py).borrow().with_question(py, |question| {
+    //             let value = match &question.response {
+    //                 Response::Character(size) => format!("Character({})", size),
+    //                 Response::Note(_) => "Note".to_string(),
+    //                 Response::Quantity { min, max, na_value, na_label } => {
+    //                     match na_value.as_ref() {
+    //                         Some(value) => {
+    //                             format!(
+    //                                 r#"Quantity(min={}, max={}, na_value={}, na_label="{}")"#,
+    //                                 min, max, value, na_label.as_ref().map(|s| s.clone()).unwrap_or_default()
+    //                             )
+    //                         }
+    //                         None => format!("Quantity(min={}, max={})", min, max)
+    //                     }
+    //                 }
+    //                 Response::Single { item } => {
+    //                     format!("Single(item={})", format_response_items(item))
+    //                 }
+    //                 Response::Multiple { item, spread } => {
+    //                     format!(
+    //                         "Multiple(item={}, spread={:?})",
+    //                         format_response_items(item),
+    //                         spread
+    //                     )
+    //                 }
+    //             };
+    //             format!("Response.{}", value)
+    //         })
+    //     }
 
-//     #[getter]
-//     fn item(
-//         response: &Bound<'_, Self>,
-//         py: Python<'_>,
-//     ) -> PyResult<std::collections::BTreeMap<u64, PyChoice>> {
-//         response
-//             .clone()
-//             .borrow()
-//             .with_response(py, |resp| match resp {
-//                 Response::Single { item } | Response::Multiple { item, .. } => {
-//                     let choices = item
-//                         .keys()
-//                         .map(|idx| (*idx, PyChoice::from_inner(response, *idx)));
-//                     Ok(std::collections::BTreeMap::from_iter(choices))
-//                 }
-//                 _ => {
-//                     let error_message =
-//                         "Only available for `Single` and `Multiple` type of questions."
-//                             .to_string();
-//                     let error = exceptions::PyTypeError::new_err(error_message);
-//                     Err(error)
-//                 }
-//             })?
-//     }
+    #[getter]
+    fn item(
+        response: &Bound<'_, Self>,
+        py: Python<'_>,
+    ) -> PyResult<std::collections::BTreeMap<u64, PyChoice>> {
+        response
+            .clone()
+            .borrow()
+            .with_response(py, |resp| match resp {
+                Response::Single { item } | Response::Multiple { item, .. } => {
+                    let choices = item
+                        .keys()
+                        .map(|idx| (*idx, PyChoice::from_inner(response, *idx)));
+                    Ok(std::collections::BTreeMap::from_iter(choices))
+                }
+                _ => {
+                    let error_message =
+                        "Only available for `Single` and `Multiple` type of questions."
+                            .to_string();
+                    let error = exceptions::PyTypeError::new_err(error_message);
+                    Err(error)
+                }
+            })?
+    }
 
-//     /// checks if current instance was one of `Single` or `Multiple` type.
-//     fn is_categorical(&self, py: Python<'_>) -> PyResult<bool> {
-//         self.with_response(py, |response| {
-//             matches!(
-//                 response,
-//                 Response::Single { .. } | Response::Multiple { .. }
-//             )
-//         })
-//     }
-// }
+    /// checks if current instance was one of `Single` or `Multiple` type.
+    fn is_categorical(&self, py: Python<'_>) -> PyResult<bool> {
+        self.with_response(py, |response| {
+            matches!(
+                response,
+                tri::Response::Single { .. } | tri::Response::Multiple { .. }
+            )
+        })
+    }
+}
 
-// /// A possible answer that a respondent can choose in a single-/ multi- response question
-// #[pyclass(module = "triple_s", name = "Choice")]
-// pub struct PyChoice {
-//     inner: Py<PyResponse>,
-//     index: u64,
-// }
+enum Storage<T> {
+    Attached { inner: Py<PyResponse>, index: u64 },
+    Owned(Arc<RwLock<T>>),
+}
 
-// impl PyChoice {
-//     pub fn from_inner(response: &Bound<'_, PyResponse>, index: u64) -> Self {
-//         Self {
-//             inner: response.clone().unbind(),
-//             index,
-//         }
-//     }
+/// A possible answer that a respondent can choose in a single-/ multi- response question
+#[pyclass(module = "triple_s", name = "Choice")]
+pub struct PyChoice {
+    storage: Storage<Choice>,
+}
 
-//     fn with_choice<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&tri::Choice) -> R,
-//     ) -> PyResult<R> {
-//         // let response = self.inner.bind(py).borrow();
-//         self.inner
-//             .bind(py)
-//             .borrow()
-//             .with_response(py, |response| match response {
-//                 Response::Single { item } | Response::Multiple { item, .. } => item
-//                     .get(&self.index)
-//                     .ok_or_else(|| exceptions::PyKeyError::new_err(self.index))
-//                     .map(f),
-//                 _ => Err(exceptions::PyTypeError::new_err(
-//                     "Only available for `Single` and `Multiple` types of responses!",
-//                 )),
-//             })?
-//     }
+impl PyChoice {
 
-//     fn with_choice_mut<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&mut tri::Choice) -> R,
-//     ) -> PyResult<R> {
-//         self.inner
-//             .bind(py)
-//             .borrow()
-//             .with_response_mut(py, |response| match response {
-//                 Response::Single { item } | Response::Multiple { item, .. } => item
-//                     .get_mut(&self.index)
-//                     .ok_or_else(|| exceptions::PyKeyError::new_err(self.index))
-//                     .map(f),
-//                 _ => Err(exceptions::PyTypeError::new_err(
-//                     "Only available for `Single` and `Multiple` types of responses!",
-//                 )),
-//             })?
-//     }
-// }
+    pub fn from_inner(response: &Bound<'_, PyResponse>, index: u64) -> Self {
+        Self {
+            storage: Storage::Attached {
+                inner: response.clone().unbind(),
+                index,
+            },
+        }
+    }
 
-// #[pymethods]
-// impl PyChoice {
-//     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-//         self.with_choice(py, format_choice)
-//     }
+    fn with_choice<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&tri::Choice) -> R,
+    ) -> PyResult<R> {
+        match &self.storage {
+            Storage::Owned(choice) => {
+                let choice = choice.read();
+                Ok(f(&choice))
+            }
 
-//     /// Code used to uniquely identify the current answer option.
-//     #[getter]
-//     fn code(&self, py: Python<'_>) -> PyResult<u64> {
-//         self.with_choice(py, |choice| choice.code)
-//     }
+            Storage::Attached { inner, index } => inner
+                .bind(py)
+                .borrow()
+                .with_response(py, |response| match response {
+                    Response::Single { item } | Response::Multiple { item, .. } => item
+                        .get(index)
+                        .ok_or_else(|| exceptions::PyKeyError::new_err(*index))
+                        .map(f),
 
-//     /// Text label of the current answer option
-//     #[getter]
-//     fn label(&self, py: Python<'_>) -> PyResult<String> {
-//         self.with_choice(py, |choice| choice.label.clone())
-//     }
+                    _ => Err(exceptions::PyTypeError::new_err(
+                        "Response is not categorical",
+                    )),
+                })?,
+        }
+    }
 
-//     #[setter]
-//     fn set_label(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         self.with_choice_mut(py, |choice| choice.label = value.to_string())
-//     }
+    fn with_choice_mut<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut tri::Choice) -> R,
+    ) -> PyResult<R> {
+        match &self.storage {
+            Storage::Owned(choice) => {
+                let mut choice = choice.write();
+                Ok(f(&mut *choice))
+            }
 
-//     /// Response filter of the current answer option.
-//     /// This attribute is not part of the .sss file itself, but can be very useful for extending current library to read other survey data maps modified from .sss xml (i.e., `.sif` from SnapSurveys, `.qps` from QPSMR etc).
-//     /// An exmaple use case be setting up something like this:
-//     /// Q1: How often do you drive?
-//     /// choice 1: Never
-//     /// choice 2: Always
-//     ///
-//     /// Q2: Do you enjoy driving?
-//     /// choice 1: nah (ONLY shown for those who selected '2' in Q1)
-//     /// choice 2: okay-ish (ONLY shown for those who selected '2' in Q1)
-//     /// choice 3: very much
-//     #[getter]
-//     fn filter(&self, py: Python<'_>) -> PyResult<Option<String>> {
-//         self.with_choice(py, |choice| choice.filter.clone())
-//     }
+            Storage::Attached {inner, index} => inner
+                .bind(py)
+                .borrow()
+                .with_response_mut(py, |response| match response {
+                Response::Single { item } | Response::Multiple { item, .. } => item
+                    .get_mut(&index)
+                    .ok_or_else(|| exceptions::PyKeyError::new_err(index.clone()))
+                    .map(f),
+                _ => Err(exceptions::PyTypeError::new_err(
+                    "Only available for `Single` and `Multiple` types of responses!",
+                )),
+            })?
+        }
+    }
+}
 
-//     #[setter]
-//     fn set_filter(&self, py: Python<'_>, value: Option<&str>) -> PyResult<()> {
-//         self.with_choice_mut(py, |choice| {
-//             choice.filter = value.map(|s| s.to_string())
-//         })
-//     }
+#[pymethods]
+impl PyChoice {
+    #[new]
+    #[pyo3(signature = (code, label, filter=None))]
+    fn new(
+        code: u64,
+        label: String,
+        filter: Option<String>,
+    ) -> Self {
+        Self {
+            storage: Storage::Owned(Arc::new(RwLock::new(Choice {
+                code,
+                label,
+                filter,
+                is_special: false,
+            }))),
+        }
+    }
 
-//     /// (Optional) indicator for special values (e.g. mannotationissing data codes).
-//     /// Removed from SSS 1.2 onwards.
-//     #[getter]
-//     fn is_special(&self, py: Python<'_>) -> PyResult<bool> {
-//         self.with_choice(py, |choice| choice.is_special.clone())
-//     }
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        self.with_choice(py, format_choice)
+    }
 
-//     #[setter]
-//     fn set_is_special(&self, py: Python<'_>, value: bool) -> PyResult<()> {
-//         self.with_choice_mut(py, |choice| {
-//             choice.is_special = value
-//         })
-//     }
-// }
+    /// Code used to uniquely identify the current answer option.
+    #[getter]
+    fn code(&self, py: Python<'_>) -> PyResult<u64> {
+        self.with_choice(py, |choice| choice.code)
+    }
+
+    /// Text label of the current answer option
+    #[getter]
+    fn label(&self, py: Python<'_>) -> PyResult<String> {
+        self.with_choice(py, |choice| choice.label.clone())
+    }
+
+    #[setter]
+    fn set_label(&self, py: Python<'_>, value: &str) -> PyResult<()> {
+        self.with_choice_mut(py, |choice| choice.label = value.to_string())
+    }
+
+    /// Response filter of the current answer option.
+    /// This attribute is not part of the .sss file itself, but can be very useful for extending current library to read other survey data maps modified from .sss xml (i.e., `.sif` from SnapSurveys, `.qps` from QPSMR etc).
+    /// An exmaple use case be setting up something like this:
+    /// Q1: How often do you drive?
+    /// choice 1: Never
+    /// choice 2: Always
+    ///
+    /// Q2: Do you enjoy driving?
+    /// choice 1: nah (ONLY shown for those who selected '2' in Q1)
+    /// choice 2: okay-ish (ONLY shown for those who selected '2' in Q1)
+    /// choice 3: very much
+    #[getter]
+    fn filter(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        self.with_choice(py, |choice| choice.filter.clone())
+    }
+
+    #[setter]
+    fn set_filter(&self, py: Python<'_>, value: Option<&str>) -> PyResult<()> {
+        self.with_choice_mut(py, |choice| {
+            choice.filter = value.map(|s| s.to_string())
+        })
+    }
+
+    /// (Optional) indicator for special values (e.g. mannotationissing data codes).
+    /// Removed from SSS 1.2 onwards.
+    #[getter]
+    fn is_special(&self, py: Python<'_>) -> PyResult<bool> {
+        self.with_choice(py, |choice| choice.is_special.clone())
+    }
+
+    #[setter]
+    fn set_is_special(&self, py: Python<'_>, value: bool) -> PyResult<()> {
+        self.with_choice_mut(py, |choice| choice.is_special = value)
+    }
+}
 
 /// Flag for indicating what response kind (i.e., single/ multiple etc.)
 #[pyclass(eq, module = "triple_s", name = "Kind")]
@@ -694,20 +731,6 @@ impl std::fmt::Display for Kind {
         }
     }
 }
-
-// /// Information about a survey instance, including creation date, user info etc.,
-// #[pyclass(module = "triple_s", name = "Meta")]
-// pub struct PyMeta {
-//     inner: Py<PySurvey>,
-// }
-
-// impl PyMeta {
-//     pub fn from_rust(survey: &Bound<'_, PySurvey>) -> Self {
-//         Self {
-//             inner: survey.clone().unbind(),
-//         }
-//     }
-// }
 
 #[pyclass(dict, weakref, module = "triple_s", name = "Meta", from_py_object)]
 pub struct PyMeta {
@@ -907,14 +930,14 @@ impl PyMeta {
 //     format!("{{{}}}", content)
 // }
 
-// #[inline]
-// fn format_choice(choice: &tri::Choice) -> String {
-//     let prefix = format!(
-//         r#"Choice(code={}, label="{}""#,
-//         choice.code, choice.label
-//     );
-//     match choice.filter.as_ref() {
-//         Some(value) => format!(r#"{}, filter="{}")"#, prefix, value),
-//         None => format!("{})", prefix),
-//     }
-// }
+#[inline]
+fn format_choice(choice: &tri::Choice) -> String {
+    let prefix = format!(
+        r#"Choice(code={}, label="{}""#,
+        choice.code, choice.label
+    );
+    match choice.filter.as_ref() {
+        Some(value) => format!(r#"{}, filter="{}")"#, prefix, value),
+        None => format!("{})", prefix),
+    }
+}
