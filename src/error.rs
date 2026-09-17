@@ -126,8 +126,8 @@ impl fmt::Display for UnexpectedLineKind {
 
 #[derive(Debug)]
 pub struct UnsupportedFeature {
-    current_version: String,
-    feature: String,
+    pub current_version: String,
+    pub feature: String,
 }
 
 impl Error for UnsupportedFeature {}

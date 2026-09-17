@@ -13,6 +13,7 @@ pub use classic::read_sss_file_classic;
 pub use survey::{
     Choice,
     Classic,
+    Xml,
     Language,
     Location,
     Meta,

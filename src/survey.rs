@@ -22,12 +22,11 @@ impl Survey {
     }
 
     pub fn empty_xml() -> Self {
-        todo!()
-        // Self {
-        //     title: None,
-        //     meta: Meta::default_classic(),
-        //     record: Record::default(),
-        // }
+        Self {
+            title: None,
+            meta: Meta::default_xml(),
+            record: Record::default(),
+        }
     }
 
     /// find question via question name, case insensitive
@@ -96,6 +95,7 @@ impl Version {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Meta {
     Classic(Box<Classic>),
+    Xml(Box<Xml>),
 }
 
 impl Meta {
@@ -104,15 +104,22 @@ impl Meta {
         Self::Classic(Box::new(meta))
     }
 
+    pub fn default_xml() -> Self {
+        let meta = Xml::default();
+        Self::Xml(Box::new(meta))
+    }
+
     pub fn to_sss_classic(&self) -> String {
         match self {
             Self::Classic(item) => item.to_sss_classic(),
+            Self::Xml(_item) =>{ todo!() },
         }
     }
 
     pub fn version(&self) -> Result<Option<&str>, UnsupportedFeature> {
         match &self {
             Self::Classic(member) => Ok(member.version.get_version_name()),
+            Self::Xml(member) => Ok(member.version.get_version_name()),
         }
     }
 
@@ -122,6 +129,7 @@ impl Meta {
     ) -> Result<(), UnsupportedFeature> {
         match self {
             Self::Classic(member) => member.version.set_version_name(value),
+            Self::Xml(member) => member.version.set_version_name(value),
         };
 
         Ok(())
@@ -130,6 +138,7 @@ impl Meta {
     pub fn date(&self) -> Result<Option<&str>, UnsupportedFeature> {
         match &self {
             Self::Classic(member) => Ok(member.date.as_ref().map(|s| s.as_str())),
+            Self::Xml(member) => Ok(member.date.as_ref().map(|s| s.as_str())),
         }
     }
 
@@ -139,6 +148,7 @@ impl Meta {
     ) -> Result<(), UnsupportedFeature> {
         match self {
             Self::Classic(member) => member.date = value.map(|s| s.into()),
+            Self::Xml(member) => member.date = value.map(|s| s.into()),
         }
         Ok(())
     }
@@ -146,6 +156,7 @@ impl Meta {
     pub fn time(&self) -> Result<Option<&str>, UnsupportedFeature> {
         match &self {
             Self::Classic(member) => Ok(member.time.as_ref().map(|s| s.as_str())),
+            Self::Xml(member) => Ok(member.time.as_ref().map(|s| s.as_str())),
         }
     }
 
@@ -155,6 +166,7 @@ impl Meta {
     ) -> Result<(), UnsupportedFeature> {
         match self {
             Self::Classic(member) => member.time = value.map(|s| s.into()),
+            Self::Xml(member) => member.time = value.map(|s| s.into()),
         }
         Ok(())
     }
@@ -162,6 +174,7 @@ impl Meta {
     pub fn origin(&self) -> Result<Option<&str>, UnsupportedFeature> {
         match &self {
             Self::Classic(member) => Ok(member.origin.as_ref().map(|s| s.as_str())),
+            Self::Xml(member) => Ok(member.origin.as_ref().map(|s| s.as_str())),
         }
     }
 
@@ -171,6 +184,7 @@ impl Meta {
     ) -> Result<(), UnsupportedFeature> {
         match self {
             Self::Classic(member) => member.origin = value.map(|s| s.into()),
+            Self::Xml(member) => member.origin = value.map(|s| s.into()),
         }
         Ok(())
     }
@@ -178,6 +192,7 @@ impl Meta {
     pub fn user(&self) -> Result<Option<&str>, UnsupportedFeature> {
         match &self {
             Self::Classic(member) => Ok(member.user.as_ref().map(|s| s.as_str())),
+            Self::Xml(member) => Ok(member.user.as_ref().map(|s| s.as_str())),
         }
     }
 
@@ -187,6 +202,7 @@ impl Meta {
     ) -> Result<(), UnsupportedFeature> {
         match self {
             Self::Classic(member) => member.user = value.map(|s| s.into()),
+            Self::Xml(member) => member.user = value.map(|s| s.into()),
         }
         Ok(())
     }
@@ -194,6 +210,7 @@ impl Meta {
     pub fn style(&self) -> Result<Option<&str>, UnsupportedFeature> {
         match &self {
             Self::Classic(member) => Ok(member.style.as_ref().map(|s| s.as_str())),
+            Self::Xml(member) => Ok(member.style.as_ref().map(|s| s.as_str())),
         }
     }
 
@@ -203,6 +220,7 @@ impl Meta {
     ) -> Result<(), UnsupportedFeature> {
         match self {
             Self::Classic(member) => member.style = value.map(|s| s.into()),
+            Self::Xml(member) => member.style = value.map(|s| s.into()),
         }
         Ok(())
     }
@@ -210,6 +228,7 @@ impl Meta {
     pub fn standard(&self) -> Result<Option<&str>, UnsupportedFeature> {
         match &self {
             Self::Classic(member) => Ok(member.standard.as_ref().map(|s| s.as_str())),
+            Self::Xml(member) => Err(UnsupportedFeature {current_version: format!("{:?}", member.version), feature: "standard".into()} )
         }
     }
 
@@ -218,10 +237,22 @@ impl Meta {
         value: Option<impl Into<String>>,
     ) -> Result<(), UnsupportedFeature> {
         match self {
-            Self::Classic(member) => member.standard = value.map(|s| s.into()),
+            Self::Classic(member) => {
+                member.standard = value.map(|s| s.into());
+                Ok(())
+            }
+            Self::Xml(member) => Err(UnsupportedFeature {current_version: format!("{:?}", member.version), feature: "standard".into()} )
         }
-        Ok(())
     }
+
+    pub fn language_options(&self) -> Result<Vec<String>, UnsupportedFeature> {
+        match self {
+            Self::Classic(member) => {
+                Err(UnsupportedFeature {current_version: format!("{:?}", member.version), feature: "language_options".into()} )
+            }
+            Self::Xml(member) => Ok(member.language_options.clone())
+        }
+    } 
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -232,8 +263,25 @@ pub struct Xml {
     pub origin: Option<String>,
     pub user: Option<String>,
     pub style: Option<String>,
-    // pub languages:
-    pub mods: Option<String>,
+    /// list of all available language options
+    pub language_options: Vec<String>,
+    /// list of all available `mod` options
+    pub mode_options: Vec<Mode>,
+}
+
+impl Default for Xml {
+    fn default() -> Self {
+        Self {
+            version: Version::GenOne(None),
+            date: None,
+            time: None,
+            origin: None,
+            user: None,
+            style: None,
+            language_options: Vec::new(),
+            mode_options: vec![Mode::None,]
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
