@@ -28,17 +28,39 @@ where
     let mut buf = Vec::new();
     loop {
         match reader.read_event_into(&mut buf)? {
-            Event::Start(ele) => { todo!() }
-            Event::End(ele) => { todo!() }
-            Event::Text(ele) => { todo!() }
-            Event::CData(ele) => { todo!() }
-            Event::Comment(ele) => { todo!() }
-            Event::Decl(ele) => { todo!() }
-            Event::PI(ele) => { todo!() }
-            Event::DocType(ele) => { todo!() }
-            Event::Empty(ele) => { todo!() }
-            Event::GeneralRef(ele) => { todo!() }
-            Event::Eof => { todo!() }
+            Event::Start(ele) => { 
+                // let tag = ele.name().into_inner();
+                // let attributes = ele.attributes();
+                // println!("{:?}", tag);
+                // for attr in attributes {
+                //     let attr = attr?;
+                //     println!("Key: {:?}; Value: {:?}", attr.key, attr.value);
+                // }
+                println!("{:?}", ele);
+                // todo!() 
+            }
+            Event::Text(ele) => {
+                let text = ele.to_string();
+                println!("text = {text}");
+            }
+            
+            Event::End(ele) => { 
+                println!("{:?}", ele);
+            }
+            // Event::CData(ele) => { todo!() }
+            // Event::Comment(ele) => { todo!() }
+            // Event::Decl(ele) => { todo!() }
+            // Event::PI(ele) => { todo!() }
+            // Event::DocType(ele) => { todo!() }
+            Event::Empty(ele) => { 
+                // SPECIALLY IMPORTANT FOR PARSING HTML ESCAPES
+                println!("{:?}", ele);
+            }
+            // Event::GeneralRef(ele) => { todo!() }
+            Event::Eof => { break }
+            _ => ()
         }
     }
+
+    Ok(survey)
 }

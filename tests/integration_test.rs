@@ -1,6 +1,7 @@
 use triple_s::{Survey, error::BadLine, read_sss_file};
 
 const PATH_SSS_CLASSIC: &str = "tests/sss_classic.sss";
+const PATH_SSS_XML: &str = "tests/sss_xml_1.0.xml";
 
 fn read_sss_file_classic_example() -> Survey {
     read_sss_file(PATH_SSS_CLASSIC).unwrap()
@@ -34,7 +35,6 @@ fn test_classic_read_n_write() {
     let survey = read_sss_file_classic_example();
     for question in survey.record.content.iter() {
         let correct_name = question.name.clone();
-        println!("Parsing question: {}", correct_name);
         let sss_string = question.to_sss_classic();
         let sss_lines = put_into_record(&sss_string);
         let read = triple_s::read_sss_file_classic(sss_lines).unwrap();
@@ -46,4 +46,9 @@ fn test_classic_read_n_write() {
         assert_eq!(question_read.text, question.text);
         assert_eq!(question_read.index, question.index);
     }
+}
+
+#[test]
+fn test_read_sss_xml() {
+    read_sss_file(PATH_SSS_XML).unwrap();
 }
