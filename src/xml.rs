@@ -54,9 +54,14 @@ where
                         let text = extract_text(&mut reader,ele)?;
                         survey.meta.set_user(Some(text))?;
                     }
+                    "survey" => {
+                        // contains: name, version, title, record <- `record` stores all variables
+                        // todo!()
+                    }
                     _ => {
                         // ()
-                        panic!("{:#?}", ele)
+                        // panic!("{:#?}", ele)
+                        println!("{:?} | {:#?}", tag, ele);
                     }
                 };
 
