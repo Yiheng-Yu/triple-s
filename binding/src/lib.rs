@@ -8,13 +8,14 @@ pub mod triple_s {
     pub use super::survey::{
         Kind,
         PyChoice,
+        PyLocation,
         PyMeta,
         PyQuestion,
         PyRecord,
         PyResponse,
         PySurvey,
         // PyProxy,
-        read_sss,
+        read_sss_file,
     };
     use super::*;
 

@@ -7,7 +7,7 @@ import pytest
 @pytest.fixture
 def sss():
     path = os.path.join(os.path.dirname(__file__), "sss_classic.sss")
-    survey = triple_s.read_sss(path)
+    survey = triple_s.read_sss_file(path)
     return survey
 
 
@@ -71,4 +71,20 @@ def test_get_set_record_id(sss):
 def test_sss_content_length_check(sss):
     assert len(sss.record.content) == 24
     
-    
+
+def test_variable_read(sss):
+    question = sss.content[0]
+    print(question)
+
+
+def test_variable_response_indexing(sss):
+    question = sss.content[0]
+    print(question.response)
+    with pytest.raises(TypeError):
+        question.response[0] 
+
+
+def sss_get_question(sss):
+    for question in sss.content:
+        got = sss.get_question(question.name.lower())
+        assert got.name == question.name

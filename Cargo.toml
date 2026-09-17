@@ -11,6 +11,7 @@ crate-type = ["rlib"]
 
 [dependencies]
 anyhow = { version = "1.0.104", features = ["backtrace"] }
+quick-xml = { version = "0.42.0", features = ["encoding", "escape-html"] }
 rayon = "1.12.0"
 regex = "1.13.1"
 strum = { version = "0.28", features = ["derive"] }

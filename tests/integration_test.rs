@@ -1,9 +1,9 @@
-use triple_s::{Survey, error::BadLine, read_sss, read_sss_classic};
+use triple_s::{Survey, error::BadLine, read_sss_file};
 
 const PATH_SSS_CLASSIC: &str = "tests/sss_classic.sss";
 
-fn read_sss_classic_example() -> Survey {
-    read_sss(PATH_SSS_CLASSIC).unwrap()
+fn read_sss_file_classic_example() -> Survey {
+    read_sss_file(PATH_SSS_CLASSIC).unwrap()
 }
 
 fn put_into_record(content: &str) -> impl Iterator<Item = Result<String, BadLine>> {
@@ -31,13 +31,13 @@ fn put_into_record(content: &str) -> impl Iterator<Item = Result<String, BadLine
 
 #[test]
 fn test_classic_read_n_write() {
-    let survey = read_sss_classic_example();
+    let survey = read_sss_file_classic_example();
     for question in survey.record.content.iter() {
         let correct_name = question.name.clone();
         println!("Parsing question: {}", correct_name);
         let sss_string = question.to_sss_classic();
         let sss_lines = put_into_record(&sss_string);
-        let read = read_sss_classic(sss_lines).unwrap();
+        let read = triple_s::read_sss_file_classic(sss_lines).unwrap();
 
         let question_read = read.get_question(&correct_name).unwrap();
         assert_eq!(question_read.name, correct_name);
