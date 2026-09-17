@@ -140,5 +140,5 @@ binding/.vscode/
 # Pyenv
 binding/.python-version
 
-binding\py_src\triple_s\triple_s.pdb
-binding\py_src\triple_s\triple_s.pyd
+# binding\py_src\triple_s\triple_s.pdb
+# binding\py_src\triple_s\triple_s.pyd
