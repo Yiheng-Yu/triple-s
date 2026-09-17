@@ -252,7 +252,7 @@ impl SSSClassicLineType {
                 let parsed = prefix
                     .parse::<Self>()
                     .with_context(|| format!("When parsing line: '{}'", line))?;
-                Ok((parsed, value.into()))
+                Ok((parsed, value))
             }
         }
     }
@@ -312,7 +312,7 @@ fn get_question_mut<'a>(
     Ok(question)
 }
 
-pub fn read_sss_classic<I, E>(lines: I) -> Result<Survey>
+pub fn read_sss_file_classic<I, E>(lines: I) -> Result<Survey>
 where
     I: IntoIterator<Item = Result<String, E>>,
     E: std::error::Error,
@@ -1011,7 +1011,7 @@ mod tests {
     #[test]
     fn test_single_code_question_read() {
         let lines = create_example_single_code_iterator();
-        let survey = read_sss_classic(lines).unwrap();
+        let survey = read_sss_file_classic(lines).unwrap();
         assert_eq!(survey.record.content.len(), 1);
 
         let question = survey.get_question("AGE").unwrap();
@@ -1026,7 +1026,7 @@ mod tests {
     #[test]
     fn test_single_code_question_write() {
         let lines = create_example_single_code_iterator();
-        let survey = read_sss_classic(lines).unwrap();
+        let survey = read_sss_file_classic(lines).unwrap();
         let question = survey.get_question("AGE").unwrap();
 
         let sss_output = question.to_sss_classic().trim().to_string();
@@ -1090,7 +1090,7 @@ mod tests {
     #[test]
     fn test_multi_code_question_read() {
         let lines = create_example_multi_code_iterator();
-        let survey = read_sss_classic(lines).unwrap();
+        let survey = read_sss_file_classic(lines).unwrap();
         assert_eq!(survey.record.content.len(), 1);
 
         let question = survey.get_question("K2").unwrap();
@@ -1102,7 +1102,7 @@ mod tests {
     #[test]
     fn test_multi_code_question_write() {
         let lines = create_example_multi_code_iterator();
-        let survey = read_sss_classic(lines).unwrap();
+        let survey = read_sss_file_classic(lines).unwrap();
         assert_eq!(survey.record.content.len(), 1);
 
         let question = survey.get_question("K2").unwrap();
@@ -1147,7 +1147,7 @@ mod tests {
     #[test]
     fn test_quantity_question_float_read() {
         let lines = create_example_float_quantity_iterator();
-        let survey = read_sss_classic(lines).unwrap();
+        let survey = read_sss_file_classic(lines).unwrap();
         assert_eq!(survey.record.content.len(), 1);
 
         let question = survey.get_question("QUANTITY").unwrap();
@@ -1189,7 +1189,7 @@ mod tests {
     #[test]
     fn test_quantity_question_float_special_read() {
         let lines = create_example_float_quantity_with_special_iterator();
-        let survey = read_sss_classic(lines).unwrap();
+        let survey = read_sss_file_classic(lines).unwrap();
         assert_eq!(survey.record.content.len(), 1);
 
         let question = survey.get_question("QUANTITY").unwrap();
@@ -1229,7 +1229,7 @@ mod tests {
     #[test]
     fn test_character_question_read_success() {
         let lines = create_character_question_iterator();
-        let survey = read_sss_classic(lines).unwrap();
+        let survey = read_sss_file_classic(lines).unwrap();
         assert_eq!(survey.record.content.len(), 1);
         let question = survey.get_question("PRODUCTINFO").unwrap();
         assert_eq!(question.response, Response::Character(2000))
@@ -1245,7 +1245,7 @@ mod tests {
             POSITION 1243 TO 3242
             SIZE -2000
         END VARIABLE"#;
-        let result = read_sss_classic(put_into_record(content));
+        let result = read_sss_file_classic(put_into_record(content));
         match result {
             Ok(instance) => panic!(
                 "Error not raised when it should, instance parsed:\n{:#?}",

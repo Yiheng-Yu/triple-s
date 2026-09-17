@@ -1,4 +1,6 @@
 mod classic;
+mod xml;
+
 pub mod error;
 mod survey;
 use std::{
@@ -7,10 +9,12 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-pub use classic::{SSSClassicLineType, SSSType, read_sss_classic};
+use classic::SSSType;
+pub use classic::read_sss_file_classic;
 pub use survey::{Choice, Location, Meta, Question, Record, Response, Spread, Survey};
+pub use xml::read_sss_file_xml_file;
 
-pub fn read_sss(sss_path: &str) -> Result<Survey> {
+pub fn read_sss_file(sss_path: &str) -> Result<Survey> {
     let input: File = File::open(sss_path).map_err(error::FileReadError::from)?;
     let mut lines = BufReader::new(input).lines();
     let first_line = lines
@@ -20,13 +24,7 @@ pub fn read_sss(sss_path: &str) -> Result<Survey> {
 
     let sss_version = SSSType::parse(&first_line)?;
     match sss_version {
-        SSSType::Classic => {
-            let survey = read_sss_classic(lines)?;
-            Ok(survey)
-        }
-        SSSType::XML => {
-            let message = error::InternalError::new("XML parsing is not implemented yet");
-            Err(message.into())
-        }
+        SSSType::Classic => read_sss_file_classic(lines),
+        SSSType::XML => read_sss_file_xml_file(sss_path),
     }
 }

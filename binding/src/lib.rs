@@ -6,15 +6,16 @@ pub mod triple_s {
 
     #[pymodule_export]
     pub use super::survey::{
-        // Kind,
-        // PyChoice,
-        // PyMeta,
-        // PyQuestion,
-        // PyRecord,
-        // PyResponse,
+        Kind,
+        PyChoice,
+        PyLocation,
+        PyMeta,
+        PyQuestion,
+        PyRecord,
+        PyResponse,
         PySurvey,
         // PyProxy,
-        read_sss,
+        read_sss_file,
     };
     use super::*;
 

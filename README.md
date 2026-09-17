@@ -25,9 +25,9 @@ pip install triple-s
 #### Read a survey
 
 ```python
-from triple_s import read_sss
+from triple_s import read_sss_file
 
-survey = read_sss("path/to/survey.sss")
+survey = read_sss_file("path/to/survey.sss")
 
 print(survey.title)
 ```
@@ -89,10 +89,10 @@ triple_s = "0.1"
 Read a classic Triple-S file:
 
 ```rust
-use triple_s::read_sss;
+use triple_s::read_sss_file;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let survey = read_sss("path/to/survey.sss")?;
+    let survey = read_sss_file("path/to/survey.sss")?;
 
     println!("{}", survey.title);
     for question in &survey.record.content {
@@ -119,9 +119,9 @@ cargo test
 
 ## Format support
 
-The public `read_sss` function currently parses the classic text Triple-S
+The public `read_sss_file` function currently parses the classic text Triple-S
 format. XML fixtures are included in the repository, but XML parsing is not
-currently exposed by `read_sss`.
+currently exposed by `read_sss_file`.
 
 ## AI usage
 
