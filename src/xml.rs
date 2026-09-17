@@ -27,17 +27,17 @@ where
     let mut survey = Survey::empty();
     let mut buf = Vec::new();
     loop {
-        match reader.read_event_into(&mut buf)? {
+        let event = reader.read_event_into(&mut buf)?;
+        match event {
             Event::Start(ele) => { 
-                // let tag = ele.name().into_inner();
-                // let attributes = ele.attributes();
-                // println!("{:?}", tag);
-                // for attr in attributes {
-                //     let attr = attr?;
-                //     println!("Key: {:?}; Value: {:?}", attr.key, attr.value);
-                // }
-                println!("{:?}", ele);
-                // todo!() 
+                let tag_name = ele.name();
+                // THIS METHOD WILL JUST INCLUDE ALL THE HTML ETC., AND READ THEM AS TEXT
+                // EXTREMELEY USEFULL FOR COLLECTING CONTENT NEEDED
+                if tag_name.as_ref() == "title" {
+                    let end = ele.to_end().into_owned();
+                    let read = reader.read_text_into(end.name(), &mut buf)?;
+                    println!("TITLE parsed: {:?}", read);
+                }
             }
             Event::Text(ele) => {
                 let text = ele.to_string();
@@ -45,7 +45,7 @@ where
             }
             
             Event::End(ele) => { 
-                println!("{:?}", ele);
+                // println!("{:?}", ele);
             }
             // Event::CData(ele) => { todo!() }
             // Event::Comment(ele) => { todo!() }
@@ -54,11 +54,11 @@ where
             // Event::DocType(ele) => { todo!() }
             Event::Empty(ele) => { 
                 // SPECIALLY IMPORTANT FOR PARSING HTML ESCAPES
-                println!("{:?}", ele);
+                // println!("{:?}", ele);
             }
             // Event::GeneralRef(ele) => { todo!() }
             Event::Eof => { break }
-            _ => ()
+            _ => (),
         }
     }
 
