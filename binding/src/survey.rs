@@ -29,7 +29,7 @@ impl<P, T> Storage<P, T> {
 pub struct PySurvey {
     // #[pyo3(get, set)]
     // pub title: Option<String>,
-    // meta: Arc<RwLock<tri::Meta>>,
+    // meta: Arc<RwLock<tri::Classic>>,
     // record: Arc<RwLock<tri::Record>>,
     inner: Arc<RwLock<tri::Survey>>,
 }
@@ -165,7 +165,7 @@ impl PySurvey {
         let version = Self::get_meta(inner)?
             .get_version(py)
             .as_ref()
-            .map_or("None".into(), |ver| ver.clone().to_string());
+            .map_or("".into(), |ver| ver.clone().unwrap_or_default());
 
         Ok(format!(
             r#"Survey(title="{}", version={})"#,
@@ -173,7 +173,6 @@ impl PySurvey {
         ))
     }
 }
-
 
 /// Content of a survey
 #[pyclass(module = "triple_s", name = "Record")]
@@ -184,14 +183,17 @@ pub struct PyRecord {
 impl PyRecord {
     pub fn from_rust(survey: &Bound<'_, PySurvey>) -> Self {
         Self {
-            inner: Storage::Attached { inner: survey.clone().unbind(), index: 0 },
+            inner: Storage::Attached {
+                inner: survey.clone().unbind(),
+                index: 0,
+            },
         }
     }
 
     pub fn len(&self, py: Python<'_>) -> usize {
         match &self.inner {
-            Storage::Attached {inner, ..} => inner.borrow(py).read_record().content.len(),
-            Storage::Owned(item) => item.read().content.len()
+            Storage::Attached { inner, .. } => inner.borrow(py).read_record().content.len(),
+            Storage::Owned(item) => item.read().content.len(),
         }
     }
 
@@ -201,7 +203,7 @@ impl PyRecord {
         f: impl FnOnce(MappedRwLockReadGuard<'_, tri::Record>) -> R,
     ) -> PyResult<R> {
         match &self.inner {
-            Storage::Attached {inner, ..} => {
+            Storage::Attached { inner, .. } => {
                 let item = inner.bind(py).borrow();
                 let item = item.read_record();
                 Ok(f(item))
@@ -220,7 +222,7 @@ impl PyRecord {
         f: impl FnOnce(MappedRwLockWriteGuard<'_, tri::Record>) -> R,
     ) -> PyResult<R> {
         match &self.inner {
-            Storage::Attached {inner, ..} => {
+            Storage::Attached { inner, .. } => {
                 let item = inner.bind(py).borrow_mut();
                 let item = item.write_record();
                 Ok(f(item))
@@ -261,34 +263,30 @@ impl PyRecord {
     #[getter]
     fn content(&self, py: Python<'_>) -> PyResult<Vec<PyQuestion>> {
         match &self.inner {
-            Storage::Attached {inner, ..} => {
-                Ok((0..self.len(py))
-                    .map(|index| PyQuestion::from_inner(&inner, index))
-                    .collect())
-            }
-            Storage::Owned(item) => {
-                Ok(item.read()
+            Storage::Attached { inner, .. } => Ok((0..self.len(py))
+                .map(|index| PyQuestion::from_inner(&inner, index))
+                .collect()),
+            Storage::Owned(item) => Ok(item
+                .read()
                 .content
                 .iter()
                 .map(PyQuestion::from_storage)
-                .collect())
-            }
+                .collect()),
         }
-        
     }
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<PyQuestion> {
         let length = self.content(py)?.len();
         let lookup = normalize_index(index, length)?; // also checks if index really exists, raise IndexError if otherwise
         match &self.inner {
-            Storage::Attached {inner, ..} => Ok(PyQuestion::from_inner(&inner, lookup)),
-            Storage::Owned(item) => {
-                item.read().content.get(lookup)
+            Storage::Attached { inner, .. } => Ok(PyQuestion::from_inner(&inner, lookup)),
+            Storage::Owned(item) => item
+                .read()
+                .content
+                .get(lookup)
                 .map(PyQuestion::from_storage)
-                .ok_or(exceptions::PyIndexError::new_err(index))
-            }
+                .ok_or(exceptions::PyIndexError::new_err(index)),
         }
-        
     }
 
     fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
@@ -319,17 +317,22 @@ impl PyRecord {
 
 #[pyclass(module = "triple_s", name = "Question")]
 pub struct PyQuestion {
-    inner: Storage<PySurvey, tri::Question>
+    inner: Storage<PySurvey, tri::Question>,
 }
 
 impl PyQuestion {
     pub fn from_storage(question: &tri::Question) -> Self {
-        Self { inner: Storage::from_owned(question.clone()) }
+        Self {
+            inner: Storage::from_owned(question.clone()),
+        }
     }
 
     pub fn from_inner(inner: &Py<PySurvey>, index: usize) -> Self {
         Self {
-            inner: Storage::Attached { inner: inner.clone(), index: index as u64}
+            inner: Storage::Attached {
+                inner: inner.clone(),
+                index: index as u64,
+            },
         }
     }
 
@@ -339,10 +342,11 @@ impl PyQuestion {
         f: impl FnOnce(MappedRwLockReadGuard<'_, tri::Question>) -> R,
     ) -> PyResult<R> {
         match &self.inner {
-            Storage::Attached {inner, index} => {
+            Storage::Attached { inner, index } => {
                 let inner = inner.bind(py).borrow();
-                let index = (*index).try_into()
-                    .map_err(|_| PyErr::new::<exceptions::PyIndexError, _>("index is too large"))?;
+                let index = (*index).try_into().map_err(|_| {
+                    PyErr::new::<exceptions::PyIndexError, _>("index is too large")
+                })?;
                 let question = inner.read_question(index)?;
 
                 Ok(f(question))
@@ -353,7 +357,6 @@ impl PyQuestion {
                 Ok(f(item))
             }
         }
-        
     }
 
     fn with_question_write<R>(
@@ -362,10 +365,11 @@ impl PyQuestion {
         f: impl FnOnce(MappedRwLockWriteGuard<'_, tri::Question>) -> R,
     ) -> PyResult<R> {
         match &self.inner {
-            Storage::Attached {inner, index} => {
+            Storage::Attached { inner, index } => {
                 let inner = inner.bind(py).borrow_mut();
-                let index = (*index).try_into()
-                    .map_err(|_| PyErr::new::<exceptions::PyIndexError, _>("index is too large"))?;
+                let index = (*index).try_into().map_err(|_| {
+                    PyErr::new::<exceptions::PyIndexError, _>("index is too large")
+                })?;
                 let question = inner.write_question(index)?;
                 Ok(f(question))
             }
@@ -908,27 +912,27 @@ impl PyMeta {
     fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
         let dict = PyDict::new(py);
 
-        if let Some(value) = self.get_version(py) {
+        if let Some(value) = self.get_version(py)? {
             dict.set_item("version", value)?;
         };
 
-        if let Some(value) = self.get_date(py) {
+        if let Some(value) = self.get_date(py)? {
             dict.set_item("date", value)?;
         };
 
-        if let Some(value) = self.get_time(py) {
+        if let Some(value) = self.get_time(py)? {
             dict.set_item("time", value)?;
         };
 
-        if let Some(value) = self.get_origin(py) {
+        if let Some(value) = self.get_origin(py)? {
             dict.set_item("origin", value)?;
         };
 
-        if let Some(value) = self.get_user(py) {
+        if let Some(value) = self.get_user(py)? {
             dict.set_item("user", value)?;
         };
 
-        if let Some(value) = self.get_standard(py) {
+        if let Some(value) = self.get_standard(py)? {
             dict.set_item("standard", value)?;
         };
 
@@ -937,88 +941,132 @@ impl PyMeta {
 
     /// SSS Version
     #[getter]
-    fn get_version(&self, py: Python<'_>) -> Option<String> {
-        self.inner.bind(py).borrow().read_meta().version.clone()
+    fn get_version(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        self.inner
+            .bind(py)
+            .borrow()
+            .read_meta()
+            .version()
+            .map(|value| value.map(str::to_owned))
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 
     #[setter]
     fn set_version(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
-        self.inner.bind(py).borrow_mut().write_meta().version = value;
-        Ok(())
+        self.inner
+            .bind(py)
+            .borrow_mut()
+            .write_meta()
+            .set_version(value)
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 
     /// (Optional) The date the file was created.
     #[getter]
-    fn get_date(&self, py: Python<'_>) -> Option<String> {
-        self.inner.bind(py).borrow().read_meta().date.clone()
+    fn get_date(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        self.inner
+            .bind(py)
+            .borrow()
+            .read_meta()
+            .date()
+            .map(|value| value.map(str::to_owned))
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
-
     #[setter]
     fn set_date(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
-        self.inner.bind(py).borrow_mut().write_meta().date = value;
-        Ok(())
+        self.inner
+            .bind(py)
+            .borrow_mut()
+            .write_meta()
+            .set_date(value)
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 
     /// (Optional) The time the file was created.
     #[getter]
-    fn get_time(&self, py: Python<'_>) -> Option<String> {
-        self.inner.bind(py).borrow().read_meta().time.clone()
+    fn get_time(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        self.inner
+            .bind(py)
+            .borrow()
+            .read_meta()
+            .time()
+            .map(|value| value.map(str::to_owned))
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 
     #[setter]
     fn set_time(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
-        self.inner.bind(py).borrow_mut().write_meta().time = value;
-        Ok(())
+        self.inner
+            .bind(py)
+            .borrow_mut()
+            .write_meta()
+            .set_time(value)
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 
     /// (Optional) The originating system (program and operating system), i.e., `Windows 95`
     #[getter]
-    fn get_origin(&self, py: Python<'_>) -> Option<String> {
-        self.inner.bind(py).borrow().read_meta().origin.clone()
+    fn get_origin(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        self.inner
+            .bind(py)
+            .borrow()
+            .read_meta()
+            .origin()
+            .map(|value| value.map(str::to_owned))
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 
     #[setter]
     fn set_origin(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
-        self.inner.bind(py).borrow_mut().write_meta().origin = value;
-        Ok(())
+        self.inner
+            .bind(py)
+            .borrow_mut()
+            .write_meta()
+            .set_origin(value)
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 
     /// (Optional) Name of the user who created this file
     #[getter]
-    fn get_user(&self, py: Python<'_>) -> Option<String> {
-        self.inner.bind(py).borrow().read_meta().user.clone()
+    fn get_user(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        self.inner
+            .bind(py)
+            .borrow()
+            .read_meta()
+            .user()
+            .map(|value| value.map(str::to_owned))
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 
     #[setter]
     fn set_user(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
-        self.inner.bind(py).borrow_mut().write_meta().user = value;
-        Ok(())
+        self.inner
+            .bind(py)
+            .borrow_mut()
+            .write_meta()
+            .set_user(value)
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 
     #[getter]
-    fn get_style(&self, py: Python<'_>) -> Option<String> {
-        self.inner.bind(py).borrow().read_meta().style.clone()
+    fn get_style(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        self.inner
+            .bind(py)
+            .borrow()
+            .read_meta()
+            .style()
+            .map(|value| value.map(str::to_owned))
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 
     #[setter]
     fn set_style(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
-        self.inner.bind(py).borrow_mut().write_meta().style = value;
-        Ok(())
-    }
-
-    /// (Optional) can appear any number of times in the definition file wherever a keyword is expected
-    /// (including between values specified in a VALUES block).
-    /// The importing program does not interpret the contents of the note_text.
-    /// It is recommended that the NOTE form be used where comments are to be inserted into the SSS definition file by an export program.
-    #[getter]
-    fn get_note(&self, py: Python<'_>) -> Vec<String> {
-        self.inner.bind(py).borrow().read_meta().note.clone()
-    }
-
-    #[setter]
-    fn set_note(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
-        self.inner.bind(py).borrow_mut().write_meta().style = value;
-        Ok(())
+        self.inner
+            .bind(py)
+            .borrow_mut()
+            .write_meta()
+            .set_style(value)
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 
     /// This statement is used to indicate that some aspect of the SSS definition meets a defined standard
@@ -1033,14 +1081,24 @@ impl PyMeta {
     /// If all variable names in the SSS definition file conform to this definition then the statement STANDARD
     /// NAMES should appear between the VERSION and SURVEY statements.
     #[getter]
-    fn get_standard(&self, py: Python<'_>) -> Option<String> {
-        self.inner.bind(py).borrow().read_meta().standard.clone()
+    fn get_standard(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        self.inner
+            .bind(py)
+            .borrow()
+            .read_meta()
+            .standard()
+            .map(|value| value.map(str::to_owned))
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 
     #[setter]
     fn set_standard(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
-        self.inner.bind(py).borrow_mut().write_meta().standard = value;
-        Ok(())
+        self.inner
+            .bind(py)
+            .borrow_mut()
+            .write_meta()
+            .set_standard(value)
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 }
 

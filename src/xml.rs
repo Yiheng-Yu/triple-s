@@ -1,13 +1,16 @@
 use std::{fs::File, io::{BufRead, BufReader}};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use quick_xml::{
     encoding::DecodingReader, 
     events::Event, 
     reader::Reader
 };
 
-use crate::survey::Survey;
+use crate::{
+    survey::{ Survey, Version},
+    error::UnknownAttribute,
+};
 
 pub fn read_sss_file_xml_file(sss_path: &str) -> Result<Survey> {
     let file = File::open(sss_path)?;
@@ -24,24 +27,47 @@ fn parse_sss_xml_lines<R>(mut reader: Reader<R>) -> Result<Survey>
 where
     R: BufRead,
 {   
-    let mut survey = Survey::empty();
+    let mut survey = Survey::empty_xml();
     let mut buf = Vec::new();
     loop {
         let event = reader.read_event_into(&mut buf)?;
         match event {
             Event::Start(ele) => { 
-                let tag_name = ele.name();
-                // THIS METHOD WILL JUST INCLUDE ALL THE HTML ETC., AND READ THEM AS TEXT
-                // EXTREMELEY USEFULL FOR COLLECTING CONTENT NEEDED
-                if tag_name.as_ref() == "title" {
-                    let end = ele.to_end().into_owned();
-                    let read = reader.read_text_into(end.name(), &mut buf)?;
-                    println!("TITLE parsed: {:?}", read);
-                }
+                let name = ele.name();
+                let tag = name.local_name().into_inner(); 
+                match tag {
+                    "sss" => {
+                        for attr_read in ele.attributes() {
+                            let attr = attr_read?;
+                            let attr_name = attr.key.into_inner();
+                            match attr_name {
+                                "version" => survey.meta.set_version(Some(attr.value.to_string()))?,
+                                // "options" => survey.meta.options = attr.value,
+                                _ => return Err(UnknownAttribute::new(attr_name, attr.value))
+                                    .with_context(|| format!("Failed to parse survey meta."))
+
+                            }
+                            println!("{:?} | {:?}", attr.key, attr.value)
+                        }
+                    }
+                    _ => ()
+                };
+
+                // println!("{:?} | {:#?}", tag, ele);
+
+                // survey meta
+
+                // // THIS METHOD WILL JUST INCLUDE ALL THE HTML ETC., AND READ THEM AS TEXT
+                // // EXTREMELEY USEFULL FOR COLLECTING CONTENT NEEDED
+                // if tag_name.as_ref() == "title" {
+                //     let end = ele.to_end().into_owned();
+                //     let read = reader.read_text_into(end.name(), &mut buf)?;
+                //     println!("TITLE parsed: {:?}", read);
+                // }
             }
             Event::Text(ele) => {
                 let text = ele.to_string();
-                println!("text = {text}");
+                // println!("text = {text}");
             }
             
             Event::End(ele) => { 
@@ -64,3 +90,8 @@ where
 
     Ok(survey)
 }
+
+
+// fn parse_survey_meta(survey: &mut Survey, start_tag: &ByteStart) {
+
+// }

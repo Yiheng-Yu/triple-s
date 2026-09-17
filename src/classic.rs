@@ -5,32 +5,9 @@ use regex::Regex;
 use strum::EnumString;
 
 use crate::{
-    Choice,
-    Location,
-    Question,
-    Response,
-    Spread,
-    Survey,
-    error::{self, BadLine, FileReadError, InternalError},
+    Choice, Location, Question, Response, Spread, Survey, Text, error::{self, BadLine, FileReadError, InternalError, OperationError},
 };
 
-#[derive(Debug, PartialEq)]
-pub enum SSSType {
-    Classic,
-    XML,
-}
-
-impl SSSType {
-    pub fn parse(first_line: &str) -> Result<Self, BadLine> {
-        match first_line.chars().next().unwrap_or_default() {
-            'S' => Ok(Self::Classic),
-            '<' => Ok(Self::XML),
-            _ => Err(BadLine::new(format!(
-                "Unable to identify sss version from the first line: '{first_line}'"
-            ))),
-        }
-    }
-}
 
 #[derive(Debug)]
 pub enum LineKind {
@@ -317,7 +294,7 @@ where
     I: IntoIterator<Item = Result<String, E>>,
     E: std::error::Error,
 {
-    let mut survey = Survey::empty();
+    let mut survey = Survey::empty_classic();
     let mut current = None;
     let mut in_values = false;
 
@@ -331,15 +308,17 @@ where
         match kind {
             SSSClassicLineType::Empty
             | SSSClassicLineType::SurveyStart
-            | SSSClassicLineType::BOF => {}
-            SSSClassicLineType::Version => survey.meta.version = Some(value),
-            SSSClassicLineType::Date => survey.meta.date = Some(value),
-            SSSClassicLineType::Time => survey.meta.time = Some(value),
-            SSSClassicLineType::Origin => survey.meta.origin = Some(value),
-            SSSClassicLineType::User => survey.meta.user = Some(value),
-            SSSClassicLineType::Note => survey.meta.note.push(value),
-            SSSClassicLineType::Standard => survey.meta.standard = Some(value),
-            SSSClassicLineType::Style => survey.meta.style = Some(value),
+            | SSSClassicLineType::BOF 
+            | SSSClassicLineType::Note => {}
+
+            SSSClassicLineType::Version => survey.meta.set_version(Some(value))?,
+            SSSClassicLineType::Date => survey.meta.set_date(Some(value))?,
+            SSSClassicLineType::Time => survey.meta.set_time(Some(value))?,
+            SSSClassicLineType::Origin => survey.meta.set_origin(Some(value))?,
+            SSSClassicLineType::User => survey.meta.set_user(Some(value))?,
+            SSSClassicLineType::Standard => survey.meta.set_standard(Some(value))?,
+            SSSClassicLineType::Style => survey.meta.set_style(Some(value))?,
+
             SSSClassicLineType::Title => survey.title = Some(value),
             SSSClassicLineType::RecordStart => survey.record.id = value,
             SSSClassicLineType::QuestionStart => {
@@ -349,7 +328,7 @@ where
                 survey.record.content.push(Question {
                     index: question_index,
                     name: "".into(),
-                    text: "".into(),
+                    text: Text::new(""),
                     filter: None,
                     location: Location::default(),
                     response: Response::Single {
@@ -402,11 +381,13 @@ where
                     .with_context(|| format!("When parsing line {}: '{}'", line_number, line))?
                     .filter = Some(value)
             }
+
             SSSClassicLineType::Label => {
-                get_question_mut(&mut survey, current, &line)
-                    .with_context(|| format!("When parsing line {}: '{}'", line_number, line))?
-                    .text = value
+                let question = get_question_mut(&mut survey, current, &line)
+                    .with_context(|| format!("When parsing line {}: '{}'", line_number, line))?;
+                question.text.default = value;
             }
+
             SSSClassicLineType::Location => {
                 if !in_values {
                     get_question_mut(&mut survey, current, &line)
@@ -443,11 +424,19 @@ where
                     get_question_mut(&mut survey, current, &line).with_context(|| {
                         format!("When parsing line {}: '{}'", line_number, line)
                     })?;
-                question.response = response_kind(&value).with_context(|| {
-                    format!("When parsing line {}: '{}'", line_number, line)
-                })?;
-                if matches!(question.response, Response::Note(_)) {
-                    question.response = Response::Note(question.text.clone());
+                
+                let response = response_kind(&value).with_context(|| {
+                        format!("When parsing line {}: '{}'", line_number, line)
+                    })?;
+                
+                match &response {
+                    &Response::Note(_) => {
+                        let error = OperationError::new(format!("Response type 'Note' doesn't exist in SSS classic!"));
+                        return Err(error).with_context(|| {
+                            format!("When parsing line {}: '{}'", line_number, line)
+                        })?;
+                    }
+                    _ => question.response = response
                 }
             }
 
@@ -1017,7 +1006,7 @@ mod tests {
         let question = survey.get_question("AGE").unwrap();
         assert_eq!(question.name, "AGE");
         assert_eq!(
-            question.text,
+            question.text.default,
             "<p>What is your <strong>age</strong>?</p>"
         );
         assert_eq!(question.response.is_categorical(), true);
@@ -1095,7 +1084,7 @@ mod tests {
 
         let question = survey.get_question("K2").unwrap();
         assert_eq!(question.name, "K2");
-        assert_eq!(question.text, "I AM A QUESTION LABEL");
+        assert_eq!(question.text.default, "I AM A QUESTION LABEL");
         assert_eq!(question.response.is_categorical(), true);
     }
 

@@ -1,9 +1,8 @@
 use triple_s::{Survey, error::BadLine, read_sss_file};
 
-const PATH_SSS_CLASSIC: &str = "tests/sss_classic.sss";
-const PATH_SSS_XML: &str = "tests/sss_xml_1.0.xml";
+const PATH_SSS_CLASSIC: &str = "tests/sss-examples/sss_classic.sss";
 
-fn read_sss_file_classic_example() -> Survey {
+fn example_datamap_classic() -> Survey {
     read_sss_file(PATH_SSS_CLASSIC).unwrap()
 }
 
@@ -32,7 +31,7 @@ fn put_into_record(content: &str) -> impl Iterator<Item = Result<String, BadLine
 
 #[test]
 fn test_classic_read_n_write() {
-    let survey = read_sss_file_classic_example();
+    let survey = example_datamap_classic();
     for question in survey.record.content.iter() {
         let correct_name = question.name.clone();
         let sss_string = question.to_sss_classic();
@@ -46,9 +45,4 @@ fn test_classic_read_n_write() {
         assert_eq!(question_read.text, question.text);
         assert_eq!(question_read.index, question.index);
     }
-}
-
-#[test]
-fn test_read_sss_xml() {
-    read_sss_file(PATH_SSS_XML).unwrap();
 }

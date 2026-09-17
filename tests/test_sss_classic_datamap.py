@@ -6,12 +6,12 @@ import pytest
 
 @pytest.fixture
 def sss():
-    path = os.path.join(os.path.dirname(__file__), "sss_classic.sss")
+    path = os.path.join(os.path.dirname(__file__), "sss-examples", "sss_classic.sss")
     survey = triple_s.read_sss_file(path)
     return survey
 
 
-def test_sss_read(sss):
+def test_sss_meta_load(sss):
     meta = sss.meta
     assert meta.version == "1.1"
     assert meta.date == "13th September 2026"
