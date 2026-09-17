@@ -720,7 +720,7 @@ mod test {
     }
 
     #[test]
-    fn test_text_variant_set() {
+    fn test_text_variant_overwrite() {
         let mut instance = Text::new("base text");
         let v1 = TextVariant::new("variant 1", Mode::None, "GB");
         let v2 = TextVariant::new("variant 2", Mode::None, "GB");
@@ -729,8 +729,15 @@ mod test {
         assert_eq!(instance.variant.len(), 1);
         instance.set_variant(v2);
         assert_eq!(instance.variant.len(), 1);
-
         assert_eq!(&instance.variant[0].value, "variant 2");
+
+        let v3 = TextVariant::new("variant", Mode::None, "GBR");
+        instance.set_variant(v3);
+        assert_eq!(instance.variant.len(), 2);
+
+        let v4 = TextVariant::new("variant", Mode::Analysis, "GBR");
+        instance.set_variant(v4);
+        assert_eq!(instance.variant.len(), 3)
     }
 
     #[test]
