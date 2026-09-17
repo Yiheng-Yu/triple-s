@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fmt::Write};
 
 use rayon::prelude::*;
-use strum::EnumString;
+use strum_macros::EnumString;
 
 use crate::error::{OperationError, UnsupportedFeature};
 
@@ -253,6 +253,27 @@ impl Meta {
             Self::Xml(member) => Ok(member.language_options.clone())
         }
     } 
+
+    pub fn mode_options(&self) -> Result<Vec<Mode>, UnsupportedFeature> {
+        match self {
+            Self::Classic(member) => {
+                    Err(UnsupportedFeature {current_version: format!("{:?}", member.version), feature: "mode_options".into()} )
+                }
+                Self::Xml(member) => Ok(member.mode_options.clone())
+            }
+    }
+
+    pub fn set_mode_options(&mut self, mode_options: Vec<Mode>) -> Result<(), UnsupportedFeature> {
+        match self {
+            Self::Classic(member) => {
+                    Err(UnsupportedFeature {current_version: format!("{:?}", member.version), feature: "mode_options".into()} )
+                }
+                Self::Xml(member) => {
+                    member.mode_options = mode_options;
+                    Ok(())
+                }
+            }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -263,6 +284,8 @@ pub struct Xml {
     pub origin: Option<String>,
     pub user: Option<String>,
     pub style: Option<String>,
+    // pub option: Option<String>,
+
     /// list of all available language options
     pub language_options: Vec<String>,
     /// list of all available `mod` options

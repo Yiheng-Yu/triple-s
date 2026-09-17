@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
 use regex::Regex;
-use strum::EnumString;
+use strum_macros::EnumString;
 
 use crate::{
     Choice, Location, Question, Response, Spread, Survey, Text, error::{self, BadLine, FileReadError, InternalError, OperationError},
