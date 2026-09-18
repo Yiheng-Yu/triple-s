@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fmt::Write, str::FromStr};
 
-use strum_macros::EnumString;
 use rayon::prelude::*;
+use strum_macros::EnumString;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, EnumString)]
 pub enum Version {
@@ -29,10 +29,100 @@ impl Version {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Survey {
+    #[cfg(feature = "xml")]
+    pub name: String,
+    pub title: Option<String>,
+    pub meta: Meta,
+    pub record: Record,
+}
+
+impl Survey {
+    pub fn empty() -> Self {
+        Self {
+            title: None,
+            meta: Meta::with_version(Version::V1_1),
+            record: Record::default(),
+
+            #[cfg(feature = "xml")]
+            name: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Meta {
+    /// The version attribute is used to indicate the version of the Triple-S standard that applies to this specification.
+    pub version: Version,
+    pub name: Option<String>,
+    pub date: Option<String>,
+    pub time: Option<String>,
+    pub origin: Option<String>,
+    pub user: Option<String>,
+    pub style: Option<String>,
+
+    /// ** Introduced since sss 1.2 **
+    /// list of all available language options
+    #[cfg(feature = "xml")]
+    pub language_options: Vec<String>,
+
+    /// ** Introduced since sss 1.2 **
+    /// list of all available `mod` options
+    #[cfg(feature = "xml")]
+    pub mode_options: Vec<Mode>,
+
+    /// ** Deprecated after sss version 1.2 **
+    /// (Optional) indicate that some aspect of the triple-s definition meets a
+    /// defined standard that may reduce the amount of checking required by an import program.
+    /// The only value that option_setting may have in version 1.2 is 'standardnames'.
+    #[cfg(feature = "classic")]
+    pub standard: Option<String>,
+}
+
+impl Meta {
+    pub fn with_version(version: Version) -> Self {
+        Self {
+            version,
+            name: None,
+            date: None,
+            time: None,
+            origin: None,
+            user: None,
+            style: None,
+            
+            #[cfg(feature = "xml")]
+            language_options: Vec::new(),
+            
+            #[cfg(feature = "xml")]
+            mode_options: vec![Mode::None],
+            
+            #[cfg(feature = "classic")]
+            standard: None,
+        }
+    }
+}
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub struct Survey {
+pub struct Record {
+    pub id: char,
 
+    // #[cfg(feature = "xml")]
+    // pub format: Option<Format>,
+    /// (Optional) 'skip' attribute can be used to ignore one or more initial records
+    /// in the Data File. This will be most useful for csv Data Files where the first line
+    /// is often used as documentation (e.g. names for the columns/fields) for the
+    /// succeeding values.
+    #[cfg(feature = "xml")]
+    pub skip: Option<String>,
+
+    /// (Optional) Used to specify an explicit location for the Data
+    /// File that is described by this Triple-S XML specification. Note that using an
+    /// href attribute ties the specification to the Data File and may cause problems
+    /// if the Metadata File and Data File are moved.
+    #[cfg(feature = "xml")]
+    pub href: Option<String>,
+    // pub content: Vec<Question>
 }
 
 // #[derive(Debug, Clone, PartialEq)]
@@ -43,14 +133,13 @@ pub struct Survey {
 //     pub width: Option<u64>,
 // }
 
-
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Text {
     /// the default value
     pub value: String,
 
     /// variants
-    #[cfg(feature="xml")]
+    #[cfg(feature = "xml")]
     pub variant: Vec<TextVariant>,
 }
 
@@ -64,7 +153,7 @@ impl Text {
 
     /// Will modify existing variant if they have the same `mode` and `language` attribute
     /// or append to the current `self.variant` if not
-    #[cfg(feature="xml")]
+    #[cfg(feature = "xml")]
     pub fn set_variant(&mut self, variant: TextVariant) {
         for item in self.variant.iter_mut() {
             if item.has_same_attribute(&variant) {
@@ -97,9 +186,7 @@ impl Text {
 ///     <text xml:lang="fr" mode="analysis">Âge de répondant</text>
 /// </label>
 /// ```
-///
-/// -> TODO: Impl this AFTER the sss xml website when up again
-#[cfg(feature="xml")]
+#[cfg(feature = "xml")]
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextVariant {
     pub value: String,
@@ -146,8 +233,7 @@ impl TextVariant {
     }
 }
 
-
-#[cfg(feature="xml")]
+#[cfg(feature = "xml")]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum Language {
     /// undefined

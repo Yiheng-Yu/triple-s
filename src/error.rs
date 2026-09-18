@@ -96,32 +96,32 @@ impl fmt::Display for BadLine {
     }
 }
 
-#[derive(Debug)]
-pub struct UnexpectedLineKind {
-    kind: crate::_classic::LineKind,
-    line: String,
-}
+// #[derive(Debug)]
+// pub struct UnexpectedLineKind {
+//     kind: crate::_classic::LineKind,
+//     line: String,
+// }
 
-impl UnexpectedLineKind {
-    pub fn new(line_type: crate::_classic::LineKind, value: impl Into<String>) -> Self {
-        Self {
-            kind: line_type,
-            line: value.into(),
-        }
-    }
-}
+// impl UnexpectedLineKind {
+//     pub fn new(line_type: crate::_classic::LineKind, value: impl Into<String>) -> Self {
+//         Self {
+//             kind: line_type,
+//             line: value.into(),
+//         }
+//     }
+// }
 
-impl Error for UnexpectedLineKind {}
+// impl Error for UnexpectedLineKind {}
 
-impl fmt::Display for UnexpectedLineKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Unexpected line kind. Line: '{}', kind: {:?}",
-            self.line, self.kind
-        )
-    }
-}
+// impl fmt::Display for UnexpectedLineKind {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         write!(
+//             f,
+//             "Unexpected line kind. Line: '{}', kind: {:?}",
+//             self.line, self.kind
+//         )
+//     }
+// }
 
 #[derive(Debug)]
 pub struct UnsupportedFeature {
