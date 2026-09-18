@@ -21,7 +21,6 @@ impl fmt::Display for OperationError {
     }
 }
 
-
 #[derive(Debug)]
 pub struct InternalError {
     message: String,
@@ -134,11 +133,13 @@ impl Error for UnsupportedFeature {}
 
 impl fmt::Display for UnsupportedFeature {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Feature '{}' is not supported in version '{}'", self.feature, self.current_version)
+        write!(
+            f,
+            "Feature '{}' is not supported in version '{}'",
+            self.feature, self.current_version
+        )
     }
 }
-
-
 
 #[derive(Debug)]
 pub struct UnknownAttribute {
@@ -152,13 +153,13 @@ impl Error for UnknownAttribute {}
 impl UnknownAttribute {
     pub fn new(name: impl Into<String>, value: impl Into<String>) -> Self {
         Self {
-            name: name.into(), 
+            name: name.into(),
             value: value.into(),
-            parent: None
+            parent: None,
         }
     }
 
-    pub fn with_parent(mut self, parent: impl Into<String> ) -> Self {
+    pub fn with_parent(mut self, parent: impl Into<String>) -> Self {
         self.parent = Some(parent.into());
         self
     }
@@ -167,8 +168,43 @@ impl UnknownAttribute {
 impl fmt::Display for UnknownAttribute {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.parent.as_ref() {
-            Some(parent) => write!(f, r#"Unexpected XML attribute!: name: "{}", value: "{}", parent: "{}"."#, self.name, self.value, parent),
-            None => write!(f, r#"Unexpected XML attribute!: name: "{}", value: "{}"."#, self.name, self.value),
+            Some(parent) => write!(
+                f,
+                r#"Unexpected XML attribute!: name: "{}", value: "{}", parent: "{}"."#,
+                self.name, self.value, parent
+            ),
+            None => write!(
+                f,
+                r#"Unexpected XML attribute!: name: "{}", value: "{}"."#,
+                self.name, self.value
+            ),
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct MissingAttributeError {
+    tag: String,
+    missing: String,
+}
+
+impl Error for MissingAttributeError {}
+
+impl MissingAttributeError {
+    pub fn new(tag: impl Into<String>, missing: impl Into<String>) -> Self {
+        Self {
+            tag: tag.into(),
+            missing: missing.into(),
+        }
+    }
+}
+
+impl fmt::Display for MissingAttributeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Element '{}' is missing a required attribute: {}",
+            self.tag, self.missing
+        )
     }
 }

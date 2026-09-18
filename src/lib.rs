@@ -12,13 +12,13 @@ use anyhow::{Context, Result};
 pub use classic::read_sss_file_classic;
 pub use survey::{
     Choice,
+    Format,
     Language,
     Location,
     Meta,
     Mode,
     Question,
     Record,
-    Format,
     Response,
     Spread,
     Survey,

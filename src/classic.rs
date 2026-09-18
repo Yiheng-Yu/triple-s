@@ -93,23 +93,44 @@ fn unquote(value: &str) -> String {
         .to_string()
 }
 
-fn range<T>(value: &str, delimiter: &str) -> Result<(T, T)>
+fn parse_range<T>(value: &str, delimiter: &str) -> Result<(T, Option<T>)>
 where
     T: std::str::FromStr + Clone,
     T::Err: std::fmt::Display,
 {
-    let parts: Vec<_> = value.split_whitespace().collect();
-    if parts.len() == 1 {
-        let item: T = parts[0].parse().map_err(BadLine::new)?;
-        return Ok((item.clone(), item));
+    let parts = value
+        .split(delimiter)
+        .map(|s| s.trim())
+        .filter(|s| s.len() > 0)
+        .collect::<Vec<&str>>();
+
+    if parts.len() == 0 {
+        let message = format!("Unable to extract data range from text: '{}'", value);
+        return Err(BadLine::new(message).into());
     }
-    if parts.len() != 3 || !parts[1].eq_ignore_ascii_case(delimiter) {
-        return Err(BadLine::new(format!("Invalid range: '{value}'")).into());
+
+    if parts.len() > 2 {
+        let error = BadLine::new(format!(
+            "Input gets splitted into too many parts: '{:?}', delimiter used: {}",
+            parts, delimiter
+        ));
+        let context = format!("Unable to extract data range from text: '{}'", value);
+        return Err(error).with_context(|| context);
     }
-    Ok((
-        parts[0].parse().map_err(BadLine::new)?,
-        parts[2].parse().map_err(BadLine::new)?,
-    ))
+
+    let from: T = parts[0]
+        .parse()
+        .map_err(BadLine::new)
+        .with_context(|| format!("\nWhen trying to parse range from text: '{}'", value))?;
+
+    let to: Option<T> = parts
+        .get(1)
+        .map(|s| s.parse::<T>())
+        .transpose()
+        .map_err(|err| BadLine::new(err.to_string()))
+        .with_context(|| format!("\nWhen trying to parse range from text: '{}'", value))?;
+
+    Ok((from, to))
 }
 
 impl SSSClassicLineType {
@@ -262,14 +283,9 @@ fn response_kind(value: &str) -> Result<Response> {
         }),
         "MULTIPLE" => Ok(Response::Multiple {
             item: BTreeMap::new(),
-            spread: Spread::default(),
+            spread: None,
         }),
-        "LOGICAL" => Ok(Response::Single {
-            item: BTreeMap::from([
-                (0, Choice::new(0, "FALSE", None)),
-                (1, Choice::new(1, "TRUE", None)),
-            ]),
-        }),
+        "LOGICAL" => Ok(Response::Logical),
         "QUANTITY" => Ok(Response::Quantity {
             min: 0.0,
             max: 0.0,
@@ -412,22 +428,15 @@ where
 
             SSSClassicLineType::Location => {
                 if !in_values {
+                    let (from, to) = parse_range::<u64>(&value, "TO").with_context(|| {
+                        format!("When parsing line {}: '{}'", line_number, line)
+                    })?;
+
                     get_question_mut(&mut survey, current, &line)
                         .with_context(|| {
                             format!("When parsing line {}: '{}'", line_number, line)
                         })?
-                        .location = Location {
-                        from: range(&value, "TO")
-                            .with_context(|| {
-                                format!("When parsing line {}: '{}'", line_number, line)
-                            })?
-                            .0,
-                        to: range(&value, "TO")
-                            .with_context(|| {
-                                format!("When parsing line {}: '{}'", line_number, line)
-                            })?
-                            .1,
-                    };
+                        .location = Location { from, to };
                 }
             }
             SSSClassicLineType::Size(size) => {
@@ -453,7 +462,9 @@ where
 
                 match &response {
                     &Response::Note(_) => {
-                        let error = OperationError::new("Response type 'Note' doesn't exist in SSS classic!".to_string());
+                        let error = OperationError::new(
+                            "Response type 'Note' doesn't exist in SSS classic!".to_string(),
+                        );
                         return Err(error).with_context(|| {
                             format!("When parsing line {}: '{}'", line_number, line)
                         })?;
@@ -469,11 +480,11 @@ where
                     })?;
                 match &mut question.response {
                     Response::Multiple { spread, .. } => {
-                        let (num_subfields, width) = range(&value, "OF")?;
-                        *spread = Spread {
+                        let (num_subfields, width) = parse_range(&value, "OF")?;
+                        *spread = Some(Spread {
                             num_subfields,
                             width,
-                        };
+                        });
                     }
                     _ => return Err(BadLine::new("SPREAD requires MULTIPLE").into()),
                 }
@@ -563,7 +574,7 @@ where
                                 )
                             });
                         };
-                        let choice = Choice::new(code, label, None)._set_special(is_special);
+                        let choice = Choice::new(code, label, None, None)._set_special(is_special);
                         item.insert(choice.code, choice);
                     }
                     Response::Quantity {
@@ -1040,7 +1051,7 @@ mod tests {
         let survey = read_sss_file_classic(lines).unwrap();
         let question = survey.get_question("AGE").unwrap();
 
-        let sss_output = question.to_sss_classic().trim().to_string();
+        let sss_output = question.to_sss_classic().unwrap().trim().to_string();
         assert!(sss_output.contains(r#"NAME "AGE""#));
         assert!(sss_output.contains(r#"LABEL "<p>What is your <strong>age</strong>?</p>""#));
         assert_eq!(
@@ -1048,7 +1059,7 @@ mod tests {
             normalize(r#"POSITION 7"#)
         );
         assert_eq!(
-            normalize(&question.response.to_sss_classic()),
+            normalize(&question.response.to_sss_classic().unwrap()),
             normalize(
                 r#"TYPE SINGLE
             VALUES
@@ -1092,7 +1103,7 @@ mod tests {
     impl Response {
         pub fn get_spread(&self) -> Option<&Spread> {
             match self {
-                Self::Multiple { item: _, spread } => Some(spread),
+                Self::Multiple { item: _, spread } => spread.as_ref(),
                 _ => None,
             }
         }
@@ -1117,7 +1128,7 @@ mod tests {
         assert_eq!(survey.record.content.len(), 1);
 
         let question = survey.get_question("K2").unwrap();
-        let sss_output = question.to_sss_classic().trim().to_string();
+        let sss_output = question.to_sss_classic().unwrap().trim().to_string();
         assert!(sss_output.contains(r#"NAME "K2""#));
         assert!(sss_output.contains(r#"LABEL "I AM A QUESTION LABEL""#));
         assert_eq!(
@@ -1134,9 +1145,100 @@ mod tests {
     fn test_sss_write_spread() {
         let spread = Spread {
             num_subfields: 5,
-            width: 3,
+            width: Some(3),
         };
         assert_eq!(spread.to_sss_classic(), "SPREAD 5 OF 3")
+    }
+
+    #[test]
+    fn test_read_double_bounded_range_success() {
+        let (start, end) = (5, 10);
+        let delimiter = "THIS IS A DELIMITER";
+        let value = format!("{} {} {}", start, delimiter, end);
+        let (start_read, end_read) = parse_range::<i32>(&value, delimiter).unwrap();
+        assert_eq!(start, start_read);
+        assert_eq!(end, end_read.unwrap());
+
+        let (start, end) = (5.5, 10.2);
+        let delimiter = " ";
+        let value = format!("{} {} {}", start, delimiter, end);
+        let (start_read, end_read) = parse_range::<f64>(&value, delimiter).unwrap();
+        assert_eq!(start, start_read);
+        assert_eq!(end, end_read.unwrap());
+    }
+    #[test]
+    fn test_read_range_fail() {
+        let value = "OK 3 TO 89";
+        let delimiter = "TO";
+        let result = parse_range::<usize>(value, delimiter);
+        assert!(
+            result.is_err(),
+            "Error failed to raise for input '{}' with delimiter '{}'. Returns: {:?}",
+            value,
+            delimiter,
+            result
+        );
+
+        let value = "3 TO 89 SPECIAL";
+        let delimiter = "TO";
+        let result = parse_range::<usize>(value, delimiter);
+        assert!(
+            result.is_err(),
+            "Error failed to raise for input '{}' with delimiter '{}'. Returns: {:?}",
+            value,
+            delimiter,
+            result
+        );
+
+        let value = "3 SPECIAL";
+        let delimiter = "TO";
+        let result = parse_range::<usize>(value, delimiter);
+        assert!(
+            result.is_err(),
+            "Error failed to raise for input '{}' with delimiter '{}'. Returns: {:?}",
+            value,
+            delimiter,
+            result
+        );
+
+        let value = "3.5 TO 89";
+        let delimiter = "TO";
+        let result = parse_range::<usize>(value, delimiter);
+        assert!(
+            result.is_err(),
+            "Error failed to raise for input '{}' with delimiter '{}'. Returns: {:?}",
+            value,
+            delimiter,
+            result
+        );
+
+        let value = "3 TO 8";
+        let delimiter = "TO TO";
+        let result = parse_range::<f64>(value, delimiter);
+        assert!(
+            result.is_err(),
+            "Error failed to raise for input '{}' with delimiter '{}'. Returns: {:?}",
+            value,
+            delimiter,
+            result
+        );
+    }
+
+    #[test]
+    fn test_read_single_bounded_range_success() {
+        let start = 3;
+        let delimiter = "THIS IS A DELIMITER";
+        let value = format!("{}", start);
+        let (start_read, end_read) = parse_range::<i32>(&value, delimiter).unwrap();
+        assert_eq!(start, start_read);
+        assert_eq!(None, end_read);
+
+        let start = 3.5;
+        let delimiter = "THIS IS A DELIMITER";
+        let value = format!("{} {}", start, delimiter);
+        let (start_read, end_read) = parse_range::<f64>(&value, delimiter).unwrap();
+        assert_eq!(start, start_read);
+        assert_eq!(None, end_read);
     }
 
     fn create_example_float_quantity_iterator() -> impl Iterator<Item = Result<String, BadLine>>

@@ -1,4 +1,4 @@
-use triple_s::{Survey, Mode, Version, read_sss_file};
+use triple_s::{Mode, Survey, Version, read_sss_file};
 
 #[allow(dead_code)]
 const PATH_SSS_XML_GENERATION_ONE: &str = "tests/sss-examples/sss_xml_1.0.xml";
@@ -24,9 +24,18 @@ fn example_datamap_xml_generation_two() -> Survey {
 fn test_read_xml_datamap_ver_2_example_2() {
     let survey = example_datamap_xml_generation_two();
     assert_eq!(survey.meta.version, Version::V2_0);
-    assert_eq!(survey.meta.language_options, vec!["en-GB", "en-US", "fr"]);
-    assert_eq!(survey.title.as_ref().unwrap(), "Historic House Exit Survey<br/>First Wave");
-    assert_eq!(survey.meta.mode_options, vec![Mode::Interview, Mode::Analysis]);
+    assert_eq!(
+        survey.meta.language_options,
+        vec!["en-GB", "en-US", "fr"]
+    );
+    assert_eq!(
+        survey.title.as_ref().unwrap(),
+        "Historic House Exit Survey<br/>First Wave"
+    );
+    assert_eq!(
+        survey.meta.mode_options,
+        vec![Mode::Interview, Mode::Analysis]
+    );
 }
 
 // #[test]

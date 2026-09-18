@@ -34,7 +34,7 @@ fn test_classic_read_n_write() {
     let survey = example_datamap_classic();
     for question in survey.record.content.iter() {
         let correct_name = question.name.clone();
-        let sss_string = question.to_sss_classic();
+        let sss_string = question.to_sss_classic().unwrap();
         let sss_lines = put_into_record(&sss_string);
         let read = triple_s::read_sss_file_classic(sss_lines).unwrap();
 

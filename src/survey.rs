@@ -1,19 +1,23 @@
-use std::{collections::BTreeMap, fmt::Write};
+use std::{collections::BTreeMap, fmt::Write, str::FromStr};
 
+use anyhow::{Context, Result};
+use chrono::{NaiveDate, NaiveTime};
 use rayon::prelude::*;
 use strum_macros::EnumString;
 
+use crate::error::{BadLine, UnsupportedFeature};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, EnumString)]
 pub enum Version {
-    #[strum(serialize="1.0")]
+    #[strum(serialize = "1.0")]
     V1_0,
-    #[strum(serialize="1.1")]
+    #[strum(serialize = "1.1")]
     V1_1,
-    #[strum(serialize="1.2")]
+    #[strum(serialize = "1.2")]
     V1_2,
-    #[strum(serialize="2.0")]
+    #[strum(serialize = "2.0")]
     V2_0,
-    #[strum(serialize="3.0")]
+    #[strum(serialize = "3.0")]
     V3_0,
 }
 
@@ -61,24 +65,25 @@ impl Survey {
             .find_first(|question| question.name.to_uppercase() == name.to_uppercase())
     }
 
-    pub fn to_sss_classic(&self) -> String {
+    pub fn to_sss_classic(&self) -> Result<String> {
         let mut output = String::from("SSS\n");
         output.push_str(&self.meta.to_sss_classic());
         append_line(&mut output, "SURVEY");
         if let Some(title) = self.title.as_ref() {
             append_line(&mut output, format!("TITLE {}", quote(title)));
         }
-        output.push_str(&self.record.to_sss_classic());
+
+        let record = &self.record.to_sss_classic()?;
+        output.push_str(record);
         append_line(&mut output, "END SURVEY");
         append_line(&mut output, "END SSS");
-        output
+        Ok(output)
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Meta {
-    /// The version attribute is used to indicate the version of the Triple-S standard that applies to this specification. 
+    /// The version attribute is used to indicate the version of the Triple-S standard that applies to this specification.
     pub version: Version,
     pub name: Option<String>,
     pub date: Option<String>,
@@ -98,7 +103,7 @@ pub struct Meta {
     /// ** Deprecated after sss version 1.2 **
     /// (Optional) indicate that some aspect of the triple-s definition meets a
     /// defined standard that may reduce the amount of checking required by an import program.
-    /// The only value that option_setting may have in version 1.2 is 'standardnames'. 
+    /// The only value that option_setting may have in version 1.2 is 'standardnames'.
     pub standard: Option<String>,
 }
 
@@ -120,7 +125,10 @@ impl Meta {
 
     pub fn to_sss_classic(&self) -> String {
         let mut output = String::new();
-        append_line(&mut output, format!("VERSION {}", self.version.as_str()));
+        append_line(
+            &mut output,
+            format!("VERSION {}", self.version.as_str()),
+        );
         for (name, value) in [
             ("DATE", &self.date),
             ("TIME", &self.time),
@@ -140,7 +148,6 @@ impl Meta {
     }
 }
 
-
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Record {
     /// Record id, any single character A to Z or a to z.
@@ -150,27 +157,27 @@ pub struct Record {
     /// (Optional) 'skip' attribute can be used to ignore one or more initial records
     /// in the Data File. This will be most useful for csv Data Files where the first line
     /// is often used as documentation (e.g. names for the columns/fields) for the
-    /// succeeding values. 
+    /// succeeding values.
     pub skip: Option<String>,
 
     /// (Optional) Used to specify an explicit location for the Data
     /// File that is described by this Triple-S XML specification. Note that using an
     /// href attribute ties the specification to the Data File and may cause problems
-    /// if the Metadata File and Data File are moved. 
+    /// if the Metadata File and Data File are moved.
     pub href: Option<String>,
 
     pub content: Vec<Question>,
 }
 
 impl Record {
-    pub fn to_sss_classic(&self) -> String {
+    pub fn to_sss_classic(&self) -> Result<String> {
         let mut output = String::new();
         append_line(&mut output, format!("RECORD {}", self.id));
         for question in self.content.iter() {
-            output.push_str(&question.to_sss_classic());
+            output.push_str(&question.to_sss_classic()?);
         }
         append_line(&mut output, "END RECORD");
-        output
+        Ok(output)
     }
 }
 
@@ -180,7 +187,7 @@ impl Record {
 pub enum Format {
     /// the data representation is fixed format fields. For data in
     /// fixed format the position element refers to the character
-    /// number. 
+    /// number.
     #[strum(ascii_case_insensitive)]
     Fixed,
     /// the data representation is comma-separated values, using
@@ -190,7 +197,6 @@ pub enum Format {
     #[strum(ascii_case_insensitive)]
     Csv,
 }
-
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Question {
@@ -203,7 +209,7 @@ pub struct Question {
 }
 
 impl Question {
-    pub fn to_sss_classic(&self) -> String {
+    pub fn to_sss_classic(&self) -> Result<String> {
         let mut output = String::new();
         append_line(&mut output, format!("VARIABLE {}", self.index));
         append_line(&mut output, format!("NAME {}", quote(&self.name)));
@@ -213,8 +219,12 @@ impl Question {
         );
         append_line(&mut output, self.location.to_sss_classic());
         append_line(&mut output, format!("END VARIABLE {}", self.index));
-        output.push_str(&self.response.to_sss_classic());
-        output
+        let response = &self
+            .response
+            .to_sss_classic()
+            .with_context(|| format!("Question '{}'", self.name))?;
+        output.push_str(response);
+        Ok(output)
     }
 }
 
@@ -237,8 +247,58 @@ pub enum Response {
     },
     Multiple {
         item: BTreeMap<u64, Choice>,
-        spread: Spread,
+        spread: Option<Spread>,
     },
+    Logical,
+    Date {
+        from: Option<NaiveDate>,
+        to: Option<NaiveDate>,
+    },
+    Time {
+        from: Option<NaiveTime>,
+        to: Option<NaiveTime>,
+    },
+}
+
+impl FromStr for Response {
+    type Err = BadLine;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let to_match = s.trim().to_ascii_lowercase();
+        let instance = match to_match.as_str() {
+            "single" => Self::Single {
+                item: BTreeMap::new(),
+            },
+            "multiple" => Self::Multiple {
+                item: BTreeMap::new(),
+                spread: None,
+            },
+            "quantity" => Self::Quantity {
+                min: 0.0,
+                max: 0.0,
+                na_value: None,
+                na_label: None,
+            },
+            "character" => Self::Character(1024),
+            "logical" => Self::Logical,
+            "date" => Self::Date {
+                from: None,
+                to: None,
+            },
+            "time" => Self::Time {
+                from: None,
+                to: None,
+            },
+            _ => {
+                return Err(BadLine::new(format!(
+                    "Unidentified response kind: '{}'",
+                    to_match
+                )));
+            }
+        };
+
+        Ok(instance)
+    }
 }
 
 impl Default for Response {
@@ -267,9 +327,17 @@ impl Response {
         }
     }
 
-    pub fn to_sss_classic(&self) -> String {
+    pub fn to_sss_classic(&self) -> Result<String> {
         let mut output = String::new();
         match self {
+            Self::Date { .. } | Self::Time { .. } => {
+                let error = UnsupportedFeature {
+                    current_version: "classic".into(),
+                    feature: format!("{:?}", &self),
+                };
+                return Err(error.into());
+            }
+            Self::Logical => append_line(&mut output, "TYPE LOGICAL"),
             Self::Quantity {
                 min,
                 max,
@@ -278,7 +346,6 @@ impl Response {
             } => {
                 append_line(&mut output, "TYPE QUANTITY");
                 append_line(&mut output, "VALUES");
-
                 // append_line(&mut output, format_range(*min, *max, "TO"));
                 match na_value {
                     Some(na_value) => {
@@ -306,13 +373,16 @@ impl Response {
                 append_line(&mut output, "TYPE SINGLE");
                 write_choices(&mut output, item);
             }
-            Self::Multiple { item, spread } => {
+            Self::Multiple { item,spread} => {
                 append_line(&mut output, "TYPE MULTIPLE");
-                append_line(&mut output, spread.to_sss_classic());
+                if let Some(item) = spread.as_ref() {
+                    append_line(&mut output, item.to_sss_classic())
+                };
                 write_choices(&mut output, item);
             }
         }
-        output
+
+        Ok(output)
     }
 
     fn size_line(&self, size: usize) -> String {
@@ -327,13 +397,14 @@ pub struct Choice {
     pub label: Text,
     /// Response filter.
     pub filter: Option<String>,
+    pub score: Option<f64>,
     /// (Optional) indicator for special values (e.g. mannotationissing data codes).
     /// Removed from SSS 1.2 onwards.
     pub is_special: bool,
 }
 
 impl Choice {
-    pub fn new<T>(code: u64, label: T, filter: Option<T>) -> Self
+    pub fn new<T>(code: u64, label: T, score: Option<f64>, filter: Option<T>) -> Self
     where
         T: Into<String>,
     {
@@ -341,6 +412,7 @@ impl Choice {
             code,
             label: Text::new(label.into()),
             filter: filter.map(Into::into),
+            score: score,
             is_special: false,
         }
     }
@@ -367,43 +439,62 @@ impl Choice {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Location {
     pub from: u64,
-    pub to: u64,
+    pub to: Option<u64>,
 }
 
 impl Default for Location {
     fn default() -> Self {
-        Self { from: 1, to: 1 }
+        Self { from: 1, to: None }
     }
 }
 
 impl Location {
     pub fn to_sss_classic(&self) -> String {
-        if self.from == self.to {
-            format!("POSITION {}", self.from)
-        } else {
-            format!("POSITION {} TO {}", self.from, self.to)
+        match self.to {
+            Some(value) => format!("POSITION {} TO {}", self.from, value),
+            None => format!("POSITION {}", self.from),
         }
     }
 }
 
+/// Indicates that the data values are coded as a series of category values in consecutive subfields,
+/// rather than the default multiple format of a series of 0/1 characters).
+///
+/// For fixed Data Files, the <position> element must
+/// define a width of at least (num_subfields * subfield_width).
+/// The subfield_width must be large enough to hold the largest category value
+/// specified for the multiple, for example:
+///  <spread subfields="5" width="3"/>
+///
+/// For fixed data:
+/// if the num_subfields exactly fills the space defined by the <position>
+/// element. In this case the subfield_width is determined by dividing the width derived from the <position> element by num_subfields.
+///
+/// For csv data:
+/// the width attribute must always be specified as it cannot be determined from the overall width defined in the <position> element.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Spread {
+    /// The number of subfields within the overall field that is defined by the <position> element.
     pub num_subfields: u64,
-    pub width: u64,
+    /// Denotes the width of each subfield.
+    pub width: Option<u64>,
 }
 
 impl Default for Spread {
     fn default() -> Self {
         Self {
             num_subfields: 999,
-            width: 999,
+            width: None,
         }
     }
 }
 
 impl Spread {
     pub fn to_sss_classic(&self) -> String {
-        format!("SPREAD {} OF {}", self.num_subfields, self.width)
+        match self.width.as_ref() {
+            Some(width) => format!("SPREAD {} OF {}", self.num_subfields, width),
+            None => format!("SPREAD {}", self.num_subfields),
+        }
     }
 }
 
@@ -506,8 +597,7 @@ impl TextVariant {
 }
 
 /// text language
-#[derive(Debug, Clone, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum Language {
     /// undefined
     #[default]
@@ -516,6 +606,11 @@ pub enum Language {
     Named(String),
 }
 
+impl Language {
+    pub fn named(name: impl Into<String>) -> Self {
+        Self::Named(name.into())
+    }
+}
 
 /// Introduced in SSS Xml 2.0.
 ///
@@ -545,7 +640,6 @@ pub enum Mode {
     #[strum(serialize = "interview")]
     Interview,
 }
-
 
 // Helper functions
 // ------------------------------------------------------------------------
@@ -582,10 +676,10 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_write_spread() {
+    fn test_write_spread_with_width() {
         let instance = Spread {
             num_subfields: 5,
-            width: 10,
+            width: Some(10),
         };
         assert_eq!(
             instance.to_sss_classic(),
@@ -594,8 +688,20 @@ mod test {
     }
 
     #[test]
+    fn test_write_spread_without_width() {
+        let instance = Spread {
+            num_subfields: 5,
+            width: None,
+        };
+        assert_eq!(instance.to_sss_classic(), format!("SPREAD {}", 5));
+    }
+
+    #[test]
     fn test_write_location() {
-        let instance = Location { from: 0, to: 100 };
+        let instance = Location {
+            from: 0,
+            to: Some(100),
+        };
         assert_eq!(instance.to_sss_classic(), "POSITION 0 TO 100");
     }
 

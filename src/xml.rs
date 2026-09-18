@@ -1,8 +1,10 @@
 use std::{
+    collections::{BTreeMap, HashMap},
     fs::File,
     io::{BufRead, BufReader},
     str::FromStr,
 };
+use chrono::{NaiveDate, NaiveTime};
 
 use anyhow::{Context, Result};
 use quick_xml::{
@@ -10,10 +12,29 @@ use quick_xml::{
     events::{BytesEnd, BytesStart, Event, attributes::Attributes},
     reader::Reader,
 };
+use rayon::prelude::*;
 
 use crate::{
-    error::{BadLine, InternalError, UnknownAttribute, UnsupportedFeature},
-    survey::{Format, Mode, Survey, Version},
+    error::{
+        BadLine,
+        InternalError,
+        MissingAttributeError,
+        OperationError,
+        UnknownAttribute,
+        UnsupportedFeature,
+    },
+    survey::{
+        Format,
+        Language,
+        Location,
+        Mode,
+        Question,
+        Response,
+        Survey,
+        Text,
+        TextVariant,
+        Version,
+    },
 };
 
 pub fn read_sss_file_xml_file(sss_path: &str) -> Result<Survey> {
@@ -33,13 +54,19 @@ where
 {
     let mut survey = Survey::empty_xml();
     let mut buf = Vec::new();
-    // let mut variable_workers = Vec::new();
+    let mut build_tasks = Vec::new();
+    let mut index: usize = 0;
     loop {
-        match reader.read_event_into(&mut buf)? {
+        let event = reader.read_event_into(&mut buf)?;
+        match event {
+            Event::Decl(_) => (),
+            Event::DocType(_) => (),
+            Event::Comment(_) => (),
             Event::Start(ele) => {
                 let name = ele.name();
                 let tag = name.local_name().into_inner();
                 match tag {
+                    "xml" => (),
                     "sss" => set_sss_attributes(&mut survey, ele.attributes())?,
                     // keep adding new cases to parse here
                     "date" => {
@@ -69,12 +96,12 @@ where
                     }
                     "record" => set_record_attributes(&mut survey, ele.attributes())?,
                     "variable" => {
-                        let mut worker = QuestionWorker::init(ele.attributes().to_owned())?;
+                        let mut worker =
+                            QuestionBuilder::init(index, ele.attributes().to_owned())?;
                         let end = ele.to_end();
                         consume_variable_data(&mut reader, &mut worker, end)?;
-                        
-                        // TODO: NOW SEND WORKER TO THE TASK SO CAN DO PAR_ITER()!!
-                        todo!()
+                        build_tasks.push(worker);
+                        index += 1;
                     }
                     _ => (),
                 };
@@ -86,23 +113,32 @@ where
 
             Event::Text(ele) => {
                 // let text = ele.to_string();
-                // println!("text: {text}");
+                println!("{:?}", ele);
             }
             // Event::CData(ele) => { todo!() }
             // Event::Comment(ele) => { todo!() }
             // Event::Decl(ele) => { todo!() }
             // Event::PI(ele) => { todo!() }
-            // Event::DocType(ele) => { todo!() }
+            // Event::DocType(ele) => { println!("{:?}", ele) }
             Event::Empty(ele) => {
-                // SPECIALLY IMPORTANT FOR PARSING HTML ESCAPES
-                // println!("{:?}", ele);
+                println!("{:?}", ele);
             }
-            Event::GeneralRef(ele) => {}
+            // Event::GeneralRef(ele) => { println!("{:?}", ele) }
             Event::Eof => break,
-            _ => (),
+            _ => {
+                return Err(
+                    OperationError::new(format!("Undefined event: '{:?}", event)).into(),
+                );
+            }
         }
     }
 
+    let questions = build_tasks
+        .par_drain(..)
+        .map(|builder| builder.build())
+        .collect::<Result<Vec<(usize, Question)>>>()?;
+
+    // let pool = rayon::ThreadPoolBuilder::new().num_threads(8).build().unwrap();
     Ok(survey)
 }
 
@@ -155,10 +191,23 @@ fn set_sss_attributes(survey: &mut Survey, attributes: Attributes<'_>) -> Result
     Ok(())
 }
 
+fn extract_attributes(attributes: Attributes<'_>) -> Result<HashMap<String, String>> {
+    attributes
+        .into_iter()
+        .map(|item| {
+            let item = item?;
+            Ok((
+                item.key.to_owned().0.to_string(),
+                item.value.to_string(),
+            ))
+        })
+        .collect::<Result<HashMap<String, String>>>()
+}
+
 #[derive(Debug)]
 struct Element {
     pub tag: String,
-    pub attribute: Vec<Attribute>,
+    pub attribute: HashMap<String, String>,
     pub text: Option<String>,
     pub children: Vec<Box<Element>>,
 }
@@ -167,69 +216,158 @@ impl Element {
     pub fn new(tag: impl Into<String>) -> Self {
         Self {
             tag: tag.into(),
-            attribute: Vec::new(),
+            attribute: HashMap::new(),
             text: None,
             children: Vec::new(),
         }
     }
 
-    pub fn with_attribute(tag: impl Into<String>, attributes: Vec<Attribute>) -> Self {
-        Self {
+    pub fn with_attribute(tag: impl Into<String>, attributes: Attributes<'_>) -> Result<Self> {
+        let attributes = attributes
+            .into_iter()
+            .map(|item| {
+                let item = item?;
+                Ok((
+                    item.key.to_owned().0.to_string(),
+                    item.value.to_string(),
+                ))
+            })
+            .collect::<Result<HashMap<String, String>>>()?;
+
+        Ok(Self {
             tag: tag.into(),
             attribute: attributes,
             text: None,
             children: Vec::new(),
-        }
+        })
     }
 }
 
+// ------- for building variables -------
 #[derive(Debug)]
-struct Attribute {
-    pub key: String,
-    pub value: String,
-}
-
-#[derive(Debug)]
-struct QuestionWorker {
-    pub attributes: Vec<Attribute>,
+struct QuestionBuilder {
+    pub index: usize, // used for ordering/ reordering
+    pub attributes: HashMap<String, String>,
     pub name: String,
     pub label: Element,
     pub filter: Option<String>,
-    pub spread: Option<BytesStart<'static>>,
     pub position: Option<BytesStart<'static>>,
-    pub size: Option<BytesStart<'static>>,  // for 'character' type of quesiton only
-    pub range: Option<BytesStart<'static>>,
+    pub size: Option<BytesStart<'static>>, // for 'character' type of quesiton only
+    pub range: Option<BytesStart<'static>>, // called 'range' from sss xml 2.0 onwards
     pub values: Vec<Element>,
 }
 
-impl QuestionWorker {
-    pub fn init(attributes: Attributes<'_>) -> Result<Self, quick_xml::Error> {
+impl QuestionBuilder {
+    pub fn init(index: usize, attributes: Attributes<'_>) -> Result<Self> {
+        let attributes = extract_attributes(attributes)?;
         Ok(Self {
-            attributes: owned_attributes(attributes)?,
+            index: index,
+            attributes: attributes,
             label: Element::new("label"),
             name: String::new(),
             filter: None,
-            spread: None,
             size: None,
             position: None,
             range: None,
             values: Vec::new(),
         })
     }
-}
 
-fn owned_attributes(
-    attributes: quick_xml::events::attributes::Attributes<'_>,
-) -> Result<Vec<Attribute>, quick_xml::Error> {
-    attributes
-        .map(|attr| {
-            let attr = attr?;
-            Ok(Attribute {
-                key: attr.key.to_owned().0.to_string(),
-                value: attr.value.to_string(),
+    fn build_text_variant(mut element: Element) -> Result<Text> {
+        let mut text = Text::new(element.text.unwrap_or_default());
+        text.variant = element
+            .children
+            .par_drain(..)
+            .map(|mut element| {
+                let language = element
+                    .attribute
+                    .remove("language")
+                    .map_or(Language::None, Language::named);
+                let mode = element
+                    .attribute
+                    .remove("mode")
+                    .map_or(Ok(Mode::default()), |s| Mode::from_str(&s))?;
+                Ok(TextVariant {
+                    value: element.text.unwrap_or_default(),
+                    language: language,
+                    mode: mode,
+                })
             })
-        })
-        .collect()
+            .collect::<Result<Vec<TextVariant>>>()?;
+        Ok(text)
+    }
+
+    fn build_response(
+        mut response: Response, 
+        range: Option<BytesStart<'static>>,
+        values: Vec<Element>,
+    ) -> Result<Response> {
+        match &mut response {
+            Response::Logical => (),
+            Response::Date { from, to } => {
+                if let Some(date_range) = range {
+                    let attrib = extract_attributes(date_range.attributes())?;
+                    *from = {
+                        let start = attrib.get("from")
+                        .ok_or(MissingAttributeError::new("range", "from"))?;
+                        Some(NaiveDate::parse_from_str(start, "%Y%m%d")?)
+                    };
+                    
+                    *to = {
+                        attrib.get("from")
+                        .map(|s| NaiveDate::parse_from_str(s, "%Y%m%d"))
+                        .transpose()?
+                    }
+                }
+            }
+            Response::Time { from, to } => {
+                if let Some(date_range) = range {
+                    let attrib = extract_attributes(date_range.attributes())?;
+                    *from = {
+                        let start = attrib.get("from")
+                        .ok_or(MissingAttributeError::new("range", "from"))?;
+                        Some(NaiveTime::parse_from_str(start, "%H%M%S")?)
+                    };
+                    *to = {
+                        attrib.get("from")
+                        .map(|s| NaiveTime::parse_from_str(s, "%H%M%S"))
+                        .transpose()?
+                    }
+                }
+            }
+            _ => ()
+        }
+        // println!("Spread: {:?}\nvalues:{:?}", &spread, &values);
+        Ok(response)
+    }
+
+    /// (question_index, question_instance)
+    pub fn build(mut self) -> Result<(usize, Question)> {
+        let text = Self::build_text_variant(self.label)?;
+        let mut response = self
+            .attributes
+            .remove("type")
+            .ok_or(MissingAttributeError::new("variable", "type"))
+            .with_context(|| format!("\nTrying to read question '{}'", self.name))?
+            .parse::<Response>()?;
+
+        println!("Question: {}", self.name);
+        let response = Self::build_response(response, self.range, self.values)?;
+
+        // let date = NaiveDate::parse_from_str("20260918", "%Y%m%d").unwrap();
+        // let time = NaiveTime::parse_from_str("124830", "%H%M%S").unwrap();
+
+        let question = Question {
+            index: self.index as u64,
+            name: self.name.clone(),
+            text: text,
+            filter: None,
+            location: Location::default(),
+            response: response,
+        };
+
+        Ok((self.index, question))
+    }
 }
 
 #[derive(Debug)]
@@ -245,7 +383,7 @@ enum Section {
 
 fn consume_variable_data<R>(
     reader: &mut Reader<R>,
-    worker: &mut QuestionWorker,
+    worker: &mut QuestionBuilder,
     end: BytesEnd,
 ) -> Result<()>
 where
@@ -272,8 +410,7 @@ where
                     }
                     "value" => {
                         current_position = Section::CodeDefault;
-                        let attributes = owned_attributes(start.attributes())?;
-                        let element = Element::with_attribute("value", attributes);
+                        let element = Element::with_attribute("value", start.attributes())?;
                         worker.values.push(element);
                     }
                     "filter" => {
@@ -282,15 +419,13 @@ where
                     "text" => match current_position {
                         Section::LabelDefault | Section::LabelVariant => {
                             current_position = Section::LabelVariant;
-                            let attributes = owned_attributes(start.attributes())?;
-                            let element = Element::with_attribute("text", attributes);
+                            let element = Element::with_attribute("text", start.attributes())?;
                             worker.label.children.push(Box::new(element));
                         }
 
                         Section::CodeDefault | Section::CodeVariant => {
                             current_position = Section::CodeVariant;
-                            let attributes = owned_attributes(start.attributes())?;
-                            let element = Element::with_attribute("text", attributes);
+                            let element = Element::with_attribute("text", start.attributes())?;
                             worker.values.last_mut()
                                 .map(|val| val.children.push(Box::new(element)) )
                                 .ok_or(InternalError::new(format!("Parent note for <text> seems to be missing?? Current: {:#?}", worker)))?;
@@ -303,7 +438,8 @@ where
                             .into());
                         }
                     },
-                    _ => println!("{:?}", start),
+                    // _ => println!("{:?}", start),
+                    _ => (),
                 };
             }
 
@@ -363,7 +499,7 @@ where
             Event::Empty(ele) => match ele.local_name().into_inner() {
                 "position" => worker.position = Some(ele.into_owned()),
                 "range" => worker.range = Some(ele.into_owned()),
-                "spread" => worker.spread = Some(ele.into_owned()),
+                "spread" => worker.range = Some(ele.into_owned()),
                 "size" => worker.size = Some(ele.into_owned()),
                 _ => {
                     return Err(UnknownAttribute::new(
@@ -379,7 +515,6 @@ where
             _ => (), // _ => println!("{:#?}", event)
         }
     }
-    println!("{:#?}", worker);
     Ok(())
 }
 
