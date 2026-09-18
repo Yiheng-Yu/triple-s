@@ -1,6 +1,6 @@
 [package]
 name = "triple_s"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "Read classic Triple-S survey definition files."
 repository = "https://github.com/Yiheng-Yu/triple-s"
@@ -9,10 +9,16 @@ repository = "https://github.com/Yiheng-Yu/triple-s"
 name = "triple_s"
 crate-type = ["rlib"]
 
+[features]
+default = ["all"]
+xml = ["dep:quick-xml"]
+classic = []
+all = ["xml", "classic"]
+
 [dependencies]
 anyhow = { version = "1.0.104", features = ["backtrace"] }
 chrono = "0.4.45"
-quick-xml = { version = "0.42.0", features = ["encoding", "escape-html", "serialize"] }
+quick-xml = { version = "0.42.0", features = ["encoding", "serialize"], optional = true}
 rayon = "1.12.0"
 regex = "1.13.1"
 strum = { version = "0.28", features = ["derive"] }

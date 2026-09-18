@@ -98,12 +98,12 @@ impl fmt::Display for BadLine {
 
 #[derive(Debug)]
 pub struct UnexpectedLineKind {
-    kind: crate::classic::LineKind,
+    kind: crate::_classic::LineKind,
     line: String,
 }
 
 impl UnexpectedLineKind {
-    pub fn new(line_type: crate::classic::LineKind, value: impl Into<String>) -> Self {
+    pub fn new(line_type: crate::_classic::LineKind, value: impl Into<String>) -> Self {
         Self {
             kind: line_type,
             line: value.into(),

@@ -1,31 +1,49 @@
-mod classic;
 mod xml;
+mod classic;
+mod entities;
 
 pub mod error;
-mod survey;
+// mod survey;
 use std::{
     fs::File,
     io::{BufRead, BufReader},
 };
 
 use anyhow::{Context, Result};
+
+#[cfg(feature="classic")]
 pub use classic::read_sss_file_classic;
-pub use survey::{
-    Choice,
-    Format,
-    Language,
-    Location,
-    Meta,
-    Mode,
-    Question,
-    Record,
-    Response,
-    Spread,
-    Survey,
+
+pub use entities::{ 
+    Survey, 
     Text,
-    TextVariant,
     Version,
 };
+
+#[cfg(feature="xml")]
+pub use entities::{
+    Mode, 
+    Language, 
+    TextVariant,
+};
+
+
+// pub use survey::{
+//     Choice,
+//     Format,
+//     Language,
+//     Location,
+//     Meta,
+//     Mode,
+//     Question,
+//     Record,
+//     Response,
+//     Spread,
+//     Survey,
+//     Text,
+//     TextVariant,
+//     Version,
+// };
 pub use xml::read_sss_file_xml_file;
 
 #[derive(Debug, PartialEq)]
@@ -56,7 +74,17 @@ pub fn read_sss_file(sss_path: &str) -> Result<Survey> {
 
     let sss_version = FileType::parse(&first_line)?;
     match sss_version {
+        #[cfg(feature="classic")]
         FileType::Classic => read_sss_file_classic(lines),
-        FileType::Xml => read_sss_file_xml_file(sss_path),
+
+        #[cfg(not(feature="classic"))]
+        FileType::Classic => {
+            todo!()
+        }
+
+        FileType::Xml => {
+            todo!()
+            // read_sss_file_xml_file(sss_path)
+        },
     }
 }
