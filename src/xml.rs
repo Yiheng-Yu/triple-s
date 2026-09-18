@@ -72,6 +72,8 @@ where
                         let mut worker = QuestionWorker::init(ele.attributes().to_owned())?;
                         let end = ele.to_end();
                         consume_variable_data(&mut reader, &mut worker, end)?;
+                        
+                        // TODO: NOW SEND WORKER TO THE TASK SO CAN DO PAR_ITER()!!
                         todo!()
                     }
                     _ => (),
