@@ -3,7 +3,31 @@ use std::{collections::BTreeMap, fmt::Write};
 use rayon::prelude::*;
 use strum_macros::EnumString;
 
-use crate::error::{OperationError, UnsupportedFeature};
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, EnumString)]
+pub enum Version {
+    #[strum(serialize="1.0")]
+    V1_0,
+    #[strum(serialize="1.1")]
+    V1_1,
+    #[strum(serialize="1.2")]
+    V1_2,
+    #[strum(serialize="2.0")]
+    V2_0,
+    #[strum(serialize="3.0")]
+    V3_0,
+}
+
+impl Version {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::V1_0 => "1.0",
+            Self::V1_1 => "1.1",
+            Self::V1_2 => "1.2",
+            Self::V2_0 => "2.0",
+            Self::V3_0 => "3.0",
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Survey {
@@ -16,7 +40,7 @@ impl Survey {
     pub fn empty_classic() -> Self {
         Self {
             title: None,
-            meta: Meta::default_classic(),
+            meta: Meta::with_version(Version::V1_1),
             record: Record::default(),
         }
     }
@@ -24,7 +48,7 @@ impl Survey {
     pub fn empty_xml() -> Self {
         Self {
             title: None,
-            meta: Meta::default_xml(),
+            meta: Meta::with_version(Version::V2_0),
             record: Record::default(),
         }
     }
@@ -51,293 +75,52 @@ impl Survey {
     }
 }
 
-/// Major SSS file version
-/// The main difference between different xml generations are on survey meta setting,
-/// where <variable> tags aren't much different from one another.
-/// Ref: https://triple-s.org/documentation/manuals/
-/// Structured as Version::{Major Version}("version_text")
-#[derive(Debug, PartialEq, Clone)]
-pub enum Version {
-    /// sss classic
-    Classic(Option<String>),
-    /// sss xml 1.x
-    GenOne(Option<String>),
-    /// sss xml 2.x
-    GenTwo(Option<String>),
-    /// sss xml 3.x
-    GenThree(Option<String>),
-}
-
-impl Version {
-    pub fn get_version_name(&self) -> Option<&str> {
-        match &self {
-            Self::Classic(value) => value.as_ref().map(|s| s.as_str()),
-            Self::GenOne(value) => value.as_ref().map(|s| s.as_str()),
-            Self::GenTwo(value) => value.as_ref().map(|s| s.as_str()),
-            Self::GenThree(value) => value.as_ref().map(|s| s.as_str()),
-        }
-    }
-
-    pub fn set_version_name<S>(&mut self, new_value: Option<S>)
-    where
-        S: Into<String>,
-    {
-        let new_value = new_value.map(|s| s.into());
-        match self {
-            Self::Classic(value) => *value = new_value.clone(),
-            Self::GenOne(value) => *value = new_value.clone(),
-            Self::GenTwo(value) => *value = new_value.clone(),
-            Self::GenThree(value) => *value = new_value.clone(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Meta {
-    Classic(Box<Classic>),
-    Xml(Box<Xml>),
-}
-
-impl Meta {
-    pub fn default_classic() -> Self {
-        let meta = Classic::default();
-        Self::Classic(Box::new(meta))
-    }
-
-    pub fn default_xml() -> Self {
-        let meta = Xml::default();
-        Self::Xml(Box::new(meta))
-    }
-
-    pub fn to_sss_classic(&self) -> String {
-        match self {
-            Self::Classic(item) => item.to_sss_classic(),
-            Self::Xml(_item) =>{ todo!() },
-        }
-    }
-
-    pub fn version(&self) -> Result<Option<&str>, UnsupportedFeature> {
-        match &self {
-            Self::Classic(member) => Ok(member.version.get_version_name()),
-            Self::Xml(member) => Ok(member.version.get_version_name()),
-        }
-    }
-
-    pub fn set_version(
-        &mut self,
-        value: Option<impl Into<String>>,
-    ) -> Result<(), UnsupportedFeature> {
-        match self {
-            Self::Classic(member) => member.version.set_version_name(value),
-            Self::Xml(member) => member.version.set_version_name(value),
-        };
-
-        Ok(())
-    }
-
-    pub fn date(&self) -> Result<Option<&str>, UnsupportedFeature> {
-        match &self {
-            Self::Classic(member) => Ok(member.date.as_ref().map(|s| s.as_str())),
-            Self::Xml(member) => Ok(member.date.as_ref().map(|s| s.as_str())),
-        }
-    }
-
-    pub fn set_date(
-        &mut self,
-        value: Option<impl Into<String>>,
-    ) -> Result<(), UnsupportedFeature> {
-        match self {
-            Self::Classic(member) => member.date = value.map(|s| s.into()),
-            Self::Xml(member) => member.date = value.map(|s| s.into()),
-        }
-        Ok(())
-    }
-
-    pub fn time(&self) -> Result<Option<&str>, UnsupportedFeature> {
-        match &self {
-            Self::Classic(member) => Ok(member.time.as_ref().map(|s| s.as_str())),
-            Self::Xml(member) => Ok(member.time.as_ref().map(|s| s.as_str())),
-        }
-    }
-
-    pub fn set_time(
-        &mut self,
-        value: Option<impl Into<String>>,
-    ) -> Result<(), UnsupportedFeature> {
-        match self {
-            Self::Classic(member) => member.time = value.map(|s| s.into()),
-            Self::Xml(member) => member.time = value.map(|s| s.into()),
-        }
-        Ok(())
-    }
-
-    pub fn origin(&self) -> Result<Option<&str>, UnsupportedFeature> {
-        match &self {
-            Self::Classic(member) => Ok(member.origin.as_ref().map(|s| s.as_str())),
-            Self::Xml(member) => Ok(member.origin.as_ref().map(|s| s.as_str())),
-        }
-    }
-
-    pub fn set_origin(
-        &mut self,
-        value: Option<impl Into<String>>,
-    ) -> Result<(), UnsupportedFeature> {
-        match self {
-            Self::Classic(member) => member.origin = value.map(|s| s.into()),
-            Self::Xml(member) => member.origin = value.map(|s| s.into()),
-        }
-        Ok(())
-    }
-
-    pub fn user(&self) -> Result<Option<&str>, UnsupportedFeature> {
-        match &self {
-            Self::Classic(member) => Ok(member.user.as_ref().map(|s| s.as_str())),
-            Self::Xml(member) => Ok(member.user.as_ref().map(|s| s.as_str())),
-        }
-    }
-
-    pub fn set_user(
-        &mut self,
-        value: Option<impl Into<String>>,
-    ) -> Result<(), UnsupportedFeature> {
-        match self {
-            Self::Classic(member) => member.user = value.map(|s| s.into()),
-            Self::Xml(member) => member.user = value.map(|s| s.into()),
-        }
-        Ok(())
-    }
-
-    pub fn style(&self) -> Result<Option<&str>, UnsupportedFeature> {
-        match &self {
-            Self::Classic(member) => Ok(member.style.as_ref().map(|s| s.as_str())),
-            Self::Xml(member) => Ok(member.style.as_ref().map(|s| s.as_str())),
-        }
-    }
-
-    pub fn set_style(
-        &mut self,
-        value: Option<impl Into<String>>,
-    ) -> Result<(), UnsupportedFeature> {
-        match self {
-            Self::Classic(member) => member.style = value.map(|s| s.into()),
-            Self::Xml(member) => member.style = value.map(|s| s.into()),
-        }
-        Ok(())
-    }
-
-    pub fn standard(&self) -> Result<Option<&str>, UnsupportedFeature> {
-        match &self {
-            Self::Classic(member) => Ok(member.standard.as_ref().map(|s| s.as_str())),
-            Self::Xml(member) => Err(UnsupportedFeature {current_version: format!("{:?}", member.version), feature: "standard".into()} )
-        }
-    }
-
-    pub fn set_standard(
-        &mut self,
-        value: Option<impl Into<String>>,
-    ) -> Result<(), UnsupportedFeature> {
-        match self {
-            Self::Classic(member) => {
-                member.standard = value.map(|s| s.into());
-                Ok(())
-            }
-            Self::Xml(member) => Err(UnsupportedFeature {current_version: format!("{:?}", member.version), feature: "standard".into()} )
-        }
-    }
-
-    pub fn language_options(&self) -> Result<Vec<String>, UnsupportedFeature> {
-        match self {
-            Self::Classic(member) => {
-                Err(UnsupportedFeature {current_version: format!("{:?}", member.version), feature: "language_options".into()} )
-            }
-            Self::Xml(member) => Ok(member.language_options.clone())
-        }
-    } 
-
-    pub fn mode_options(&self) -> Result<Vec<Mode>, UnsupportedFeature> {
-        match self {
-            Self::Classic(member) => {
-                    Err(UnsupportedFeature {current_version: format!("{:?}", member.version), feature: "mode_options".into()} )
-                }
-                Self::Xml(member) => Ok(member.mode_options.clone())
-            }
-    }
-
-    pub fn set_mode_options(&mut self, mode_options: Vec<Mode>) -> Result<(), UnsupportedFeature> {
-        match self {
-            Self::Classic(member) => {
-                    Err(UnsupportedFeature {current_version: format!("{:?}", member.version), feature: "mode_options".into()} )
-                }
-                Self::Xml(member) => {
-                    member.mode_options = mode_options;
-                    Ok(())
-                }
-            }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Xml {
+pub struct Meta {
+    /// The version attribute is used to indicate the version of the Triple-S standard that applies to this specification. 
     pub version: Version,
+    pub name: Option<String>,
     pub date: Option<String>,
     pub time: Option<String>,
     pub origin: Option<String>,
     pub user: Option<String>,
     pub style: Option<String>,
-    // pub option: Option<String>,
 
+    /// ** Introduced since sss 1.2 **
     /// list of all available language options
     pub language_options: Vec<String>,
+
+    /// ** Introduced since sss 1.2 **
     /// list of all available `mod` options
     pub mode_options: Vec<Mode>,
+
+    /// ** Deprecated after sss version 1.2 **
+    /// (Optional) indicate that some aspect of the triple-s definition meets a
+    /// defined standard that may reduce the amount of checking required by an import program.
+    /// The only value that option_setting may have in version 1.2 is 'standardnames'. 
+    pub standard: Option<String>,
 }
 
-impl Default for Xml {
-    fn default() -> Self {
+impl Meta {
+    pub fn with_version(version: Version) -> Self {
         Self {
-            version: Version::GenOne(None),
+            version: version,
+            name: None,
             date: None,
             time: None,
             origin: None,
             user: None,
             style: None,
             language_options: Vec::new(),
-            mode_options: vec![Mode::None,]
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Classic {
-    pub version: Version,
-    pub date: Option<String>,
-    pub time: Option<String>,
-    pub origin: Option<String>,
-    pub user: Option<String>,
-    pub style: Option<String>,
-    pub standard: Option<String>,
-}
-
-impl Default for Classic {
-    fn default() -> Self {
-        Self {
-            version: Version::Classic(None),
-            date: None,
-            time: None,
-            origin: None,
-            user: None,
-            style: None,
+            mode_options: vec![Mode::None],
             standard: None,
         }
     }
-}
 
-impl Classic {
     pub fn to_sss_classic(&self) -> String {
         let mut output = String::new();
-        if let Some(value) = &self.version.get_version_name() {
-            append_line(&mut output, format!("VERSION {}", value));
-        }
+        append_line(&mut output, format!("VERSION {}", self.version.as_str()));
         for (name, value) in [
             ("DATE", &self.date),
             ("TIME", &self.time),
@@ -357,9 +140,25 @@ impl Classic {
     }
 }
 
+
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Record {
-    pub id: String,
+    /// Record id, any single character A to Z or a to z.
+    pub id: char,
+    pub format: Option<Format>,
+
+    /// (Optional) 'skip' attribute can be used to ignore one or more initial records
+    /// in the Data File. This will be most useful for csv Data Files where the first line
+    /// is often used as documentation (e.g. names for the columns/fields) for the
+    /// succeeding values. 
+    pub skip: Option<String>,
+
+    /// (Optional) Used to specify an explicit location for the Data
+    /// File that is described by this Triple-S XML specification. Note that using an
+    /// href attribute ties the specification to the Data File and may cause problems
+    /// if the Metadata File and Data File are moved. 
+    pub href: Option<String>,
+
     pub content: Vec<Question>,
 }
 
@@ -375,11 +174,28 @@ impl Record {
     }
 }
 
+/// (Optional) used to declare the format of the Data File that corresponds to this specification.
+/// Introduced after sss xml 1.1.
+#[derive(Debug, Clone, PartialEq, EnumString)]
+pub enum Format {
+    /// the data representation is fixed format fields. For data in
+    /// fixed format the position element refers to the character
+    /// number. 
+    #[strum(ascii_case_insensitive)]
+    Fixed,
+    /// the data representation is comma-separated values, using
+    /// one field for each variable, with data values similar to the
+    /// fixed format. Note that for data in csv format the
+    /// <position> element refers to the field number
+    #[strum(ascii_case_insensitive)]
+    Csv,
+}
+
+
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Question {
     pub index: u64,
     pub name: String,
-    /// text in a question
     pub text: Text,
     pub filter: Option<String>,
     pub location: Location,
@@ -591,7 +407,6 @@ impl Spread {
     }
 }
 
-/// TODO: sss xml 2.0: `mode` attribute
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Text {
     /// the default value
@@ -811,8 +626,8 @@ mod test {
         assert_eq!(instance.variant.len(), 3)
     }
 
-    #[test]
-    fn test_choice_variant() {
-        todo!("Set up unit tests for testing different text variants!!!")
-    }
+    // #[test]
+    // fn test_choice_variant() {
+    //     todo!("Set up unit tests for testing different text variants!!!")
+    // }
 }
