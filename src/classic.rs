@@ -1,13 +1,20 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, str::FromStr};
 
 use anyhow::{Context, Result};
 use regex::Regex;
 use strum_macros::EnumString;
 
 use crate::{
-    Choice, Location, Question, Response, Spread, Survey, Text, error::{self, BadLine, FileReadError, InternalError, OperationError},
+    Choice,
+    Location,
+    Question,
+    Response,
+    Spread,
+    Survey,
+    Text,
+    Version,
+    error::{self, BadLine, FileReadError, InternalError, OperationError},
 };
-
 
 #[derive(Debug)]
 pub enum LineKind {
@@ -29,7 +36,7 @@ pub enum SSSClassicLineType {
     Style,
     Label,
     #[strum(serialize = "SSS")]
-    BOF,
+    Bof,
     #[strum(serialize = "SURVEY")]
     SurveyStart,
     Title,
@@ -308,19 +315,32 @@ where
         match kind {
             SSSClassicLineType::Empty
             | SSSClassicLineType::SurveyStart
-            | SSSClassicLineType::BOF 
+            | SSSClassicLineType::Bof
             | SSSClassicLineType::Note => {}
 
-            SSSClassicLineType::Version => survey.meta.set_version(Some(value))?,
-            SSSClassicLineType::Date => survey.meta.set_date(Some(value))?,
-            SSSClassicLineType::Time => survey.meta.set_time(Some(value))?,
-            SSSClassicLineType::Origin => survey.meta.set_origin(Some(value))?,
-            SSSClassicLineType::User => survey.meta.set_user(Some(value))?,
-            SSSClassicLineType::Standard => survey.meta.set_standard(Some(value))?,
-            SSSClassicLineType::Style => survey.meta.set_style(Some(value))?,
+            SSSClassicLineType::Version => survey.meta.version = Version::from_str(&value)?,
+            SSSClassicLineType::Date => survey.meta.date = Some(value),
+            SSSClassicLineType::Time => survey.meta.time = Some(value),
+            SSSClassicLineType::Origin => survey.meta.origin = Some(value),
+            SSSClassicLineType::User => survey.meta.user = Some(value),
+            SSSClassicLineType::Standard => survey.meta.standard = Some(value),
+            SSSClassicLineType::Style => survey.meta.style = Some(value),
 
             SSSClassicLineType::Title => survey.title = Some(value),
-            SSSClassicLineType::RecordStart => survey.record.id = value,
+            SSSClassicLineType::RecordStart => {
+                if value.len() != 1 {
+                    return Err(
+                        BadLine::new(format!(
+                            "The 'id' attribute of 'RECORD' field should be one single character. Parsed: {}", 
+                            value
+                        )).into());
+                } else {
+                    survey.record.id = value
+                        .chars()
+                        .next()
+                        .ok_or(InternalError::new("This error should not happen"))?;
+                }
+            }
             SSSClassicLineType::QuestionStart => {
                 let question_index = value
                     .parse::<u64>()
@@ -383,8 +403,10 @@ where
             }
 
             SSSClassicLineType::Label => {
-                let question = get_question_mut(&mut survey, current, &line)
-                    .with_context(|| format!("When parsing line {}: '{}'", line_number, line))?;
+                let question =
+                    get_question_mut(&mut survey, current, &line).with_context(|| {
+                        format!("When parsing line {}: '{}'", line_number, line)
+                    })?;
                 question.text.default = value;
             }
 
@@ -424,19 +446,19 @@ where
                     get_question_mut(&mut survey, current, &line).with_context(|| {
                         format!("When parsing line {}: '{}'", line_number, line)
                     })?;
-                
+
                 let response = response_kind(&value).with_context(|| {
-                        format!("When parsing line {}: '{}'", line_number, line)
-                    })?;
-                
+                    format!("When parsing line {}: '{}'", line_number, line)
+                })?;
+
                 match &response {
                     &Response::Note(_) => {
-                        let error = OperationError::new(format!("Response type 'Note' doesn't exist in SSS classic!"));
+                        let error = OperationError::new("Response type 'Note' doesn't exist in SSS classic!".to_string());
                         return Err(error).with_context(|| {
                             format!("When parsing line {}: '{}'", line_number, line)
                         })?;
                     }
-                    _ => question.response = response
+                    _ => question.response = response,
                 }
             }
 
@@ -916,7 +938,7 @@ mod tests {
     #[test]
     fn test_parse_start_n_end() {
         let (parsed, text) = SSSClassicLineType::parse_line("SSS").unwrap();
-        assert_eq!(parsed, SSSClassicLineType::BOF);
+        assert_eq!(parsed, SSSClassicLineType::Bof);
         assert_eq!(text, "");
 
         let (parsed, text) = SSSClassicLineType::parse_line("SURVEY").unwrap();
@@ -1240,9 +1262,7 @@ mod tests {
                 "Error not raised when it should, instance parsed:\n{:#?}",
                 instance
             ),
-            Err(err) => {
-                println!("Error successfully raised: '{:?}'", err);
-            }
+            Err(_) => {}
         }
     }
 }

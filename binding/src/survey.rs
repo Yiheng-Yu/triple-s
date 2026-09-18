@@ -1,9 +1,9 @@
 extern crate triple_s as tri;
-use std::sync::Arc;
+use std::{sync::Arc, str::FromStr};
 
 use parking_lot::{MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock};
 use pyo3::{exceptions, prelude::*, types::PyDict};
-use tri::{Choice, Location, Response};
+use tri::{Choice, Location, Response, Version};
 
 #[pyfunction]
 pub fn read_sss_file(path: &str) -> PyResult<PySurvey> {
@@ -163,9 +163,8 @@ impl PySurvey {
         let py = inner.py();
         let title = instance.get_title().unwrap_or_default();
         let version = Self::get_meta(inner)?
-            .get_version(py)
-            .as_ref()
-            .map_or("".into(), |ver| ver.clone().unwrap_or_default());
+            .get_version(py)?
+            .to_string();
 
         Ok(format!(
             r#"Survey(title="{}", version={})"#,
@@ -250,12 +249,12 @@ impl PyRecord {
     /// generate a unique variable name on import.
     /// For example: RECORD A
     #[getter]
-    fn get_id(&self, py: Python<'_>) -> PyResult<String> {
+    fn get_id(&self, py: Python<'_>) -> PyResult<char> {
         self.with_record_read(py, |record| record.id.clone())
     }
 
     #[setter]
-    fn set_id(&mut self, py: Python<'_>, value: String) -> PyResult<()> {
+    fn set_id(&mut self, py: Python<'_>, value: char) -> PyResult<()> {
         self.with_record_write(py, |mut record| record.id = value)
     }
 
@@ -433,14 +432,18 @@ impl PyQuestion {
         self.with_question_write(py, |mut question| question.name = value.to_string())
     }
 
+    #[allow(unused_variables)]
     #[getter]
     fn get_label(&self, py: Python<'_>) -> PyResult<String> {
-        self.with_question_read(py, |question| question.text.clone())
+        todo!()
+        // self.with_question_read(py, |question| question.text.clone())
     }
 
+    #[allow(unused_variables)]
     #[setter]
     fn set_label(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-        self.with_question_write(py, |mut question| question.text = value.to_string())
+        todo!()
+        // self.with_question_write(py, |mut question| question.text = value.to_string())
     }
 
     #[getter]
@@ -776,17 +779,19 @@ impl PyChoice {
 
 #[pymethods]
 impl PyChoice {
+    #[allow(unused_variables)]
     #[new]
     #[pyo3(signature = (code, label, filter=None))]
     fn new(code: u64, label: String, filter: Option<String>) -> Self {
-        Self {
-            storage: Storage::Owned(Arc::new(RwLock::new(Choice {
-                code,
-                label,
-                filter,
-                is_special: false,
-            }))),
-        }
+        todo!()
+        // Self {
+        //     storage: Storage::Owned(Arc::new(RwLock::new(Choice {
+        //         code,
+        //         label,
+        //         filter,
+        //         is_special: false,
+        //     }))),
+        // }
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -800,14 +805,18 @@ impl PyChoice {
     }
 
     /// Text label of the current answer option
+    #[allow(unused_variables)]
     #[getter]
     fn label(&self, py: Python<'_>) -> PyResult<String> {
-        self.with_choice(py, |choice| choice.label.clone())
+        todo!()
+        // self.with_choice(py, |choice| choice.label.clone())
     }
 
+    #[allow(unused_variables)]
     #[setter]
     fn set_label(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-        self.with_choice_mut(py, |choice| choice.label = value.to_string())
+        todo!()
+        // self.with_choice_mut(py, |choice| choice.label = value.to_string())
     }
 
     /// Response filter of the current answer option.
@@ -912,9 +921,7 @@ impl PyMeta {
     fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
         let dict = PyDict::new(py);
 
-        if let Some(value) = self.get_version(py)? {
-            dict.set_item("version", value)?;
-        };
+        dict.set_item("version", self.get_version(py)?)?;
 
         if let Some(value) = self.get_date(py)? {
             dict.set_item("date", value)?;
@@ -941,36 +948,35 @@ impl PyMeta {
 
     /// SSS Version
     #[getter]
-    fn get_version(&self, py: Python<'_>) -> PyResult<Option<String>> {
-        self.inner
+    fn get_version(&self, py: Python<'_>) -> PyResult<&str> {
+        Ok(self.inner
             .bind(py)
             .borrow()
             .read_meta()
-            .version()
-            .map(|value| value.map(str::to_owned))
-            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
+            .version
+            .as_str())
     }
 
     #[setter]
-    fn set_version(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+    fn set_version(&self, py: Python<'_>, value: String) -> PyResult<()> {
+        let version = Version::from_str(&value)
+            .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))?;
         self.inner
             .bind(py)
             .borrow_mut()
             .write_meta()
-            .set_version(value)
-            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
+            .version = version;
+        Ok(())
     }
 
     /// (Optional) The date the file was created.
     #[getter]
     fn get_date(&self, py: Python<'_>) -> PyResult<Option<String>> {
-        self.inner
+        Ok(self.inner
             .bind(py)
             .borrow()
             .read_meta()
-            .date()
-            .map(|value| value.map(str::to_owned))
-            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
+            .date.clone())
     }
     #[setter]
     fn set_date(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
@@ -978,20 +984,20 @@ impl PyMeta {
             .bind(py)
             .borrow_mut()
             .write_meta()
-            .set_date(value)
-            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
+            .date = value;
+        Ok(())
+
     }
 
     /// (Optional) The time the file was created.
     #[getter]
     fn get_time(&self, py: Python<'_>) -> PyResult<Option<String>> {
-        self.inner
+        Ok(self.inner
             .bind(py)
             .borrow()
             .read_meta()
-            .time()
-            .map(|value| value.map(str::to_owned))
-            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
+            .time
+            .clone())
     }
 
     #[setter]
@@ -1000,20 +1006,18 @@ impl PyMeta {
             .bind(py)
             .borrow_mut()
             .write_meta()
-            .set_time(value)
-            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
+            .time = value;
+        Ok(())
     }
 
     /// (Optional) The originating system (program and operating system), i.e., `Windows 95`
     #[getter]
     fn get_origin(&self, py: Python<'_>) -> PyResult<Option<String>> {
-        self.inner
+        Ok(self.inner
             .bind(py)
             .borrow()
             .read_meta()
-            .origin()
-            .map(|value| value.map(str::to_owned))
-            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
+            .origin.clone())
     }
 
     #[setter]
@@ -1022,20 +1026,19 @@ impl PyMeta {
             .bind(py)
             .borrow_mut()
             .write_meta()
-            .set_origin(value)
-            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
+            .origin = value;
+        Ok(())
     }
 
     /// (Optional) Name of the user who created this file
     #[getter]
     fn get_user(&self, py: Python<'_>) -> PyResult<Option<String>> {
-        self.inner
+        Ok(self.inner
             .bind(py)
             .borrow()
             .read_meta()
-            .user()
-            .map(|value| value.map(str::to_owned))
-            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
+            .user
+            .clone())
     }
 
     #[setter]
@@ -1044,19 +1047,17 @@ impl PyMeta {
             .bind(py)
             .borrow_mut()
             .write_meta()
-            .set_user(value)
-            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
+            .user = value;
+        Ok(())
     }
 
     #[getter]
     fn get_style(&self, py: Python<'_>) -> PyResult<Option<String>> {
-        self.inner
+        Ok(self.inner
             .bind(py)
             .borrow()
             .read_meta()
-            .style()
-            .map(|value| value.map(str::to_owned))
-            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
+            .style.clone())
     }
 
     #[setter]
@@ -1065,8 +1066,8 @@ impl PyMeta {
             .bind(py)
             .borrow_mut()
             .write_meta()
-            .set_style(value)
-            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
+            .style = value;
+        Ok(())
     }
 
     /// This statement is used to indicate that some aspect of the SSS definition meets a defined standard
@@ -1082,13 +1083,11 @@ impl PyMeta {
     /// NAMES should appear between the VERSION and SURVEY statements.
     #[getter]
     fn get_standard(&self, py: Python<'_>) -> PyResult<Option<String>> {
-        self.inner
+        Ok(self.inner
             .bind(py)
             .borrow()
             .read_meta()
-            .standard()
-            .map(|value| value.map(str::to_owned))
-            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
+            .standard.clone())
     }
 
     #[setter]
@@ -1097,8 +1096,8 @@ impl PyMeta {
             .bind(py)
             .borrow_mut()
             .write_meta()
-            .set_standard(value)
-            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
+            .standard = value;
+        Ok(())
     }
 }
 
@@ -1136,7 +1135,7 @@ fn format_response_items(item: &std::collections::BTreeMap<u64, tri::Choice>) ->
 #[inline]
 fn format_choice(choice: &tri::Choice) -> String {
     let prefix = format!(
-        r#"Choice(code={}, label="{}""#,
+        r#"Choice(code={}, label="{:#?}""#,
         choice.code, choice.label
     );
     match choice.filter.as_ref() {
