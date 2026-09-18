@@ -3,34 +3,42 @@ use std::sync::{Arc, LazyLock};
 use anyhow::Result;
 use regex::{Regex, regex};
 
-use super::Node;
-use crate::entities::{Survey, Text};
+use super::{ Node, Tag};
 
 static RE_PREFIX: LazyLock<Regex> =
     LazyLock::new(|| regex!(r"^(?P<prefix>[A-Z]+)?[\s]?(?P<value>.*)$").to_owned());
 
-/// represents one single raw line in a .sss classic file
-struct Line<'a>(&'a str);
 
-impl<'a> From<&'a str> for Line<'a> {
-    fn from(value: &'a str) -> Self {
-        Self(value)
+impl TryFrom<String> for Node {
+    type Error = anyhow::Error;
+    fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
+        match RE_PREFIX.captures(&value) {
+            Some(captured) => todo!(),
+            None => todo!()
+        }
     }
 }
 
 
-pub fn read_sss_file_classic<I, E>(lines: I) -> Result<Survey>
+impl TryFrom<String> for Tag {
+    type Error = anyhow::Error;
+    fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
+        todo!()
+    }
+}
+
+pub fn read_sss_file_classic<I>(lines: I) -> Result<Node>
 where
-    I: IntoIterator<Item = Result<String, E>>,
-    E: std::error::Error,
+    I: IntoIterator<Item = Result<String, anyhow::Error>>,
 {
-    let mut survey = Survey::empty();
-    // let mut current = None;
+    let mut root = Node::new("sss".into());
+    
     for (line_number, raw_line) in lines.into_iter().enumerate() {
+        // let element: Node = raw_line?.into();
         todo!()
     }
 
-    Ok(survey)
+    Ok(root)
 }
 
 

@@ -1,4 +1,4 @@
-use triple_s::{Survey, error::BadLine, read_sss_file};
+use triple_s::{Survey, read_sss_file};
 
 const PATH_SSS_CLASSIC: &str = "tests/sss-examples/sss_classic.sss";
 
@@ -6,7 +6,7 @@ fn example_datamap_classic() -> Survey {
     read_sss_file(PATH_SSS_CLASSIC).unwrap()
 }
 
-fn put_into_record(content: &str) -> impl Iterator<Item = Result<String, BadLine>> {
+fn put_into_record(content: &str) -> impl Iterator<Item = Result<String, anyhow::Error>> {
     let content = format!(
         r#"
         SSS
@@ -24,8 +24,8 @@ fn put_into_record(content: &str) -> impl Iterator<Item = Result<String, BadLine
     );
     content
         .lines()
-        .map(|line| Ok::<String, BadLine>(line.to_string()))
-        .collect::<Vec<Result<String, BadLine>>>()
+        .map(|line| Ok::<String, anyhow::Error>(line.to_string()))
+        .collect::<Vec<Result<String, anyhow::Error>>>()
         .into_iter()
 }
 
