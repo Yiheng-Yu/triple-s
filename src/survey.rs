@@ -105,7 +105,7 @@ pub struct Meta {
 impl Meta {
     pub fn with_version(version: Version) -> Self {
         Self {
-            version: version,
+            version,
             name: None,
             date: None,
             time: None,
@@ -209,7 +209,7 @@ impl Question {
         append_line(&mut output, format!("NAME {}", quote(&self.name)));
         append_line(
             &mut output,
-            format!("LABEL {}", quote(&self.text.to_sss_classic())),
+            format!("LABEL {}", quote(self.text.to_sss_classic())),
         );
         append_line(&mut output, self.location.to_sss_classic());
         append_line(&mut output, format!("END VARIABLE {}", self.index));
@@ -346,7 +346,7 @@ impl Choice {
     }
 
     pub fn to_sss_classic(&self) -> String {
-        let base = format!("{} {}", self.code, quote(&self.label.to_sss_classic()));
+        let base = format!("{} {}", self.code, quote(self.label.to_sss_classic()));
         if self.is_special {
             format!("{} SPECIAL", base)
         } else {
@@ -473,7 +473,7 @@ impl TextVariant {
     {
         Self {
             value: value.into(),
-            mode: mode,
+            mode,
             language: Language::Named(language.into()),
         }
     }
@@ -507,18 +507,15 @@ impl TextVariant {
 
 /// text language
 #[derive(Debug, Clone, PartialEq)]
+#[derive(Default)]
 pub enum Language {
     /// undefined
+    #[default]
     None,
     /// Language as defined by W3C XML version 1.0 specification
     Named(String),
 }
 
-impl Default for Language {
-    fn default() -> Self {
-        Self::None
-    }
-}
 
 /// Introduced in SSS Xml 2.0.
 ///
@@ -539,7 +536,9 @@ impl Default for Language {
 /// - Interview: mode 'interview'
 #[derive(Debug, PartialEq, Clone, EnumString)]
 #[strum(ascii_case_insensitive)]
+#[derive(Default)]
 pub enum Mode {
+    #[default]
     None,
     #[strum(serialize = "analysis")]
     Analysis,
@@ -547,11 +546,6 @@ pub enum Mode {
     Interview,
 }
 
-impl Default for Mode {
-    fn default() -> Self {
-        Self::None
-    }
-}
 
 // Helper functions
 // ------------------------------------------------------------------------

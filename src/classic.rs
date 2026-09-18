@@ -36,7 +36,7 @@ pub enum SSSClassicLineType {
     Style,
     Label,
     #[strum(serialize = "SSS")]
-    BOF,
+    Bof,
     #[strum(serialize = "SURVEY")]
     SurveyStart,
     Title,
@@ -315,7 +315,7 @@ where
         match kind {
             SSSClassicLineType::Empty
             | SSSClassicLineType::SurveyStart
-            | SSSClassicLineType::BOF
+            | SSSClassicLineType::Bof
             | SSSClassicLineType::Note => {}
 
             SSSClassicLineType::Version => survey.meta.version = Version::from_str(&value)?,
@@ -453,9 +453,7 @@ where
 
                 match &response {
                     &Response::Note(_) => {
-                        let error = OperationError::new(format!(
-                            "Response type 'Note' doesn't exist in SSS classic!"
-                        ));
+                        let error = OperationError::new("Response type 'Note' doesn't exist in SSS classic!".to_string());
                         return Err(error).with_context(|| {
                             format!("When parsing line {}: '{}'", line_number, line)
                         })?;
@@ -940,7 +938,7 @@ mod tests {
     #[test]
     fn test_parse_start_n_end() {
         let (parsed, text) = SSSClassicLineType::parse_line("SSS").unwrap();
-        assert_eq!(parsed, SSSClassicLineType::BOF);
+        assert_eq!(parsed, SSSClassicLineType::Bof);
         assert_eq!(text, "");
 
         let (parsed, text) = SSSClassicLineType::parse_line("SURVEY").unwrap();

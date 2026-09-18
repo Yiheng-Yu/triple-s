@@ -8,7 +8,6 @@ use anyhow::{Context, Result};
 use quick_xml::{
     encoding::DecodingReader,
     events::{BytesEnd, BytesStart, Event, attributes::Attributes},
-    name::QName,
     reader::Reader,
 };
 
@@ -40,7 +39,6 @@ where
             Event::Start(ele) => {
                 let name = ele.name();
                 let tag = name.local_name().into_inner();
-                println!("{:?}", ele.attributes());
                 match tag {
                     "sss" => set_sss_attributes(&mut survey, ele.attributes())?,
                     // keep adding new cases to parse here
@@ -87,7 +85,6 @@ where
             Event::Text(ele) => {
                 // let text = ele.to_string();
                 // println!("text: {text}");
-                ()
             }
             // Event::CData(ele) => { todo!() }
             // Event::Comment(ele) => { todo!() }
@@ -97,7 +94,6 @@ where
             Event::Empty(ele) => {
                 // SPECIALLY IMPORTANT FOR PARSING HTML ESCAPES
                 // println!("{:?}", ele);
-                ()
             }
             Event::GeneralRef(ele) => {}
             Event::Eof => break,
@@ -136,7 +132,7 @@ fn set_sss_attributes(survey: &mut Survey, attributes: Attributes<'_>) -> Result
                 // deprecated after version 1.0
                 if survey.meta.version > Version::V1_2 {
                     return Err(UnsupportedFeature {
-                        current_version: format!("{:?}", &survey.meta.version),
+                        current_version: format!("{:?}", survey.meta.version),
                         feature: "<options>".into(),
                     }
                     .into());
@@ -150,7 +146,7 @@ fn set_sss_attributes(survey: &mut Survey, attributes: Attributes<'_>) -> Result
             }
             _ => {
                 return Err(UnknownAttribute::new(attr_name, attr.value))
-                    .with_context(|| format!("Failed to parse survey meta."));
+                    .with_context(|| "Failed to parse survey meta.".to_string());
             }
         }
     }
@@ -196,7 +192,10 @@ struct QuestionWorker {
     pub attributes: Vec<Attribute>,
     pub name: String,
     pub label: Element,
+    pub filter: Option<String>,
+    pub spread: Option<BytesStart<'static>>,
     pub position: Option<BytesStart<'static>>,
+    pub size: Option<BytesStart<'static>>,  // for 'character' type of quesiton only
     pub range: Option<BytesStart<'static>>,
     pub values: Vec<Element>,
 }
@@ -207,6 +206,9 @@ impl QuestionWorker {
             attributes: owned_attributes(attributes)?,
             label: Element::new("label"),
             name: String::new(),
+            filter: None,
+            spread: None,
+            size: None,
             position: None,
             range: None,
             values: Vec::new(),
@@ -236,7 +238,7 @@ enum Section {
     LabelVariant,
     CodeDefault,
     CodeVariant,
-    End,
+    Filter,
 }
 
 fn consume_variable_data<R>(
@@ -272,6 +274,9 @@ where
                         let element = Element::with_attribute("value", attributes);
                         worker.values.push(element);
                     }
+                    "filter" => {
+                        current_position = Section::Filter;
+                    }
                     "text" => match current_position {
                         Section::LabelDefault | Section::LabelVariant => {
                             current_position = Section::LabelVariant;
@@ -298,29 +303,66 @@ where
                     },
                     _ => println!("{:?}", start),
                 };
-
-                // println!("Start: {}", tag);
             }
-            Event::Text(ele) => {
-                match current_position {
-                    Section::LabelDefault => {
-                        worker.label.text = Some(ele.to_string());
-                    }
-                    Section::CodeDefault => {
-                        let text = ele.into_inner().to_string();
-                        worker.values.last_mut().map(|val| val.text = Some(text) )
-                            .ok_or(InternalError::new(format!("Parent note for <text> seems to be missing?? Current: {:#?}", worker)))?;
-                    }
-                    Section::LabelVariant => if worker.label.children.len() == 0 {
 
-                    },
-                    _ => todo!(),
+            Event::Text(ele) => match current_position {
+                Section::Filter => {
+                    worker.filter = Some(ele.to_string());
                 }
-            }
+
+                Section::LabelDefault => {
+                    worker.label.text = Some(ele.to_string());
+                }
+
+                Section::CodeDefault => {
+                    let text = ele.into_inner().to_string();
+                    worker
+                        .values
+                        .last_mut()
+                        .map(|val| val.text = Some(text))
+                        .ok_or(InternalError::new(format!(
+                            "Parent note for <text> seems to be missing?? Current: {:#?}",
+                            worker
+                        )))?;
+                }
+
+                Section::LabelVariant => {
+                    let text = ele.into_inner().to_string();
+                    worker
+                        .label
+                        .children
+                        .last_mut()
+                        .map(|val| val.text = Some(text))
+                        .ok_or(InternalError::new(format!(
+                            "Parent note for <text> seems to be missing?? Current: {:#?}",
+                            worker
+                        )))?;
+                }
+                Section::CodeVariant => {
+                    let text = ele.into_inner().to_string();
+                    worker
+                        .values
+                        .last_mut()
+                        .ok_or(InternalError::new(format!(
+                            "No <value> was added but trying to amend text {:?}",
+                            text
+                        )))?
+                        .children
+                        .last_mut()
+                        .map(|child| child.text = Some(text))
+                        .ok_or(InternalError::new(format!(
+                            "Parent note for <text> seems to be missing?? Current: {:#?}",
+                            worker
+                        )))?;
+                }
+                _ => (),
+            },
             // self-closing elements
             Event::Empty(ele) => match ele.local_name().into_inner() {
                 "position" => worker.position = Some(ele.into_owned()),
                 "range" => worker.range = Some(ele.into_owned()),
+                "spread" => worker.spread = Some(ele.into_owned()),
+                "size" => worker.size = Some(ele.into_owned()),
                 _ => {
                     return Err(UnknownAttribute::new(
                         ele.local_name().into_inner(),
@@ -329,17 +371,13 @@ where
                     .into());
                 }
             },
-            Event::End(close_tag) => {
-                if close_tag == end {
-                    break;
-                } else {
-                    println!("{:?}", close_tag)
-                }
+            Event::End(close_tag) if close_tag == end => {
+                break;
             }
             _ => (), // _ => println!("{:#?}", event)
         }
     }
-    // println!("{:#?}", &worker);
+    println!("{:#?}", worker);
     Ok(())
 }
 
@@ -376,7 +414,7 @@ fn set_record_attributes(survey: &mut Survey, attributes: Attributes<'_>) -> Res
             }
             _ => {
                 return Err(UnknownAttribute::new(attr_name, attr.value))
-                    .with_context(|| format!("Failed to parse <record>."));
+                    .with_context(|| "Failed to parse <record>.".to_string());
             }
         }
     }
