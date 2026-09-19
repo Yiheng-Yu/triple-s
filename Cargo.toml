@@ -9,16 +9,11 @@ repository = "https://github.com/Yiheng-Yu/triple-s"
 name = "triple_s"
 crate-type = ["rlib"]
 
-[features]
-default = ["all"]
-xml = ["dep:quick-xml"]
-classic = []
-all = ["xml", "classic"]
-
 [dependencies]
 anyhow = { version = "1.0.104", features = ["backtrace"] }
 chrono = "0.4.45"
-quick-xml = { version = "0.42.0", features = ["encoding", "serialize"], optional = true}
+parking_lot = "0.12.5"
+quick-xml = { version = "0.42.0", features = ["encoding", "serialize"] }
 rayon = "1.12.0"
 regex = "1.13.1"
 strum = { version = "0.28", features = ["derive"] }

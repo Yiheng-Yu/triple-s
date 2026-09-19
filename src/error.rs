@@ -1,27 +1,6 @@
 use std::{error::Error, fmt};
 
 #[derive(Debug)]
-pub struct OperationError {
-    message: String,
-}
-
-impl OperationError {
-    pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
-    }
-}
-
-impl Error for OperationError {}
-
-impl fmt::Display for OperationError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "OperationError: {}", self.message)
-    }
-}
-
-#[derive(Debug)]
 pub struct InternalError {
     message: String,
 }
@@ -96,33 +75,6 @@ impl fmt::Display for BadLine {
     }
 }
 
-// #[derive(Debug)]
-// pub struct UnexpectedLineKind {
-//     kind: crate::_classic::LineKind,
-//     line: String,
-// }
-
-// impl UnexpectedLineKind {
-//     pub fn new(line_type: crate::_classic::LineKind, value: impl Into<String>) -> Self {
-//         Self {
-//             kind: line_type,
-//             line: value.into(),
-//         }
-//     }
-// }
-
-// impl Error for UnexpectedLineKind {}
-
-// impl fmt::Display for UnexpectedLineKind {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         write!(
-//             f,
-//             "Unexpected line kind. Line: '{}', kind: {:?}",
-//             self.line, self.kind
-//         )
-//     }
-// }
-
 #[derive(Debug)]
 pub struct UnsupportedFeature {
     pub current_version: String,
@@ -173,11 +125,13 @@ impl fmt::Display for UnknownAttribute {
                 r#"Unexpected XML attribute!: name: "{}", value: "{}", parent: "{}"."#,
                 self.name, self.value, parent
             ),
-            None => write!(
-                f,
-                r#"Unexpected XML attribute!: name: "{}", value: "{}"."#,
-                self.name, self.value
-            ),
+            None => {
+                write!(
+                    f,
+                    r#"Unexpected XML attribute!: name: "{}", value: "{}"."#,
+                    self.name, self.value
+                )
+            }
         }
     }
 }
@@ -205,6 +159,60 @@ impl fmt::Display for MissingAttributeError {
             f,
             "Element '{}' is missing a required attribute: {}",
             self.tag, self.missing
+        )
+    }
+}
+
+#[derive(Debug)]
+pub struct MissingValueError {
+    instance: String,
+    field: String,
+}
+
+impl Error for MissingValueError {}
+
+impl MissingValueError {
+    pub fn new(instance: impl Into<String>, field: impl Into<String>) -> Self {
+        Self {
+            instance: instance.into(),
+            field: field.into(),
+        }
+    }
+}
+
+impl fmt::Display for MissingValueError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Field '{}' of instance '{}' is empty",
+            self.field, self.instance
+        )
+    }
+}
+
+#[derive(Debug)]
+pub struct DuplicatedKey {
+    key: String,
+    prev_value: String,
+}
+
+impl Error for DuplicatedKey {}
+
+impl DuplicatedKey {
+    pub fn new(key: impl std::fmt::Debug, prev_value: impl std::fmt::Debug) -> Self {
+        Self {
+            key: format!("{:?}", key),
+            prev_value: format!("{:?}", prev_value),
+        }
+    }
+}
+
+impl fmt::Display for DuplicatedKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Duplicated key: {{key: '{}', value: '{}'}}",
+            self.key, self.prev_value
         )
     }
 }
