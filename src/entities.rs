@@ -236,10 +236,22 @@ pub struct ViewResponse {
 }
 
 impl ViewResponse {
-    fn new() -> Self {
+    fn cnovert(&mut self, new_type: ResponseType) -> Self {
         todo!()
     }
 }
+
+
+pub enum ResponseType {
+    Single,
+    Multiple,
+    SingleLiteral,
+    Quantity,
+    Note,
+    Date,
+    Time
+}
+
 
 #[derive(Debug, Clone, EnumString, Default, PartialEq)]
 pub enum Format {
