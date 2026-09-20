@@ -16,10 +16,6 @@ fn test_read_classic_tmp() {
         survey.title.as_ref().unwrap(),
         "Customer Experience Survey - HTML Test"
     );
-
-    for question in survey.record.content.iter() {
-        println!("name: {} | index: {}", question.name, question.index);
-    }
 }
 
 fn put_into_record(content: &str) -> String {
@@ -49,8 +45,6 @@ fn test_classic_read_n_write() {
         let sss_string = question.to_sss_classic().unwrap();
         let sss_lines = put_into_record(&sss_string);
         let read = triple_s::read_from_string(sss_lines.clone()).unwrap();
-        println!("{}", &sss_lines);
-        println!("{:?}", &read.record.content);
 
         let question_read = read.get_question(&correct_name).unwrap();
         assert_eq!(question_read.name, correct_name);

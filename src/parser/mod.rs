@@ -8,7 +8,7 @@ use std::{
     io::{BufRead, BufReader, Cursor},
     range::Range,
     str::FromStr,
-    sync::{Arc, LazyLock},
+    sync::Arc,
 };
 
 use anyhow::{Context, Result};
@@ -42,13 +42,6 @@ use crate::{
     },
 };
 
-/// tag names
-const RANGE: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("range"));
-const FLAG: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("flag"));
-
-/// attribute names
-const FROM: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("from"));
-const TO: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("to"));
 
 #[derive(Debug, PartialEq)]
 pub enum FileType {
@@ -410,14 +403,14 @@ impl QuestionBuilder {
                 if let Some(node) = data.into_iter().next() {
                     let start = node
                         .attributes
-                        .get(FROM.as_ref())
+                        .get("from")
                         .map(|val| NaiveDate::parse_from_str(val.as_ref(), "%Y%m%d"))
                         .transpose()?;
 
                     if let Some(start) = start {
                         let end = node
                             .attributes
-                            .get(TO.as_ref())
+                            .get("to")
                             .map(|val| NaiveDate::parse_from_str(val.as_ref(), "%Y%m%d"))
                             .transpose()?
                             .unwrap_or(NaiveDate::MAX);
@@ -431,14 +424,14 @@ impl QuestionBuilder {
                 if let Some(node) = data.into_iter().next() {
                     let start = node
                         .attributes
-                        .get(FROM.as_ref())
+                        .get("from")
                         .map(|val| NaiveTime::parse_from_str(val.as_ref(), "%H%M%S"))
                         .transpose()?;
 
                     if let Some(start) = start {
                         let end = node
                             .attributes
-                            .get(TO.as_ref())
+                            .get("to")
                             .map(|val| NaiveTime::parse_from_str(val.as_ref(), "%H%M%S"))
                             .transpose()?
                             .unwrap_or(
@@ -654,8 +647,8 @@ fn parse_text(mut node: Node, is_classic: bool) -> Result<Text> {
             .attributes
             .get("xml:lang")
             .or_else(|| variant.attributes.get("lang"))
-            .map(|language| Language::from_string(language))
-            .transpose()?;
+            .map(|language| Language::new(language.to_string()));
+
         let mode = variant
             .attributes
             .get("mode")
@@ -691,7 +684,7 @@ where
         .ok_or(MissingAttributeError::new(node.tag.as_ref(), "code"))?
         .parse::<T>()?;
 
-    let is_special = node.attributes.contains_key(FLAG.as_ref());
+    let is_special = node.attributes.contains_key("flag");
     let text = parse_text(*node, is_classic)?;
     let choice = Code {
         code,

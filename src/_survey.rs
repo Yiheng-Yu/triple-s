@@ -725,9 +725,4 @@ mod test {
         instance.set_variant(v4);
         assert_eq!(instance.variant.len(), 3)
     }
-
-    // #[test]
-    // fn test_choice_variant() {
-    //     todo!("Set up unit tests for testing different text variants!!!")
-    // }
 }

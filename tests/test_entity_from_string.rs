@@ -2,8 +2,6 @@ use triple_s::{
     Character,
     Code,
     Format,
-    Language,
-    Mode,
     Multiple,
     Position,
     Quantity,
@@ -14,8 +12,6 @@ use triple_s::{
     Single,
     Spread,
     Survey,
-    Text,
-    TextVariant,
     Version,
 };
 
@@ -51,8 +47,6 @@ fn classic_fragments_use_the_existing_parser() {
             .id,
         'A'
     );
-    assert_eq!(Text::from_string(CLASSIC_SINGLE).unwrap().value, "Age");
-    assert_eq!(Text::from_string(r#"LABEL "Age""#).unwrap().value, "Age");
     assert_eq!(Position::from_string(CLASSIC_SINGLE).unwrap().from, 1);
     assert!(matches!(
         Response::from_string(CLASSIC_SINGLE).unwrap(),
@@ -90,23 +84,6 @@ fn xml_fragments_preserve_nested_entities() {
         Code::<u64>::from_string(XML_MULTIPLE).unwrap().label.value,
         "Online ordering"
     );
-
-    let text = Text::from_string(XML_MULTIPLE).unwrap();
-    assert_eq!(text.variant.len(), 1);
-    assert_eq!(
-        TextVariant::from_string(XML_MULTIPLE).unwrap().value,
-        "Which features?"
-    );
-    assert_eq!(
-        TextVariant::from_string(
-            r#"<text xml:lang="en-GB" mode="interview">Which features?</text>"#
-        )
-        .unwrap()
-        .mode,
-        Mode::Interview
-    );
-    assert_eq!(Language::from_string("en-GB").unwrap().to_string(), "en-GB");
-    assert_eq!(Mode::from_string("interview").unwrap(), Mode::Interview);
 }
 
 #[test]

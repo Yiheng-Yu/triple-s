@@ -8,7 +8,7 @@ pub const WITH: &str = "WITH";
 
 use crate::{
     error::{BadLine, InternalError},
-    parser::{FLAG, Node, QuestionBuilder, SurveyBuilder},
+    parser::{Node, QuestionBuilder, SurveyBuilder},
 };
 
 static PATTERN: LazyLock<Regex> = LazyLock::new(|| {
@@ -47,7 +47,7 @@ impl TryFrom<&str> for Node {
         let tag: Arc<str> = capture
             .name("text")
             .map(|s| s.as_str().to_ascii_lowercase())
-            .map_or(super::RANGE.clone(), Arc::from);
+            .map_or("range".into(), Arc::from);
 
         let mut node = Node::new(tag);
 
@@ -66,20 +66,20 @@ impl TryFrom<&str> for Node {
             }
 
             if let Some(flag) = flag {
-                node.attributes.insert(FLAG.clone(), flag.into());
+                node.attributes.insert("flag".into(), flag.into());
             }
         }
 
         if let Some(value) = capture.name("flag") {
-            node.attributes.insert(FLAG.clone(), value.as_str().into());
+            node.attributes.insert("flag".into(), value.as_str().into());
         }
 
         if let Some(value) = capture.name("range_start") {
-            node.attributes.insert(super::FROM.clone(), value.as_str().into());
+            node.attributes.insert("from".into(), value.as_str().into());
         }
 
         if let Some(value) = capture.name("range_end") {
-            node.attributes.insert(super::TO.clone(), value.as_str().into());
+            node.attributes.insert("to".into(), value.as_str().into());
         }
 
         Ok(node)

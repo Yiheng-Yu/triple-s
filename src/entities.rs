@@ -707,11 +707,6 @@ impl std::fmt::Display for Text {
 }
 
 impl Text {
-    /// Parses the label text from one variable fragment.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        Ok(parse_one_question(&survey_template(input.as_ref()))?.label)
-    }
-
     pub fn new(content: impl Into<String>) -> Self {
         Self {
             value: content.into(),
@@ -774,19 +769,6 @@ impl std::fmt::Display for TextVariant {
 }
 
 impl TextVariant {
-    /// Parses the sole specialised label text from one XML variable fragment.
-    ///
-    /// Classic SSS has no representation for specialised text variants.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        let variants = Text::from_string(input)?.variant;
-        ensure!(
-            variants.len() == 1,
-            "expected exactly one text variant, found {}",
-            variants.len()
-        );
-        Ok(variants.into_iter().next().expect("length checked"))
-    }
-
     pub fn new<S>(value: S, mode: Mode, language: S) -> Self
     where S: Into<String> {
         Self {
@@ -827,16 +809,8 @@ impl TextVariant {
 pub struct Language(String);
 
 impl Language {
-    /// Parses a language identifier, such as `en-GB`.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        let value = input.as_ref().trim();
-        if value.starts_with("<text") {
-            return TextVariant::from_string(value)?
-                .language
-                .ok_or_else(|| anyhow::anyhow!("text variant has no language"));
-        }
-        ensure!(!value.is_empty(), "language identifier cannot be empty");
-        Ok(Self(value.to_owned()))
+    pub fn new(language: impl Into<String>) -> Self {
+        Self(language.into())
     }
 
     pub fn some(self) -> Option<Self> {
@@ -880,34 +854,6 @@ pub enum Mode {
     #[strum(serialize = "interview")]
     Interview,
 }
-
-impl Mode {
-    /// Parses a mode identifier (`analysis` or `interview`). An empty value is
-    /// `None`.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        let value = input.as_ref().trim();
-        if value.starts_with("<text") {
-            return Ok(TextVariant::from_string(value)?.mode);
-        }
-        if value.is_empty() {
-            return Ok(Self::None);
-        }
-        Ok(Self::from_str(value)?)
-    }
-}
-
-// #[derive(Debug, Clone, PartialEq)]
-// pub struct Value {
-//     pub code: u64,
-//     /// text label
-//     pub label: Text,
-//     /// Response filter.
-//     pub filter: Option<String>,
-//     pub score: Option<f64>,
-//     /// (Optional) indicator for special values (e.g. mannotationissing data
-// codes).     /// Removed from SSS 1.2 onwards.
-//     pub is_special: bool,
-// }
 
 // Helper functions
 // ------------------------------------------------------------------------
@@ -1006,26 +952,58 @@ fn response_template(input: &str, xml_type: &str) -> Result<Response> {
     response_from_fragment(&document)
 }
 
-#[inline]
-fn survey_template(input: &str) -> String {
-    if is_sss_classic(input)
-        || input.trim_start().starts_with("<variable")
-        || input.trim_start().starts_with("VARIABLE")
-    {
-        return wrap_question_fragment(input);
-    }
-    if is_xml_fragment(input) {
-        let label = if input.trim_start().starts_with("<label") {
-            input.to_owned()
-        } else {
-            format!("<label>Value{input}</label>")
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_write_spread_with_width() {
+        let instance = Spread {
+            subfield: 5,
+            width: Some(10),
         };
-        format!(
-            r#"<sss version="1.2"><survey><record ident="A"><variable ident="1" type="logical"><name>VALUE</name>{label}<position start="1"/></variable></record></survey></sss>"#
-        )
-    } else {
-        format!(
-            "SSS\nVERSION 1.1\nSURVEY\nRECORD A\nVARIABLE 1\nNAME \"VALUE\"\n{input}\nPOSITION 1\nTYPE LOGICAL\nEND VARIABLE\nEND RECORD\nEND SURVEY\nEND SSS"
-        )
+        assert_eq!(
+            instance.to_sss_classic(),
+            format!("SPREAD {} OF {}", 5, 10)
+        );
+    }
+
+    #[test]
+    fn test_write_spread_without_width() {
+        let instance = Spread {
+            subfield: 5,
+            width: None,
+        };
+        assert_eq!(instance.to_sss_classic(), format!("SPREAD {}", 5));
+    }
+
+    #[test]
+    fn test_write_location() {
+        let instance = Position {
+            from: 0,
+            to: 100,
+        };
+        assert_eq!(instance.to_sss_classic(), "POSITION 0 TO 100");
+    }
+
+    #[test]
+    fn test_text_variant_overwrite() {
+        let mut instance = Text::new("base text");
+        let v1 = TextVariant::new("variant 1", Mode::None, "GB");
+        let v2 = TextVariant::new("variant 2", Mode::None, "GB");
+
+        instance.set_variant(v1);
+        assert_eq!(instance.variant.len(), 1);
+        instance.set_variant(v2);
+        assert_eq!(instance.variant.len(), 1);
+        assert_eq!(&instance.variant[0].value, "variant 2");
+
+        let v3 = TextVariant::new("variant", Mode::None, "GBR");
+        instance.set_variant(v3);
+        assert_eq!(instance.variant.len(), 2);
+
+        let v4 = TextVariant::new("variant", Mode::Analysis, "GBR");
+        instance.set_variant(v4);
+        assert_eq!(instance.variant.len(), 3)
     }
 }
