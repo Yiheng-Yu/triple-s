@@ -5,7 +5,7 @@ use std::{
     collections::HashMap,
     fs::File,
     hash::Hash,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Cursor},
     range::Range,
     str::FromStr,
     sync::{Arc, LazyLock},
@@ -18,7 +18,20 @@ use quick_xml::{encoding::DecodingReader, reader::Reader as XmlReader};
 use rayon::prelude::*;
 
 use crate::{
-    entities::{Code, Format, Position, Question, Response, Spread, Survey, Text, Version},
+    entities::{
+        Code,
+        Format,
+        Language,
+        Mode,
+        Position,
+        Question,
+        Response,
+        Spread,
+        Survey,
+        Text,
+        TextVariant,
+        Version,
+    },
     error::{
         self,
         BadLine,
@@ -32,7 +45,6 @@ use crate::{
 /// tag names
 const RANGE: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("range"));
 const FLAG: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("flag"));
-const META: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("meta"));
 
 /// attribute names
 const FROM: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("from"));
@@ -54,6 +66,30 @@ impl FileType {
             ))),
         }
     }
+}
+
+pub fn read_from_string(data: String) -> Result<Survey> {
+    let data = data.trim().to_string();
+    let first_line =
+        data.lines().next().ok_or(error::FileReadError::new("file seems to be empty"))?;
+
+    let sss_version = FileType::parse(first_line)?;
+    let builder = match sss_version {
+        FileType::Classic => {
+            let lines = BufReader::new(Cursor::new(data.into_bytes())).lines();
+            classic::create_survey_builder(lines)?
+        }
+
+        FileType::Xml => {
+            let file = BufReader::new(Cursor::new(data.into_bytes()));
+            let decoder = DecodingReader::new(file);
+            let mut reader = XmlReader::from_reader(decoder);
+            reader.config_mut().trim_text(true);
+            xml::create_survey_builder(reader)?
+        }
+    };
+
+    builder.build()
 }
 
 pub fn read_sss_file(sss_path: &str) -> Result<Survey> {
@@ -201,11 +237,29 @@ impl SurveyBuilder {
             .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
             .transpose()?;
 
-        output.title = self
+        output.name = self
             .attributes
             .remove("name")
             .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
-            .transpose()?;
+            .transpose()?
+            .unwrap_or_default();
+
+        if let Some(record) = self.attributes.remove("record") {
+            if self.is_classic {
+                output.record.id = record
+                    .value
+                    .and_then(|value| value.chars().next())
+                    .ok_or(MissingValueError::new("survey", "record"))?;
+            } else {
+                output.record.id = record
+                    .attributes
+                    .get("ident")
+                    .and_then(|value| value.chars().next())
+                    .ok_or(MissingAttributeError::new("record", "ident"))?;
+                output.record.skip = record.attributes.get("skip").map(ToString::to_string);
+                output.record.href = record.attributes.get("href").map(ToString::to_string);
+            }
+        }
 
         output.meta.origin = self
             .attributes
@@ -279,7 +333,7 @@ impl QuestionBuilder {
     pub fn build_response(
         mut response: Response,
         mut data: Vec<Box<Node>>,
-        _is_classic: bool,
+        is_classic: bool,
     ) -> Result<Response> {
         match &mut response {
             Response::Logical => (),
@@ -310,7 +364,7 @@ impl QuestionBuilder {
 
                 // then add special values for the rest
                 item.values = iterator
-                    .map(parse_into_choice::<f64>)
+                    .map(|node| parse_into_choice::<f64>(node, is_classic))
                     .collect::<Result<Vec<Code<f64>>>>()?;
             }
             Response::Multiple(item) => {
@@ -327,7 +381,7 @@ impl QuestionBuilder {
                 item.values = data
                     .par_drain(..)
                     .filter(|val| val.tag.as_ref() != "range")
-                    .map(parse_into_choice::<u64>)
+                    .map(|node| parse_into_choice::<u64>(node, is_classic))
                     .collect::<Result<Vec<Code<u64>>>>()?;
             }
 
@@ -345,7 +399,7 @@ impl QuestionBuilder {
                 item.values = data
                     .par_drain(..)
                     .filter(|val| val.tag.as_ref() != "range")
-                    .map(parse_into_choice::<u64>)
+                    .map(|node| parse_into_choice::<u64>(node, is_classic))
                     .collect::<Result<Vec<Code<u64>>>>()?;
             }
 
@@ -353,7 +407,7 @@ impl QuestionBuilder {
                 let mut item = RwLockWriteGuard::map(item.write(), |resp| resp);
                 item.values = data
                     .par_drain(..)
-                    .map(parse_into_choice::<String>)
+                    .map(|node| parse_into_choice::<String>(node, is_classic))
                     .collect::<Result<Vec<Code<String>>>>()?;
             }
 
@@ -458,20 +512,20 @@ impl QuestionBuilder {
         output.name = self
             .attributes
             .remove("name")
-            .and_then(|val| val.value.map(|name| name.to_string()))
+            .and_then(|val| val.value.map(|name| unquote(name, is_classic)))
+            .transpose()?
             .ok_or(error::MissingAttributeError::new("variable", "name"))?;
 
         let question_name = output.name.to_string();
 
         // sss classic does not have text variant
-        let label_text = self
+        let label = self
             .attributes
             .remove("label")
-            .and_then(|val| val.value.map(|v| unquote(v, is_classic)))
-            .transpose()?
             .ok_or(error::MissingAttributeError::new("variable", "label"))
             .with_context(|| format!("When parsing question {}", question_name))?;
-        output.label = Text::from(label_text);
+        output.label = parse_text(label, is_classic)
+            .with_context(|| format!("When parsing question {}", question_name))?;
 
         let position = self
             .attributes
@@ -516,55 +570,55 @@ impl QuestionBuilder {
         let response = Self::build_response(response, self.responses.children, is_classic)
             .with_context(|| format!("When parsing question {}", question_name))?;
 
-        if let Some(mut node) = self.attributes.remove("spread") {
-            if let Response::Multiple(item) = &response {
-                let spread = if is_classic {
-                    let text = node
-                        .value
-                        .ok_or(MissingValueError::new("variable", "spread"))
-                        .with_context(|| format!("When parsing question {}", question_name))?
-                        .to_uppercase();
+        if let Some(mut node) = self.attributes.remove("spread")
+            && let Response::Multiple(item) = &response
+        {
+            let spread = if is_classic {
+                let text = node
+                    .value
+                    .ok_or(MissingValueError::new("variable", "spread"))
+                    .with_context(|| format!("When parsing question {}", question_name))?
+                    .to_uppercase();
 
-                    let text = text.splitn(2, "OF")
-                        .map(|s| s.trim())
-                        .filter(|s| !s.is_empty())
-                        .collect::<Vec<&str>>();
+                let text = text
+                    .splitn(2, "OF")
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<&str>>();
 
-                    let subfield = text
-                        .get(0)
-                        .ok_or(MissingValueError::new("variable", "spread"))
-                        .with_context(|| format!("When parsing question {}", question_name))?
-                        .trim()
-                        .parse::<u64>()
-                        .with_context(|| format!("When parsing question {}", question_name))?;
+                let subfield = text
+                    .first()
+                    .ok_or(MissingValueError::new("variable", "spread"))
+                    .with_context(|| format!("When parsing question {}", question_name))?
+                    .trim()
+                    .parse::<u64>()
+                    .with_context(|| format!("When parsing question {}", question_name))?;
 
-                    let width = text.get(1)
-                        .map(|s| s.parse::<u64>()).transpose()?;
+                let width = text.get(1).map(|s| s.parse::<u64>()).transpose()?;
 
-                    Spread { subfield, width }
-                } else {
-                    let subfield = node
-                        .attributes
-                        .remove("subfields")
-                        .ok_or(error::MissingAttributeError::new("variable", "subfields"))
-                        .with_context(|| format!("When parsing question {}", question_name))?
-                        .as_ref()
-                        .parse::<u64>()
-                        .with_context(|| format!("When parsing question {}", question_name))?;
+                Spread { subfield, width }
+            } else {
+                let subfield = node
+                    .attributes
+                    .remove("subfields")
+                    .ok_or(error::MissingAttributeError::new("variable", "subfields"))
+                    .with_context(|| format!("When parsing question {}", question_name))?
+                    .as_ref()
+                    .parse::<u64>()
+                    .with_context(|| format!("When parsing question {}", question_name))?;
 
-                    let width = node
-                        .attributes
-                        .remove("width")
-                        .map(|s| s.as_ref().trim().parse::<u64>())
-                        .transpose()
-                        .with_context(|| format!("When parsing question {}", question_name))?;
+                let width = node
+                    .attributes
+                    .remove("width")
+                    .map(|s| s.as_ref().trim().parse::<u64>())
+                    .transpose()
+                    .with_context(|| format!("When parsing question {}", question_name))?;
 
-                    Spread { subfield, width }
-                };
-
-                let mut guard = item.write();
-                guard.spread = Some(spread);
+                Spread { subfield, width }
             };
+
+            let mut guard = item.write();
+            guard.spread = Some(spread);
         };
 
         output.response = response;
@@ -586,10 +640,46 @@ fn unquote(text: Arc<str>, raise_error: bool) -> Result<String> {
     }
 }
 
+fn parse_text(mut node: Node, is_classic: bool) -> Result<Text> {
+    let value = node
+        .value
+        .take()
+        .map(|value| unquote(value, is_classic))
+        .transpose()?
+        .unwrap_or_default();
+    let mut text = Text::from(value);
+
+    for variant in node.children {
+        let value = variant
+            .value
+            .as_ref()
+            .ok_or(MissingValueError::new("text", "value"))?
+            .to_string();
+        let language = variant
+            .attributes
+            .get("xml:lang")
+            .or_else(|| variant.attributes.get("lang"))
+            .map(|language| Language::from_string(language))
+            .transpose()?;
+        let mode = variant
+            .attributes
+            .get("mode")
+            .map(|mode| Mode::from_str(mode))
+            .transpose()?
+            .unwrap_or_default();
+        text.set_variant(TextVariant {
+            value,
+            language,
+            mode,
+        });
+    }
+    Ok(text)
+}
+
 #[inline]
-fn parse_into_choice<T>(mut node: Box<Node>) -> Result<Code<T>>
+fn parse_into_choice<T>(node: Box<Node>, is_classic: bool) -> Result<Code<T>>
 where
-    T: Clone + FromStr,
+    T: Clone + FromStr + std::fmt::Display,
     T::Err: std::error::Error + Send + Sync + 'static,
 {
     if node.tag.as_ref() != "value" {
@@ -606,8 +696,8 @@ where
         .ok_or(MissingAttributeError::new(node.tag.as_ref(), "code"))?
         .parse::<T>()?;
 
-    let text = node.value.take().map_or_default(Text::from);
     let is_special = node.attributes.contains_key(FLAG.as_ref());
+    let text = parse_text(*node, is_classic)?;
     let choice = Code {
         code,
         label: text,

@@ -6,34 +6,23 @@ mod parser;
 pub use entities::{
     Character,
     Code,
+    Format,
     Language,
+    Meta,
     Mode,
     Multiple,
+    Position,
+    Quantity,
+    Question,
     RangeDate,
     RangeTime,
+    Record,
     Response,
     Single,
+    Spread,
     Survey,
     Text,
     TextVariant,
     Version,
 };
-pub use parser::read_sss_file;
-
-// pub use survey::{
-//     Value,
-//     Format,
-//     Language,
-//     Location,
-//     Meta,
-//     Mode,
-//     Question,
-//     Record,
-//     Response,
-//     Spread,
-//     Survey,
-//     Text,
-//     TextVariant,
-//     Version,
-// };
-// pub use xml::read_sss_file_xml_file;
+pub use parser::{read_from_string, read_sss_file};

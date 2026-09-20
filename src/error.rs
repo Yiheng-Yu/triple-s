@@ -81,6 +81,15 @@ pub struct UnsupportedFeature {
     pub feature: String,
 }
 
+impl UnsupportedFeature {
+    pub fn new(current_version: impl Into<String>, feature: impl Into<String>) -> Self {
+        Self {
+            current_version: current_version.into(),
+            feature: feature.into(),
+        }
+    }
+}
+
 impl Error for UnsupportedFeature {}
 
 impl fmt::Display for UnsupportedFeature {

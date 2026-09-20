@@ -151,7 +151,11 @@ where
                 match node.tag.as_ref() {
                     "end" => {
                         if let Some(tag_ended) = node.value {
-                            if tag_ended.as_ref() == "VARIABLE" {
+                            if tag_ended
+                                .split_whitespace()
+                                .next()
+                                .is_some_and(|tag| tag == "VARIABLE")
+                            {
                                 // create a new question builder
                                 let question_builder = QuestionBuilder::empty();
                                 survey_builder.questions.push(question_builder);
@@ -180,7 +184,7 @@ where
                         // and everything else should be tagged as <value>
                         let is_empty = builder.responses.children.is_empty();
                         if is_empty {
-                            if node.attributes.get("to").is_none() {
+                            if !node.attributes.contains_key("to") {
                                 node.tag = "value".into();
                                 if let Some(from) = node.attributes.remove("from") {
                                     node.attributes.insert("code".into(), from);

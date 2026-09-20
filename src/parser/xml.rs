@@ -100,7 +100,7 @@ enum Section {
     LabelVariant,
     CodeDefault,
     CodeVariant,
-    Filter,
+    // Filter,
 }
 
 fn consume_variable_data<R>(
@@ -115,7 +115,7 @@ where
     let mut current_position = Section::Start;
 
     // bunch of question attributes to be pushed later,,
-    let mut filter = Node::new("filter");
+    // let mut filter = Node::new("filter");
     let mut label = Node::new("label");
     let mut name = Node::new("name");
     let mut responses = Vec::new();
@@ -180,10 +180,10 @@ where
                 }
             }
             Event::Text(ele) => match current_position {
-                Section::Filter => {
-                    let value = ele.to_string();
-                    filter.value = Some(Arc::from(value));
-                }
+                // Section::Filter => {
+                //     let value = ele.to_string();
+                //     filter.value = Some(Arc::from(value));
+                // }
                 Section::LabelDefault => {
                     let value = ele.to_string();
                     label.value = Some(Arc::from(value));
@@ -261,7 +261,7 @@ where
     }
 
     // and finally put things into the question builder
-    builder.attributes.insert("filter".into(), filter);
+    // builder.attributes.insert("filter".into(), filter);
     builder.attributes.insert("label".into(), label);
     builder.attributes.insert("name".into(), name);
     builder.responses.children = responses.into_iter().map(Box::new).collect();

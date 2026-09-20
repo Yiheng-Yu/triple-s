@@ -3,7 +3,7 @@ use std::{sync::Arc, str::FromStr};
 
 use parking_lot::{MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock};
 use pyo3::{exceptions, prelude::*, types::PyDict};
-use tri::{Choice, Location, Response, Version};
+use tri::{Code, Response, Version};
 
 #[pyfunction]
 pub fn read_sss_file(path: &str) -> PyResult<PySurvey> {
