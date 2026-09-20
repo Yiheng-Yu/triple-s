@@ -62,8 +62,8 @@ def test_meta_to_sss_classic(sss):
 
 
 def test_get_set_record_id(sss):
-    sss.record.id = "hii"
-    assert sss.record.id == "hii"
+    sss.record.id = "i"
+    assert sss.record.id == "i"
 
     with pytest.raises(TypeError):
         sss.record.id = None

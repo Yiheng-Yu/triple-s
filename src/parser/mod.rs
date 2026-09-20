@@ -307,11 +307,6 @@ impl SurveyBuilder {
             .map(|item| item.build(is_classic))
             .collect::<Result<Vec<Question>>>()?;
 
-        // for (k, v) in &self.attributes {
-        //     if let Some(val) = v.value.as_ref() {
-        //         println!("Key: '{}', value: {}", k.as_ref(), val.as_ref())
-        //     }
-        // }
         Ok(output)
     }
 }

@@ -1,9 +1,9 @@
 extern crate triple_s as tri;
-use std::{sync::Arc, str::FromStr};
+use std::{str::FromStr, sync::Arc};
 
 use parking_lot::{MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock};
 use pyo3::{exceptions, prelude::*, types::PyDict};
-use tri::{Code, Response, Version};
+use tri::{Code, Position, Response, Text, Version};
 
 #[pyfunction]
 pub fn read_sss_file(path: &str) -> PyResult<PySurvey> {
@@ -108,9 +108,20 @@ impl PySurvey {
 
 #[pymethods]
 impl PySurvey {
+    #[new]
+    #[pyo3(signature = (title=None))]
+    fn new(title: Option<String>) -> Self {
+        let mut survey = tri::Survey::empty();
+        survey.title = title;
+        Self::from(survey)
+    }
+
     /// Export content back to sss classic
-    fn to_sss_classic(&self) -> String {
-        self.inner.read().to_sss_classic()
+    fn to_sss_classic(&self) -> PyResult<String> {
+        self.inner
+            .read()
+            .to_sss_classic()
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 
     #[getter]
@@ -237,9 +248,21 @@ impl PyRecord {
 
 #[pymethods]
 impl PyRecord {
+    #[new]
+    #[pyo3(signature = (id='A'))]
+    fn new(id: char) -> Self {
+        Self {
+            inner: Storage::from_owned(tri::Record {
+                id,
+                ..Default::default()
+            }),
+        }
+    }
+
     /// Export content back to sss classic
     fn to_sss_classic(&self, py: Python<'_>) -> PyResult<String> {
-        self.with_record_read(py, |record| record.to_sss_classic())
+        self.with_record_read(py, |record| record.to_sss_classic())?
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 
     /// One RECORD keyword appears after SURVEY (or after TITLE if present).
@@ -383,7 +406,7 @@ impl PyQuestion {
     pub(crate) fn with_location_read<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&tri::Location) -> R,
+        f: impl FnOnce(&tri::Position) -> R,
     ) -> PyResult<R> {
         self.with_question_read(py, |question| f(&question.location))
     }
@@ -391,7 +414,7 @@ impl PyQuestion {
     pub(crate) fn with_location_write<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&mut tri::Location) -> R,
+        f: impl FnOnce(&mut tri::Position) -> R,
     ) -> PyResult<R> {
         self.with_question_write(py, |mut question| f(&mut question.location))
     }
@@ -399,10 +422,22 @@ impl PyQuestion {
 
 #[pymethods]
 impl PyQuestion {
-    // TODO: Create new question
+    #[new]
+    #[pyo3(signature = (name="", label="", index=0))]
+    fn new(name: &str, label: &str, index: u64) -> Self {
+        Self {
+            inner: Storage::from_owned(tri::Question {
+                index,
+                name: name.to_string(),
+                label: Text::new(label),
+                ..Default::default()
+            }),
+        }
+    }
 
     fn to_sss_classic(&self, py: Python<'_>) -> PyResult<String> {
-        self.with_question_read(py, |question| question.to_sss_classic())
+        self.with_question_read(py, |question| question.to_sss_classic())?
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -432,18 +467,14 @@ impl PyQuestion {
         self.with_question_write(py, |mut question| question.name = value.to_string())
     }
 
-    #[allow(unused_variables)]
     #[getter]
     fn get_label(&self, py: Python<'_>) -> PyResult<String> {
-        todo!()
-        // self.with_question_read(py, |question| question.text.clone())
+        self.with_question_read(py, |question| question.label.value.clone())
     }
 
-    #[allow(unused_variables)]
     #[setter]
     fn set_label(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-        todo!()
-        // self.with_question_write(py, |mut question| question.text = value.to_string())
+        self.with_question_write(py, |mut question| question.label = Text::new(value))
     }
 
     #[getter]
@@ -463,8 +494,32 @@ impl PyQuestion {
     }
 
     #[getter]
-    fn get_response(question: &Bound<'_, Self>) -> PyResult<PyResponse> {
-        Ok(PyResponse::from_inner(question))
+    fn get_response(question: &Bound<'_, Self>) -> PyResult<Py<PyAny>> {
+        let py = question.py();
+        let response = PyResponse::from_inner(question);
+        let kind = question
+            .borrow()
+            .with_question_read(py, |question| match &question.response {
+                Response::Single(_) | Response::Multiple(_) => ResponseAlias::Categorical,
+                Response::Quantity(_) => ResponseAlias::Quantity,
+                Response::Character(_) => ResponseAlias::Character,
+                Response::Logical => ResponseAlias::Logical,
+                Response::SingleLiteral(_) => ResponseAlias::SingleLiteral,
+                Response::Date(_) => ResponseAlias::Date,
+                Response::Time(_) => ResponseAlias::Time,
+                Response::Note => ResponseAlias::Note,
+            })?;
+
+        match kind {
+            ResponseAlias::Categorical => Py::new(py, (PyCategorical, response)).map(Py::into_any),
+            ResponseAlias::Quantity => Py::new(py, (PyQuantity, response)).map(Py::into_any),
+            ResponseAlias::Character => Py::new(py, (PyCharacter, response)).map(Py::into_any),
+            ResponseAlias::Logical => Py::new(py, (PyLogical, response)).map(Py::into_any),
+            ResponseAlias::SingleLiteral => Py::new(py, (PySingleLiteral, response)).map(Py::into_any),
+            ResponseAlias::Date => Py::new(py, (PyDate, response)).map(Py::into_any),
+            ResponseAlias::Time => Py::new(py, (PyTime, response)).map(Py::into_any),
+            ResponseAlias::Note => Py::new(py, (PyNote, response)).map(Py::into_any),
+        }
     }
 
     #[getter]
@@ -478,7 +533,7 @@ impl PyQuestion {
         let from = loc.get_from(py)?;
         let to = loc.get_to(py)?;
 
-        let location = Location { from, to };
+        let location = Position { from, to };
         self.with_question_write(py, |mut question| {
             question.location = location;
         })
@@ -487,7 +542,7 @@ impl PyQuestion {
 
 #[pyclass(module = "triple_s", name = "Location")]
 pub struct PyLocation {
-    inner: Storage<PyQuestion, Location>,
+    inner: Storage<PyQuestion, Position>,
 }
 
 impl PyLocation {
@@ -503,7 +558,7 @@ impl PyLocation {
     fn with_location_read<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&tri::Location) -> R,
+        f: impl FnOnce(&tri::Position) -> R,
     ) -> PyResult<R> {
         match &self.inner {
             Storage::Owned(location) => {
@@ -520,7 +575,7 @@ impl PyLocation {
     fn with_location_write<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&mut tri::Location) -> R,
+        f: impl FnOnce(&mut tri::Position) -> R,
     ) -> PyResult<R> {
         match &self.inner {
             Storage::Owned(location) => {
@@ -541,7 +596,7 @@ impl PyLocation {
     #[pyo3(signature = (from, to))]
     fn new(from: u64, to: u64) -> Self {
         Self {
-            inner: Storage::Owned(Arc::new(RwLock::new(Location { from, to }))),
+            inner: Storage::Owned(Arc::new(RwLock::new(Position { from, to }))),
         }
     }
 
@@ -572,10 +627,45 @@ impl PyLocation {
     }
 }
 
-#[pyclass(module = "triple_s", name = "Response")]
+#[pyclass(module = "triple_s", name = "Response", subclass)]
 pub struct PyResponse {
     inner: Py<PyQuestion>,
 }
+
+enum ResponseAlias {
+    Categorical,
+    Quantity,
+    Character,
+    Logical,
+    SingleLiteral,
+    Date,
+    Time,
+    Note,
+}
+
+#[pyclass(extends=PyResponse, module = "triple_s", name = "Categorical")]
+pub struct PyCategorical;
+
+#[pyclass(extends=PyResponse, module = "triple_s", name = "Quantity")]
+pub struct PyQuantity;
+
+#[pyclass(extends=PyResponse, module = "triple_s", name = "Character")]
+pub struct PyCharacter;
+
+#[pyclass(extends=PyResponse, module = "triple_s", name = "Logical")]
+pub struct PyLogical;
+
+#[pyclass(extends=PyResponse, module = "triple_s", name = "SingleLiteral")]
+pub struct PySingleLiteral;
+
+#[pyclass(extends=PyResponse, module = "triple_s", name = "Date")]
+pub struct PyDate;
+
+#[pyclass(extends=PyResponse, module = "triple_s", name = "Time")]
+pub struct PyTime;
+
+#[pyclass(extends=PyResponse, module = "triple_s", name = "Note")]
+pub struct PyNote;
 
 impl PyResponse {
     pub fn from_inner(question: &Bound<'_, PyQuestion>) -> Self {
@@ -607,19 +697,51 @@ impl PyResponse {
 
 #[pymethods]
 impl PyResponse {
+    #[new]
+    #[pyo3(signature = (kind=None))]
+    fn new(py: Python<'_>, kind: Option<&str>) -> PyResult<Self> {
+        let response = match kind.unwrap_or("note").to_ascii_lowercase().as_str() {
+            "single" => Response::new_single(),
+            "multiple" => Response::new_multiple(),
+            "quantity" => Response::new_quantity(),
+            "character" => Response::new_character(),
+            "note" => Response::Note,
+            kind => {
+                return Err(exceptions::PyValueError::new_err(format!(
+                    "unsupported response kind: {kind}"
+                )));
+            }
+        };
+        let question = PyQuestion {
+            inner: Storage::from_owned(tri::Question {
+                response,
+                ..Default::default()
+            }),
+        };
+        Ok(Self {
+            inner: Py::new(py, question)?,
+        })
+    }
+
     fn __getitem__(bind: &Bound<'_, Self>, index: isize) -> PyResult<PyChoice> {
         let instance = bind.borrow();
         let py = bind.py();
 
         instance.with_response(py, |response| match &response {
-            tri::Response::Single { item } | tri::Response::Multiple { item, .. } => {
-                let keyname = index as u64;
-                if item.contains_key(&keyname) {
-                    Ok(PyChoice::from_inner(bind, keyname))
-                } else {
-                    Err(exceptions::PyIndexError::new_err("index out of range"))
-                }
-            }
+            tri::Response::Single(item) => item
+                .read()
+                .values
+                .iter()
+                .any(|choice| choice.code == index as u64)
+                .then(|| PyChoice::from_inner(bind, index as u64))
+                .ok_or_else(|| exceptions::PyIndexError::new_err("index out of range")),
+            tri::Response::Multiple(item) => item
+                .read()
+                .values
+                .iter()
+                .any(|choice| choice.code == index as u64)
+                .then(|| PyChoice::from_inner(bind, index as u64))
+                .ok_or_else(|| exceptions::PyIndexError::new_err("index out of range")),
             _ => {
                 let error_message =
                     "Only available for `Single` and `Multiple` type of questions."
@@ -633,35 +755,25 @@ impl PyResponse {
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         self.with_response(py, |response| {
             let value = match &response {
-                Response::Character(size) => format!("Character({})", size),
-                Response::Note(_) => "Note".to_string(),
-                Response::Quantity {
-                    min,
-                    max,
-                    na_value,
-                    na_label,
-                } => match na_value.as_ref() {
-                    Some(value) => {
-                        format!(
-                            r#"Quantity(min={}, max={}, na_value={}, na_label="{}")"#,
-                            min,
-                            max,
-                            value,
-                            na_label.as_ref().map(|s| s.clone()).unwrap_or_default()
-                        )
-                    }
-                    None => format!("Quantity(min={}, max={})", min, max),
-                },
-                Response::Single { item } => {
-                    format!("Single(item={})", format_response_items(item))
+                Response::Character(item) => format!("Character({})", item.read().size),
+                Response::Quantity(item) => {
+                    let item = item.read();
+                    format!("Quantity(min={}, max={})", item.range.start, item.range.end)
                 }
-                Response::Multiple { item, spread } => {
+                Response::Single(item) => format!("Single(item={})", format_response_items(&item.read().values)),
+                Response::Multiple(item) => {
+                    let item = item.read();
                     format!(
                         "Multiple(item={}, spread={:?})",
-                        format_response_items(item),
-                        spread
+                        format_response_items(&item.values),
+                        item.spread
                     )
                 }
+                Response::SingleLiteral(_) => "SingleLiteral".to_string(),
+                Response::Logical => "Logical".to_string(),
+                Response::Date(_) => "Date".to_string(),
+                Response::Time(_) => "Time".to_string(),
+                Response::Note => "Note".to_string(),
             };
             format!("Response.{}", value)
         })
@@ -676,11 +788,23 @@ impl PyResponse {
             .clone()
             .borrow()
             .with_response(py, |resp| match resp {
-                Response::Single { item } | Response::Multiple { item, .. } => {
+                Response::Single(item) => {
                     let choices = item
-                        .keys()
-                        .map(|idx| (*idx, PyChoice::from_inner(response, *idx)));
-                    Ok(std::collections::BTreeMap::from_iter(choices))
+                        .read()
+                        .values
+                        .iter()
+                        .map(|choice| (choice.code, PyChoice::from_inner(response, choice.code)))
+                        .collect();
+                    Ok(choices)
+                }
+                Response::Multiple(item) => {
+                    let choices = item
+                        .read()
+                        .values
+                        .iter()
+                        .map(|choice| (choice.code, PyChoice::from_inner(response, choice.code)))
+                        .collect();
+                    Ok(choices)
                 }
                 _ => {
                     let error_message =
@@ -697,7 +821,7 @@ impl PyResponse {
         self.with_response(py, |response| {
             matches!(
                 response,
-                tri::Response::Single { .. } | tri::Response::Multiple { .. }
+                tri::Response::Single(_) | tri::Response::Multiple(_)
             )
         })
     }
@@ -706,7 +830,7 @@ impl PyResponse {
 /// A possible answer that a respondent can choose in a single-/ multi- response question
 #[pyclass(module = "triple_s", name = "Choice")]
 pub struct PyChoice {
-    storage: Storage<PyResponse, Choice>,
+    storage: Storage<PyResponse, Code<u64>>,
 }
 
 impl PyChoice {
@@ -722,7 +846,7 @@ impl PyChoice {
     fn with_choice<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&tri::Choice) -> R,
+        f: impl FnOnce(&Code<u64>) -> R,
     ) -> PyResult<R> {
         match &self.storage {
             Storage::Owned(choice) => {
@@ -735,8 +859,18 @@ impl PyChoice {
                     .bind(py)
                     .borrow()
                     .with_response(py, |response| match response {
-                        Response::Single { item } | Response::Multiple { item, .. } => item
-                            .get(index)
+                        Response::Single(item) => item
+                            .read()
+                            .values
+                            .iter()
+                            .find(|choice| choice.code == *index)
+                            .ok_or_else(|| exceptions::PyKeyError::new_err(*index))
+                            .map(f),
+                        Response::Multiple(item) => item
+                            .read()
+                            .values
+                            .iter()
+                            .find(|choice| choice.code == *index)
                             .ok_or_else(|| exceptions::PyKeyError::new_err(*index))
                             .map(f),
 
@@ -751,7 +885,7 @@ impl PyChoice {
     fn with_choice_mut<R>(
         &self,
         py: Python<'_>,
-        f: impl FnOnce(&mut tri::Choice) -> R,
+        f: impl FnOnce(&mut Code<u64>) -> R,
     ) -> PyResult<R> {
         match &self.storage {
             Storage::Owned(choice) => {
@@ -764,8 +898,18 @@ impl PyChoice {
                     .bind(py)
                     .borrow()
                     .with_response_mut(py, |response| match response {
-                        Response::Single { item } | Response::Multiple { item, .. } => item
-                            .get_mut(&index)
+                        Response::Single(item) => item
+                            .write()
+                            .values
+                            .iter_mut()
+                            .find(|choice| choice.code == *index)
+                            .ok_or_else(|| exceptions::PyKeyError::new_err(*index))
+                            .map(f),
+                        Response::Multiple(item) => item
+                            .write()
+                            .values
+                            .iter_mut()
+                            .find(|choice| choice.code == *index)
                             .ok_or_else(|| exceptions::PyKeyError::new_err(index.clone()))
                             .map(f),
                         _ => Err(exceptions::PyTypeError::new_err(
@@ -779,19 +923,18 @@ impl PyChoice {
 
 #[pymethods]
 impl PyChoice {
-    #[allow(unused_variables)]
     #[new]
     #[pyo3(signature = (code, label, filter=None))]
     fn new(code: u64, label: String, filter: Option<String>) -> Self {
-        todo!()
-        // Self {
-        //     storage: Storage::Owned(Arc::new(RwLock::new(Choice {
-        //         code,
-        //         label,
-        //         filter,
-        //         is_special: false,
-        //     }))),
-        // }
+        Self {
+            storage: Storage::from_owned(Code {
+                code,
+                label: Text::new(label),
+                filter,
+                score: None,
+                is_special: false,
+            }),
+        }
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -805,18 +948,14 @@ impl PyChoice {
     }
 
     /// Text label of the current answer option
-    #[allow(unused_variables)]
     #[getter]
     fn label(&self, py: Python<'_>) -> PyResult<String> {
-        todo!()
-        // self.with_choice(py, |choice| choice.label.clone())
+        self.with_choice(py, |choice| choice.label.value.clone())
     }
 
-    #[allow(unused_variables)]
     #[setter]
     fn set_label(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-        todo!()
-        // self.with_choice_mut(py, |choice| choice.label = value.to_string())
+        self.with_choice_mut(py, |choice| choice.label = Text::new(value))
     }
 
     /// Response filter of the current answer option.
@@ -846,7 +985,7 @@ impl PyChoice {
     /// Removed from SSS 1.2 onwards.
     #[getter]
     fn is_special(&self, py: Python<'_>) -> PyResult<bool> {
-        self.with_choice(py, |choice| choice.is_special.clone())
+        self.with_choice(py, |choice| choice.is_special)
     }
 
     #[setter]
@@ -869,11 +1008,11 @@ pub enum Kind {
 impl Kind {
     pub fn from_response(response: &tri::Response) -> Self {
         match response {
-            tri::Response::Single { .. } => Kind::Single,
-            tri::Response::Multiple { .. } => Kind::Multiple,
-            tri::Response::Quantity { .. } => Kind::Quantity,
-            tri::Response::Character(..) => Kind::Character,
-            tri::Response::Note(..) => Kind::Note,
+            tri::Response::Single(_) | tri::Response::SingleLiteral(_) => Kind::Single,
+            tri::Response::Multiple(_) => Kind::Multiple,
+            tri::Response::Quantity(_) => Kind::Quantity,
+            tri::Response::Character(_) => Kind::Character,
+            tri::Response::Logical | tri::Response::Date(_) | tri::Response::Time(_) | tri::Response::Note => Kind::Note,
         }
     }
 }
@@ -913,6 +1052,33 @@ impl Clone for PyMeta {
 
 #[pymethods]
 impl PyMeta {
+    #[new]
+    #[pyo3(signature = (survey=None, version=None))]
+    fn new(
+        py: Python<'_>,
+        survey: Option<&Bound<'_, PySurvey>>,
+        version: Option<String>,
+    ) -> PyResult<Self> {
+        let version = version
+            .as_deref()
+            .map(Version::from_str)
+            .transpose()
+            .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))?;
+
+        if let Some(survey) = survey {
+            if let Some(version) = version {
+                survey.borrow_mut().write_meta().version = version;
+            }
+            return Ok(Self::from_rust(survey));
+        }
+
+        let mut survey = tri::Survey::empty();
+        survey.meta = tri::Meta::with_version(version.unwrap_or(Version::V1_1));
+        Ok(Self {
+            inner: Py::new(py, PySurvey::from(survey))?,
+        })
+    }
+
     /// Export meta back to sss classic
     fn to_sss_classic(&self, py: Python<'_>) -> String {
         self.inner.bind(py).borrow().read_meta().to_sss_classic()
@@ -1120,9 +1286,9 @@ fn normalize_index(index: isize, total: usize) -> PyResult<usize> {
     Ok(index as usize)
 }
 
-fn format_response_items(item: &std::collections::BTreeMap<u64, tri::Choice>) -> String {
+fn format_response_items(item: &[Code<u64>]) -> String {
     let content = item
-        .values()
+        .iter()
         .map(|choice| {
             let formatted_string = format_choice(choice);
             format!("{}: {}", choice.code, formatted_string)
@@ -1133,7 +1299,7 @@ fn format_response_items(item: &std::collections::BTreeMap<u64, tri::Choice>) ->
 }
 
 #[inline]
-fn format_choice(choice: &tri::Choice) -> String {
+fn format_choice(choice: &Code<u64>) -> String {
     let prefix = format!(
         r#"Choice(code={}, label="{:#?}""#,
         choice.code, choice.label
