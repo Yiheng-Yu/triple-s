@@ -285,11 +285,11 @@ pub struct Position {
     pub to: u64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Spread {
     /// The number of subfields within the overall field that is defined by the
     /// <position> element.
-    pub num_subfields: u64,
+    pub subfield: u64,
     /// Denotes the width of each subfield.
     pub width: Option<u64>,
 }

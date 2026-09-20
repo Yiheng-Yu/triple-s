@@ -24,9 +24,7 @@ where R: BufRead {
             Event::DocType(_) => (),
             Event::Comment(_) => (),
             Event::End(_) => (),
-            Event::Text(_ele) => {
-                // println!("{:?}", ele);
-            }
+            Event::Text(_ele) => (),
             Event::Eof => should_stop = true,
 
             Event::Start(ele) => {

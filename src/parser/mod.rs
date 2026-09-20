@@ -18,7 +18,7 @@ use quick_xml::{encoding::DecodingReader, reader::Reader as XmlReader};
 use rayon::prelude::*;
 
 use crate::{
-    entities::{Code, Format, Position, Question, Response, Survey, Text, Version},
+    entities::{Code, Format, Position, Question, Response, Spread, Survey, Text, Version},
     error::{
         self,
         BadLine,
@@ -461,24 +461,30 @@ impl QuestionBuilder {
             .and_then(|val| val.value.map(|name| name.to_string()))
             .ok_or(error::MissingAttributeError::new("variable", "name"))?;
 
+        let question_name = output.name.to_string();
+
         // sss classic does not have text variant
         let label_text = self
             .attributes
             .remove("label")
             .and_then(|val| val.value.map(|v| unquote(v, is_classic)))
             .transpose()?
-            .ok_or(error::MissingAttributeError::new("variable", "label"))?;
+            .ok_or(error::MissingAttributeError::new("variable", "label"))
+            .with_context(|| format!("When parsing question {}", question_name))?;
         output.label = Text::from(label_text);
 
         let position = self
             .attributes
             .remove("position")
-            .ok_or(error::MissingAttributeError::new("variable", "position"))?;
+            .ok_or(error::MissingAttributeError::new("variable", "position"))
+            .with_context(|| format!("When parsing question {}", question_name))?;
 
         output.location = if is_classic {
-            Self::parse_location_classic(&position)?
+            Self::parse_location_classic(&position)
+                .with_context(|| format!("When parsing question {}", question_name))?
         } else {
-            Self::parse_location_xml(&position)?
+            Self::parse_location_xml(&position)
+                .with_context(|| format!("When parsing question {}", question_name))?
         };
 
         output.format = self
@@ -492,9 +498,11 @@ impl QuestionBuilder {
         let response = self
             .attributes
             .remove("type")
-            .ok_or(error::MissingAttributeError::new("variable", "type"))?
+            .ok_or(error::MissingAttributeError::new("variable", "type"))
+            .with_context(|| format!("When parsing question {}", question_name))?
             .value
-            .ok_or(error::MissingValueError::new("variable", "type"))?;
+            .ok_or(error::MissingValueError::new("variable", "type"))
+            .with_context(|| format!("When parsing question {}", question_name))?;
 
         let response = Response::from_str(&response)?;
         let response = match &output.format {
@@ -505,9 +513,59 @@ impl QuestionBuilder {
             _ => response,
         };
 
-        let question_name = output.name.to_string();
         let response = Self::build_response(response, self.responses.children, is_classic)
             .with_context(|| format!("When parsing question {}", question_name))?;
+
+        if let Some(mut node) = self.attributes.remove("spread") {
+            if let Response::Multiple(item) = &response {
+                let spread = if is_classic {
+                    let text = node
+                        .value
+                        .ok_or(MissingValueError::new("variable", "spread"))
+                        .with_context(|| format!("When parsing question {}", question_name))?
+                        .to_uppercase();
+
+                    let text = text.splitn(2, "OF")
+                        .map(|s| s.trim())
+                        .filter(|s| !s.is_empty())
+                        .collect::<Vec<&str>>();
+
+                    let subfield = text
+                        .get(0)
+                        .ok_or(MissingValueError::new("variable", "spread"))
+                        .with_context(|| format!("When parsing question {}", question_name))?
+                        .trim()
+                        .parse::<u64>()
+                        .with_context(|| format!("When parsing question {}", question_name))?;
+
+                    let width = text.get(1)
+                        .map(|s| s.parse::<u64>()).transpose()?;
+
+                    Spread { subfield, width }
+                } else {
+                    let subfield = node
+                        .attributes
+                        .remove("subfields")
+                        .ok_or(error::MissingAttributeError::new("variable", "subfields"))
+                        .with_context(|| format!("When parsing question {}", question_name))?
+                        .as_ref()
+                        .parse::<u64>()
+                        .with_context(|| format!("When parsing question {}", question_name))?;
+
+                    let width = node
+                        .attributes
+                        .remove("width")
+                        .map(|s| s.as_ref().trim().parse::<u64>())
+                        .transpose()
+                        .with_context(|| format!("When parsing question {}", question_name))?;
+
+                    Spread { subfield, width }
+                };
+
+                let mut guard = item.write();
+                guard.spread = Some(spread);
+            };
+        };
 
         output.response = response;
         Ok(output)
