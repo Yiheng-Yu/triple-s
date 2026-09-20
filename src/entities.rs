@@ -32,15 +32,9 @@ impl Version {
             Self::V3_0 => "3.0",
         }
     }
-
-    /// Parses a version literal, a Classic `VERSION` line, or an XML `<sss>`
-    /// document.
-    pub fn from_string(_input: &str) -> Result<Self> {
-        todo!()
-    }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Survey {
     pub name: String,
     pub title: Option<String>,
@@ -153,7 +147,7 @@ impl Meta {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Record {
     pub id: char,
 
@@ -189,7 +183,7 @@ impl Record {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Question {
     pub index: u64,
     pub name: String,
@@ -202,10 +196,14 @@ pub struct Question {
 
 impl Question {
     /// Parses one Classic `VARIABLE` block or XML `<variable>` fragment.
-    pub fn from_string(_input: &str) -> Result<Self> {
-        todo!()
+    pub fn from_string(input: &str) -> Result<Self> {
+        let is_classic = is_sss_classic(input);
+        let stream = input.lines().map(|s| Ok::<_, BadLine>(s.to_string()));
+        let builder = crate::parser::classic::collect_question_stream(stream, 0)?;
+        builder.build(is_classic)
     }
 
+    /// Export fragments of `Question` instance from from SSS classic
     pub fn to_sss_classic(&self) -> Result<String> {
         let mut output = String::new();
         append_line(&mut output, format!("VARIABLE {}", self.index));
@@ -226,21 +224,13 @@ impl Question {
     }
 }
 
-#[derive(Debug, Clone, EnumString, Default)]
+#[derive(Debug, Clone, EnumString, Default, PartialEq)]
 pub enum Format {
     #[default]
     #[strum(serialize = "numeric")]
     Numeric,
     #[strum(serialize = "literal")]
     Literal,
-}
-
-impl Format {
-    /// Parses a `numeric`/`literal` value or obtains the format from one
-    /// variable fragment.
-    pub fn from_string(_input: &str) -> Result<Self> {
-        todo!()
-    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -278,9 +268,8 @@ pub enum Response {
 }
 
 impl Response {
-    /// Parses the response of one Classic `VARIABLE` block or XML `<variable>`
-    /// fragment.
     pub fn from_string(_input: &str) -> Result<Self> {
+        // plan: put input inside a template, parse as question, return the question.resposne
         todo!()
     }
 
@@ -311,9 +300,18 @@ impl Response {
     pub fn new_literal_single() -> Self {
         Self::SingleLiteral(Arc::new(RwLock::new(Single::<String>::default())))
     }
-}
 
-impl Response {
+    /// count amount of codes in the instance
+    pub fn num_values(&self) -> usize
+    {
+        match self {
+            Self::Single(item) => item.read().values.len(),
+            Self::SingleLiteral(item) => item.read().values.len(),
+            Self::Multiple(item) => item.read().values.len(),
+            _ => 0
+        }
+    }
+
     pub fn to_sss_classic(&self) -> Result<String> {
         match self {
             Self::Character(item) => item.read().to_sss_classic(),
@@ -328,6 +326,42 @@ impl Response {
                 };
                 Err(error.into())
             }
+        }
+    }
+}
+
+impl PartialEq for Response {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Logical, Self::Logical) => true,
+            (Self::Note, Self::Note) => true,
+            (Self::Character(self_item), Self::Character(other_item)) => {
+                self_item.read().size == other_item.read().size
+            }
+            (Self::Date(self_item), Self::Date(other_item)) => {
+                self_item.read().range == other_item.read().range
+            }
+            (Self::Time(self_item), Self::Time(other_item)) => {
+                self_item.read().range == other_item.read().range
+            }
+            (Self::Quantity(self_item), Self::Quantity(other_item)) => {
+                (self_item.read().range == other_item.read().range)
+                & (self_item.read().values == other_item.read().values)
+            }
+            (Self::Single(self_item), Self::Single(other_item)) => {
+                (self_item.read().range == other_item.read().range)
+                & (self_item.read().values == other_item.read().values)
+            }
+            (Self::SingleLiteral(self_item), Self::SingleLiteral(other_item)) => {
+                (self_item.read().range == other_item.read().range)
+                & (self_item.read().values == other_item.read().values)
+            }
+            (Self::Multiple(self_item), Self::Multiple(other_item)) => {
+                (self_item.read().range == other_item.read().range)
+                & (self_item.read().values == other_item.read().values)
+                & (self_item.read().spread == other_item.read().spread)
+            }
+            _ => false
         }
     }
 }
@@ -363,10 +397,6 @@ pub struct Quantity {
 }
 
 impl Quantity {
-    pub fn from_string(_input: &str) -> Result<Self> {
-        todo!()
-    }
-
     pub fn to_sss_classic(&self) -> Result<String> {
         let mut output = String::new();
         append_line(&mut output, "TYPE QUANTITY");
@@ -763,6 +793,11 @@ fn format_range<T: std::fmt::Display>(from: T, to: T, delimiter: &str) -> String
     } else {
         format!("{from} {delimiter} {to}")
     }
+}
+
+#[inline]
+fn is_sss_classic(text: &str) -> bool {
+    !text.trim().starts_with('<')
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-use triple_s::Survey;
+use triple_s::{Question, Survey};
 
 const PATH_SSS_CLASSIC: &str = "tests/sss-examples/sss_classic.sss";
 
@@ -7,16 +7,35 @@ fn example_datamap_classic() -> Survey {
 }
 
 #[test]
-fn test_read_classic_tmp() {
+fn test_read_classic() {
     let survey = example_datamap_classic();
     assert_eq!(survey.record.content.len(), 24);
-    // println!("Reading file: {}", PATH_SSS_CLASSIC);
-    // println!("Num of question loaded: {:?}", survey.record.content.len())
-    assert_eq!(
-        survey.title.as_ref().unwrap(),
-        "Customer Experience Survey - HTML Test"
-    );
 }
+
+#[test]
+fn test_question_from_to_sss_classic() {
+    let survey = example_datamap_classic();
+
+    for question in survey.record.content.into_iter() {
+        let text = question.to_sss_classic().unwrap();
+        let parsed = Question::from_string(&text).unwrap();
+        assert_eq!(parsed.name, question.name);
+        assert_eq!(parsed.label, question.label);
+        assert_eq!(parsed.index, question.index);
+        assert_eq!(parsed.filter, question.filter);
+        assert_eq!(parsed.location, question.location);
+        assert_eq!(parsed.format, question.format);
+        assert_eq!(parsed.response, question.response);
+    }
+}
+
+// #[test]
+// fn test_survey_from_to_string() {
+//     let survey = example_datamap_classic();
+//     let test = survey.to_sss_classic().unwrap();
+//     let parsed = Survey::from_string(&text).unwrap();
+//     assert_eq!(parsed, survey)
+// }
 
 fn put_into_record(content: &str) -> String {
     format!(

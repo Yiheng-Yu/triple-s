@@ -229,6 +229,122 @@ where
     Ok(survey_builder)
 }
 
+/// used internally
+/// start_line_idx: used only for providing context for printing error
+pub fn collect_question_stream<I, E>(
+    mut stream: I,
+    start_line_idx: usize,
+) -> Result<QuestionBuilder>
+where
+    I: Iterator<Item = Result<String, E>>,
+    E: std::error::Error + Send + Sync + 'static,
+{
+    // TODO: Make this a msvc??? so let this runs things and tell survey_builder
+    // TODO: Put this into the create_survey_builder!
+    let mut question_builder = QuestionBuilder::empty();
+    let mut line_number = start_line_idx;
+    let mut should_break = false;
+
+    const END_MARKERS: &[&str] = &["END RECORD", "END SURVEY", "END VARIABLE"];
+    loop {
+        line_number += 1;
+        let current_read = stream
+            .next()
+            .transpose()
+            .with_context(|| format!("Unable to read line {}", line_number))?
+            .map(|s| s.trim().to_owned());
+
+        if let Some(line) = current_read {
+            if line.is_empty() {
+                break;
+            }
+
+            if END_MARKERS.iter().any(|prefix| line.starts_with(prefix)) {
+                break;
+            }
+
+            let mut node = Node::try_from(line.as_str()).with_context(|| {
+                format!(
+                    "Error raised when reading line {} (text: '{}')",
+                    line_number, line
+                )
+            })?;
+
+            match node.tag.as_ref() {
+                "end" => {
+                    if let Some(tag_ended) = node.value {
+                        if tag_ended
+                            .split_whitespace()
+                            .next()
+                            .is_some_and(|tag| tag == "VARIABLE")
+                        {
+                            // just in case of future stupid me,,,
+                            panic!("should not expect 'variable' end tag because it should already be checked earlier on!")
+                        }
+                    } else {
+                        let error = BadLine::new(format!(
+                            r#"Unable to element name from: '{}'"#,
+                            line
+                        ));
+                        return Err(error).with_context(|| {
+                            format!("Error raised when reading line {}", line_number)
+                        });
+                    }
+                }
+                // "position" => {
+                //     println!("{:#?}", node);
+                // }
+                "range" => {
+                    // <range> can only be the first element,
+                    // and everything else should be tagged as <value>
+                    let is_empty = question_builder.responses.children.is_empty();
+                    if is_empty {
+                        if !node.attributes.contains_key("to") {
+                            node.tag = "value".into();
+                            if let Some(from) = node.attributes.remove("from") {
+                                node.attributes.insert("code".into(), from);
+                            }
+                        }
+                    } else {
+                        node.tag = "value".into();
+                        if let Some(from) = node.attributes.remove("from") {
+                            node.attributes.insert("code".into(), from);
+                        }
+                    }
+                    question_builder.responses.children.push(node);
+                }
+
+                "size" => {  // only used for 'character' type
+                    question_builder
+                        .responses
+                        .children
+                        .push(node);
+                }
+                _ => { // variable attributes
+                    let res = question_builder.attributes.insert(node.tag.clone(), node);
+                    if let Some(old) = res {
+                        let error = BadLine::new(format!(
+                            "Found duplicate entry: {{tag: '{}', value: '{:?}'}}",
+                            old.tag.clone(),
+                            old.value
+                        ));
+                        return Err(error).with_context(|| {
+                            format!("Error raised when reading line {}", line_number)
+                        });
+                    }
+                }
+            }
+        } else {
+            should_break = true;
+        };
+
+        if should_break {
+            break;
+        }
+    }
+    Ok(question_builder)
+}
+
 // ---------------- helper function ----------------
 fn get_question_mut(
     survey_builder: &mut SurveyBuilder,

@@ -1,4 +1,4 @@
-use triple_s::{Mode, Survey, Version, read_sss_file};
+use triple_s::{Survey, read_sss_file};
 
 #[allow(dead_code)]
 const PATH_SSS_XML_GENERATION_ONE: &str = "tests/sss-examples/sss_xml_1.0.xml";

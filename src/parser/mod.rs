@@ -1,5 +1,5 @@
-mod classic;
-mod xml;
+pub mod classic;
+pub mod xml;
 
 use std::{
     collections::HashMap,
