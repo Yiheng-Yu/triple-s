@@ -223,34 +223,29 @@ impl Question {
         Ok(output)
     }
 
-
-    /// fix data location 
-    pub fn sanitise_data_location(&mut self) {
-        todo!()
-    }
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct ViewResponse {
-    inner: Response
-}
+// #[derive(Debug, Clone, Default, PartialEq)]
+// pub struct TEMP {
+//     inner: Response
+// }
 
-impl ViewResponse {
-    fn cnovert(&mut self, new_type: ResponseType) -> Self {
-        todo!()
-    }
-}
+// impl TEMP {
+//     fn cnovert(&mut self, new_type: ResponseType) -> Self {
+//         todo!()
+//     }
+// }
 
 
-pub enum ResponseType {
-    Single,
-    Multiple,
-    SingleLiteral,
-    Quantity,
-    Note,
-    Date,
-    Time
-}
+// pub enum ResponseType {
+//     Single,
+//     Multiple,
+//     SingleLiteral,
+//     Quantity,
+//     Note,
+//     Date,
+//     Time
+// }
 
 
 #[derive(Debug, Clone, EnumString, Default, PartialEq)]
@@ -544,6 +539,7 @@ where T: Clone + std::fmt::Display
     }
 }
 
+/// Defines the part of the data record that is allocated to holding the value of the variable. 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Position {
     pub from: u64,
@@ -879,11 +875,6 @@ mod test {
     }
 
     #[test]
-    fn test_sanitise_data_location() {
-        todo!("For fixing data locations")
-    }
-
-    #[test]
     fn test_create_question_from_rust() {
         todo!("This is indended to create an API for python side to create new instance")
     }
@@ -911,7 +902,7 @@ mod test {
         // Or: make current `Response` enum as a backend, rename to something like `ResponseData`
         // then createe a new `Response` struct that exploses public API
         //
-        // checkout: `ViewResponse`
+        // checkout: `TEMP`
         todo!()
     }
 }

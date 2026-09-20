@@ -919,22 +919,9 @@ impl PyChoice {
     }
 }
 
+
 #[pymethods]
 impl PyChoice {
-    #[new]
-    #[pyo3(signature = (code, label, filter=None))]
-    fn new(code: u64, label: String, filter: Option<String>) -> Self {
-        Self {
-            storage: Storage::from_owned(Code {
-                code,
-                label: Text::new(label),
-                filter,
-                score: None,
-                is_special: false,
-            }),
-        }
-    }
-
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         self.with_choice(py, format_choice)
     }
@@ -1266,11 +1253,11 @@ impl PyMeta {
     }
 }
 
-// TODO!
-#[pyclass(dict, module = "triple_s", name = "Mode")]
-pub struct PyMode {
-    inner: Py<PySurvey>
-}
+// // TODO!
+// #[pyclass(dict, module = "triple_s", name = "Mode")]
+// pub struct PyMode {
+//     inner: Py<PySurvey>
+// }
 
 // /// Just a dummy class used for creating a python parent class for inheritance
 // #[pyclass(dict, module = "triple_s", name = "Proxy")]
