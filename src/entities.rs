@@ -1,6 +1,6 @@
 use std::{fmt::Write, range::Range, str::FromStr, sync::Arc};
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result};
 use chrono::{NaiveDate, NaiveTime};
 use parking_lot::RwLock;
 use rayon::prelude::*;
@@ -35,13 +35,8 @@ impl Version {
 
     /// Parses a version literal, a Classic `VERSION` line, or an XML `<sss>`
     /// document.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        let input = input.as_ref().trim();
-        if is_sss_classic(input) {
-            return Ok(parse_sss_classic(input)?.meta.version);
-        }
-        let value = input.strip_prefix("VERSION").map(str::trim).unwrap_or(input);
-        Ok(Self::from_str(value)?)
+    pub fn from_string(_input: &str) -> Result<Self> {
+        todo!()
     }
 }
 
@@ -55,15 +50,8 @@ pub struct Survey {
 
 impl Survey {
     /// Parses a complete Classic or XML SSS document, or a `<survey>` fragment.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        let input = input.as_ref();
-        if is_sss_classic(input) {
-            return parse_sss_classic(input);
-        }
-        if is_xml_fragment(input) {
-            return parse_sss_classic(&format!(r#"<sss version="1.2">{input}</sss>"#));
-        }
-        bail!("a Classic survey must include the surrounding SSS document")
+    pub fn from_string(_input: &str) -> Result<Self> {
+        todo!()
     }
 
     pub fn empty() -> Self {
@@ -186,16 +174,8 @@ pub struct Record {
 
 impl Record {
     /// Parses a Classic `RECORD` block or an XML `<record>` fragment.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        let input = input.as_ref();
-        let document = if is_sss_classic(input) {
-            input.to_owned()
-        } else if is_xml_fragment(input) {
-            format!(r#"<sss version="1.2"><survey>{input}</survey></sss>"#)
-        } else {
-            format!("SSS\nVERSION 1.1\nSURVEY\n{input}\nEND SURVEY\nEND SSS")
-        };
-        Ok(parse_sss_classic(&document)?.record)
+    pub fn from_string(_input: &str) -> Result<Self> {
+        todo!()
     }
 
     pub fn to_sss_classic(&self) -> Result<String> {
@@ -222,8 +202,8 @@ pub struct Question {
 
 impl Question {
     /// Parses one Classic `VARIABLE` block or XML `<variable>` fragment.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        parse_one_question(input.as_ref())
+    pub fn from_string(_input: &str) -> Result<Self> {
+        todo!()
     }
 
     pub fn to_sss_classic(&self) -> Result<String> {
@@ -258,12 +238,8 @@ pub enum Format {
 impl Format {
     /// Parses a `numeric`/`literal` value or obtains the format from one
     /// variable fragment.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        let input = input.as_ref().trim();
-        if input.eq_ignore_ascii_case("numeric") || input.eq_ignore_ascii_case("literal") {
-            return Ok(Self::from_str(input)?);
-        }
-        Ok(parse_one_question(input)?.format)
+    pub fn from_string(_input: &str) -> Result<Self> {
+        todo!()
     }
 }
 
@@ -304,15 +280,8 @@ pub enum Response {
 impl Response {
     /// Parses the response of one Classic `VARIABLE` block or XML `<variable>`
     /// fragment.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        let input = input.as_ref();
-        if input.trim_start().starts_with("TYPE ") {
-            let document = format!(
-                "SSS\nVERSION 1.1\nSURVEY\nRECORD A\nVARIABLE 1\nNAME \"VALUE\"\nLABEL \"Value\"\nPOSITION 1\n{input}\nEND VARIABLE\nEND RECORD\nEND SURVEY\nEND SSS"
-            );
-            return response_from_fragment(&document);
-        }
-        response_from_fragment(input)
+    pub fn from_string(_input: &str) -> Result<Self> {
+        todo!()
     }
 
     pub fn new_single() -> Self {
@@ -394,12 +363,8 @@ pub struct Quantity {
 }
 
 impl Quantity {
-    /// Parses a variable fragment whose response type is `quantity`.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        match response_template(input.as_ref(), "quantity")? {
-            Response::Quantity(value) => Ok(value.read().clone()),
-            response => bail!("expected a quantity response, found {response:?}"),
-        }
+    pub fn from_string(_input: &str) -> Result<Self> {
+        todo!()
     }
 
     pub fn to_sss_classic(&self) -> Result<String> {
@@ -421,14 +386,6 @@ pub struct Character {
 }
 
 impl Character {
-    /// Parses a variable fragment whose response type is `character`.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        match response_template(input.as_ref(), "character")? {
-            Response::Character(value) => Ok(value.read().clone()),
-            response => bail!("expected a character response, found {response:?}"),
-        }
-    }
-
     pub fn to_sss_classic(&self) -> Result<String> {
         let mut output = String::new();
         append_line(&mut output, "TYPE CHARACTER");
@@ -446,14 +403,6 @@ where T: Clone + std::fmt::Display
 }
 
 impl Single<u64> {
-    /// Parses a variable fragment whose response type is numeric `single`.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        match response_template(input.as_ref(), "single")? {
-            Response::Single(value) => Ok(value.read().clone()),
-            response => bail!("expected a numeric single response, found {response:?}"),
-        }
-    }
-
     pub fn to_sss_classic(&self) -> Result<String> {
         let mut output = String::new();
         append_line(&mut output, "TYPE SINGLE");
@@ -471,14 +420,6 @@ pub struct Multiple {
 }
 
 impl Multiple {
-    /// Parses a variable fragment whose response type is `multiple`.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        match response_template(input.as_ref(), "multiple")? {
-            Response::Multiple(value) => Ok(value.read().clone()),
-            response => bail!("expected a multiple response, found {response:?}"),
-        }
-    }
-
     pub fn to_sss_classic(&self) -> Result<String> {
         let mut output = String::new();
         if let Some(spread) = self.spread.as_ref() {
@@ -497,14 +438,6 @@ pub struct RangeDate {
 }
 
 impl RangeDate {
-    /// Parses a variable fragment whose response type is `date`.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        match response_template(input.as_ref(), "date")? {
-            Response::Date(value) => Ok(value.read().clone()),
-            response => bail!("expected a date response, found {response:?}"),
-        }
-    }
-
     pub fn to_sss_classic(&self) -> Result<String> {
         Err(UnsupportedFeature::new("SSS Classic", "DateTime response type").into())
     }
@@ -516,14 +449,6 @@ pub struct RangeTime {
 }
 
 impl RangeTime {
-    /// Parses a variable fragment whose response type is `time`.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        match response_template(input.as_ref(), "time")? {
-            Response::Time(value) => Ok(value.read().clone()),
-            response => bail!("expected a time response, found {response:?}"),
-        }
-    }
-
     pub fn to_sss_classic(&self) -> Result<String> {
         Err(UnsupportedFeature::new("SSS Classic", "DateTime response type").into())
     }
@@ -560,61 +485,6 @@ where T: Clone + std::fmt::Display
     }
 }
 
-impl Code<u64> {
-    /// Parses the sole value from a numeric single or multiple variable
-    /// fragment.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        let question = parse_one_question(input.as_ref())?;
-        let values = match question.response {
-            Response::Single(value) => value.read().values.clone(),
-            Response::Multiple(value) => value.read().values.clone(),
-            response => bail!("expected a single or multiple response, found {response:?}"),
-        };
-        ensure!(
-            values.len() == 1,
-            "expected exactly one value, found {}",
-            values.len()
-        );
-        Ok(values.into_iter().next().expect("length checked"))
-    }
-}
-
-impl Code<f64> {
-    /// Parses the sole labelled value from a quantity variable fragment.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        let quantity = Quantity::from_string(input)?;
-        ensure!(
-            quantity.values.len() == 1,
-            "expected exactly one value, found {}",
-            quantity.values.len()
-        );
-        Ok(quantity.values.into_iter().next().expect("length checked"))
-    }
-}
-
-impl Single<String> {
-    /// Parses a variable fragment whose response is a literal `single`.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        match response_template(input.as_ref(), "single")? {
-            Response::SingleLiteral(value) => Ok(value.read().clone()),
-            response => bail!("expected a literal single response, found {response:?}"),
-        }
-    }
-}
-
-impl Code<String> {
-    /// Parses the sole value from a literal single variable fragment.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        let single = Single::<String>::from_string(input)?;
-        ensure!(
-            single.values.len() == 1,
-            "expected exactly one value, found {}",
-            single.values.len()
-        );
-        Ok(single.values.into_iter().next().expect("length checked"))
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Position {
     pub from: u64,
@@ -622,11 +492,6 @@ pub struct Position {
 }
 
 impl Position {
-    /// Parses the position from one variable fragment.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        Ok(parse_one_question(input.as_ref())?.location)
-    }
-
     pub fn to_sss_classic(&self) -> String {
         if self.to != self.from {
             format!("POSITION {} TO {}", self.from, self.to)
@@ -646,18 +511,6 @@ pub struct Spread {
 }
 
 impl Spread {
-    /// Parses the spread from one multiple-response variable fragment.
-    pub fn from_string(input: impl AsRef<str>) -> Result<Self> {
-        match response_from_fragment(input.as_ref())? {
-            Response::Multiple(value) => value
-                .read()
-                .spread
-                .clone()
-                .ok_or_else(|| anyhow::anyhow!("multiple response has no spread")),
-            response => bail!("expected a multiple response, found {response:?}"),
-        }
-    }
-
     pub fn to_sss_classic(&self) -> String {
         match self.width.as_ref() {
             Some(width) => format!("SPREAD {} OF {}", self.subfield, width),
@@ -821,8 +674,35 @@ impl Language {
         Ok(self)
     }
 
-    pub fn to_string(self) -> String {
+    pub fn into_inner(self) -> String {
         self.0
+    }
+}
+
+
+// make `Language` behave more like a string
+impl AsRef<str> for Language {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for Language {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl From<Language> for String {
+    fn from(language: Language) -> Self {
+        language.0
+    }
+}
+
+impl std::fmt::Display for Language {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.as_str())
     }
 }
 
@@ -885,73 +765,6 @@ fn format_range<T: std::fmt::Display>(from: T, to: T, delimiter: &str) -> String
     }
 }
 
-#[inline]
-fn is_xml_fragment(input: &str) -> bool {
-    input.trim_start().starts_with('<')
-}
-
-#[inline]
-fn is_sss_classic(input: &str) -> bool {
-    let input = input.trim_start();
-    input.starts_with("SSS") || input.starts_with("<?xml") || input.starts_with("<sss")
-}
-
-#[inline]
-fn parse_sss_classic(input: &str) -> Result<Survey> {
-    crate::parser::read_from_string(input.to_owned())
-}
-
-#[inline]
-fn wrap_question_fragment(input: &str) -> String {
-    if is_sss_classic(input) {
-        return input.to_owned();
-    }
-    if is_xml_fragment(input) {
-        format!(
-            r#"<sss version="1.2"><survey><record ident="A">{input}</record></survey></sss>"#
-        )
-    } else {
-        format!("SSS\nVERSION 1.1\nSURVEY\nRECORD A\n{input}\nEND RECORD\nEND SURVEY\nEND SSS")
-    }
-}
-
-#[inline]
-fn parse_one_question(input: &str) -> Result<Question> {
-    let survey = parse_sss_classic(&wrap_question_fragment(input))?;
-    ensure!(
-        survey.record.content.len() == 1,
-        "expected exactly one variable fragment, found {}",
-        survey.record.content.len()
-    );
-    Ok(survey.record.content.into_iter().next().expect("length checked"))
-}
-
-#[inline]
-fn response_from_fragment(input: &str) -> Result<Response> {
-    Ok(parse_one_question(input)?.response)
-}
-
-#[inline]
-fn response_template(input: &str, xml_type: &str) -> Result<Response> {
-    if is_sss_classic(input)
-        || input.trim_start().starts_with("<variable")
-        || input.trim_start().starts_with("VARIABLE")
-    {
-        return response_from_fragment(input);
-    }
-
-    let document = if is_xml_fragment(input) {
-        format!(
-            r#"<sss version="1.2"><survey><record ident="A"><variable ident="1" type="{xml_type}"><name>VALUE</name><label>Value</label><position start="1"/>{input}</variable></record></survey></sss>"#
-        )
-    } else {
-        format!(
-            "SSS\nVERSION 1.1\nSURVEY\nRECORD A\nVARIABLE 1\nNAME \"VALUE\"\nLABEL \"Value\"\nPOSITION 1\n{input}\nEND VARIABLE\nEND RECORD\nEND SURVEY\nEND SSS"
-        )
-    };
-    response_from_fragment(&document)
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -962,10 +775,7 @@ mod test {
             subfield: 5,
             width: Some(10),
         };
-        assert_eq!(
-            instance.to_sss_classic(),
-            format!("SPREAD {} OF {}", 5, 10)
-        );
+        assert_eq!(instance.to_sss_classic(), format!("SPREAD {} OF {}", 5, 10));
     }
 
     #[test]
@@ -979,10 +789,7 @@ mod test {
 
     #[test]
     fn test_write_location() {
-        let instance = Position {
-            from: 0,
-            to: 100,
-        };
+        let instance = Position { from: 0, to: 100 };
         assert_eq!(instance.to_sss_classic(), "POSITION 0 TO 100");
     }
 

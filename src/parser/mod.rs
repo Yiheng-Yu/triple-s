@@ -42,7 +42,6 @@ use crate::{
     },
 };
 
-
 #[derive(Debug, PartialEq)]
 pub enum FileType {
     Classic,
@@ -182,7 +181,7 @@ pub struct Node {
     pub tag: Arc<str>,
     pub attributes: HashMap<Arc<str>, Arc<str>>,
     pub value: Option<Arc<str>>,
-    pub children: Vec<Box<Node>>,
+    pub children: Vec<Node>,
 }
 
 impl Node {
@@ -320,7 +319,7 @@ impl QuestionBuilder {
 
     pub fn build_response(
         mut response: Response,
-        mut data: Vec<Box<Node>>,
+        mut data: Vec<Node>,
         is_classic: bool,
     ) -> Result<Response> {
         match &mut response {
@@ -665,7 +664,7 @@ fn parse_text(mut node: Node, is_classic: bool) -> Result<Text> {
 }
 
 #[inline]
-fn parse_into_choice<T>(node: Box<Node>, is_classic: bool) -> Result<Code<T>>
+fn parse_into_choice<T>(node: Node, is_classic: bool) -> Result<Code<T>>
 where
     T: Clone + FromStr + std::fmt::Display,
     T::Err: std::error::Error + Send + Sync + 'static,
@@ -685,7 +684,7 @@ where
         .parse::<T>()?;
 
     let is_special = node.attributes.contains_key("flag");
-    let text = parse_text(*node, is_classic)?;
+    let text = parse_text(node, is_classic)?;
     let choice = Code {
         code,
         label: text,
@@ -701,7 +700,7 @@ where
 /// from_to == false:
 /// 'start'
 #[inline]
-fn get_range<T>(node: &Box<Node>, from_to: bool) -> Result<(T, Option<T>)>
+fn get_range<T>(node: &Node, from_to: bool) -> Result<(T, Option<T>)>
 where
     T: FromStr,
     T::Err: std::error::Error + Send + Sync + 'static,

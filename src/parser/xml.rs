@@ -152,7 +152,7 @@ where
                             let mut variant = with_attribute("text", start.attributes())?;
                             let text = extract_text(reader, &start)?;
                             variant.value = Some(Arc::from(text));
-                            label.children.push(Box::new(variant));
+                            label.children.push(variant);
                         }
                         Section::CodeDefault | Section::CodeVariant => {
                             current_position = Section::CodeVariant;
@@ -160,7 +160,7 @@ where
                             let text = extract_text(reader, &start)?;
                             variant.value = Some(Arc::from(text));
                             responses.last_mut()
-                                .map(|val| val.children.push(Box::new(variant)))
+                                .map(|val| val.children.push(variant))
                                 .ok_or(InternalError::new(format!("Parent note for <text> seems to be missing?? Current: {:#?}", builder)))?;
                         }
                         _ => {
@@ -264,7 +264,7 @@ where
     // builder.attributes.insert("filter".into(), filter);
     builder.attributes.insert("label".into(), label);
     builder.attributes.insert("name".into(), name);
-    builder.responses.children = responses.into_iter().map(Box::new).collect();
+    builder.responses.children = responses.into_iter().collect();
 
     Ok(())
 }

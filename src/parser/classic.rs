@@ -196,14 +196,14 @@ where
                                 node.attributes.insert("code".into(), from);
                             }
                         }
-                        builder.responses.children.push(Box::new(node));
+                        builder.responses.children.push(node);
                     }
 
                     "size" => {
                         get_question_mut(&mut survey_builder, current_index, line_number)?
                             .responses
                             .children
-                            .push(Box::new(node));
+                            .push(node);
                     }
                     _ => {
                         let builder =
