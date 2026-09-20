@@ -111,9 +111,10 @@ impl PySurvey {
     #[new]
     #[pyo3(signature = (title=None))]
     fn new(title: Option<String>) -> Self {
-        let mut survey = tri::Survey::empty();
-        survey.title = title;
-        Self::from(survey)
+        todo!()
+        // let mut survey = tri::Survey::empty();
+        // survey.title = title;
+        // Self::from(survey)
     }
 
     /// Export content back to sss classic
@@ -251,12 +252,13 @@ impl PyRecord {
     #[new]
     #[pyo3(signature = (id='A'))]
     fn new(id: char) -> Self {
-        Self {
-            inner: Storage::from_owned(tri::Record {
-                id,
-                ..Default::default()
-            }),
-        }
+        todo!()
+        // Self {
+        //     inner: Storage::from_owned(tri::Record {
+        //         id,
+        //         ..Default::default()
+        //     }),
+        // }
     }
 
     /// Export content back to sss classic
@@ -328,10 +330,10 @@ impl PyRecord {
         if read_length < content_length {
             question_string.push("...".into())
         };
-        let question_string = question_string.join(",\n\t\t");
+        let question_string = question_string.join(",\n    ");
         let current_id = self.get_id(py)?;
         Ok(format!(
-            "Record(\n\tid=\"{}\",\n\tcontent=[\n\t\t{}\n\t]\n)",
+            "Record(\n  id=\"{}\",\n  content=[\n    {}\n  ]\n)",
             current_id, question_string
         ))
     }
@@ -425,14 +427,15 @@ impl PyQuestion {
     #[new]
     #[pyo3(signature = (name="", label="", index=0))]
     fn new(name: &str, label: &str, index: u64) -> Self {
-        Self {
-            inner: Storage::from_owned(tri::Question {
-                index,
-                name: name.to_string(),
-                label: Text::new(label),
-                ..Default::default()
-            }),
-        }
+        todo!()
+        // Self {
+        //     inner: Storage::from_owned(tri::Question {
+        //         index,
+        //         name: name.to_string(),
+        //         label: Text::new(label),
+        //         ..Default::default()
+        //     }),
+        // }
     }
 
     fn to_sss_classic(&self, py: Python<'_>) -> PyResult<String> {
@@ -442,17 +445,11 @@ impl PyQuestion {
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let kind = self.get_kind(py)?;
-        let label = self.get_label(py)?;
-        let label = if label.chars().count() > 20 {
-            format!("{}…", label.chars().take(19).collect::<String>())
-        } else {
-            label
-        };
 
         self.with_question_read(py, |question| {
             format!(
-                r#"Question(name="{}", kind={}, label="{}")"#,
-                &question.name, kind, label
+                r#"Question(name="{}", kind={})"#,
+                &question.name, kind
             )
         })
     }
@@ -700,27 +697,28 @@ impl PyResponse {
     #[new]
     #[pyo3(signature = (kind=None))]
     fn new(py: Python<'_>, kind: Option<&str>) -> PyResult<Self> {
-        let response = match kind.unwrap_or("note").to_ascii_lowercase().as_str() {
-            "single" => Response::new_single(),
-            "multiple" => Response::new_multiple(),
-            "quantity" => Response::new_quantity(),
-            "character" => Response::new_character(),
-            "note" => Response::Note,
-            kind => {
-                return Err(exceptions::PyValueError::new_err(format!(
-                    "unsupported response kind: {kind}"
-                )));
-            }
-        };
-        let question = PyQuestion {
-            inner: Storage::from_owned(tri::Question {
-                response,
-                ..Default::default()
-            }),
-        };
-        Ok(Self {
-            inner: Py::new(py, question)?,
-        })
+        todo!()
+        // let response = match kind.unwrap_or("note").to_ascii_lowercase().as_str() {
+        //     "single" => Response::new_single(),
+        //     "multiple" => Response::new_multiple(),
+        //     "quantity" => Response::new_quantity(),
+        //     "character" => Response::new_character(),
+        //     "note" => Response::Note,
+        //     kind => {
+        //         return Err(exceptions::PyValueError::new_err(format!(
+        //             "unsupported response kind: {kind}"
+        //         )));
+        //     }
+        // };
+        // let question = PyQuestion {
+        //     inner: Storage::from_owned(tri::Question {
+        //         response,
+        //         ..Default::default()
+        //     }),
+        // };
+        // Ok(Self {
+        //     inner: Py::new(py, question)?,
+        // })
     }
 
     fn __getitem__(bind: &Bound<'_, Self>, index: isize) -> PyResult<PyChoice> {
@@ -775,7 +773,7 @@ impl PyResponse {
                 Response::Time(_) => "Time".to_string(),
                 Response::Note => "Note".to_string(),
             };
-            format!("Response.{}", value)
+            format!("{}", value)
         })
     }
 
@@ -1059,24 +1057,25 @@ impl PyMeta {
         survey: Option<&Bound<'_, PySurvey>>,
         version: Option<String>,
     ) -> PyResult<Self> {
-        let version = version
-            .as_deref()
-            .map(Version::from_str)
-            .transpose()
-            .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))?;
+        todo!()
+        // let version = version
+        //     .as_deref()
+        //     .map(Version::from_str)
+        //     .transpose()
+        //     .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))?;
 
-        if let Some(survey) = survey {
-            if let Some(version) = version {
-                survey.borrow_mut().write_meta().version = version;
-            }
-            return Ok(Self::from_rust(survey));
-        }
+        // if let Some(survey) = survey {
+        //     if let Some(version) = version {
+        //         survey.borrow_mut().write_meta().version = version;
+        //     }
+        //     return Ok(Self::from_rust(survey));
+        // }
 
-        let mut survey = tri::Survey::empty();
-        survey.meta = tri::Meta::with_version(version.unwrap_or(Version::V1_1));
-        Ok(Self {
-            inner: Py::new(py, PySurvey::from(survey))?,
-        })
+        // let mut survey = tri::Survey::empty();
+        // survey.meta = tri::Meta::with_version(version.unwrap_or(Version::V1_1));
+        // Ok(Self {
+        //     inner: Py::new(py, PySurvey::from(survey))?,
+        // })
     }
 
     /// Export meta back to sss classic
@@ -1265,6 +1264,12 @@ impl PyMeta {
             .standard = value;
         Ok(())
     }
+}
+
+// TODO!
+#[pyclass(dict, module = "triple_s", name = "Mode")]
+pub struct PyMode {
+    inner: Py<PySurvey>
 }
 
 // /// Just a dummy class used for creating a python parent class for inheritance

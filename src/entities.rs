@@ -222,6 +222,23 @@ impl Question {
         append_line(&mut output, format!("END VARIABLE {}", self.index));
         Ok(output)
     }
+
+
+    /// fix data location 
+    pub fn sanitise_data_location(&mut self) {
+        todo!()
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ViewResponse {
+    inner: Response
+}
+
+impl ViewResponse {
+    fn new() -> Self {
+        todo!()
+    }
 }
 
 #[derive(Debug, Clone, EnumString, Default, PartialEq)]
@@ -847,5 +864,42 @@ mod test {
         let v4 = TextVariant::new("variant", Mode::Analysis, "GBR");
         instance.set_variant(v4);
         assert_eq!(instance.variant.len(), 3)
+    }
+
+    #[test]
+    fn test_sanitise_data_location() {
+        todo!("For fixing data locations")
+    }
+
+    #[test]
+    fn test_create_question_from_rust() {
+        todo!("This is indended to create an API for python side to create new instance")
+    }
+
+    #[test]
+    fn test_create_survey_from_rust() {
+        todo!("This is indended to create an API for python side to create new instance")
+    }
+
+    #[test]
+    fn test_create_response_from_rust() {
+        todo!("This is indended to create an API for python side to create new instance")
+    }
+
+    #[test]
+    fn test_convert_between_single_and_multiple() {
+        // have some think about the current design of Response enum
+        // should type <-> response being two separate things?
+        // a master Response struct that contains everything needed, and return 
+        // thing according current type of response
+        // provide a '.convert(resp_type)' method ?? to switch betwen types
+        // and raises error when .convert betwen f64 <-> string
+        //
+        // OK ACTUAL IDEA:
+        // Or: make current `Response` enum as a backend, rename to something like `ResponseData`
+        // then createe a new `Response` struct that exploses public API
+        //
+        // checkout: `ViewResponse`
+        todo!()
     }
 }
