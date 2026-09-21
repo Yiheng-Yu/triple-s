@@ -3,7 +3,7 @@ use std::{str::FromStr, sync::Arc};
 
 use parking_lot::{MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock};
 use pyo3::{exceptions, prelude::*, types::{PyDict, PyTuple}};
-use tri::{Code, Position, Response, Text, Version, prelude::Wrap};
+use tri::{Code, Position, Response, Text, Version, prelude::*};
 
 #[pyfunction]
 pub fn read_file(path: &str) -> PyResult<PySurvey> {
@@ -897,19 +897,37 @@ impl PyResponse {
 impl PyResponse {
 
     #[getter]
-    fn item(slf: &Bound<'_, Self>) -> PyResult<Vec<PyChoice>> {
+    fn item(slf: &Bound<'_, Self>) -> PyResult<Option<Vec<PyChoice>>> {
         let py = slf.py();
         slf.borrow().with_response(py, |response| {
             match response {
                 Response::NumericCategory(item) => {
-                    [0..item.read().values.len()]
-                    .iter()
-                    .for_each(|idx| );
+                    let items = (0..item.read().values.len())
+                        .map(|idx| PyChoice::from_inner(slf, idx as u64))
+                        .collect::<Vec<PyChoice>>();
+                    Some(items)
                 }
+                Response::TextCategory(item) => {
+                    let items = (0..item.read().values.len())
+                        .map(|idx| PyChoice::from_inner(slf, idx as u64))
+                        .collect::<Vec<PyChoice>>();
+                    Some(items)
+                }
+                _ => None
             }
         })
     }
 
+    /// alias for `item`
+    #[getter]
+    fn content(slf: &Bound<'_, Self>) -> PyResult<Option<Vec<PyChoice>>> {
+        Self::item(slf)
+    }
+}
+
+pub trait CodeInterface<Value: CodeType>{
+    fn with_code<R>(&self, f: impl FnOnce(&Code<Value>)) -> PyResult<R>;
+    fn with_code_mut<R>(&mut self, f: impl FnOnce(&mut Code<Value>)) -> PyResult<R>;
 }
 
 /// A possible answer that a respondent can choose in a single-/ multi- response question
