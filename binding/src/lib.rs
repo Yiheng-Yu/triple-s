@@ -22,7 +22,7 @@ pub mod triple_s {
         PySingleLiteral,
         PySurvey,
         PyTime,
-        read_sss_file as read_file,
+        read_file
     };
     use super::*;
 

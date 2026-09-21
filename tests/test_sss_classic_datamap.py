@@ -7,7 +7,7 @@ import pytest
 @pytest.fixture
 def sss():
     path = os.path.join(os.path.dirname(__file__), "sss-examples", "sss_classic.sss")
-    survey = triple_s.read_sss_file(path)
+    survey = triple_s.read_file(path)
     return survey
 
 

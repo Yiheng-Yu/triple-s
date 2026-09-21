@@ -266,14 +266,10 @@ pub enum Response {
     Note(Arc<RwLock<Note>>),
 
     /// Single/ Multiple response type with code value being u64
-    Categorical(Arc<RwLock<Categorical<u64>>>),
+    Categorical(Arc<RwLock<Categorical>>),
 
     /// Logical response type
     Logical(Arc<RwLock<Logical>>),
-
-    /// Single response type but with code value as string literals,
-    /// introduced since sss 2.0
-    SingleLiteral(Arc<RwLock<Categorical<String>>>),
 
     Date(Arc<RwLock<RangeDate>>),
     Time(Arc<RwLock<RangeTime>>),
@@ -299,14 +295,14 @@ impl Response {
     }
 
     pub fn new_single() -> Result<Self> {
-        Self::Categorical(Arc::new(RwLock::new(Categorical::<u64>::new_single(
+        Self::Categorical(Arc::new(RwLock::new(Categorical::new_single::<u64>(
             vec![],
         )?)))
         .wrap()
     }
 
     pub fn new_multiple() -> Result<Self> {
-        Self::Categorical(Arc::new(RwLock::new(Categorical::<u64>::new_multiple(
+        Self::Categorical(Arc::new(RwLock::new(Categorical::new_multiple(
             vec![],
         )?)))
         .wrap()
@@ -450,7 +446,7 @@ impl Response {
                 "Trying to append code to response type: '{}'",
                 self.response_type()
             ))?;
-        
+
         let has_duplicate = item.values.iter().any(|member| member.code == code.code);
         if !has_duplicate {
             item.values.push(code);
@@ -495,16 +491,11 @@ impl PartialEq for Response {
                     & (self_item.read().values == other_item.read().values)
             }
             (Self::Categorical(self_item), Self::Categorical(other_item)) => {
-                (self_item.read().is_single == other_item.read().is_single)
-                    & (self_item.read().range == other_item.read().range)
-                    & (self_item.read().spread == other_item.read().spread)
-                    & (self_item.read().values == other_item.read().values)
-            }
-            (Self::SingleLiteral(self_item), Self::SingleLiteral(other_item)) => {
-                (self_item.read().is_single == other_item.read().is_single)
-                    & (self_item.read().range == other_item.read().range)
-                    & (self_item.read().spread == other_item.read().spread)
-                    & (self_item.read().values == other_item.read().values)
+                (self_item.read().is_single() == other_item.read().is_single())
+                    & (self_item.read().range() == other_item.read().range())
+                    & (self_item.read().spread() == other_item.read().spread())
+                    & { todo!() }
+                    // & (self_item.read().values() == other_item.read().values())
             }
             _ => false,
         }
@@ -570,6 +561,8 @@ impl Character {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Categorical {
     Integer(Values<u64>),
+    /// Single response type but with code value as string literals,
+    /// introduced since sss 2.0
     String(Values<String>)
 }
 
@@ -581,23 +574,35 @@ impl Default for Categorical {
 
 impl Wrap for Categorical {}
 
-impl From<Values<u64>> for Categorical {
-    fn from(code_values: Values<u64>) -> Self {
-        Self::Integer(code_values)
+impl TryFrom<Values<u64>> for Categorical {
+    type Error = TypeMismatch;
+
+    fn try_from(value: Values<u64>) -> std::prelude::v1::Result<Self, Self::Error> {
+        Ok(Self::Integer(value))
     }
 }
 
-impl From<Values<String>> for Categorical {
-    fn from(code_values: Values<String>) -> Self {
-        Self::String(code_values)
+impl TryFrom<Values<String>> for Categorical {
+    type Error = TypeMismatch;
+
+    fn try_from(value: Values<String>) -> Result<Self, Self::Error> {
+        Ok(Self::String(value))
+    }
+}
+
+impl TryFrom<Values<f64>> for Categorical {
+    type Error = TypeMismatch;
+
+    fn try_from(_: Values<f64>) -> Result<Self, Self::Error> {
+        Err(TypeMismatch::new("Cannot create `Categorical` responses from code value of type `float`"))
     }
 }
 
 impl Categorical {
     fn new_single<Value>(values: Vec<Code<Value>>) -> Result<Self>
     where
-        Self: From<Values<Value>>,
         Value: CodeType,
+        Self: TryFrom<Values<Value>, Error = TypeMismatch>,
     {
         let item = Values {
             values,
@@ -606,32 +611,51 @@ impl Categorical {
             spread: None,
         };
 
-        Self::from(item).wrap()
+        Ok(<Self as TryFrom<Values<Value>>>::try_from(item)?)
     }
 
     fn new_multiple(values: Vec<Code<u64>>) -> Result<Self> {
         let item = Values::<u64>::new(values, false)?;
         Self::Integer(item).wrap()
     }
+
+    pub fn range(&self) -> Option<&Range<u64>> {
+        match self {
+            Self::Integer(item) => item.range.as_ref(),
+            Self::String(item) => item.range.as_ref(),
+        }
+    }
+
+    pub fn range_mut(&mut self) -> Option<&mut Range<u64>> {
+        match self {
+            Self::Integer(item) => item.range.as_mut(),
+            Self::String(item) => item.range.as_mut(),
+        }
+    }
+
+    pub fn spread(&self) -> Option<&Spread> {
+        match self {
+            Self::Integer(item) => item.spread.as_ref(),
+            Self::String(item) => item.spread.as_ref(),
+        }
+    }
+
+    pub fn spread_mut(&mut self) -> Option<&mut Spread> {
+        match self {
+            Self::Integer(item) => item.spread.as_mut(),
+            Self::String(item) => item.spread.as_mut(),
+        }
+    }
+
+    pub fn is_single(&self) -> bool {
+        match self {
+            Self::Integer(item) => item.is_single,
+            Self::String(item) => item.is_single,
+        }
+
+        // TODO: set toggle between single/ multiple
+    }
 }
-
-// impl Categorical {
-//     fn read(&self) -> &Values<u64> {
-//         match self {
-//             Self::Integer(item) => item,
-//             _ => todo!()
-//         }
-//     }
-// }
-
-// impl Categorical {
-//     fn read(&self) -> &Values<String> {
-//         match self {
-//             Self::String(item) => item,
-//             _ => todo!()
-//         }
-//     }
-// }
 
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -641,9 +665,9 @@ where Value: CodeType
     /// toggle `is_single` on/off won't overwrite existing value of `spread`,
     /// but hiding it from the user instead.
     pub spread: Option<Spread>,
-    pub range: Option<Range<Value>>,
+    pub range: Option<Range<u64>>,
     pub values: Vec<Code<Value>>,
-    is_single: bool,
+    pub is_single: bool,
 }
 
 impl Wrap for Values<u64> {}
@@ -720,10 +744,10 @@ pub struct Logical {}
 impl Wrap for Logical {}
 
 impl Logical {
-    pub const ITEM: LazyLock<Categorical<u64>> = LazyLock::new(|| {
+    pub const ITEM: LazyLock<Categorical> = LazyLock::new(|| {
         Categorical::new_single(vec![
-            Code::new(0, "FALSE").unwrap(),
-            Code::new(1, "TRUE").unwrap(),
+            Code::<u64>::new(0, "FALSE").unwrap(),
+            Code::<u64>::new(1, "TRUE").unwrap(),
         ])
         .unwrap()
     });
@@ -843,9 +867,13 @@ where Value: CodeType
     }
 }
 
+impl Eq for Code<u64> {}
+impl Eq for Code<String> {}
+impl Eq for Code<f64> {}
+
 /// Defines the part of the data record that is allocated to holding the value
 /// of the variable.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Eq)]
 pub struct Position {
     pub from: u64,
     pub to: u64,
@@ -861,7 +889,7 @@ impl Position {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Eq)]
 pub struct Spread {
     /// The number of subfields within the overall field that is defined by the
     /// <position> element.
@@ -879,7 +907,7 @@ impl Spread {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Text {
     /// the default value
     pub value: String,
@@ -962,7 +990,7 @@ impl Text {
 ///     <text xml:lang="fr" mode="analysis">Âge de répondant</text>
 /// </label>
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextVariant {
     pub value: String,
     pub language: Option<Language>,
@@ -1018,7 +1046,7 @@ impl TextVariant {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Eq)]
 pub struct Language(String);
 
 impl Language {
@@ -1082,7 +1110,7 @@ impl Display for Language {
 /// - None: default value when no 'mode' value was defined.
 /// - Analysis: mode 'analysis'
 /// - Interview: mode 'interview'
-#[derive(Debug, PartialEq, Clone, EnumString)]
+#[derive(Debug, PartialEq, Clone, EnumString, Eq)]
 #[strum(ascii_case_insensitive)]
 #[derive(Default)]
 pub enum Mode {

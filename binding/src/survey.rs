@@ -6,7 +6,7 @@ use pyo3::{exceptions, prelude::*, types::PyDict};
 use tri::{Code, Position, Response, Text, Version};
 
 #[pyfunction]
-pub fn read_sss_file(path: &str) -> PyResult<PySurvey> {
+pub fn read_file(path: &str) -> PyResult<PySurvey> {
     let survey = tri::read_sss_file(path)
         .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))?;
     Ok(PySurvey::from(survey))
