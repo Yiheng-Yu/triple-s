@@ -154,7 +154,7 @@ Run the Rust tests with:
 cargo test
 ```
 
-## Format support
+## CodeFormat support
 
 Both `read_sss_file` and `read_from_string` detect Classic or XML input. Numeric
 categories retain integer codes, quantity values retain floating-point codes,

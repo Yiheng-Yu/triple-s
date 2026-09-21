@@ -20,7 +20,7 @@ use rayon::prelude::*;
 use crate::{
     entities::{
         Code,
-        Format,
+        CodeFormat,
         Language,
         Mode,
         Position,
@@ -249,8 +249,10 @@ impl SurveyBuilder {
                     .get("ident")
                     .and_then(|value| value.chars().next())
                     .ok_or(MissingAttributeError::new("record", "ident"))?;
+
                 output.record.skip = record.attributes.get("skip").map(ToString::to_string);
                 output.record.href = record.attributes.get("href").map(ToString::to_string);
+                output.record.href = record.attributes.get("format").map(ToString::to_string);
             }
         }
 
@@ -519,7 +521,7 @@ impl QuestionBuilder {
         output.format = self
             .attributes
             .remove("format")
-            .and_then(|node| node.value.map(|s| Format::from_str(s.as_ref())))
+            .and_then(|node| node.value.map(|s| CodeFormat::from_str(s.as_ref())))
             .transpose()?
             .unwrap_or_default();
 
@@ -536,7 +538,7 @@ impl QuestionBuilder {
         let response = Response::from_str(&response)
             .with_context(|| format!("When parsing question {}", question_name))?;
         let response = match &output.format {
-            Format::Literal => Response::new_single_literal()?,
+            CodeFormat::Literal => Response::new_single_literal()?,
              _ => response,
         };
         let response = Self::build_response(response, self.responses.children, is_classic)

@@ -152,11 +152,26 @@ impl Meta {
     }
 }
 
+#[derive(Debug, EnumString, PartialEq, Default, Clone)]
+pub enum DataSource {
+    /// Supported from sss 2.0 onwards.
+    /// the data representation is comma separated values, using one field 
+    /// for each variable, with data values similar to the fixed format. Note 
+    /// that for data in csv format the position element refers to the 
+    /// field number. 
+    Csv,
+
+    /// The data representation is fixed format fields.
+    /// Basically `.asc` text file that formatted bit like csv but without any column header.
+    #[default]
+    Fixed,
+}
+
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Record {
     pub id: char,
 
-    // pub format: Option<Format>,
+    // pub format: Option<CodeFormat>,
     /// (Optional) 'skip' attribute can be used to ignore one or more initial
     /// records in the Data File. This will be most useful for csv Data
     /// Files where the first line is often used as documentation (e.g.
@@ -168,6 +183,8 @@ pub struct Record {
     /// using an href attribute ties the specification to the Data File and
     /// may cause problems if the Metadata File and Data File are moved.
     pub href: Option<String>,
+
+    pub data_source: DataSource,
     pub content: Vec<Question>,
 }
 
@@ -194,7 +211,7 @@ pub struct Question {
     pub name: String,
     pub label: Text,
     pub filter: Option<String>,
-    pub format: Format,
+    pub format: CodeFormat,
     pub response: Response,
     pub location: Position,
 }
@@ -229,8 +246,9 @@ impl Question {
     }
 }
 
+// TODO! ADD DOCUMENTATION
 #[derive(Debug, Clone, EnumString, Default, PartialEq)]
-pub enum Format {
+pub enum CodeFormat {
     #[default]
     #[strum(serialize = "numeric")]
     Numeric,

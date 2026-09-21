@@ -9,7 +9,7 @@ pub use entities::{
     Character,
     Code,
     Codes,
-    Format,
+    CodeFormat,
     Language,
     Meta,
     Mode,
