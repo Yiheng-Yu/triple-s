@@ -586,7 +586,6 @@ dependencies = [
  "rayon",
  "regex",
  "strum",
- "strum_macros",
 ]
 
 [[package]]

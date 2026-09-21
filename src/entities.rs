@@ -1,12 +1,27 @@
-use std::{fmt::Write, range::Range, str::FromStr, sync::Arc};
+use std::{
+    any::type_name_of_val,
+    fmt::{Display, Write},
+    range::Range,
+    str::FromStr,
+    sync::{Arc, LazyLock},
+};
 
 use anyhow::{Context, Result};
 use chrono::{NaiveDate, NaiveTime};
-use parking_lot::RwLock;
+use parking_lot::{
+    MappedRwLockReadGuard,
+    MappedRwLockWriteGuard,
+    RwLock,
+    RwLockReadGuard,
+    RwLockWriteGuard,
+};
 use rayon::prelude::*;
-use strum_macros::EnumString;
+use strum::EnumString;
 
-use crate::error::{BadLine, UnsupportedFeature};
+use crate::{
+    error::{BadLine, InvalidArg, TypeMismatch, UnsupportedFeature},
+    prelude::*,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, EnumString)]
 pub enum Version {
@@ -222,31 +237,7 @@ impl Question {
         append_line(&mut output, format!("END VARIABLE {}", self.index));
         Ok(output)
     }
-
 }
-
-// #[derive(Debug, Clone, Default, PartialEq)]
-// pub struct TEMP {
-//     inner: Response
-// }
-
-// impl TEMP {
-//     fn cnovert(&mut self, new_type: ResponseType) -> Self {
-//         todo!()
-//     }
-// }
-
-
-// pub enum ResponseType {
-//     Single,
-//     Multiple,
-//     SingleLiteral,
-//     Quantity,
-//     Note,
-//     Date,
-//     Time
-// }
-
 
 #[derive(Debug, Clone, EnumString, Default, PartialEq)]
 pub enum Format {
@@ -257,7 +248,7 @@ pub enum Format {
     Literal,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub enum Response {
     /// Quantity type of response.
     /// min/ max: minimun & maximun value allowed
@@ -272,78 +263,98 @@ pub enum Response {
     /// companies inplement various variations of it. Main use case is a
     /// blank page with just 'Next Page' button on it, used for displaying
     /// instructions
-    #[default]
-    Note,
+    Note(Arc<RwLock<Note>>),
 
-    /// Single response type
-    Single(Arc<RwLock<Single<u64>>>),
-
-    /// Multi response type
-    Multiple(Arc<RwLock<Multiple>>),
+    /// Single/ Multiple response type with code value being u64
+    Categorical(Arc<RwLock<Categorical<u64>>>),
 
     /// Logical response type
-    Logical,
+    Logical(Arc<RwLock<Logical>>),
 
     /// Single response type but with code value as string literals,
     /// introduced since sss 2.0
-    SingleLiteral(Arc<RwLock<Single<String>>>),
+    SingleLiteral(Arc<RwLock<Categorical<String>>>),
+
     Date(Arc<RwLock<RangeDate>>),
     Time(Arc<RwLock<RangeTime>>),
 }
 
+impl Wrap for Response {}
+
+impl Default for Response {
+    fn default() -> Self {
+        Self::new_note().expect("Creation of 'Note' variant is EXTREMELY unlikely to fail")
+    }
+}
+
 impl Response {
     pub fn from_string(_input: &str) -> Result<Self> {
-        // plan: put input inside a template, parse as question, return the question.resposne
+        // plan: put input inside a template, parse as question, return the
+        // question.resposne
         todo!()
     }
 
-    pub fn new_single() -> Self {
-        Self::Single(Arc::new(RwLock::new(Single::<u64>::default())))
+    pub fn new_note() -> Result<Self> {
+        Self::Note(Arc::new(RwLock::new(Note::new()))).wrap()
     }
 
-    pub fn new_multiple() -> Self {
-        Self::Multiple(Arc::new(RwLock::new(Multiple::default())))
+    pub fn new_single() -> Result<Self> {
+        Self::Categorical(Arc::new(RwLock::new(Categorical::<u64>::new_single(
+            vec![],
+        )?)))
+        .wrap()
     }
 
-    pub fn new_quantity() -> Self {
-        Self::Quantity(Arc::new(RwLock::new(Quantity::default())))
+    pub fn new_multiple() -> Result<Self> {
+        Self::Categorical(Arc::new(RwLock::new(Categorical::<u64>::new_multiple(
+            vec![],
+        )?)))
+        .wrap()
     }
 
-    pub fn new_character() -> Self {
-        Self::Character(Arc::new(RwLock::new(Character::default())))
+    pub fn new_logical() -> Result<Self> {
+        Self::Logical(Arc::new(RwLock::new(Logical::new()))).wrap()
     }
 
-    pub fn new_range_date() -> Self {
-        Self::Date(Arc::new(RwLock::new(RangeDate::default())))
+    pub fn new_quantity() -> Result<Self> {
+        Self::Quantity(Arc::new(RwLock::new(Quantity::default()))).wrap()
     }
 
-    pub fn new_range_time() -> Self {
-        Self::Time(Arc::new(RwLock::new(RangeTime::default())))
+    pub fn new_character() -> Result<Self> {
+        Self::Character(Arc::new(RwLock::new(Character::default()))).wrap()
     }
 
-    pub fn new_literal_single() -> Self {
-        Self::SingleLiteral(Arc::new(RwLock::new(Single::<String>::default())))
+    pub fn new_range_date() -> Result<Self> {
+        Self::Date(Arc::new(RwLock::new(RangeDate::default()))).wrap()
+    }
+
+    pub fn new_range_time() -> Result<Self> {
+        Self::Time(Arc::new(RwLock::new(RangeTime::default()))).wrap()
+    }
+
+    pub fn new_literal_single() -> Result<Self> {
+        Self::SingleLiteral(Arc::new(RwLock::new(Categorical::<String>::new_single(
+            vec![],
+        )?)))
+        .wrap()
     }
 
     /// count amount of codes in the instance
-    pub fn num_values(&self) -> usize
-    {
+    pub fn num_values(&self) -> usize {
         match self {
-            Self::Single(item) => item.read().values.len(),
+            Self::Categorical(item) => item.read().values.len(),
             Self::SingleLiteral(item) => item.read().values.len(),
-            Self::Multiple(item) => item.read().values.len(),
-            _ => 0
+            _ => 0,
         }
     }
 
     pub fn to_sss_classic(&self) -> Result<String> {
         match self {
             Self::Character(item) => item.read().to_sss_classic(),
-            Self::Single(item) => item.read().to_sss_classic(),
-            Self::Multiple(item) => item.read().to_sss_classic(),
+            Self::Categorical(item) => item.read().to_sss_classic(),
             Self::Quantity(item) => item.read().to_sss_classic(),
-            Self::Logical => Ok("TYPE LOGICAL\n".into()),
-            Self::Date(_) | Self::Time(_) | Self::SingleLiteral(_) | Self::Note => {
+            Self::Logical(_) => Ok("TYPE LOGICAL\n".into()),
+            Self::Date(_) | Self::Time(_) | Self::SingleLiteral(_) | Self::Note(_) => {
                 let error = UnsupportedFeature {
                     current_version: "classic".into(),
                     feature: format!("{:?}", self),
@@ -352,13 +363,124 @@ impl Response {
             }
         }
     }
+
+    pub fn is_categorical(&self) -> bool {
+        matches!(
+            self,
+            Self::Categorical(_) | Self::SingleLiteral(_) | Self::Logical(_)
+        )
+    }
+
+    pub fn is_open_end(&self) -> bool {
+        matches!(
+            self,
+            Self::Quantity(_) | Self::Character(_) | Self::Time(_) | Self::Date(_)
+        )
+    }
+
+    /// read values of variant `Categorical`
+    pub fn with_read_categorical<R>(
+        &self,
+        f: impl FnOnce(&Categorical<u64>) -> R,
+    ) -> Result<R> {
+        match self {
+            Self::Categorical(item) => {
+                let guard = item.read();
+                Ok(f(&guard))
+            }
+            _ => Err(
+                TypeMismatch::new("Only available for response type 'Categorical'!").into(),
+            ),
+        }
+    }
+
+    pub fn with_write_categorical<R>(
+        &self,
+        f: impl FnOnce(&mut Categorical<u64>) -> R,
+    ) -> Result<R> {
+        match self {
+            Self::Categorical(item) => {
+                let mut guard = item.write();
+                Ok(f(&mut guard))
+            }
+            _ => Err(
+                TypeMismatch::new("Only available for response type 'Categorical'!").into(),
+            ),
+        }
+    }
+
+    pub fn read_categorical(&self) -> Result<MappedRwLockReadGuard<'_, Categorical<u64>>> {
+        match self {
+            Self::Categorical(item) => {
+                Ok(RwLockReadGuard::map(item.read(), |item| item))
+            },
+            _ => Err(
+                TypeMismatch::new("Only available for response type 'Categorical'!").into(),
+            ),
+        }
+    }
+
+    pub fn write_categorical(&self) -> Result<MappedRwLockWriteGuard<'_, Categorical<u64>>> {
+        match self {
+            Self::Categorical(item) => {
+                Ok( RwLockWriteGuard::map(item.write(), |item| item) )
+            },
+            _ => Err(
+                TypeMismatch::new("Only available for response type 'Categorical'!").into(),
+            ),
+        }
+    }
+
+    pub fn response_type(&self) -> &'static str {
+        match self {
+            Self::Categorical(member) => type_name_of_val(&*member.read()),
+            Self::SingleLiteral(member) => type_name_of_val(&*member.read()),
+            Self::Quantity(member) => type_name_of_val(&*member.read()),
+            Self::Note(member) => type_name_of_val(&*member.read()),
+            Self::Logical(member) => type_name_of_val(&*member.read()),
+            Self::Character(member) => type_name_of_val(&*member.read()),
+            Self::Date(member) => type_name_of_val(&*member.read()),
+            Self::Time(member) => type_name_of_val(&*member.read()),
+        }
+    }
+
+    pub fn try_add_code(&mut self, code: Code<u64>) -> Result<()> {
+        let mut item = self.write_categorical()
+            .with_context(|| format!(
+                "Trying to append code to response type: '{}'",
+                self.response_type()
+            ))?;
+        
+        let has_duplicate = item.values.iter().any(|member| member.code == code.code);
+        if !has_duplicate {
+            item.values.push(code);
+            Ok(())
+        } else {
+            Err(
+                InvalidArg::new(format!("Unable to add new code, value '{}' already exists!", code.code)).into()
+            )
+        }
+    }
+
+    pub fn try_convert_to_multiple(self) -> Result<Self> {
+        match self {
+            Self::Categorical(_)=> {
+                self.with_write_categorical(|item| item.as_multiple())??;
+                Ok(self)
+            },
+            Self::SingleLiteral(_) => todo!(),
+            _ => Err(
+                TypeMismatch::new("Only available for response type 'Categorical/ SingleLiteral'").into(),
+            )
+        }
+    }
 }
 
 impl PartialEq for Response {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Logical, Self::Logical) => true,
-            (Self::Note, Self::Note) => true,
+            (Self::Logical(_), Self::Logical(_)) => true,
+            (Self::Note(_), Self::Note(_)) => true,
             (Self::Character(self_item), Self::Character(other_item)) => {
                 self_item.read().size == other_item.read().size
             }
@@ -370,47 +492,44 @@ impl PartialEq for Response {
             }
             (Self::Quantity(self_item), Self::Quantity(other_item)) => {
                 (self_item.read().range == other_item.read().range)
-                & (self_item.read().values == other_item.read().values)
+                    & (self_item.read().values == other_item.read().values)
             }
-            (Self::Single(self_item), Self::Single(other_item)) => {
-                (self_item.read().range == other_item.read().range)
-                & (self_item.read().values == other_item.read().values)
+            (Self::Categorical(self_item), Self::Categorical(other_item)) => {
+                (self_item.read().is_single == other_item.read().is_single)
+                    & (self_item.read().range == other_item.read().range)
+                    & (self_item.read().spread == other_item.read().spread)
+                    & (self_item.read().values == other_item.read().values)
             }
             (Self::SingleLiteral(self_item), Self::SingleLiteral(other_item)) => {
-                (self_item.read().range == other_item.read().range)
-                & (self_item.read().values == other_item.read().values)
+                (self_item.read().is_single == other_item.read().is_single)
+                    & (self_item.read().range == other_item.read().range)
+                    & (self_item.read().spread == other_item.read().spread)
+                    & (self_item.read().values == other_item.read().values)
             }
-            (Self::Multiple(self_item), Self::Multiple(other_item)) => {
-                (self_item.read().range == other_item.read().range)
-                & (self_item.read().values == other_item.read().values)
-                & (self_item.read().spread == other_item.read().spread)
-            }
-            _ => false
+            _ => false,
         }
     }
 }
 
 impl FromStr for Response {
     type Err = BadLine;
-
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let to_match = s.trim().to_ascii_lowercase();
-        let instance = match to_match.as_str() {
-            "single" => Self::new_single(),
-            "multiple" => Self::new_multiple(),
-            "quantity" => Self::new_quantity(),
-            "character" => Self::new_character(),
-            "logical" => Self::Logical,
-            "date" => Self::new_range_date(),
-            "time" => Self::new_range_time(),
+        match to_match.as_str() {
+            "single" => Self::new_single().map_err(BadLine::from).map_err(BadLine::from),
+            "multiple" => Self::new_multiple().map_err(BadLine::from),
+            "quantity" => Self::new_quantity().map_err(BadLine::from),
+            "character" => Self::new_character().map_err(BadLine::from),
+            "logical" => Self::new_logical().map_err(BadLine::from),
+            "date" => Self::new_range_date().map_err(BadLine::from),
+            "time" => Self::new_range_time().map_err(BadLine::from),
             _ => {
                 return Err(BadLine::new(format!(
                     "Unidentified response kind: '{}'",
                     to_match
                 )));
             }
-        };
-        Ok(instance)
+        }
     }
 }
 
@@ -448,43 +567,211 @@ impl Character {
     }
 }
 
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Categorical {
+    Integer(Values<u64>),
+    String(Values<String>)
+}
+
+impl Default for Categorical {
+    fn default() -> Self {
+        Self::Integer(Values::<u64>::default())
+    }
+}
+
+impl Wrap for Categorical {}
+
+impl From<Values<u64>> for Categorical {
+    fn from(code_values: Values<u64>) -> Self {
+        Self::Integer(code_values)
+    }
+}
+
+impl From<Values<String>> for Categorical {
+    fn from(code_values: Values<String>) -> Self {
+        Self::String(code_values)
+    }
+}
+
+impl Categorical {
+    fn new_single<Value>(values: Vec<Code<Value>>) -> Result<Self>
+    where
+        Self: From<Values<Value>>,
+        Value: CodeType,
+    {
+        let item = Values {
+            values,
+            is_single: true,
+            range: None,
+            spread: None,
+        };
+
+        Self::from(item).wrap()
+    }
+
+    fn new_multiple(values: Vec<Code<u64>>) -> Result<Self> {
+        let item = Values::<u64>::new(values, false)?;
+        Self::Integer(item).wrap()
+    }
+}
+
+// impl Categorical {
+//     fn read(&self) -> &Values<u64> {
+//         match self {
+//             Self::Integer(item) => item,
+//             _ => todo!()
+//         }
+//     }
+// }
+
+// impl Categorical {
+//     fn read(&self) -> &Values<String> {
+//         match self {
+//             Self::String(item) => item,
+//             _ => todo!()
+//         }
+//     }
+// }
+
+
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct Single<T: Clone>
-where T: Clone + std::fmt::Display
+pub struct Values<Value>
+where Value: CodeType
 {
-    pub range: Option<Range<T>>,
-    pub values: Vec<Code<T>>,
-}
-
-impl Single<u64> {
-    pub fn to_sss_classic(&self) -> Result<String> {
-        let mut output = String::new();
-        append_line(&mut output, "TYPE SINGLE");
-        append_line(&mut output, "VALUES");
-        write_choices(&mut output, self.values.clone());
-        Ok(output)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct Multiple {
-    pub range: Option<Range<u64>>,
+    /// toggle `is_single` on/off won't overwrite existing value of `spread`,
+    /// but hiding it from the user instead.
     pub spread: Option<Spread>,
-    pub values: Vec<Code<u64>>,
+    pub range: Option<Range<Value>>,
+    pub values: Vec<Code<Value>>,
+    is_single: bool,
 }
 
-impl Multiple {
+impl Wrap for Values<u64> {}
+
+impl Values<u64> {
+    fn new(values: Vec<Code<u64>>, is_single: bool) -> Result<Self> {
+        (Self {
+            values: values,
+            is_single: is_single,
+            range: None,
+            spread: None,
+        })
+        .wrap()
+    }
+
     pub fn to_sss_classic(&self) -> Result<String> {
         let mut output = String::new();
-        if let Some(spread) = self.spread.as_ref() {
-            append_line(&mut output, spread.to_sss_classic());
+        if self.is_single {
+            append_line(&mut output, "TYPE SINGLE");
+        } else {
+            if let Some(spread) = self.spread.as_ref() {
+                append_line(&mut output, spread.to_sss_classic());
+            }
+            append_line(&mut output, "TYPE MULTIPLE");
         }
-        append_line(&mut output, "TYPE MULTIPLE");
         append_line(&mut output, "VALUES");
         write_choices(&mut output, self.values.clone());
         Ok(output)
     }
 }
+
+impl Wrap for Values<String> {}
+
+impl Values<String> {
+        fn new(values: Vec<Code<String>>, is_single: bool) -> Result<Values<String>> {
+        if !is_single {
+            let error = InvalidArg::new(
+                "Unable to create muli-code categorical response with code value being 'String'",
+            );
+            return Err(error.into());
+        }
+        
+        (Self {
+            values: values,
+            is_single: true,
+            range: None,
+            spread: None,
+        })
+        .wrap()
+    }
+
+    pub fn to_sss_classic(&self) -> Result<String> {
+        let error = InvalidArg::new(
+            "Unable to create muli-code categorical response with code value being 'String'",
+        );
+        return Err(error.into());
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Note {}
+
+impl Wrap for Note {}
+
+impl Note {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Logical {}
+
+impl Wrap for Logical {}
+
+impl Logical {
+    pub const ITEM: LazyLock<Categorical<u64>> = LazyLock::new(|| {
+        Categorical::new_single(vec![
+            Code::new(0, "FALSE").unwrap(),
+            Code::new(1, "TRUE").unwrap(),
+        ])
+        .unwrap()
+    });
+
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+// #[derive(Debug, Clone, PartialEq, Default)]
+// pub struct Single<T: Clone>
+// where T: Clone + Display
+// {
+//     pub range: Option<Range<T>>,
+//     pub values: Vec<Code<T>>,
+// }
+
+// impl Single<u64> {
+//     pub fn to_sss_classic(&self) -> Result<String> {
+//         let mut output = String::new();
+//         append_line(&mut output, "TYPE SINGLE");
+//         append_line(&mut output, "VALUES");
+//         write_choices(&mut output, self.values.clone());
+//         Ok(output)
+//     }
+// }
+
+// #[derive(Debug, Clone, PartialEq, Default)]
+// pub struct Multiple {
+//     pub range: Option<Range<u64>>,
+//     pub spread: Option<Spread>,
+//     pub values: Vec<Code<u64>>,
+// }
+
+// impl Multiple {
+//     pub fn to_sss_classic(&self) -> Result<String> {
+//         let mut output = String::new();
+//         if let Some(spread) = self.spread.as_ref() {
+//             append_line(&mut output, spread.to_sss_classic());
+//         }
+//         append_line(&mut output, "TYPE MULTIPLE");
+//         append_line(&mut output, "VALUES");
+//         write_choices(&mut output, self.values.clone());
+//         Ok(output)
+//     }
+// }
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct RangeDate {
@@ -509,13 +796,14 @@ impl RangeTime {
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct Code<T>
-where T: Clone + std::fmt::Display
+pub struct Code<Value>
+where Value: CodeType
 {
-    pub code: T,
+    pub code: Value,
 
     /// text label
     pub label: Text,
+
     /// Response filter.
     pub filter: Option<String>,
 
@@ -526,9 +814,27 @@ where T: Clone + std::fmt::Display
     pub is_special: bool,
 }
 
-impl<T> Code<T>
-where T: Clone + std::fmt::Display
+impl<Value> Code<Value>
+where Value: CodeType
 {
+    /// create new instance with code & label whilest everything else set as
+    /// their default value
+    pub fn new<C>(code: C, label: impl Into<String>) -> Result<Self>
+    where
+        C: TryInto<Value>,
+        C::Error: Into<anyhow::Error>,
+    {
+        let code = code.try_into().map_err(|err| err.into())?;
+
+        Ok(Self {
+            code: code,
+            label: Text::new(label),
+            filter: None,
+            score: None,
+            is_special: false,
+        })
+    }
+
     pub fn to_sss_classic(&self) -> String {
         let base = format!("{} {}", self.code, quote(self.label.to_sss_classic()));
         if self.is_special {
@@ -539,7 +845,8 @@ where T: Clone + std::fmt::Display
     }
 }
 
-/// Defines the part of the data record that is allocated to holding the value of the variable. 
+/// Defines the part of the data record that is allocated to holding the value
+/// of the variable.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Position {
     pub from: u64,
@@ -601,7 +908,7 @@ impl From<std::sync::Arc<str>> for Text {
     }
 }
 
-impl std::fmt::Display for Text {
+impl Display for Text {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let _variants = format!(", [{}] variants", self.variant.len());
         let variants = "";
@@ -664,7 +971,7 @@ pub struct TextVariant {
     pub mode: Mode,
 }
 
-impl std::fmt::Display for TextVariant {
+impl Display for TextVariant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -734,7 +1041,6 @@ impl Language {
     }
 }
 
-
 // make `Language` behave more like a string
 impl AsRef<str> for Language {
     fn as_ref(&self) -> &str {
@@ -755,7 +1061,7 @@ impl From<Language> for String {
     }
 }
 
-impl std::fmt::Display for Language {
+impl Display for Language {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0.as_str())
     }
@@ -768,7 +1074,7 @@ impl std::fmt::Display for Language {
 /// ```text
 /// (Optional) The use of specialised texts for interviewing and/or analysis within the
 /// specification must be signalled by a modes="mode_identifier_list"
-/// attribute on the initial <sss> element.   
+/// attribute on the initial <sss> element.
 /// Two explicit modes are available: “interview” and “analysis”. In the absence of
 /// a mode specification, the appropriate text is assumed to be used in both
 /// modes.
@@ -793,18 +1099,18 @@ pub enum Mode {
 // Helper functions
 // ------------------------------------------------------------------------
 #[inline]
-fn quote(value: impl std::fmt::Display) -> String {
+fn quote(value: impl Display) -> String {
     format!(r#""{}""#, value)
 }
 
 #[inline]
-fn append_line(output: &mut String, content: impl std::fmt::Display) {
+fn append_line(output: &mut String, content: impl Display) {
     writeln!(output, "{content}").expect("writing to a String shouldn't fail");
 }
 
 #[inline]
-fn write_choices<T>(output: &mut String, choices: Vec<Code<T>>)
-where T: Clone + std::fmt::Display {
+fn write_choices<Value>(output: &mut String, choices: Vec<Code<Value>>)
+where Value: CodeType {
     for choice in choices {
         append_line(output, choice.to_sss_classic());
     }
@@ -812,7 +1118,7 @@ where T: Clone + std::fmt::Display {
 }
 
 #[inline]
-fn format_range<T: std::fmt::Display>(from: T, to: T, delimiter: &str) -> String {
+fn format_range<T: Display>(from: T, to: T, delimiter: &str) -> String {
     if from.to_string() == to.to_string() {
         from.to_string()
     } else {
@@ -875,6 +1181,106 @@ mod test {
     }
 
     #[test]
+    fn test_response_type_categorical() {
+        assert_eq!(Response::new_single().unwrap().is_categorical(), true);
+        assert_eq!(Response::new_multiple().unwrap().is_categorical(), true);
+        assert_eq!(
+            Response::new_literal_single().unwrap().is_categorical(),
+            true
+        );
+        assert_eq!(Response::new_logical().unwrap().is_categorical(), true);
+
+        assert_eq!(Response::new_character().unwrap().is_categorical(), false);
+        assert_eq!(Response::new_quantity().unwrap().is_categorical(), false);
+        assert_eq!(Response::new_range_date().unwrap().is_categorical(), false);
+        assert_eq!(Response::new_range_time().unwrap().is_categorical(), false);
+
+        assert_eq!(Response::new_note().unwrap().is_categorical(), false);
+    }
+
+    #[test]
+    fn test_response_type_open_end() {
+        assert_eq!(Response::new_single().unwrap().is_open_end(), false);
+        assert_eq!(Response::new_multiple().unwrap().is_open_end(), false);
+        assert_eq!(Response::new_literal_single().unwrap().is_open_end(), false);
+        assert_eq!(Response::new_logical().unwrap().is_open_end(), false);
+
+        assert_eq!(Response::new_character().unwrap().is_open_end(), true);
+        assert_eq!(Response::new_quantity().unwrap().is_open_end(), true);
+        assert_eq!(Response::new_range_date().unwrap().is_open_end(), true);
+        assert_eq!(Response::new_range_time().unwrap().is_open_end(), true);
+
+        assert_eq!(Response::new_note().unwrap().is_categorical(), false);
+    }
+
+    #[test]
+    fn test_add_code_single_u64() {
+        let mut resp = Response::new_single().unwrap();
+        let codes = [
+            Code::<u64>::new(1, "haha").unwrap(),
+            Code::<u64>::new(2, "yes").unwrap(),
+            Code::<u64>::new(3, "whatafgasrfd").unwrap(),
+            Code::<u64>::new(4, "").unwrap(),
+            Code::<u64>::new(5, "123").unwrap(),
+            Code::<u64>::new(6, "213331421").unwrap(),
+        ];
+        for code in codes.iter() {
+            resp.try_add_code(code.clone()).unwrap()
+        }
+        let member = resp.read_categorical().unwrap();
+        assert_eq!(member.values.len(), codes.len());
+        for (parsed, correct) in member.values.iter().zip(codes) {
+            assert_eq!(parsed, &correct)
+        }
+    }
+
+    #[test]
+    fn test_add_code_multi_u64() {
+        let mut resp = Response::new_multiple().unwrap();
+        let codes = [
+            Code::<u64>::new(1, "haha").unwrap(),
+            Code::<u64>::new(2, "yes").unwrap(),
+            Code::<u64>::new(3, "whatafgasrfd").unwrap(),
+            Code::<u64>::new(4, "").unwrap(),
+            Code::<u64>::new(5, "123").unwrap(),
+            Code::<u64>::new(6, "213331421").unwrap(),
+        ];
+        for code in codes.iter() {
+            resp.try_add_code(code.clone()).unwrap()
+        }
+        let member = resp.read_categorical().unwrap();
+        assert_eq!(member.values.len(), codes.len());
+        for (parsed, correct) in member.values.iter().zip(codes) {
+            assert_eq!(parsed, &correct)
+        }
+    }
+
+    #[test]
+    fn test_add_code_error() {
+        let codes = [
+            Code::<u64>::new(1, "haha").unwrap(),
+            Code::<u64>::new(2, "yes").unwrap(),
+            Code::<u64>::new(3, "whatafgasrfd").unwrap(),
+            Code::<u64>::new(4, "").unwrap(),
+            Code::<u64>::new(5, "123").unwrap(),
+            Code::<u64>::new(6, "213331421").unwrap(),
+            ];
+
+        let mut resp = Response::new_multiple().unwrap();
+        for code in codes.iter() {
+            resp.try_add_code(code.clone()).unwrap();
+            assert!(resp.try_add_code(code.clone()).is_err())
+        }
+
+        let mut resp = Response::new_single().unwrap();
+        for code in codes.iter() {
+            resp.try_add_code(code.clone()).unwrap();
+            assert!(resp.try_add_code(code.clone()).is_err())
+        }
+        
+    }
+
+    #[test]
     fn test_create_question_from_rust() {
         todo!("This is indended to create an API for python side to create new instance")
     }
@@ -893,14 +1299,15 @@ mod test {
     fn test_convert_between_single_and_multiple() {
         // have some think about the current design of Response enum
         // should type <-> response being two separate things?
-        // a master Response struct that contains everything needed, and return 
+        // a master Response struct that contains everything needed, and return
         // thing according current type of response
         // provide a '.convert(resp_type)' method ?? to switch betwen types
         // and raises error when .convert betwen f64 <-> string
         //
         // OK ACTUAL IDEA:
-        // Or: make current `Response` enum as a backend, rename to something like `ResponseData`
-        // then createe a new `Response` struct that exploses public API
+        // Or: make current `Response` enum as a backend, rename to something
+        // like `ResponseData` then createe a new `Response` struct that
+        // exploses public API
         //
         // checkout: `TEMP`
         todo!()

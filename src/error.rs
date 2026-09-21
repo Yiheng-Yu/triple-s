@@ -22,6 +22,79 @@ impl fmt::Display for InternalError {
 }
 
 #[derive(Debug)]
+pub struct InvalidArg {
+    message: String,
+}
+
+impl InvalidArg {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+impl Error for InvalidArg {}
+
+impl fmt::Display for InvalidArg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "InvalidArg: {}", self.message)
+    }
+}
+
+
+#[derive(Debug)]
+pub struct TypeMismatch {
+    message: String,
+}
+
+impl TypeMismatch {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+impl Error for TypeMismatch {}
+
+impl fmt::Display for TypeMismatch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "TypeMismatch: {}", self.message)
+    }
+}
+
+
+
+/// Error raised when user tring to convert things from type A to type B
+/// i.e., trying to export Questions that only exists in sss xml into sss classic
+/// Or trying to convert response types that are incompatible with each other.
+#[derive(Debug)]
+pub struct ConversionError {
+    field: String,
+    from: String,
+    to: String
+}
+
+impl ConversionError {
+    pub fn new(field: impl Into<String>, from: impl Into<String>, to: impl Into<String>) -> Self {
+        Self {
+            field: field.into(),
+            from: from.into(),
+            to: to.into()
+        }
+    }
+}
+
+impl Error for ConversionError {}
+
+impl fmt::Display for ConversionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ConversionError: unable to convert [{}] from '{}' to '{}'", self.field, self.from, self.to)
+    }
+}
+
+#[derive(Debug)]
 pub struct FileReadError {
     message: String,
 }
@@ -66,6 +139,16 @@ impl Error for BadLine {}
 impl From<std::io::Error> for BadLine {
     fn from(value: std::io::Error) -> Self {
         Self::new(value.to_string())
+    }
+}
+
+impl From<anyhow::Error> for BadLine {
+    fn from(value: anyhow::Error) -> Self {
+        let error = format!(
+            "{value:#}\n\nBacktrace:\n{}",
+            value.backtrace()
+        );
+        Self::new(error)
     }
 }
 

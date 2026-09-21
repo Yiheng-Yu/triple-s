@@ -10,7 +10,7 @@ pub use entities::{
     Language,
     Meta,
     Mode,
-    Multiple,
+    Categorical,
     Position,
     Quantity,
     Question,
@@ -18,7 +18,6 @@ pub use entities::{
     RangeTime,
     Record,
     Response,
-    Single,
     Spread,
     Survey,
     Text,
@@ -26,3 +25,23 @@ pub use entities::{
     Version,
 };
 pub use parser::{read_from_string, read_sss_file};
+
+
+pub mod prelude {
+    use std::fmt::Display;
+    use anyhow::Result;
+
+    pub trait CodeType:Clone + Display + Sized + PartialEq {}
+
+    impl CodeType for u64 {}
+    impl CodeType for f64 {}
+    impl CodeType for String {}
+
+    /// wrap current instance in Ok(), just to save some boilderplate code,,,
+    pub trait Wrap: Sized {
+        fn wrap(self) -> Result<Self> {
+            Ok(self)
+        }
+    }
+
+}

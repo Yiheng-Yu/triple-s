@@ -18,6 +18,7 @@ use quick_xml::{encoding::DecodingReader, reader::Reader as XmlReader};
 use rayon::prelude::*;
 
 use crate::{
+    prelude::*,
     entities::{
         Code,
         Format,
@@ -323,7 +324,8 @@ impl QuestionBuilder {
         is_classic: bool,
     ) -> Result<Response> {
         match &mut response {
-            Response::Logical => (),
+            Response::Logical(_) => (),
+
             Response::Character(item) => {
                 let size = data
                     .into_par_iter()
@@ -354,35 +356,16 @@ impl QuestionBuilder {
                     .map(|node| parse_into_choice::<f64>(node, is_classic))
                     .collect::<Result<Vec<Code<f64>>>>()?;
             }
-            Response::Multiple(item) => {
-                let mut item = RwLockWriteGuard::map(item.write(), |resp| resp);
-                let first_entry =
-                    data.first().ok_or(MissingValueError::new("values", "value"))?;
 
+            Response::Categorical(item) => {
+                let mut item = RwLockWriteGuard::map(item.write(), |resp| resp);
+                let first_entry = data.first()
+                    .ok_or(MissingValueError::new("values", "value"))?;
                 if first_entry.tag.as_ref() == "range" {
                     let (from, to) = get_range::<u64>(first_entry, true)?;
                     let end = to.ok_or(MissingAttributeError::new("range", "to"))?;
                     item.range = Some(Range { start: from, end });
                 };
-
-                item.values = data
-                    .par_drain(..)
-                    .filter(|val| val.tag.as_ref() != "range")
-                    .map(|node| parse_into_choice::<u64>(node, is_classic))
-                    .collect::<Result<Vec<Code<u64>>>>()?;
-            }
-
-            Response::Single(item) => {
-                let mut item = RwLockWriteGuard::map(item.write(), |resp| resp);
-                let first_entry =
-                    data.first().ok_or(MissingValueError::new("values", "value"))?;
-
-                if first_entry.tag.as_ref() == "range" {
-                    let (from, to) = get_range::<u64>(first_entry, true)?;
-                    let end = to.ok_or(MissingAttributeError::new("range", "to"))?;
-                    item.range = Some(Range { start: from, end });
-                };
-
                 item.values = data
                     .par_drain(..)
                     .filter(|val| val.tag.as_ref() != "range")
@@ -419,6 +402,7 @@ impl QuestionBuilder {
                     }
                 }
             }
+
             Response::Time(item) => {
                 if let Some(node) = data.into_iter().next() {
                     let start = node
@@ -443,7 +427,7 @@ impl QuestionBuilder {
                 }
             }
 
-            Response::Note => {
+            Response::Note(_) => {
                 return Err(InternalError::new(
                     "Customised response type 'Note' should not exist".to_string(),
                 )
@@ -548,7 +532,10 @@ impl QuestionBuilder {
         let response = Response::from_str(&response)?;
         let response = match &output.format {
             Format::Literal => match &response {
-                Response::Single(_) => Response::new_literal_single(),
+                Response::Categorical(_) => {
+                    Response::new_literal_single()
+                        .with_context(|| format!("Whilest trying to parse question: '{}'", &question_name))?
+                }
                 _ => response,
             },
             _ => response,
@@ -558,8 +545,9 @@ impl QuestionBuilder {
             .with_context(|| format!("When parsing question {}", question_name))?;
 
         if let Some(mut node) = self.attributes.remove("spread")
-            && let Response::Multiple(item) = &response
+            && let Response::Categorical(item) = &response
         {
+            // read field `spread` regardless of response type, just in case
             let spread = if is_classic {
                 let text = node
                     .value
@@ -666,7 +654,7 @@ fn parse_text(mut node: Node, is_classic: bool) -> Result<Text> {
 #[inline]
 fn parse_into_choice<T>(node: Node, is_classic: bool) -> Result<Code<T>>
 where
-    T: Clone + FromStr + std::fmt::Display,
+    T: CodeType + FromStr,
     T::Err: std::error::Error + Send + Sync + 'static,
 {
     if node.tag.as_ref() != "value" {
