@@ -567,8 +567,6 @@ impl Character {
     }
 }
 
-
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Categorical {
     Integer(Values<u64>),
