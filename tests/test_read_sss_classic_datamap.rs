@@ -1,4 +1,4 @@
-use triple_s::{Question, Survey};
+use triple_s::{Question, Response, Survey};
 
 const PATH_SSS_CLASSIC: &str = "tests/sss-examples/sss_classic.sss";
 
@@ -17,6 +17,8 @@ fn test_question_from_to_sss_classic() {
     let survey = example_datamap_classic();
 
     for question in survey.record.content.into_iter() {
+        println!("Asserting sss xml question read/write for questio: '{}'", question.name);
+        
         let text = question.to_sss_classic().unwrap();
         let parsed = Question::from_string(&text).unwrap();
         assert_eq!(parsed.name, question.name);
@@ -25,7 +27,15 @@ fn test_question_from_to_sss_classic() {
         assert_eq!(parsed.filter, question.filter);
         assert_eq!(parsed.location, question.location);
         assert_eq!(parsed.format, question.format);
-        assert_eq!(parsed.response, question.response);
+        match (&parsed.response, &question.response) {
+            (Response::NumericCategory(parsed_), Response::NumericCategory(correct)) => {
+                assert_eq!(parsed_.read().is_single, correct.read().is_single);
+                assert_eq!(parsed_.read().range, correct.read().range);
+                assert_eq!(parsed_.read().spread, correct.read().spread);
+                assert_eq!(parsed_.read().values, correct.read().values);
+            }
+            _ => assert_eq!(parsed.response, question.response)
+        }
     }
 }
 

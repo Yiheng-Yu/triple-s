@@ -86,7 +86,7 @@ Add the crate to your project:
 triple_s = "0.1"
 ```
 
-Read a classic Triple-S file:
+Read a Classic or XML Triple-S file:
 
 ```rust
 use triple_s::read_sss_file;
@@ -94,14 +94,51 @@ use triple_s::read_sss_file;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let survey = read_sss_file("path/to/survey.sss")?;
 
-    println!("{}", survey.title);
+    println!("{:?}", survey.title);
     for question in &survey.record.content {
-        println!("{}: {}", question.name, question.text);
+        println!("{}: {}", question.name, question.label.value);
     }
 
     Ok(())
 }
 ```
+
+Response codes keep their Rust types:
+
+| Response | Code type | Empty constructor |
+| --- | --- | --- |
+| Numeric single | `u64` | `Response::new_single()` |
+| Numeric multiple | `u64` | `Response::new_multiple()` |
+| Literal single | `String` | `Response::new_literal_single()` |
+| Quantity | `f64` | `Response::new_quantity()` |
+
+```rust
+use triple_s::{Code, Response};
+
+fn main() -> anyhow::Result<()> {
+    let response = Response::new_literal_single()?;
+    response.try_add_code(Code::<String>::new("001", "First option")?)?;
+
+    {
+        let values = response.try_get_values::<String>()?;
+        assert_eq!(values[0].code, "001");
+    } // The read lock is released here.
+
+    response.try_get_values_mut::<String>()?[0].label.value = "New label".into();
+    Ok(())
+}
+```
+
+`try_add_code` infers the type from its argument and rejects duplicates. Typed
+getters return an error for incompatible responses. Read and write guards hold
+the lock until dropped; release them before taking another lock on the same
+response. Direct edits through mutable guards or public fields bypass validation.
+Float codes must be finite when parsed, constructed, or added through checked methods.
+
+`FromValues` has been replaced by ordinary constructors:
+`Categorical::integer_single(codes)`, `Categorical::integer_multiple(codes)`, and
+`Categorical::string_single(codes)`. Match the `Categorical` variant to work with
+its `Values<T>` directly using `values()`, `values_mut()`, and `try_add_code()`.
 
 ## Development
 
@@ -119,9 +156,11 @@ cargo test
 
 ## Format support
 
-The public `read_sss_file` function currently parses the classic text Triple-S
-format. XML fixtures are included in the repository, but XML parsing is not
-currently exposed by `read_sss_file`.
+Both `read_sss_file` and `read_from_string` detect Classic or XML input. Numeric
+categories retain integer codes, quantity values retain floating-point codes,
+and literal single responses retain string codes (including leading zeroes).
+Literal multiple responses return an error. Literal codes cannot be exported to
+Classic format.
 
 ## AI usage
 

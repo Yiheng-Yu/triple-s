@@ -18,7 +18,6 @@ use quick_xml::{encoding::DecodingReader, reader::Reader as XmlReader};
 use rayon::prelude::*;
 
 use crate::{
-    prelude::*,
     entities::{
         Code,
         Format,
@@ -41,6 +40,7 @@ use crate::{
         MissingAttributeError,
         MissingValueError,
     },
+    prelude::*,
 };
 
 #[derive(Debug, PartialEq)]
@@ -160,7 +160,7 @@ where
             .with_context(|| format!("Text: {}", text))?;
 
         let to = parts
-            .first()
+            .get(1)
             .map(|s| s.parse::<T>())
             .transpose()
             .map_err(anyhow::Error::from)
@@ -357,15 +357,19 @@ impl QuestionBuilder {
                     .collect::<Result<Vec<Code<f64>>>>()?;
             }
 
-            Response::Categorical(item) => {
-                let mut item = RwLockWriteGuard::map(item.write(), |resp| resp);
-                let first_entry = data.first()
+            Response::NumericCategory(item) => {
+                let mut item = item.write();
+
+                let first_entry = data
+                    .first()
                     .ok_or(MissingValueError::new("values", "value"))?;
+
                 if first_entry.tag.as_ref() == "range" {
                     let (from, to) = get_range::<u64>(first_entry, true)?;
                     let end = to.ok_or(MissingAttributeError::new("range", "to"))?;
                     item.range = Some(Range { start: from, end });
-                };
+                }
+
                 item.values = data
                     .par_drain(..)
                     .filter(|val| val.tag.as_ref() != "range")
@@ -373,10 +377,10 @@ impl QuestionBuilder {
                     .collect::<Result<Vec<Code<u64>>>>()?;
             }
 
-            Response::SingleLiteral(item) => {
-                let mut item = RwLockWriteGuard::map(item.write(), |resp| resp);
-                item.values = data
+            Response::TextCategory(item) => {
+                item.write().values = data
                     .par_drain(..)
+                    .filter(|val| val.tag.as_ref() == "value")
                     .map(|node| parse_into_choice::<String>(node, is_classic))
                     .collect::<Result<Vec<Code<String>>>>()?;
             }
@@ -529,26 +533,21 @@ impl QuestionBuilder {
             .ok_or(error::MissingValueError::new("variable", "type"))
             .with_context(|| format!("When parsing question {}", question_name))?;
 
-        let response = Response::from_str(&response)?;
+        let response = Response::from_str(&response)
+            .with_context(|| format!("When parsing question {}", question_name))?;
         let response = match &output.format {
-            Format::Literal => match &response {
-                Response::Categorical(_) => {
-                    Response::new_literal_single()
-                        .with_context(|| format!("Whilest trying to parse question: '{}'", &question_name))?
-                }
-                _ => response,
-            },
-            _ => response,
+            Format::Literal => Response::new_single_literal()?,
+             _ => response,
         };
-
         let response = Self::build_response(response, self.responses.children, is_classic)
             .with_context(|| format!("When parsing question {}", question_name))?;
 
+        // update spread
         if let Some(mut node) = self.attributes.remove("spread")
-            && let Response::Categorical(item) = &response
+            && let Response::NumericCategory(code_values) = &response
         {
             // read field `spread` regardless of response type, just in case
-            let spread = if is_classic {
+            code_values.write().spread = if is_classic {
                 let text = node
                     .value
                     .ok_or(MissingValueError::new("variable", "spread"))
@@ -568,10 +567,8 @@ impl QuestionBuilder {
                     .trim()
                     .parse::<u64>()
                     .with_context(|| format!("When parsing question {}", question_name))?;
-
                 let width = text.get(1).map(|s| s.parse::<u64>()).transpose()?;
-
-                Spread { subfield, width }
+                Some(Spread { subfield, width })
             } else {
                 let subfield = node
                     .attributes
@@ -589,11 +586,8 @@ impl QuestionBuilder {
                     .transpose()
                     .with_context(|| format!("When parsing question {}", question_name))?;
 
-                Spread { subfield, width }
+                Some(Spread { subfield, width })
             };
-
-            let mut guard = item.write();
-            guard.spread = Some(spread);
         };
 
         output.response = response;
@@ -659,17 +653,22 @@ where
 {
     if node.tag.as_ref() != "value" {
         return Err(InternalError::new(format!(
-            "Exepct 'range' node, received: '{}'",
+            "Expected 'value' node, received: '{}'",
             node.tag
         ))
         .into());
     };
 
-    let code = node
+    let raw_code = node
         .attributes
         .get("code")
-        .ok_or(MissingAttributeError::new(node.tag.as_ref(), "code"))?
-        .parse::<T>()?;
+        .ok_or(MissingAttributeError::new(node.tag.as_ref(), "code"))?;
+    let code = raw_code
+        .parse::<T>()
+        // String parsing succeeds unchanged; numeric parsing can retry trimmed.
+        .or_else(|_| raw_code.trim().parse::<T>())
+        .with_context(|| format!("When parsing code '{}'", raw_code))?;
+    code.validate().with_context(|| format!("When parsing code '{}'", raw_code))?;
 
     let is_special = node.attributes.contains_key("flag");
     let text = parse_text(node, is_classic)?;
@@ -690,7 +689,7 @@ where
 #[inline]
 fn get_range<T>(node: &Node, from_to: bool) -> Result<(T, Option<T>)>
 where
-    T: FromStr,
+    T: CodeType + FromStr,
     T::Err: std::error::Error + Send + Sync + 'static,
 {
     let (attr_from, attr_to) = if from_to {
@@ -705,6 +704,12 @@ where
         .ok_or(MissingAttributeError::new(node.tag.as_ref(), attr_from))?
         .parse::<T>()?;
     let to = node.attributes.get(attr_to).map(|s| s.as_ref().parse::<T>()).transpose()?;
+    from.validate()
+        .with_context(|| format!("Invalid range attribute '{}'", attr_from))?;
+    if let Some(to) = &to {
+        to.validate()
+            .with_context(|| format!("Invalid range attribute '{}'", attr_to))?;
+    }
     Ok((from, to))
 }
 

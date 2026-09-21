@@ -308,3 +308,15 @@ impl fmt::Display for DuplicatedKey {
         )
     }
 }
+
+
+#[derive(Debug)]
+pub struct NotFiniteError;
+
+impl fmt::Display for NotFiniteError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Value must be finite.")
+    }
+}
+
+impl Error for NotFiniteError {}

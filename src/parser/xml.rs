@@ -2,6 +2,7 @@ use std::{collections::HashMap, io::BufRead, sync::Arc};
 
 use anyhow::Result;
 use quick_xml::{
+    XmlVersion,
     events::{BytesEnd, BytesStart, Event, attributes::Attributes},
     reader::Reader,
 };
@@ -115,7 +116,7 @@ where
     let mut current_position = Section::Start;
 
     // bunch of question attributes to be pushed later,,
-    // let mut filter = Node::new("filter");
+    let mut filter = Node::new("filter");
     let mut label = Node::new("label");
     let mut name = Node::new("name");
     let mut responses = Vec::new();
@@ -144,7 +145,10 @@ where
                         value.attributes = extract_attributes(start.attributes())?.collect();
                         responses.push(value);
                     }
-
+                    "filter" => {
+                        let filter_content = extract_text(reader, &start)?;
+                        filter.value = Some(Arc::from(filter_content));
+                    }
                     // <text> are ALL text variants
                     "text" => match current_position {
                         Section::LabelDefault | Section::LabelVariant => {
@@ -261,7 +265,7 @@ where
     }
 
     // and finally put things into the question builder
-    // builder.attributes.insert("filter".into(), filter);
+    builder.attributes.insert("filter".into(), filter);
     builder.attributes.insert("label".into(), label);
     builder.attributes.insert("name".into(), name);
     builder.responses.children = responses.into_iter().collect();
@@ -287,7 +291,14 @@ fn extract_attributes(
         .map(|attr| {
             let attr = attr?;
             let key: Arc<str> = Arc::from(attr.key.into_inner());
-            let value: Arc<str> = Arc::from(attr.value.trim());
+            let decoded = attr.normalized_value(XmlVersion::Implicit1_0)?;
+            // Literal codes may contain significant leading or trailing spaces.
+            // Numeric code parsing handles its own whitespace.
+            let value: Arc<str> = if key.as_ref() == "code" {
+                Arc::from(decoded.as_ref())
+            } else {
+                Arc::from(decoded.trim())
+            };
             Ok((key, value))
         })
         .collect::<Result<_>>()?;

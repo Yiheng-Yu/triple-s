@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sss version="3.0">
+  <survey>
+    <title>Invalid literal multiple response</title>
+    <record ident="A">
+      <variable ident="1" type="multiple" format="literal">
+        <name>INVALID</name>
+        <label>Literal multiple is unsupported</label>
+        <position start="1" finish="3"/>
+        <values>
+          <value code="001">Leading zeroes</value>
+          <value code="A1">Alphanumeric</value>
+        </values>
+      </variable>
+    </record>
+  </survey>
+</sss>
