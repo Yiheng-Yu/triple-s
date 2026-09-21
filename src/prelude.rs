@@ -36,7 +36,7 @@ impl CodeType for String {}
 
 /// wrap current instance in Ok()
 pub trait Wrap: Sized {
-    fn wrap(self) -> Result<Self, anyhow::Error> {
+    fn wrap<E>(self) -> Result<Self, E> {
         Ok(self)
     }
 }

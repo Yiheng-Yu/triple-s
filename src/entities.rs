@@ -377,6 +377,13 @@ impl Response {
         )
     }
 
+    pub fn is_scale(&self) -> bool {
+        matches!(
+            self,
+            Self::Date(_) | Self::Time(_) | Self::Quantity(_)
+        )
+    }
+
     pub fn is_open_end(&self) -> bool {
         matches!(
             self,

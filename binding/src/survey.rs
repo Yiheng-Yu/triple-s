@@ -2,8 +2,8 @@ extern crate triple_s as tri;
 use std::{str::FromStr, sync::Arc};
 
 use parking_lot::{MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock};
-use pyo3::{exceptions, prelude::*, types::PyDict};
-use tri::{Code, Position, Response, Text, Version};
+use pyo3::{exceptions, prelude::*, types::{PyDict, PyTuple}};
+use tri::{Code, Position, Response, Text, Version, prelude::Wrap};
 
 #[pyfunction]
 pub fn read_file(path: &str) -> PyResult<PySurvey> {
@@ -33,6 +33,8 @@ pub struct PySurvey {
     // record: Arc<RwLock<tri::Record>>,
     inner: Arc<RwLock<tri::Survey>>,
 }
+
+impl Wrap for PySurvey {}
 
 impl Clone for PySurvey {
     fn clone(&self) -> Self {
@@ -420,6 +422,22 @@ impl PyQuestion {
     ) -> PyResult<R> {
         self.with_question_write(py, |mut question| f(&mut question.location))
     }
+
+    pub(crate) fn with_response_read<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&tri::Response) -> R,
+    ) -> PyResult<R> {
+        self.with_question_read(py, |question| f(&question.response))
+    }
+
+    pub(crate) fn with_response_write<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut tri::Response) -> R,
+    ) -> PyResult<R> {
+        self.with_question_write(py, |mut question| f(&mut question.response))
+    }
 }
 
 #[pymethods]
@@ -492,31 +510,32 @@ impl PyQuestion {
 
     #[getter]
     fn get_response(question: &Bound<'_, Self>) -> PyResult<Py<PyAny>> {
-        let py = question.py();
-        let response = PyResponse::from_inner(question);
-        let kind = question
-            .borrow()
-            .with_question_read(py, |question| match &question.response {
-                Response::Single(_) | Response::Multiple(_) => ResponseAlias::Categorical,
-                Response::Quantity(_) => ResponseAlias::Quantity,
-                Response::Character(_) => ResponseAlias::Character,
-                Response::Logical => ResponseAlias::Logical,
-                Response::SingleLiteral(_) => ResponseAlias::SingleLiteral,
-                Response::Date(_) => ResponseAlias::Date,
-                Response::Time(_) => ResponseAlias::Time,
-                Response::Note => ResponseAlias::Note,
-            })?;
+        todo!()
+        // let py = question.py();
+        // let response = PyResponse::from_inner(question);
+        // let kind = question
+        //     .borrow()
+        //     .with_question_read(py, |question| match &question.response {
+        //         Response::NumericCategory => ResponseAlias::Categorical,
+        //         Response::Single(_) | Response::Multiple(_) => ResponseAlias::Categorical,
+        //         Response::Quantity(_) => ResponseAlias::Quantity,
+        //         Response::Character(_) => ResponseAlias::Character,
+        //         Response::SingleLiteral(_) => ResponseAlias::SingleLiteral,
+        //         Response::Date(_) => ResponseAlias::Date,
+        //         Response::Time(_) => ResponseAlias::Time,
+        //         Response::Note => ResponseAlias::Note,
+        //     })?;
 
-        match kind {
-            ResponseAlias::Categorical => Py::new(py, (PyCategorical, response)).map(Py::into_any),
-            ResponseAlias::Quantity => Py::new(py, (PyQuantity, response)).map(Py::into_any),
-            ResponseAlias::Character => Py::new(py, (PyCharacter, response)).map(Py::into_any),
-            ResponseAlias::Logical => Py::new(py, (PyLogical, response)).map(Py::into_any),
-            ResponseAlias::SingleLiteral => Py::new(py, (PySingleLiteral, response)).map(Py::into_any),
-            ResponseAlias::Date => Py::new(py, (PyDate, response)).map(Py::into_any),
-            ResponseAlias::Time => Py::new(py, (PyTime, response)).map(Py::into_any),
-            ResponseAlias::Note => Py::new(py, (PyNote, response)).map(Py::into_any),
-        }
+        // match kind {
+        //     ResponseAlias::Categorical => Py::new(py, (PyCategorical, response)).map(Py::into_any),
+        //     ResponseAlias::Quantity => Py::new(py, (PyQuantity, response)).map(Py::into_any),
+        //     ResponseAlias::Character => Py::new(py, (PyCharacter, response)).map(Py::into_any),
+        //     ResponseAlias::Logical => Py::new(py, (PyLogical, response)).map(Py::into_any),
+        //     ResponseAlias::SingleLiteral => Py::new(py, (PySingleLiteral, response)).map(Py::into_any),
+        //     ResponseAlias::Date => Py::new(py, (PyDate, response)).map(Py::into_any),
+        //     ResponseAlias::Time => Py::new(py, (PyTime, response)).map(Py::into_any),
+        //     ResponseAlias::Note => Py::new(py, (PyNote, response)).map(Py::into_any),
+        // }
     }
 
     #[getter]
@@ -624,45 +643,217 @@ impl PyLocation {
     }
 }
 
+#[pyclass(module = "triple_s", name = "Response")]
+pub enum PyResponse_ {
+    Scale(PyScaleResponse),
+    Categorical(PyCategoricalResponse),
+    OpenEnd(PyOpenEndResponse),
+}
+
+#[pyclass(module = "triple_s", name = "Category")]
+pub struct PyCategoricalResponse {
+    inner: Storage<PyQuestion, tri::Response>
+}
+
+impl Wrap for PyCategoricalResponse {}
+
+impl PyCategoricalResponse {
+    pub fn from_inner(question: &Bound<'_, PyQuestion>) -> PyResult<Self> {
+        let py = question.py();
+        let is_categorical = question.borrow()
+            .with_question_read(py, |guard| guard.response.is_categorical())?;
+
+        if is_categorical {
+            let inner = question.clone().unbind();
+            (Self {
+                inner: Storage::Attached {inner: inner, index: 0}
+            })
+            .wrap::<PyErr>()
+        } else {
+            Err(exceptions::PyTypeError::new_err("Cannot create caregorical responses from non-categorical entries."))
+        }
+    }
+
+    fn with_response_read<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&tri::Response) -> R,
+    ) -> PyResult<R> {
+        match &self.inner {
+            Storage::Attached {inner, ..} => {
+                inner.bind(py).borrow().with_response_read(py, f)
+            }
+            Storage::Owned(item) => {
+                let item = item.read();
+                Ok(f(&item))
+            }
+        }
+    }
+
+    fn with_response_write<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut tri::Response) -> R,
+    ) -> PyResult<R> {
+        match &self.inner {
+            Storage::Attached {inner, ..} => {
+                inner.bind(py).borrow().with_response_write(py, f)
+            }
+            Storage::Owned(item) => {
+                let mut item = item.write();
+                Ok(f(&mut item))
+            }
+        }
+    }
+}
+
+#[pymethods]
+impl PyCategoricalResponse {
+    #[pyo3(signature = (*values, is_single=true))]
+    pub fn from_values(
+        slf: PyRef<'_, Self>,
+        values: &Bound<'_, PyTuple>,
+        is_single: bool,
+    ) -> PyResult<Self> {
+        let mut responses = Vec::new();
+        let py = values.py();
+        let responses = values.iter().map(|item| {
+            let member = item.extract::<PyRef<'_, PyCode>>()?;
+            member.with_code(py, |choice| choice.clone())
+        })
+        .collect::<Result<Vec<tri::Code>>>();
+
+        todo!()
+    }
+}
+
+// #[pyclass(module = "triple_s", name = "Code")]
+// pub struct PyCode {
+//     inner: Storage<PyCategoricalResponse, tri::Codes>,
+// }
+
+
+#[pyclass(module = "triple_s", name = "Scale", subclass)]
+pub struct PyScaleResponse {
+    inner: Storage<PyQuestion, tri::Response>
+}
+
+impl Wrap for PyScaleResponse {}
+
+impl PyScaleResponse {
+    pub fn from_inner(question: &Bound<'_, PyQuestion>) -> PyResult<Self> {
+        let py = question.py();
+        let is_scale = question.borrow()
+            .with_question_read(py, |guard| guard.response.is_scale())?;
+
+        if is_scale {
+            let inner = question.clone().unbind();
+            (Self {
+                inner: Storage::Attached {inner: inner, index: 0}
+            })
+            .wrap::<PyErr>()
+        } else {
+            Err(exceptions::PyTypeError::new_err("Cannot create scale responses from non-scale entries."))
+        }
+    }
+
+    fn with_response_read<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&tri::Response) -> R,
+    ) -> PyResult<R> {
+        match &self.inner {
+            Storage::Attached {inner, ..} => {
+                inner.bind(py).borrow().with_response_read(py, f)
+            }
+            Storage::Owned(item) => {
+                let item = item.read();
+                Ok(f(&item))
+            }
+        }
+    }
+
+    fn with_response_write<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut tri::Response) -> R,
+    ) -> PyResult<R> {
+        match &self.inner {
+            Storage::Attached {inner, ..} => {
+                inner.bind(py).borrow().with_response_write(py, f)
+            }
+            Storage::Owned(item) => {
+                let mut item = item.write();
+                Ok(f(&mut item))
+            }
+        }
+    }
+}
+
+#[pyclass(module = "triple_s", name = "OpenEnd", subclass)]
+pub struct PyOpenEndResponse {
+    inner: Storage<PyQuestion, tri::Response>
+}
+
+impl Wrap for PyOpenEndResponse {}
+
+impl PyOpenEndResponse {
+    pub fn from_inner(question: &Bound<'_, PyQuestion>) -> PyResult<Self> {
+        let py = question.py();
+        let is_open_end = question.borrow()
+            .with_question_read(py, |guard| {
+                matches!(guard.response, Response::Character(_) | Response::Note(_) )
+            })?;
+
+        if is_open_end {
+            let inner = question.clone().unbind();
+            (Self {
+                inner: Storage::Attached {inner: inner, index: 0}
+            })
+            .wrap::<PyErr>()
+        } else {
+            Err(exceptions::PyTypeError::new_err("Cannot create scale responses from non-scale entries."))
+        }
+    }
+
+    fn with_response_read<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&tri::Response) -> R,
+    ) -> PyResult<R> {
+        match &self.inner {
+            Storage::Attached {inner, ..} => {
+                inner.bind(py).borrow().with_response_read(py, f)
+            }
+            Storage::Owned(item) => {
+                let item = item.read();
+                Ok(f(&item))
+            }
+        }
+    }
+
+    fn with_response_write<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut tri::Response) -> R,
+    ) -> PyResult<R> {
+        match &self.inner {
+            Storage::Attached {inner, ..} => {
+                inner.bind(py).borrow().with_response_write(py, f)
+            }
+            Storage::Owned(item) => {
+                let mut item = item.write();
+                Ok(f(&mut item))
+            }
+        }
+    }
+}
+
+
 #[pyclass(module = "triple_s", name = "Response", subclass)]
 pub struct PyResponse {
     inner: Py<PyQuestion>,
 }
-
-enum ResponseAlias {
-    Categorical,
-    Quantity,
-    Character,
-    Logical,
-    SingleLiteral,
-    Date,
-    Time,
-    Note,
-}
-
-#[pyclass(extends=PyResponse, module = "triple_s", name = "Categorical")]
-pub struct PyCategorical;
-
-#[pyclass(extends=PyResponse, module = "triple_s", name = "Quantity")]
-pub struct PyQuantity;
-
-#[pyclass(extends=PyResponse, module = "triple_s", name = "Character")]
-pub struct PyCharacter;
-
-#[pyclass(extends=PyResponse, module = "triple_s", name = "Logical")]
-pub struct PyLogical;
-
-#[pyclass(extends=PyResponse, module = "triple_s", name = "SingleLiteral")]
-pub struct PySingleLiteral;
-
-#[pyclass(extends=PyResponse, module = "triple_s", name = "Date")]
-pub struct PyDate;
-
-#[pyclass(extends=PyResponse, module = "triple_s", name = "Time")]
-pub struct PyTime;
-
-#[pyclass(extends=PyResponse, module = "triple_s", name = "Note")]
-pub struct PyNote;
 
 impl PyResponse {
     pub fn from_inner(question: &Bound<'_, PyQuestion>) -> Self {
