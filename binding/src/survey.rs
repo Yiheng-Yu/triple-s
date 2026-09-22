@@ -462,12 +462,10 @@ impl PyQuestion {
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        let kind = self.get_kind(py)?;
-
         self.with_question_read(py, |question| {
             format!(
-                r#"Question(name="{}", kind={})"#,
-                &question.name, kind
+                r#"Question(name="{}")"#,
+                &question.name
             )
         })
     }
@@ -504,38 +502,8 @@ impl PyQuestion {
     }
 
     #[getter]
-    fn get_kind(&self, py: Python<'_>) -> PyResult<Kind> {
-        self.with_question_read(py, |question| Kind::from_response(&question.response))
-    }
-
-    #[getter]
-    fn get_response(question: &Bound<'_, Self>) -> PyResult<Py<PyAny>> {
-        todo!()
-        // let py = question.py();
-        // let response = PyResponse::from_inner(question);
-        // let kind = question
-        //     .borrow()
-        //     .with_question_read(py, |question| match &question.response {
-        //         Response::NumericCategory => ResponseAlias::Categorical,
-        //         Response::Single(_) | Response::Multiple(_) => ResponseAlias::Categorical,
-        //         Response::Quantity(_) => ResponseAlias::Quantity,
-        //         Response::Character(_) => ResponseAlias::Character,
-        //         Response::SingleLiteral(_) => ResponseAlias::SingleLiteral,
-        //         Response::Date(_) => ResponseAlias::Date,
-        //         Response::Time(_) => ResponseAlias::Time,
-        //         Response::Note => ResponseAlias::Note,
-        //     })?;
-
-        // match kind {
-        //     ResponseAlias::Categorical => Py::new(py, (PyCategorical, response)).map(Py::into_any),
-        //     ResponseAlias::Quantity => Py::new(py, (PyQuantity, response)).map(Py::into_any),
-        //     ResponseAlias::Character => Py::new(py, (PyCharacter, response)).map(Py::into_any),
-        //     ResponseAlias::Logical => Py::new(py, (PyLogical, response)).map(Py::into_any),
-        //     ResponseAlias::SingleLiteral => Py::new(py, (PySingleLiteral, response)).map(Py::into_any),
-        //     ResponseAlias::Date => Py::new(py, (PyDate, response)).map(Py::into_any),
-        //     ResponseAlias::Time => Py::new(py, (PyTime, response)).map(Py::into_any),
-        //     ResponseAlias::Note => Py::new(py, (PyNote, response)).map(Py::into_any),
-        // }
+    fn get_response(question: &Bound<'_, Self>) -> PyResult<PyResponse> {
+        Ok(PyResponse::from_inner(question))
     }
 
     #[getter]
@@ -555,7 +523,6 @@ impl PyQuestion {
         })
     }
 }
-
 
 #[pyclass(module = "triple_s", name = "Response", subclass)]
 pub struct PyResponse {
@@ -631,19 +598,20 @@ impl PyResponse {
     }
 }
 
-pub trait CodeInterface<Value: CodeType>{
-    fn with_code<R>(&self, py: Python<'_>, f: impl FnOnce(&Code<Value>)->R) -> PyResult<R>;
-    fn with_code_mut<R>(&mut self, py: Python<'_>,f: impl FnOnce(&mut Code<Value>)->R) -> PyResult<R>;
+enum CodeInterface {
+    Int(Code<u64>),
+    Float(Code<f64>),
+    String(Code<String>)
 }
 
 /// A possible answer that a respondent can choose in a single-/ multi- response question
 #[pyclass(module = "triple_s", name = "Choice")]
 pub struct PyCode {
-    storage: Storage<PyResponse, tri::Codes>,
+    storage: Storage<PyResponse, CodeInterface>,
 }
 
 impl PyCode {
-    fn with_integer_code<R>(
+    pub(crate) fn with_integer_code<R>(
         &self,
         py: Python<'_>,
         f: impl FnOnce(&Code<u64>) -> R,
@@ -665,16 +633,13 @@ impl PyCode {
                 })?,
             // Owned choices store their code at index zero.
             Storage::Owned(item) => match &*item.read() {
-                tri::Codes::Int(values) => values
-                    .first()
-                    .ok_or_else(|| exceptions::PyIndexError::new_err(0))
-                    .map(f),
+                CodeInterface::Int(value) => Ok(f(value)),
                 _ => Err(exceptions::PyTypeError::new_err("Expected integer codes")),
             },
         }
     }
 
-    fn with_integer_code_mute<R>(
+    pub(crate) fn with_integer_code_mute<R>(
         &mut self,
         py: Python<'_>,
         f: impl FnOnce(&mut Code<u64>) -> R,
@@ -696,16 +661,13 @@ impl PyCode {
                 })?,
             // Owned choices store their code at index zero.
             Storage::Owned(item) => match &mut *item.write() {
-                tri::Codes::Int(values) => values
-                    .first_mut()
-                    .ok_or_else(|| exceptions::PyIndexError::new_err(0))
-                    .map(f),
+                CodeInterface::Int(value) => Ok(f(value)),
                 _ => Err(exceptions::PyTypeError::new_err("Expected integer codes")),
             },
         }
     }
 
-    fn with_string_code<R>(
+    pub(crate) fn with_string_code<R>(
         &self,
         py: Python<'_>,
         f: impl FnOnce(&Code<String>) -> R,
@@ -727,16 +689,13 @@ impl PyCode {
                 })?,
             // Owned choices store their code at index zero.
             Storage::Owned(item) => match &*item.read() {
-                tri::Codes::String(values) => values
-                    .first()
-                    .ok_or_else(|| exceptions::PyIndexError::new_err(0))
-                    .map(f),
+                CodeInterface::String(value) => Ok(f(value)),
                 _ => Err(exceptions::PyTypeError::new_err("Expected string codes")),
             },
         }
     }
 
-    fn with_string_code_mute<R>(
+    pub(crate) fn with_string_code_mute<R>(
         &mut self,
         py: Python<'_>,
         f: impl FnOnce(&mut Code<String>) -> R,
@@ -758,10 +717,7 @@ impl PyCode {
                 })?,
             // Owned choices store their code at index zero.
             Storage::Owned(item) => match &mut *item.write() {
-                tri::Codes::String(values) => values
-                    .first_mut()
-                    .ok_or_else(|| exceptions::PyIndexError::new_err(0))
-                    .map(f),
+                CodeInterface::String(value) => Ok(f(value)),
                 _ => Err(exceptions::PyTypeError::new_err("Expected string codes")),
             },
         }
@@ -780,25 +736,52 @@ impl PyCode {
 
 #[pymethods]
 impl PyCode {
+    #[new]
+    #[pyo3(signature = (code, label))]
+    fn new(
+        code: &Bound<'_, PyAny>,
+        label: String,
+    ) -> PyResult<Self>{
+        let inner = if let Ok(code) = code.extract::<u64>() {
+            let item = Code::new(code, label)
+                .map_err(|err| exceptions::PyRuntimeError::new_err(err.backtrace().to_string()))?;
+            CodeInterface::Int(item)
+        } else if let Ok(code) = code.extract::<String>() {
+            let item = Code::new(code, label)
+                .map_err(|err| exceptions::PyRuntimeError::new_err(err.backtrace().to_string()))?;
+            CodeInterface::String(item)
+        } else if let Ok(code) = code.extract::<f64>() {
+            let item = Code::new(code, label)
+                .map_err(|err| exceptions::PyRuntimeError::new_err(err.backtrace().to_string()))?;
+            CodeInterface::Float(item)
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                    "code must be an int, float or str",
+                ))
+        };
+        Ok(Self { storage: Storage::from_owned(inner)} )
+    }
+
+    // todo! need to acoomdate different data types!!
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        self.with_integer_code(py, format_choice)
+        todo!()
     }
 
     /// Code used to uniquely identify the current answer option.
     #[getter]
     fn code(&self, py: Python<'_>) -> PyResult<u64> {
-        self.with_integer_code(py, |choice| choice.code)
+        todo!()
     }
 
     /// Text label of the current answer option
     #[getter]
     fn label(&self, py: Python<'_>) -> PyResult<String> {
-        self.with_integer_code(py, |choice| choice.label.value.clone())
+        todo!()
     }
 
     #[setter]
     fn set_label(&mut self, py: Python<'_>, value: &str) -> PyResult<()> {
-        self.with_integer_code_mute(py, |choice| choice.label = Text::new(value))
+        todo!()
     }
 
     /// Response filter of the current answer option.
