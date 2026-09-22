@@ -926,14 +926,42 @@ impl PyResponse {
 }
 
 pub trait CodeInterface<Value: CodeType>{
-    fn with_code<R>(&self, f: impl FnOnce(&Code<Value>)) -> PyResult<R>;
-    fn with_code_mut<R>(&mut self, f: impl FnOnce(&mut Code<Value>)) -> PyResult<R>;
+    fn with_code<R>(&self, py: Python<'_>, f: impl FnOnce(&Code<Value>)->R) -> PyResult<R>;
+    fn with_code_mut<R>(&mut self, py: Python<'_>,f: impl FnOnce(&mut Code<Value>)->R) -> PyResult<R>;
 }
 
 /// A possible answer that a respondent can choose in a single-/ multi- response question
 #[pyclass(module = "triple_s", name = "Choice")]
 pub struct PyChoice {
     storage: Storage<PyResponse, tri::Codes>,
+}
+
+impl CodeInterface<u64> for PyChoice {
+    fn with_code<R>(&self, py: Python<'_>,f: impl FnOnce(&Code<u64>)->R) -> PyResult<R> {
+        let item = match self.storage {
+            Storage::Attached { inner, index } => {
+                let response = inner.bind(py).borrow().with_response(py, |response| response)?;
+                match response {
+                    Response::NumericCategory(member) => {
+                        member.read()
+                            .values
+                            .get(index.clone() as usize)
+                            .ok_or_else(|| {
+                                exceptions::PyIndexError::new_err(index.clone())
+                            })?
+                    }
+                    _ => return Err(exceptions::PyTypeError::new_err(
+                        "Only available for 'NumericalCategory' type!"
+                    ))
+                }
+            }
+            Storage::Owned(item) => f(&item.read())
+        };
+    }
+
+    fn with_code_mut<R>(&mut self, py: Python<'_>, f: impl FnOnce(&mut Code<u64>)) -> PyResult<R> {
+        todo!()
+    }
 }
 
 impl PyChoice {
