@@ -6,22 +6,12 @@ pub mod triple_s {
 
     #[pymodule_export]
     pub use super::survey::{
-        Kind,
-        PyChoice,
-        PyCategorical,
-        PyCharacter,
-        PyDate,
-        PyLogical,
-        PyLocation,
+        PyCode,
         PyMeta,
-        PyNote,
         PyQuestion,
-        PyQuantity,
         PyRecord,
         PyResponse,
-        PySingleLiteral,
         PySurvey,
-        PyTime,
         read_file
     };
     use super::*;

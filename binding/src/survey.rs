@@ -556,6 +556,288 @@ impl PyQuestion {
     }
 }
 
+
+#[pyclass(module = "triple_s", name = "Response", subclass)]
+pub struct PyResponse {
+    inner: Storage<PyQuestion, tri::Response>,
+}
+
+impl PyResponse {
+    pub fn from_inner(question: &Bound<'_, PyQuestion>) -> Self {
+        Self {
+            inner: Storage::Attached { inner: question.clone().unbind(), index: 0}
+        }
+    }
+
+    fn with_response<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&tri::Response) -> R,
+    ) -> PyResult<R> {
+        match &self.inner {
+            Storage::Attached {inner, ..} => {
+                inner.bind(py).borrow().with_response(py, |response| f(&response))
+            }
+            Storage::Owned(inner) => {
+                Ok(f(&inner.read()))
+            }
+        }
+    }
+
+    fn with_response_mut<R>(
+        &mut self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut tri::Response) -> R,
+    ) -> PyResult<R> {
+        match &mut self.inner {
+            Storage::Attached {inner, ..} => {
+                inner.bind(py).borrow_mut().with_response_mut(py, |mut response| f(&mut response))
+            }
+            Storage::Owned(inner) => {
+                Ok(f(&mut inner.write()))
+            }
+        }
+    }
+}
+
+#[pymethods]
+impl PyResponse {
+    #[getter]
+    fn item(slf: &Bound<'_, Self>) -> PyResult<Option<Vec<PyCode>>> {
+        let py = slf.py();
+        slf.borrow().with_response(py, |response| {
+            match response {
+                Response::NumericCategory(item) => {
+                    let items = (0..item.read().values.len())
+                        .map(|idx| PyCode::from_inner(slf, idx as u64))
+                        .collect::<Vec<PyCode>>();
+                    Some(items)
+                }
+                Response::TextCategory(item) => {
+                    let items = (0..item.read().values.len())
+                        .map(|idx| PyCode::from_inner(slf, idx as u64))
+                        .collect::<Vec<PyCode>>();
+                    Some(items)
+                }
+                _ => None
+            }
+        })
+    }
+
+    /// alias for `item`
+    #[getter]
+    fn content(slf: &Bound<'_, Self>) -> PyResult<Option<Vec<PyCode>>> {
+        Self::item(slf)
+    }
+}
+
+pub trait CodeInterface<Value: CodeType>{
+    fn with_code<R>(&self, py: Python<'_>, f: impl FnOnce(&Code<Value>)->R) -> PyResult<R>;
+    fn with_code_mut<R>(&mut self, py: Python<'_>,f: impl FnOnce(&mut Code<Value>)->R) -> PyResult<R>;
+}
+
+/// A possible answer that a respondent can choose in a single-/ multi- response question
+#[pyclass(module = "triple_s", name = "Choice")]
+pub struct PyCode {
+    storage: Storage<PyResponse, tri::Codes>,
+}
+
+impl PyCode {
+    fn with_integer_code<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&Code<u64>) -> R,
+    ) -> PyResult<R> {
+        match &self.storage {
+            Storage::Attached { inner, index } => inner
+                .bind(py)
+                .try_borrow()?
+                .with_response(py, |response| match response {
+                    Response::NumericCategory(member) => member
+                        .read()
+                        .values
+                        .get(*index as usize)
+                        .ok_or_else(|| exceptions::PyIndexError::new_err(*index))
+                        .map(f),
+                    _ => Err(exceptions::PyTypeError::new_err(
+                        "Expected a NumericCategory response",
+                    )),
+                })?,
+            // Owned choices store their code at index zero.
+            Storage::Owned(item) => match &*item.read() {
+                tri::Codes::Int(values) => values
+                    .first()
+                    .ok_or_else(|| exceptions::PyIndexError::new_err(0))
+                    .map(f),
+                _ => Err(exceptions::PyTypeError::new_err("Expected integer codes")),
+            },
+        }
+    }
+
+    fn with_integer_code_mute<R>(
+        &mut self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut Code<u64>) -> R,
+    ) -> PyResult<R> {
+        match &mut self.storage {
+            Storage::Attached { inner, index } => inner
+                .bind(py)
+                .try_borrow_mut()?
+                .with_response_mut(py, |response| match response {
+                    Response::NumericCategory(member) => member
+                        .write()
+                        .values
+                        .get_mut(*index as usize)
+                        .ok_or_else(|| exceptions::PyIndexError::new_err(*index))
+                        .map(f),
+                    _ => Err(exceptions::PyTypeError::new_err(
+                        "Expected a NumericCategory response",
+                    )),
+                })?,
+            // Owned choices store their code at index zero.
+            Storage::Owned(item) => match &mut *item.write() {
+                tri::Codes::Int(values) => values
+                    .first_mut()
+                    .ok_or_else(|| exceptions::PyIndexError::new_err(0))
+                    .map(f),
+                _ => Err(exceptions::PyTypeError::new_err("Expected integer codes")),
+            },
+        }
+    }
+
+    fn with_string_code<R>(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&Code<String>) -> R,
+    ) -> PyResult<R> {
+        match &self.storage {
+            Storage::Attached { inner, index } => inner
+                .bind(py)
+                .try_borrow()?
+                .with_response(py, |response| match response {
+                    Response::TextCategory(member) => member
+                        .read()
+                        .values
+                        .get(*index as usize)
+                        .ok_or_else(|| exceptions::PyIndexError::new_err(*index))
+                        .map(f),
+                    _ => Err(exceptions::PyTypeError::new_err(
+                        "Expected a TextCategory response",
+                    )),
+                })?,
+            // Owned choices store their code at index zero.
+            Storage::Owned(item) => match &*item.read() {
+                tri::Codes::String(values) => values
+                    .first()
+                    .ok_or_else(|| exceptions::PyIndexError::new_err(0))
+                    .map(f),
+                _ => Err(exceptions::PyTypeError::new_err("Expected string codes")),
+            },
+        }
+    }
+
+    fn with_string_code_mute<R>(
+        &mut self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut Code<String>) -> R,
+    ) -> PyResult<R> {
+        match &mut self.storage {
+            Storage::Attached { inner, index } => inner
+                .bind(py)
+                .try_borrow_mut()?
+                .with_response_mut(py, |response| match response {
+                    Response::TextCategory(member) => member
+                        .write()
+                        .values
+                        .get_mut(*index as usize)
+                        .ok_or_else(|| exceptions::PyIndexError::new_err(*index))
+                        .map(f),
+                    _ => Err(exceptions::PyTypeError::new_err(
+                        "Expected a TextCategory response",
+                    )),
+                })?,
+            // Owned choices store their code at index zero.
+            Storage::Owned(item) => match &mut *item.write() {
+                tri::Codes::String(values) => values
+                    .first_mut()
+                    .ok_or_else(|| exceptions::PyIndexError::new_err(0))
+                    .map(f),
+                _ => Err(exceptions::PyTypeError::new_err("Expected string codes")),
+            },
+        }
+    }
+
+    pub fn from_inner(response: &Bound<'_, PyResponse>, index: u64) -> Self {
+        Self {
+            storage: Storage::Attached {
+                inner: response.clone().unbind(),
+                index,
+            },
+        }
+    }
+}
+
+
+#[pymethods]
+impl PyCode {
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        self.with_integer_code(py, format_choice)
+    }
+
+    /// Code used to uniquely identify the current answer option.
+    #[getter]
+    fn code(&self, py: Python<'_>) -> PyResult<u64> {
+        self.with_integer_code(py, |choice| choice.code)
+    }
+
+    /// Text label of the current answer option
+    #[getter]
+    fn label(&self, py: Python<'_>) -> PyResult<String> {
+        self.with_integer_code(py, |choice| choice.label.value.clone())
+    }
+
+    #[setter]
+    fn set_label(&mut self, py: Python<'_>, value: &str) -> PyResult<()> {
+        self.with_integer_code_mute(py, |choice| choice.label = Text::new(value))
+    }
+
+    /// Response filter of the current answer option.
+    /// This attribute is not part of the .sss file itself, but can be very useful for extending current library to read other survey data maps modified from .sss xml (i.e., `.sif` from SnapSurveys, `.qps` from QPSMR etc).
+    /// An exmaple use case be setting up something like this:
+    /// Q1: How often do you drive?
+    /// choice 1: Never
+    /// choice 2: Always
+    ///
+    /// Q2: Do you enjoy driving?
+    /// choice 1: nah (ONLY shown for those who selected '2' in Q1)
+    /// choice 2: okay-ish (ONLY shown for those who selected '2' in Q1)
+    /// choice 3: very much
+    #[getter]
+    fn filter(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        self.with_integer_code(py, |choice| choice.filter.clone())
+    }
+
+    #[setter]
+    fn set_filter(&mut self, py: Python<'_>, value: Option<&str>) -> PyResult<()> {
+        self.with_integer_code_mute(py, |choice| {
+            choice.filter = value.map(|s| s.to_string())
+        })
+    }
+
+    /// (Optional) indicator for special values (e.g. mannotationissing data codes).
+    /// Removed from SSS 1.2 onwards.
+    #[getter]
+    fn is_special(&self, py: Python<'_>) -> PyResult<bool> {
+        self.with_integer_code(py, |choice| choice.is_special)
+    }
+
+    #[setter]
+    fn set_is_special(&mut self, py: Python<'_>, value: bool) -> PyResult<()> {
+        self.with_integer_code_mute(py, |choice| choice.is_special = value)
+    }
+}
+
+
 #[pyclass(module = "triple_s", name = "Location")]
 pub struct PyLocation {
     inner: Storage<PyQuestion, Position>,
@@ -640,510 +922,6 @@ impl PyLocation {
     #[setter]
     fn set_to(&self, py: Python<'_>, value: u64) -> PyResult<()> {
         self.with_location_write(py, |loc| loc.to = value)
-    }
-}
-
-// #[pyclass(module = "triple_s", name = "Response")]
-// pub enum PyResponse_ {
-//     Scale(PyScaleResponse),
-//     Categorical(PyCategoricalResponse),
-//     OpenEnd(PyOpenEndResponse),
-// }
-
-// #[pyclass(module = "triple_s", name = "Category")]
-// pub struct PyCategoricalResponse {
-//     inner: Storage<PyQuestion, tri::Response>
-// }
-
-// impl Wrap for PyCategoricalResponse {}
-
-// impl PyCategoricalResponse {
-//     pub fn from_inner(question: &Bound<'_, PyQuestion>) -> PyResult<Self> {
-//         let py = question.py();
-//         let is_categorical = question.borrow()
-//             .with_question_read(py, |guard| guard.response.is_categorical())?;
-
-//         if is_categorical {
-//             let inner = question.clone().unbind();
-//             (Self {
-//                 inner: Storage::Attached {inner: inner, index: 0}
-//             })
-//             .wrap::<PyErr>()
-//         } else {
-//             Err(exceptions::PyTypeError::new_err("Cannot create caregorical responses from non-categorical entries."))
-//         }
-//     }
-
-//     fn with_response<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&tri::Response) -> R,
-//     ) -> PyResult<R> {
-//         match &self.inner {
-//             Storage::Attached {inner, ..} => {
-//                 inner.bind(py).borrow().with_response(py, f)
-//             }
-//             Storage::Owned(item) => {
-//                 let item = item.read();
-//                 Ok(f(&item))
-//             }
-//         }
-//     }
-
-//     fn with_response_mut<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&mut tri::Response) -> R,
-//     ) -> PyResult<R> {
-//         match &self.inner {
-//             Storage::Attached {inner, ..} => {
-//                 inner.bind(py).borrow().with_response_mut(py, f)
-//             }
-//             Storage::Owned(item) => {
-//                 let mut item = item.write();
-//                 Ok(f(&mut item))
-//             }
-//         }
-//     }
-// }
-
-// #[pymethods]
-// impl PyCategoricalResponse {
-//     #[pyo3(signature = (*values, is_single=true))]
-//     pub fn from_values(
-//         slf: PyRef<'_, Self>,
-//         values: &Bound<'_, PyTuple>,
-//         is_single: bool,
-//     ) -> PyResult<Self> {
-//         let mut responses = Vec::new();
-//         let py = values.py();
-//         let responses = values.iter().map(|item| {
-//             let member = item.extract::<PyRef<'_, PyCode>>()?;
-//             member.with_code(py, |choice| choice.clone())
-//         })
-//         .collect::<Result<Vec<tri::Code>>>();
-
-//         todo!()
-//     }
-// }
-
-// // #[pyclass(module = "triple_s", name = "Code")]
-// // pub struct PyCode {
-// //     inner: Storage<PyCategoricalResponse, tri::Codes>,
-// // }
-
-
-// #[pyclass(module = "triple_s", name = "Scale", subclass)]
-// pub struct PyScaleResponse {
-//     inner: Storage<PyQuestion, tri::Response>
-// }
-
-// impl Wrap for PyScaleResponse {}
-
-// impl PyScaleResponse {
-//     pub fn from_inner(question: &Bound<'_, PyQuestion>) -> PyResult<Self> {
-//         let py = question.py();
-//         let is_scale = question.borrow()
-//             .with_question_read(py, |guard| guard.response.is_scale())?;
-
-//         if is_scale {
-//             let inner = question.clone().unbind();
-//             (Self {
-//                 inner: Storage::Attached {inner: inner, index: 0}
-//             })
-//             .wrap::<PyErr>()
-//         } else {
-//             Err(exceptions::PyTypeError::new_err("Cannot create scale responses from non-scale entries."))
-//         }
-//     }
-
-//     fn with_response<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&tri::Response) -> R,
-//     ) -> PyResult<R> {
-//         match &self.inner {
-//             Storage::Attached {inner, ..} => {
-//                 inner.bind(py).borrow().with_response(py, f)
-//             }
-//             Storage::Owned(item) => {
-//                 let item = item.read();
-//                 Ok(f(&item))
-//             }
-//         }
-//     }
-
-//     fn with_response_mut<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&mut tri::Response) -> R,
-//     ) -> PyResult<R> {
-//         match &self.inner {
-//             Storage::Attached {inner, ..} => {
-//                 inner.bind(py).borrow().with_response_mut(py, f)
-//             }
-//             Storage::Owned(item) => {
-//                 let mut item = item.write();
-//                 Ok(f(&mut item))
-//             }
-//         }
-//     }
-// }
-
-// #[pyclass(module = "triple_s", name = "OpenEnd", subclass)]
-// pub struct PyOpenEndResponse {
-//     inner: Storage<PyQuestion, tri::Response>
-// }
-
-// impl Wrap for PyOpenEndResponse {}
-
-// impl PyOpenEndResponse {
-//     pub fn from_inner(question: &Bound<'_, PyQuestion>) -> PyResult<Self> {
-//         let py = question.py();
-//         let is_open_end = question.borrow()
-//             .with_question_read(py, |guard| {
-//                 matches!(guard.response, Response::Character(_) | Response::Note(_) )
-//             })?;
-
-//         if is_open_end {
-//             let inner = question.clone().unbind();
-//             (Self {
-//                 inner: Storage::Attached {inner: inner, index: 0}
-//             })
-//             .wrap::<PyErr>()
-//         } else {
-//             Err(exceptions::PyTypeError::new_err("Cannot create scale responses from non-scale entries."))
-//         }
-//     }
-
-//     fn with_response<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&tri::Response) -> R,
-//     ) -> PyResult<R> {
-//         match &self.inner {
-//             Storage::Attached {inner, ..} => {
-//                 inner.bind(py).borrow().with_response(py, f)
-//             }
-//             Storage::Owned(item) => {
-//                 let item = item.read();
-//                 Ok(f(&item))
-//             }
-//         }
-//     }
-
-//     fn with_response_mut<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&mut tri::Response) -> R,
-//     ) -> PyResult<R> {
-//         match &self.inner {
-//             Storage::Attached {inner, ..} => {
-//                 inner.bind(py).borrow().with_response_mut(py, f)
-//             }
-//             Storage::Owned(item) => {
-//                 let mut item = item.write();
-//                 Ok(f(&mut item))
-//             }
-//         }
-//     }
-// }
-
-
-#[pyclass(module = "triple_s", name = "Response", subclass)]
-pub struct PyResponse {
-    inner: Storage<PyQuestion, tri::Response>,
-}
-
-impl PyResponse {
-    pub fn from_inner(question: &Bound<'_, PyQuestion>) -> Self {
-        Self {
-            inner: Storage::Attached { inner: question.clone().unbind(), index: 0}
-        }
-    }
-
-    fn with_response<R>(
-        &self,
-        py: Python<'_>,
-        f: impl FnOnce(&tri::Response) -> R,
-    ) -> PyResult<R> {
-        match &self.inner {
-            Storage::Attached {inner, ..} => {
-                inner.bind(py).borrow().with_response(py, |response| f(&response))
-            }
-            Storage::Owned(inner) => {
-                Ok(f(&inner.read()))
-            }
-        }
-    }
-
-    fn with_response_mut<R>(
-        &mut self,
-        py: Python<'_>,
-        f: impl FnOnce(&mut tri::Response) -> R,
-    ) -> PyResult<R> {
-        match &mut self.inner {
-            Storage::Attached {inner, ..} => {
-                inner.bind(py).borrow_mut().with_response_mut(py, |mut response| f(&mut response))
-            }
-            Storage::Owned(inner) => {
-                Ok(f(&mut inner.write()))
-            }
-        }
-    }
-}
-
-#[pymethods]
-impl PyResponse {
-
-    #[getter]
-    fn item(slf: &Bound<'_, Self>) -> PyResult<Option<Vec<PyChoice>>> {
-        let py = slf.py();
-        slf.borrow().with_response(py, |response| {
-            match response {
-                Response::NumericCategory(item) => {
-                    let items = (0..item.read().values.len())
-                        .map(|idx| PyChoice::from_inner(slf, idx as u64))
-                        .collect::<Vec<PyChoice>>();
-                    Some(items)
-                }
-                Response::TextCategory(item) => {
-                    let items = (0..item.read().values.len())
-                        .map(|idx| PyChoice::from_inner(slf, idx as u64))
-                        .collect::<Vec<PyChoice>>();
-                    Some(items)
-                }
-                _ => None
-            }
-        })
-    }
-
-    /// alias for `item`
-    #[getter]
-    fn content(slf: &Bound<'_, Self>) -> PyResult<Option<Vec<PyChoice>>> {
-        Self::item(slf)
-    }
-}
-
-pub trait CodeInterface<Value: CodeType>{
-    fn with_code<R>(&self, py: Python<'_>, f: impl FnOnce(&Code<Value>)->R) -> PyResult<R>;
-    fn with_code_mut<R>(&mut self, py: Python<'_>,f: impl FnOnce(&mut Code<Value>)->R) -> PyResult<R>;
-}
-
-/// A possible answer that a respondent can choose in a single-/ multi- response question
-#[pyclass(module = "triple_s", name = "Choice")]
-pub struct PyChoice {
-    storage: Storage<PyResponse, tri::Codes>,
-}
-
-impl CodeInterface<u64> for PyChoice {
-    fn with_code<R>(&self, py: Python<'_>,f: impl FnOnce(&Code<u64>)->R) -> PyResult<R> {
-        let item = match self.storage {
-            Storage::Attached { inner, index } => {
-                let response = inner.bind(py).borrow().with_response(py, |response| response)?;
-                match response {
-                    Response::NumericCategory(member) => {
-                        member.read()
-                            .values
-                            .get(index.clone() as usize)
-                            .ok_or_else(|| {
-                                exceptions::PyIndexError::new_err(index.clone())
-                            })?
-                    }
-                    _ => return Err(exceptions::PyTypeError::new_err(
-                        "Only available for 'NumericalCategory' type!"
-                    ))
-                }
-            }
-            Storage::Owned(item) => f(&item.read())
-        };
-    }
-
-    fn with_code_mut<R>(&mut self, py: Python<'_>, f: impl FnOnce(&mut Code<u64>)) -> PyResult<R> {
-        todo!()
-    }
-}
-
-impl PyChoice {
-    pub fn from_inner(response: &Bound<'_, PyResponse>, index: u64) -> Self {
-        Self {
-            storage: Storage::Attached {
-                inner: response.clone().unbind(),
-                index,
-            },
-        }
-    }
-
-    // fn with_choice<R>(
-    //     &self,
-    //     py: Python<'_>,
-    //     f: impl FnOnce(&Code<u64>) -> R,
-    // ) -> PyResult<R> {
-    //     match &self.storage {
-    //         Storage::Owned(choice) => {
-    //             let choice = choice.read();
-    //             Ok(f(&choice))
-    //         }
-
-    //         Storage::Attached { inner, index } => {
-    //             inner
-    //                 .bind(py)
-    //                 .borrow()
-    //                 .with_response(py, |response| match response {
-    //                     Response::Single(item) => item
-    //                         .read()
-    //                         .values
-    //                         .iter()
-    //                         .find(|choice| choice.code == *index)
-    //                         .ok_or_else(|| exceptions::PyKeyError::new_err(*index))
-    //                         .map(f),
-    //                     Response::Multiple(item) => item
-    //                         .read()
-    //                         .values
-    //                         .iter()
-    //                         .find(|choice| choice.code == *index)
-    //                         .ok_or_else(|| exceptions::PyKeyError::new_err(*index))
-    //                         .map(f),
-
-    //                     _ => Err(exceptions::PyTypeError::new_err(
-    //                         "Response is not categorical",
-    //                     )),
-    //                 })?
-    //         }
-    //     }
-    // }
-
-    // fn with_choice_mut<R>(
-    //     &self,
-    //     py: Python<'_>,
-    //     f: impl FnOnce(&mut Code<u64>) -> R,
-    // ) -> PyResult<R> {
-    //     match &self.storage {
-    //         Storage::Owned(choice) => {
-    //             let mut choice = choice.write();
-    //             Ok(f(&mut *choice))
-    //         }
-
-    //         Storage::Attached { inner, index } => {
-    //             inner
-    //                 .bind(py)
-    //                 .borrow()
-    //                 .with_response_mut(py, |response| match response {
-    //                     Response::Single(item) => item
-    //                         .write()
-    //                         .values
-    //                         .iter_mut()
-    //                         .find(|choice| choice.code == *index)
-    //                         .ok_or_else(|| exceptions::PyKeyError::new_err(*index))
-    //                         .map(f),
-    //                     Response::Multiple(item) => item
-    //                         .write()
-    //                         .values
-    //                         .iter_mut()
-    //                         .find(|choice| choice.code == *index)
-    //                         .ok_or_else(|| exceptions::PyKeyError::new_err(index.clone()))
-    //                         .map(f),
-    //                     _ => Err(exceptions::PyTypeError::new_err(
-    //                         "Only available for `Single` and `Multiple` types of responses!",
-    //                     )),
-    //                 })?
-    //         }
-    //     }
-    // }
-}
-
-
-#[pymethods]
-impl PyChoice {
-    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        self.with_choice(py, format_choice)
-    }
-
-    /// Code used to uniquely identify the current answer option.
-    #[getter]
-    fn code(&self, py: Python<'_>) -> PyResult<u64> {
-        self.with_choice(py, |choice| choice.code)
-    }
-
-    /// Text label of the current answer option
-    #[getter]
-    fn label(&self, py: Python<'_>) -> PyResult<String> {
-        self.with_choice(py, |choice| choice.label.value.clone())
-    }
-
-    #[setter]
-    fn set_label(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-        self.with_choice_mut(py, |choice| choice.label = Text::new(value))
-    }
-
-    /// Response filter of the current answer option.
-    /// This attribute is not part of the .sss file itself, but can be very useful for extending current library to read other survey data maps modified from .sss xml (i.e., `.sif` from SnapSurveys, `.qps` from QPSMR etc).
-    /// An exmaple use case be setting up something like this:
-    /// Q1: How often do you drive?
-    /// choice 1: Never
-    /// choice 2: Always
-    ///
-    /// Q2: Do you enjoy driving?
-    /// choice 1: nah (ONLY shown for those who selected '2' in Q1)
-    /// choice 2: okay-ish (ONLY shown for those who selected '2' in Q1)
-    /// choice 3: very much
-    #[getter]
-    fn filter(&self, py: Python<'_>) -> PyResult<Option<String>> {
-        self.with_choice(py, |choice| choice.filter.clone())
-    }
-
-    #[setter]
-    fn set_filter(&self, py: Python<'_>, value: Option<&str>) -> PyResult<()> {
-        self.with_choice_mut(py, |choice| {
-            choice.filter = value.map(|s| s.to_string())
-        })
-    }
-
-    /// (Optional) indicator for special values (e.g. mannotationissing data codes).
-    /// Removed from SSS 1.2 onwards.
-    #[getter]
-    fn is_special(&self, py: Python<'_>) -> PyResult<bool> {
-        self.with_choice(py, |choice| choice.is_special)
-    }
-
-    #[setter]
-    fn set_is_special(&self, py: Python<'_>, value: bool) -> PyResult<()> {
-        self.with_choice_mut(py, |choice| choice.is_special = value)
-    }
-}
-
-/// Flag for indicating what response kind (i.e., single/ multiple etc.)
-#[pyclass(eq, module = "triple_s", name = "Kind")]
-#[derive(PartialEq, Debug)]
-pub enum Kind {
-    Single,
-    Multiple,
-    Quantity,
-    Character,
-    Note,
-}
-
-impl Kind {
-    pub fn from_response(response: &tri::Response) -> Self {
-        match response {
-            tri::Response::Single(_) | tri::Response::SingleLiteral(_) => Kind::Single,
-            tri::Response::Multiple(_) => Kind::Multiple,
-            tri::Response::Quantity(_) => Kind::Quantity,
-            tri::Response::Character(_) => Kind::Character,
-            tri::Response::Logical | tri::Response::Date(_) | tri::Response::Time(_) | tri::Response::Note => Kind::Note,
-        }
-    }
-}
-
-impl std::fmt::Display for Kind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Single => write!(f, "Kind.Single"),
-            Self::Multiple => write!(f, "Kind.Multiple"),
-            Self::Quantity => write!(f, "Kind.Quantity"),
-            Self::Character => write!(f, "Kind.Character"),
-            Self::Note => write!(f, "Kind.Note"),
-        }
     }
 }
 
