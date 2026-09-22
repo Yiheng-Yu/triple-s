@@ -116,6 +116,11 @@ impl PySurvey {
 //             .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
 //     }
 
+    /// return s a deep copy of current instance
+    fn copy(&self) -> Self {
+        self.clone()
+    }
+
     #[getter]
     fn get_meta<'py>(&self) -> PyResult<PyMeta> {
         Ok(PyMeta::from_parent(&self))

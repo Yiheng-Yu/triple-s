@@ -1,5 +1,5 @@
 # # from .survey import Survey, Question, Response
-# from .triple_s import (
+from .triple_s import (
 #     Categorical,
 #     Character,
 #     Choice,
@@ -17,8 +17,8 @@
 #     SingleLiteral,
 #     Survey,
 #     Time,
-#     read_file,
-# )
+    read_file,
+)
 
 # # def read_sss_file(sss_path: str) -> Survey:
 # #     """this reads sss"""
