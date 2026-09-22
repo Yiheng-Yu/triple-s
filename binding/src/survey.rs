@@ -990,163 +990,122 @@ impl PyMeta {
 //         Ok(dict.unbind())
 //     }
 
+    /// make a deep copy of current instance
+    fn copy(&self) -> Self {
+        self.clone()
+    }
+
     /// SSS Version
     #[getter]
     fn get_version(&self) -> PyResult<&str> {
         Ok(self.inner.read().version.as_str())
-        // Ok(self.inner
-        //     .bind(py)
-        //     .borrow()
-        //     .read_meta()
-        //     .version
-        //     .as_str())
     }
 
     #[setter]
-    fn set_version(&self, _py: Python<'_>, value: String) -> PyResult<()> {
+    fn set_version(&self, value: String) -> PyResult<()> {
         let version = Version::from_str(&value)
             .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))?;
         self.inner.write().version = version;
-        // self.inner
-        //     .bind(py)
-        //     .borrow_mut()
-        //     .write_meta()
-        //     .version = version;
         Ok(())
+    }
+
+    /// (Optional) name fo the survey
+    #[getter]
+    fn get_name(&self) -> PyResult<Option<String>> {
+        Ok(self.inner.read().name.clone())
+    }
+
+    #[setter]
+    fn set_name(&self, value: Option<String>) -> PyResult<()> {
+        self.inner.write().name = value;
+        Ok(())
+
     }
 
     /// (Optional) The date the file was created.
     #[getter]
-    fn get_date(&self, py: Python<'_>) -> PyResult<Option<String>> {
+    fn get_date(&self) -> PyResult<Option<String>> {
         Ok(self.inner.read().date.clone())
-        // Ok(self.inner
-        //     .bind(py)
-        //     .borrow()
-        //     .read_meta()
-        //     .date.clone())
     }
     #[setter]
-    fn set_date(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
+    fn set_date(&self, value: Option<String>) -> PyResult<()> {
         self.inner.write().date = value;
-        // self.inner
-        //     .bind(py)
-        //     .borrow_mut()
-        //     .write_meta()
-        //     .date = value;
         Ok(())
-
     }
 
-//     /// (Optional) The time the file was created.
-//     #[getter]
-//     fn get_time(&self, py: Python<'_>) -> PyResult<Option<String>> {
-//         Ok(self.inner
-//             .bind(py)
-//             .borrow()
-//             .read_meta()
-//             .time
-//             .clone())
-//     }
+    /// (Optional) The time the file was created.
+    #[getter]
+    fn get_time(&self) -> PyResult<Option<String>> {
+        Ok(self.inner.read().time.clone())
+    }
+    #[setter]
+    fn set_time(&self, value: Option<String>) -> PyResult<()> {
+        self.inner.write().time = value;
+        Ok(())
+    }
 
-//     #[setter]
-//     fn set_time(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
-//         self.inner
-//             .bind(py)
-//             .borrow_mut()
-//             .write_meta()
-//             .time = value;
-//         Ok(())
-//     }
+    #[getter]
+    fn get_title(&self) -> PyResult<Option<String>> {
+        Ok(self.inner.read().title.clone())
+    }
+    #[setter]
+    fn set_title(&self, value: Option<String>) -> PyResult<()> {
+        self.inner.write().title = value;
+        Ok(())
+    }
 
-//     /// (Optional) The originating system (program and operating system), i.e., `Windows 95`
-//     #[getter]
-//     fn get_origin(&self, py: Python<'_>) -> PyResult<Option<String>> {
-//         Ok(self.inner
-//             .bind(py)
-//             .borrow()
-//             .read_meta()
-//             .origin.clone())
-//     }
+    /// (Optional) The originating system (program and operating system), i.e., `Windows 95`
+    #[getter]
+    fn get_origin(&self) -> PyResult<Option<String>> {
+        Ok(self.inner.read().origin.clone())
+    }
+    #[setter]
+    fn set_origin(&self, value: Option<String>) -> PyResult<()> {
+        self.inner.write().origin = value;
+        Ok(())
+    }
 
-//     #[setter]
-//     fn set_origin(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
-//         self.inner
-//             .bind(py)
-//             .borrow_mut()
-//             .write_meta()
-//             .origin = value;
-//         Ok(())
-//     }
+    /// (Optional) Name of the user who created this file
+    #[getter]
+    fn get_user(&self) -> PyResult<Option<String>> {
+        Ok(self.inner.read().user.clone())
+    }
+    #[setter]
+    fn set_user(&self, value: Option<String>) -> PyResult<()> {
+        self.inner.write().user = value;
+        Ok(())
+    }
 
-//     /// (Optional) Name of the user who created this file
-//     #[getter]
-//     fn get_user(&self, py: Python<'_>) -> PyResult<Option<String>> {
-//         Ok(self.inner
-//             .bind(py)
-//             .borrow()
-//             .read_meta()
-//             .user
-//             .clone())
-//     }
+    #[getter]
+    fn get_style(&self) -> PyResult<Option<String>> {
+        Ok(self.inner.read().style.clone())
+    }
+    #[setter]
+    fn set_style(&self, value: Option<String>) -> PyResult<()> {
+        self.inner.write().style = value;
+        Ok(())
+    }
 
-//     #[setter]
-//     fn set_user(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
-//         self.inner
-//             .bind(py)
-//             .borrow_mut()
-//             .write_meta()
-//             .user = value;
-//         Ok(())
-//     }
-
-//     #[getter]
-//     fn get_style(&self, py: Python<'_>) -> PyResult<Option<String>> {
-//         Ok(self.inner
-//             .bind(py)
-//             .borrow()
-//             .read_meta()
-//             .style.clone())
-//     }
-
-//     #[setter]
-//     fn set_style(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
-//         self.inner
-//             .bind(py)
-//             .borrow_mut()
-//             .write_meta()
-//             .style = value;
-//         Ok(())
-//     }
-
-//     /// This statement is used to indicate that some aspect of the SSS definition meets a defined standard
-//     /// that may reduce the amount of checking required by an import program.
-//     /// The only standard_option provided in version 1.1 is NAMES. The definition of SSS standard names is:
-//     /// - consist of 1-8 characters
-//     /// - consist of only the characters A-Z (and a-z) and 0-9
-//     /// - start with a letter (A-Z or a-z)
-//     /// - case insensitive (i.e. upper and lower case are equivalent)
-//     /// - unique within the survey (e.g. Q1 and Q001 are different, q1 and Q1 are the same)
-//     /// - appear as the "name_text" without leading, trailing, or embedded blanks
-//     /// If all variable names in the SSS definition file conform to this definition then the statement STANDARD
-//     /// NAMES should appear between the VERSION and SURVEY statements.
-//     #[getter]
-//     fn get_standard(&self, py: Python<'_>) -> PyResult<Option<String>> {
-//         Ok(self.inner
-//             .bind(py)
-//             .borrow()
-//             .read_meta()
-//             .standard.clone())
-//     }
-
-//     #[setter]
-//     fn set_standard(&self, py: Python<'_>, value: Option<String>) -> PyResult<()> {
-//         self.inner
-//             .bind(py)
-//             .borrow_mut()
-//             .write_meta()
-//             .standard = value;
-//         Ok(())
-//     }
+    /// This statement is used to indicate that some aspect of the SSS definition meets a defined standard
+    /// that may reduce the amount of checking required by an import program.
+    /// The only standard_option provided in version 1.1 is NAMES. The definition of SSS standard names is:
+    /// - consist of 1-8 characters
+    /// - consist of only the characters A-Z (and a-z) and 0-9
+    /// - start with a letter (A-Z or a-z)
+    /// - case insensitive (i.e. upper and lower case are equivalent)
+    /// - unique within the survey (e.g. Q1 and Q001 are different, q1 and Q1 are the same)
+    /// - appear as the "name_text" without leading, trailing, or embedded blanks
+    /// If all variable names in the SSS definition file conform to this definition then the statement STANDARD
+    /// NAMES should appear between the VERSION and SURVEY statements.
+    #[getter]
+    fn get_standard(&self) -> PyResult<Option<String>> {
+        Ok(self.inner.read().standard.clone())
+    }
+    #[setter]
+    fn set_standard(&self, value: Option<String>) -> PyResult<()> {
+        self.inner.write().standard = value;
+        Ok(())
+    }
 }
 
 // // ============================= Enums/ Flags =============================
