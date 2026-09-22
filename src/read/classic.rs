@@ -8,7 +8,7 @@ pub const WITH: &str = "WITH";
 
 use crate::{
     error::{BadLine, InternalError},
-    parser::{Node, QuestionBuilder, SurveyBuilder},
+    read::{Node, QuestionBuilder, SurveyBuilder},
 };
 
 static PATTERN: LazyLock<Regex> = LazyLock::new(|| {

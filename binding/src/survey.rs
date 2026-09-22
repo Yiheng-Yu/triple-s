@@ -475,16 +475,16 @@ impl PyQuestion {
         Ok(())
     }
 
-//     #[getter]
-//     fn get_label(&self, py: Python<'_>) -> PyResult<String> {
-//         self.with_question_read(py, |question| question.label.value.clone())
-//     }
+    // #[getter]
+    // fn get_label(&self, py: Python<'_>) -> PyResult<String> {
+    //     Ok(self.inner.read().label.clone())
+    // }
 
-//     #[setter]
-//     fn set_label(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         self.with_question_write(py, |mut question| question.label = Text::new(value))
-//     }
-
+    // #[setter]
+    // fn set_label(&self, py: Python<'_>, value: &str) -> PyResult<()> {
+    //     self.inner.write().label = value.into();
+    //     Ok(())
+    // }
 //     #[getter]
 //     fn get_filter(&self, py: Python<'_>) -> PyResult<Option<String>> {
 //         self.with_question_read(py, |question| question.filter.clone())

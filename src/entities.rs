@@ -252,7 +252,7 @@ impl Question {
     pub fn from_string(input: &str) -> Result<Self> {
         let is_classic = is_sss_classic(input);
         let stream = input.lines().map(|s| Ok::<_, BadLine>(s.to_string()));
-        let builder = crate::parser::classic::collect_question_stream(stream, 0)?;
+        let builder = crate::read::classic::collect_question_stream(stream, 0)?;
         builder.build(is_classic)
     }
 

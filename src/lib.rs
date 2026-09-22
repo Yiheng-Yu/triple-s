@@ -1,6 +1,6 @@
 mod entities;
 pub mod error;
-mod parser;
+mod read;
 pub mod prelude;
 
 pub use entities::{
@@ -25,4 +25,4 @@ pub use entities::{
     TextVariant,
     Version,
 };
-pub use parser::{read_from_string, read_sss_file};
+pub use read::{read_from_string, read_sss_file};
