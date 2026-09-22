@@ -1,14 +1,16 @@
-extern crate triple_s as tri;
+extern crate triple_s as sss;
 use std::{str::FromStr, sync::Arc};
 
-use parking_lot::{MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock};
-use pyo3::{exceptions, prelude::*, types::{PyDict}};
-use tri::{Code, Position, Response, Text, Version, prelude::*};
-use triple_s::Meta;
+use parking_lot::RwLock;
+use pyo3::{exceptions, prelude::*};
+use sss::{Code, Position, Response, Text, Version, prelude::*};
+use triple_s::{Meta, Question, Record};
+
+use crate::configuration::{PyFormat, PyLanguage, PyMode};
 
 #[pyfunction]
 pub fn read_file(path: &str) -> PyResult<PySurvey> {
-    let survey = tri::read_sss_file(path)
+    let survey = sss::read_sss_file(path)
         .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))?;
     Ok(PySurvey::from(survey))
 }
@@ -28,8 +30,8 @@ pub fn read_file(path: &str) -> PyResult<PySurvey> {
 /// More detail can be found at: https://triple-s.org/documentation/manuals/
 #[pyclass(module = "triple_s", name = "Survey", from_py_object)]
 pub struct PySurvey {
-    meta: Arc<RwLock<tri::Meta>>, // holy hell this works
-    record: Arc<RwLock<tri::Record>>,
+    meta: Arc<RwLock<sss::Meta>>, // holy hell this works
+    record: Arc<RwLock<sss::Record>>,
 }
 
 impl Wrap for PySurvey {}
@@ -47,8 +49,8 @@ impl Clone for PySurvey {
     }
 }
 
-impl From<tri::Survey> for PySurvey {
-    fn from(value: tri::Survey) -> Self {
+impl From<sss::Survey> for PySurvey {
+    fn from(value: sss::Survey) -> Self {
         Self {
             meta: value.meta,
             record: Arc::new(RwLock::new(value.record))
@@ -59,25 +61,25 @@ impl From<tri::Survey> for PySurvey {
 // impl PySurvey {
 //     /// Acquire the inner 'survey.meta' for reading; surfaces lock poisoning as a
 //     /// `PyException` instead of panicking.
-//     pub(crate) fn read_meta(&self) -> MappedRwLockReadGuard<'_, tri::Meta> {
+//     pub(crate) fn read_meta(&self) -> MappedRwLockReadGuard<'_, sss::Meta> {
 //         parking_lot::RwLockReadGuard::map(self.inner.read(), |survey| &survey.meta)
 //     }
 
 //     /// Acquire the inner 'survey.meta' for writing; surfaces lock poisoning as a
 //     /// `PyException` instead of panicking.
-//     pub(crate) fn write_meta(&self) -> MappedRwLockWriteGuard<'_, tri::Meta> {
+//     pub(crate) fn write_meta(&self) -> MappedRwLockWriteGuard<'_, sss::Meta> {
 //         parking_lot::RwLockWriteGuard::map(self.inner.write(), |survey| &mut survey.meta)
 //     }
 
 //     /// Acquire the inner 'survey.record' for reading; surfaces lock poisoning as a
 //     /// `PyException` instead of panicking.
-//     pub(crate) fn read_record(&self) -> MappedRwLockReadGuard<'_, tri::Record> {
+//     pub(crate) fn read_record(&self) -> MappedRwLockReadGuard<'_, sss::Record> {
 //         parking_lot::RwLockReadGuard::map(self.inner.read(), |survey| &survey.record)
 //     }
 
 //     /// Acquire the inner 'survey.record' for writing; surfaces lock poisoning as a
 //     /// `PyException` instead of panicking.
-//     pub(crate) fn write_record(&self) -> MappedRwLockWriteGuard<'_, tri::Record> {
+//     pub(crate) fn write_record(&self) -> MappedRwLockWriteGuard<'_, sss::Record> {
 //         parking_lot::RwLockWriteGuard::map(self.inner.write(), |survey| &mut survey.record)
 //     }
 
@@ -86,7 +88,7 @@ impl From<tri::Survey> for PySurvey {
 //     pub(crate) fn read_question(
 //         &self,
 //         index: usize,
-//     ) -> PyResult<MappedRwLockReadGuard<'_, tri::Question>> {
+//     ) -> PyResult<MappedRwLockReadGuard<'_, sss::Question>> {
 //         parking_lot::RwLockReadGuard::try_map(self.inner.read(), |survey| {
 //             survey.record.content.get(index)
 //         })
@@ -98,7 +100,7 @@ impl From<tri::Survey> for PySurvey {
 //     pub(crate) fn write_question(
 //         &self,
 //         index: usize,
-//     ) -> PyResult<MappedRwLockWriteGuard<'_, tri::Question>> {
+//     ) -> PyResult<MappedRwLockWriteGuard<'_, sss::Question>> {
 //         parking_lot::RwLockWriteGuard::try_map(self.inner.write(), |survey| {
 //             survey.record.content.get_mut(index)
 //         })
@@ -141,10 +143,10 @@ impl PySurvey {
 //         self.inner.write().title = title;
 //     }
 
-//     #[getter]
-//     fn get_record<'py>(inner: &Bound<'_, Self>) -> PyResult<PyRecord> {
-//         Ok(PyRecord::from_rust(inner))
-//     }
+    #[getter]
+    fn get_record<'py>(&self) -> PyResult<PyRecord> {
+        Ok(PyRecord::from_parent(&self))
+    }
 
 //     #[getter]
 //     fn get_content<'py>(inner: &Bound<'_, Self>) -> PyResult<Vec<PyQuestion>> {
@@ -186,13 +188,16 @@ impl PySurvey {
 //     }
 }
 
-// /// Content of a survey
-// #[pyclass(module = "triple_s", name = "Record")]
-// pub struct PyRecord {
-//     inner: Storage<PySurvey, tri::Record>,
-// }
+/// Content of a survey
+#[pyclass(module = "triple_s", name = "Record")]
+pub struct PyRecord {
+    inner: Arc<RwLock<Record>>
+}
 
-// impl PyRecord {
+impl PyRecord {
+    pub fn from_parent(survey: &PySurvey) -> Self {
+        Self { inner: survey.record.clone() }
+    }
 //     pub fn from_rust(survey: &Bound<'_, PySurvey>) -> Self {
 //         Self {
 //             inner: Storage::Attached {
@@ -212,7 +217,7 @@ impl PySurvey {
 //     fn with_record_read<R>(
 //         &self,
 //         py: Python<'_>,
-//         f: impl FnOnce(MappedRwLockReadGuard<'_, tri::Record>) -> R,
+//         f: impl FnOnce(MappedRwLockReadGuard<'_, sss::Record>) -> R,
 //     ) -> PyResult<R> {
 //         match &self.inner {
 //             Storage::Attached { inner, .. } => {
@@ -226,12 +231,12 @@ impl PySurvey {
 //                 Ok(f(item))
 //             }
 //         }
-//     }
+    // }
 
 //     fn with_record_write<R>(
 //         &self,
 //         py: Python<'_>,
-//         f: impl FnOnce(MappedRwLockWriteGuard<'_, tri::Record>) -> R,
+//         f: impl FnOnce(MappedRwLockWriteGuard<'_, sss::Record>) -> R,
 //     ) -> PyResult<R> {
 //         match &self.inner {
 //             Storage::Attached { inner, .. } => {
@@ -246,10 +251,10 @@ impl PySurvey {
 //             }
 //         }
 //     }
-// }
+}
 
-// #[pymethods]
-// impl PyRecord {
+#[pymethods]
+impl PyRecord {
 //     /// Export content back to sss classic
 //     fn to_sss_classic(&self, py: Python<'_>) -> PyResult<String> {
 //         self.with_record_read(py, |record| record.to_sss_classic())?
@@ -272,7 +277,14 @@ impl PySurvey {
 //         self.with_record_write(py, |mut record| record.id = value)
 //     }
 
-//     /// List of questions/ variables that the current survey instance contains
+    /// List of questions/ variables that the current survey instance contains
+    #[getter]
+    fn get_content(&self) -> Vec<PyQuestion> {
+        self.inner.read().content.iter().map(PyQuestion::new).collect()
+    }
+
+
+    //     /// List of questions/ variables that the current survey instance contains
 //     #[getter]
 //     fn content(&self, py: Python<'_>) -> PyResult<Vec<PyQuestion>> {
 //         match &self.inner {
@@ -326,15 +338,25 @@ impl PySurvey {
 //             current_id, question_string
 //         ))
 //     }
-// }
+}
+
+#[pyclass(module = "triple_s", name = "Question")]
+pub struct PyQuestion {
+    inner: Arc<RwLock<Question>>
+}
+
+
 
 // #[pyclass(module = "triple_s", name = "Question")]
 // pub struct PyQuestion {
-//     inner: Storage<PySurvey, tri::Question>,
+//     inner: Storage<PySurvey, sss::Question>,
 // }
 
-// impl PyQuestion {
-//     pub fn from_storage(question: &tri::Question) -> Self {
+impl PyQuestion {
+    pub fn new(item: &Arc<RwLock<Question>>) -> Self {
+        Self { inner: item.clone() }
+    }
+//     pub fn from_storage(question: &sss::Question) -> Self {
 //         Self {
 //             inner: Storage::from_owned(question.clone()),
 //         }
@@ -352,7 +374,7 @@ impl PySurvey {
 //     fn with_question_read<R>(
 //         &self,
 //         py: Python<'_>,
-//         f: impl FnOnce(MappedRwLockReadGuard<'_, tri::Question>) -> R,
+//         f: impl FnOnce(MappedRwLockReadGuard<'_, sss::Question>) -> R,
 //     ) -> PyResult<R> {
 //         match &self.inner {
 //             Storage::Attached { inner, index } => {
@@ -375,7 +397,7 @@ impl PySurvey {
 //     fn with_question_write<R>(
 //         &self,
 //         py: Python<'_>,
-//         f: impl FnOnce(MappedRwLockWriteGuard<'_, tri::Question>) -> R,
+//         f: impl FnOnce(MappedRwLockWriteGuard<'_, sss::Question>) -> R,
 //     ) -> PyResult<R> {
 //         match &self.inner {
 //             Storage::Attached { inner, index } => {
@@ -397,7 +419,7 @@ impl PySurvey {
 //     pub(crate) fn with_location_read<R>(
 //         &self,
 //         py: Python<'_>,
-//         f: impl FnOnce(&tri::Position) -> R,
+//         f: impl FnOnce(&sss::Position) -> R,
 //     ) -> PyResult<R> {
 //         self.with_question_read(py, |question| f(&question.location))
 //     }
@@ -405,7 +427,7 @@ impl PySurvey {
 //     pub(crate) fn with_location_write<R>(
 //         &self,
 //         py: Python<'_>,
-//         f: impl FnOnce(&mut tri::Position) -> R,
+//         f: impl FnOnce(&mut sss::Position) -> R,
 //     ) -> PyResult<R> {
 //         self.with_question_write(py, |mut question| f(&mut question.location))
 //     }
@@ -413,7 +435,7 @@ impl PySurvey {
 //     pub(crate) fn with_response<R>(
 //         &self,
 //         py: Python<'_>,
-//         f: impl FnOnce(&tri::Response) -> R,
+//         f: impl FnOnce(&sss::Response) -> R,
 //     ) -> PyResult<R> {
 //         self.with_question_read(py, |question| f(&question.response))
 //     }
@@ -421,38 +443,37 @@ impl PySurvey {
 //     pub(crate) fn with_response_mut<R>(
 //         &self,
 //         py: Python<'_>,
-//         f: impl FnOnce(&mut tri::Response) -> R,
+//         f: impl FnOnce(&mut sss::Response) -> R,
 //     ) -> PyResult<R> {
 //         self.with_question_write(py, |mut question| f(&mut question.response))
 //     }
-// }
+}
 
-// #[pymethods]
-// impl PyQuestion {
+#[pymethods]
+impl PyQuestion {
 
-//     fn to_sss_classic(&self, py: Python<'_>) -> PyResult<String> {
-//         self.with_question_read(py, |question| question.to_sss_classic())?
-//             .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
-//     }
+    fn to_sss_classic(&self) -> PyResult<String> {
+        self.inner.read()
+            .to_sss_classic()
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
+    }
 
-//     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-//         self.with_question_read(py, |question| {
-//             format!(
-//                 r#"Question(name="{}")"#,
-//                 &question.name
-//             )
-//         })
-//     }
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!(
+            r#"Question(name="{}")"#,
+            self.inner.read().name
+        ))
+    }
 
-//     #[getter]
-//     fn get_name(&self, py: Python<'_>) -> PyResult<String> {
-//         self.with_question_read(py, |question| question.name.clone())
-//     }
-
-//     #[setter]
-//     fn set_name(&self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         self.with_question_write(py, |mut question| question.name = value.to_string())
-//     }
+    #[getter]
+    fn get_name(&self) -> PyResult<String> {
+        Ok(self.inner.read().name.clone())
+    }
+    #[setter]
+    fn set_name(&self, value: &str) -> PyResult<()> {
+        self.inner.write().name = value.into();
+        Ok(())
+    }
 
 //     #[getter]
 //     fn get_label(&self, py: Python<'_>) -> PyResult<String> {
@@ -505,10 +526,10 @@ impl PySurvey {
 //     #[setter]
 //     pub fn set_format(&mut self, format: &Bound<'_, PyAny>) -> PyResult<()> {
 //         if let Ok(arg) = format.extract::<&str>() {
-//             let format= tri::CodeFormat::from_str(arg)
+//             let format= sss::CodeFormat::from_str(arg)
 //                 .map_err(exceptions::PyValueError::new_err(format!(
 //                     "Unidentified format option: '{}'. Exepct to be one of: [{}]",
-//                     arg, tri::CodeFormat::all_format_names().collect::<Vec<&str>>()
+//                     arg, sss::CodeFormat::all_format_names().collect::<Vec<&str>>()
 //                 )))?;
 //             todo!()
 //             // self.with_question_write(format.py(), |inner| inner)
@@ -516,11 +537,11 @@ impl PySurvey {
 //             todo!()
 //         }
 //     }
-// }
+}
 
 // #[pyclass(module = "triple_s", name = "Response", subclass)]
 // pub struct PyResponse {
-//     inner: Storage<PyQuestion, tri::Response>,
+//     inner: Storage<PyQuestion, sss::Response>,
 // }
 
 // impl PyResponse {
@@ -533,7 +554,7 @@ impl PySurvey {
 //     fn with_response<R>(
 //         &self,
 //         py: Python<'_>,
-//         f: impl FnOnce(&tri::Response) -> R,
+//         f: impl FnOnce(&sss::Response) -> R,
 //     ) -> PyResult<R> {
 //         match &self.inner {
 //             Storage::Attached {inner, ..} => {
@@ -548,7 +569,7 @@ impl PySurvey {
 //     fn with_response_mut<R>(
 //         &mut self,
 //         py: Python<'_>,
-//         f: impl FnOnce(&mut tri::Response) -> R,
+//         f: impl FnOnce(&mut sss::Response) -> R,
 //     ) -> PyResult<R> {
 //         match &mut self.inner {
 //             Storage::Attached {inner, ..} => {
@@ -836,7 +857,7 @@ impl PySurvey {
 //     fn with_location_read<R>(
 //         &self,
 //         py: Python<'_>,
-//         f: impl FnOnce(&tri::Position) -> R,
+//         f: impl FnOnce(&sss::Position) -> R,
 //     ) -> PyResult<R> {
 //         match &self.inner {
 //             Storage::Owned(location) => {
@@ -853,7 +874,7 @@ impl PySurvey {
 //     fn with_location_write<R>(
 //         &self,
 //         py: Python<'_>,
-//         f: impl FnOnce(&mut tri::Position) -> R,
+//         f: impl FnOnce(&mut sss::Position) -> R,
 //     ) -> PyResult<R> {
 //         match &self.inner {
 //             Storage::Owned(location) => {
@@ -950,8 +971,8 @@ impl PyMeta {
 //         //     return Ok(Self::from_rust(survey));
 //         // }
 
-//         // let mut survey = tri::Survey::empty();
-//         // survey.meta = tri::Meta::with_version(version.unwrap_or(Version::V1_1));
+//         // let mut survey = sss::Survey::empty();
+//         // survey.meta = sss::Meta::with_version(version.unwrap_or(Version::V1_1));
 //         // Ok(Self {
 //         //     inner: Py::new(py, PySurvey::from(survey))?,
 //         // })
@@ -1101,6 +1122,7 @@ impl PyMeta {
     fn get_standard(&self) -> PyResult<Option<String>> {
         Ok(self.inner.read().standard.clone())
     }
+
     #[setter]
     fn set_standard(&self, value: Option<String>) -> PyResult<()> {
         self.inner.write().standard = value;
@@ -1109,20 +1131,6 @@ impl PyMeta {
 }
 
 // // ============================= Enums/ Flags =============================
-// #[pyclass(name="Format")]
-// pub struct PyFormat(pub tri::CodeFormat);
-
-// impl From<tri::CodeFormat> for PyFormat {
-//     fn from(value: tri::CodeFormat) -> Self {
-//         Self(value)
-//     }
-// }
-
-// impl From<PyFormat> for tri::CodeFormat {
-//     fn from(value: PyFormat) -> Self {
-//         value.0
-//     }
-// }
 
 // // // TODO!
 // // #[pyclass(dict, module = "triple_s", name = "Mode")]
