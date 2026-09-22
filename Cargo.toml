@@ -5,6 +5,26 @@ edition = "2024"
 description = "Read classic Triple-S survey definition files."
 repository = "https://github.com/Yiheng-Yu/triple-s"
 
+[profile.dev]
+debug = "full"
+opt-level = 0
+overflow-checks = true
+debug-assertions = true
+split-debuginfo = "packed"
+panic="unwind"
+strip = "none"
+lto = "off"
+
+[profile.release]
+debug = "none"
+opt-level = "z"
+overflow-checks = true
+debug-assertions = false
+incremental = false
+strip = true
+lto = "fat"
+codegen-units = 1
+
 [lib]
 name = "triple_s"
 crate-type = ["rlib"]

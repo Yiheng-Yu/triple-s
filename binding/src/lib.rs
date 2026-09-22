@@ -6,13 +6,13 @@ use pyo3::prelude::*;
 pub mod triple_s {
     #[pymodule_export]
     pub use super::survey::{
-        PyCode,
+        // PyCode,
         PyMeta,
-        PyQuestion,
-        PyRecord,
-        PyResponse,
+        // PyQuestion,
+        // PyRecord,
+        // PyResponse,
         PySurvey,
-        PyFormat,
+        // PyFormat,
         read_file
     };
     use super::*;
