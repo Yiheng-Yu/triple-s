@@ -8,7 +8,6 @@ pub use entities::{
     TextCategory,
     Character,
     Code,
-    Codes,
     CodeFormat,
     Language,
     Meta,

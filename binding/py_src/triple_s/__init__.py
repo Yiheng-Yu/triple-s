@@ -13,6 +13,7 @@ from .triple_s import (
     Question,
     Record,
     Response,
+    Format,
     SingleLiteral,
     Survey,
     Time,
@@ -25,6 +26,7 @@ from .triple_s import (
 #     return Survey(inner)
 
 __all__ = [
+    "Format",
     "Categorical",
     "Character",
     "Choice",

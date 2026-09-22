@@ -1,12 +1,17 @@
 use std::{
-    any::type_name, collections::HashMap, fmt::{Display, Write}, range::Range, str::FromStr, sync::{Arc, LazyLock},
+    any::type_name, 
+    collections::HashMap, 
+    fmt::{Display, Write}, 
+    range::Range, 
+    str::FromStr, 
+    sync::{Arc, LazyLock},
 };
 
 use anyhow::{Context, Result};
 use chrono::{NaiveDate, NaiveTime};
 use parking_lot::RwLock;
 use rayon::prelude::*;
-use strum::EnumString;
+use strum::{EnumString, EnumIter, IntoEnumIterator};
 
 use crate::{
     error::{BadLine, DuplicatedKey, UnsupportedFeature},
@@ -39,11 +44,9 @@ impl Version {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Survey {
-    pub name: String,
-    pub title: Option<String>,
-    pub meta: Meta,
+    pub meta: Arc<RwLock<Meta>>,
     pub record: Record,
 }
 
@@ -54,44 +57,69 @@ impl Survey {
     }
 
     pub fn empty() -> Self {
+        let meta = Meta::with_version(Version::V1_1);
         Self {
-            title: None,
-            meta: Meta::with_version(Version::V1_1),
+            meta: Arc::new(RwLock::new(meta)),
             record: Record::default(),
-            name: String::new(),
         }
     }
 
     /// find question via question name, case insensitive
-    pub fn get_question(&self, name: &str) -> Option<&Question> {
+    pub fn get_question(&self, name: &str) -> Option<Arc<RwLock<Question>>> {
         self.record
             .content
             .par_iter()
-            .find_first(|question| question.name.to_uppercase() == name.to_uppercase())
+            .find_first(|question| question.read().name.to_uppercase() == name.to_uppercase())
+            .map(|found| found.clone())
     }
 
     pub fn to_sss_classic(&self) -> Result<String> {
         let mut output = String::from("SSS\n");
-        output.push_str(&self.meta.to_sss_classic());
-        append_line(&mut output, "SURVEY");
-        if let Some(title) = self.title.as_ref() {
-            append_line(&mut output, format!("TITLE {}", quote(title)));
+        // survey meta
+        append_line(&mut output, format!("VERSION {}", self.meta.read().version.as_str()));
+        for (name, value) in [
+            ("DATE", &self.meta.read().date),
+            ("TIME", &self.meta.read().time),
+            ("ORIGIN", &self.meta.read().origin),
+            ("USER", &self.meta.read().user),
+            ("STANDARD",  &self.meta.read().standard)
+            // sss classic does not have 'style' field
+        ] {
+            if let Some(value) = value {
+                append_line(&mut output, format!("{name} {}", quote(value)));
+            }
         }
 
+        // survey content
+        append_line(&mut output, "SURVEY");
+        for (name, value) in [
+            ("NAME", &self.meta.read().name),
+            ("TITLE", &self.meta.read().title)
+        ] {
+            if let Some(value) = value {
+                append_line(&mut output, format!("{name} {}", quote(value)));
+            }
+        }
+
+        // list of questions
         let record = &self.record.to_sss_classic()?;
         output.push_str(record);
+
+        // ending
         append_line(&mut output, "END SURVEY");
         append_line(&mut output, "END SSS");
         Ok(output)
     }
 }
 
+/// meta information about the survey entity.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Meta {
     /// The version attribute is used to indicate the version of the Triple-S
     /// standard that applies to this specification.
     pub version: Version,
     pub name: Option<String>,
+    pub title: Option<String>,
     pub date: Option<String>,
     pub time: Option<String>,
     pub origin: Option<String>,
@@ -119,6 +147,7 @@ impl Meta {
         Self {
             version,
             name: None,
+            title: None,
             date: None,
             time: None,
             origin: None,
@@ -130,26 +159,27 @@ impl Meta {
         }
     }
 
-    pub fn to_sss_classic(&self) -> String {
-        let mut output = String::new();
-        append_line(&mut output, format!("VERSION {}", self.version.as_str()));
-        for (name, value) in [
-            ("DATE", &self.date),
-            ("TIME", &self.time),
-            ("ORIGIN", &self.origin),
-            ("USER", &self.user),
-        ] {
-            if let Some(value) = value {
-                append_line(&mut output, format!("{name} {}", quote(value)));
-            }
-        }
-        for (name, value) in [("STANDARD", &self.standard), ("STYLE", &self.style)] {
-            if let Some(value) = value {
-                append_line(&mut output, format!("{name} {}", quote(value)));
-            }
-        }
-        output
-    }
+    // pub fn to_sss_classic(&self) -> String {
+    //     let mut output = String::new();
+    //     append_line(&mut output, format!("VERSION {}", self.version.as_str()));
+    //     for (name, value) in [
+    //         ("DATE", &self.date),
+    //         ("TIME", &self.time),
+    //         ("ORIGIN", &self.origin),
+    //         ("USER", &self.user),
+    //         ("TITLE", &self.title),
+    //     ] {
+    //         if let Some(value) = value {
+    //             append_line(&mut output, format!("{name} {}", quote(value)));
+    //         }
+    //     }
+    //     for (name, value) in [("STANDARD", &self.standard), ("STYLE", &self.style)] {
+    //         if let Some(value) = value {
+    //             append_line(&mut output, format!("{name} {}", quote(value)));
+    //         }
+    //     }
+    //     output
+    // }
 }
 
 #[derive(Debug, EnumString, PartialEq, Default, Clone)]
@@ -167,7 +197,7 @@ pub enum DataSource {
     Fixed,
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone)]
 pub struct Record {
     pub id: char,
 
@@ -185,7 +215,7 @@ pub struct Record {
     pub href: Option<String>,
 
     pub data_source: DataSource,
-    pub content: Vec<Question>,
+    pub content: Vec<Arc<RwLock<Question>>>,
 }
 
 impl Record {
@@ -198,7 +228,7 @@ impl Record {
         let mut output = String::new();
         append_line(&mut output, format!("RECORD {}", self.id));
         for question in self.content.iter() {
-            output.push_str(&question.to_sss_classic()?);
+            output.push_str(&question.read().to_sss_classic()?);
         }
         append_line(&mut output, "END RECORD");
         Ok(output)
@@ -212,6 +242,7 @@ pub struct Question {
     pub label: Text,
     pub filter: Option<String>,
     pub format: CodeFormat,
+    pub usage: Usage,
     pub response: Response,
     pub location: Position,
 }
@@ -246,14 +277,43 @@ impl Question {
     }
 }
 
+/// describes the role of this variable in the survey. 
+/// Only a subset of variable types may have a use attribute (as detailed below)
+#[derive(Clone, Debug, Default, EnumString, EnumIter, PartialEq)]
+pub enum Usage {
+    /// plain data
+    #[default]
+    Null,
+
+    /// this variable contains the serial number (or other identification field)
+    #[strum(serialize = "serial")]
+    Serial,
+    /// this variable contains the weighting
+    #[strum(serialize = "weight")]
+    Weight,
+}
+
 // TODO! ADD DOCUMENTATION
-#[derive(Debug, Clone, EnumString, Default, PartialEq)]
+#[derive(Debug, Clone, EnumString, EnumIter, Default, PartialEq)]
 pub enum CodeFormat {
     #[default]
     #[strum(serialize = "numeric")]
     Numeric,
     #[strum(serialize = "literal")]
     Literal,
+}
+
+impl CodeFormat {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Literal => "literal",
+            Self::Numeric => "numeric"
+        }
+    }
+
+    pub fn all_format_names() -> impl Iterator<Item = Arc<str>> {
+        Self::iter().map(|format| format.name().into())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -683,16 +743,9 @@ impl RangeTime {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Codes {
-    Int(Vec<Code<u64>>),
-    Float(Vec<Code<f64>>),
-    String(Vec<Code<String>>),
-}
-
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Code<T: CodeType> {
-    /// code value
+    /// code value, this can be String, Float or u64
     pub code: T,
 
     /// text label
@@ -713,6 +766,9 @@ impl<T: CodeType> Code<T> {
     /// their default value
     pub fn new<C>(code: C, label: impl Into<String>) -> Result<Self>
     where C: Into<T> {
+        let code = code.into();
+        code.validate()?;
+
         Ok(Self {
             code: code.into(),
             label: Text::new(label),
@@ -1102,6 +1158,17 @@ mod test {
 
         let duplicated = response.find_duplicated_entries();
         assert_eq!(duplicated.len(), 5)
+    }
+
+    /// field `code` for struct `Code` can only be one of the:
+    /// - None-NaN, None-infinity float
+    /// - u64,
+    /// - String
+    #[test]
+    fn test_allowed_code_types() {
+        assert!(Code::<f64>::new(f64::NAN, "test").is_err());
+        assert!(Code::<f64>::new(f64::INFINITY, "test").is_err());
+        assert!(Code::<f64>::new(f64::NEG_INFINITY, "test").is_err());
     }
 
     // #[test]

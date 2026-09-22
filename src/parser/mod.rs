@@ -13,34 +13,21 @@ use std::{
 
 use anyhow::{Context, Result};
 use chrono::{NaiveDate, NaiveTime};
-use parking_lot::RwLockWriteGuard;
+use parking_lot::{RwLock, RwLockWriteGuard};
 use quick_xml::{encoding::DecodingReader, reader::Reader as XmlReader};
 use rayon::prelude::*;
 
 use crate::{
     entities::{
-        Code,
-        CodeFormat,
-        Language,
-        Mode,
-        Position,
-        Question,
-        Response,
-        Spread,
-        Survey,
-        Text,
-        TextVariant,
-        Version,
-    },
-    error::{
+        Code, CodeFormat, Language, Mode, Position, Question, Response, Spread, Survey, Text, TextVariant, Usage, Version,
+    }, error::{
         self,
         BadLine,
         DuplicatedKey,
         InternalError,
         MissingAttributeError,
         MissingValueError,
-    },
-    prelude::*,
+    }, prelude::*,
 };
 
 #[derive(Debug, PartialEq)]
@@ -224,18 +211,17 @@ impl SurveyBuilder {
     pub fn build(mut self) -> Result<Survey> {
         let mut output = Survey::empty();
 
-        output.title = self
+        output.meta.write().title = self
             .attributes
             .remove("title")
             .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
             .transpose()?;
 
-        output.name = self
+        output.meta.write().name = self
             .attributes
             .remove("name")
             .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
-            .transpose()?
-            .unwrap_or_default();
+            .transpose()?;
 
         if let Some(record) = self.attributes.remove("record") {
             if self.is_classic {
@@ -256,37 +242,37 @@ impl SurveyBuilder {
             }
         }
 
-        output.meta.origin = self
+        output.meta.write().origin = self
             .attributes
             .remove("origin")
             .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
             .transpose()?;
 
-        output.meta.user = self
+        output.meta.write().user = self
             .attributes
             .remove("user")
             .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
             .transpose()?;
 
-        output.meta.date = self
+        output.meta.write().date = self
             .attributes
             .remove("date")
             .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
             .transpose()?;
 
-        output.meta.time = self
+        output.meta.write().time = self
             .attributes
             .remove("time")
             .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
             .transpose()?;
 
-        output.meta.standard = self
+        output.meta.write().standard = self
             .attributes
             .remove("standard")
             .and_then(|val| val.value.map(|v| unquote(v, false)))
             .transpose()?;
 
-        output.meta.version = self
+        output.meta.write().version = self
             .attributes
             .remove("version")
             .ok_or(MissingAttributeError::new("sss", "version"))?
@@ -299,8 +285,11 @@ impl SurveyBuilder {
         output.record.content = self
             .questions
             .par_drain(..)
-            .map(|item| item.build(is_classic))
-            .collect::<Result<Vec<Question>>>()?;
+            .map(|item| {
+                let question = item.build(is_classic)?;
+                Ok(Arc::new(RwLock::new(question)))
+            })
+            .collect::<Result<Vec<Arc<RwLock<Question>>>>>()?;
 
         Ok(output)
     }
@@ -525,6 +514,18 @@ impl QuestionBuilder {
             .transpose()?
             .unwrap_or_default();
 
+        output.usage = self
+            .attributes
+            .remove("use")
+            .and_then(|node| node.value.map(|s| Usage::from_str(s.as_ref())))
+            .transpose()?
+            .unwrap_or_default();
+
+        output.filter = self
+            .attributes
+            .remove("filter")
+            .and_then(|node| node.value.map(|s| s.to_string()));
+
         // build question responses
         let response = self
             .attributes
@@ -591,7 +592,6 @@ impl QuestionBuilder {
                 Some(Spread { subfield, width })
             };
         };
-
         output.response = response;
         Ok(output)
     }

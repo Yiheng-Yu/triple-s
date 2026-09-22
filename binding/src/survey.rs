@@ -2,7 +2,7 @@ extern crate triple_s as tri;
 use std::{str::FromStr, sync::Arc};
 
 use parking_lot::{MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock};
-use pyo3::{exceptions, prelude::*, types::{PyDict, PyTuple}};
+use pyo3::{exceptions, prelude::*, types::{PyDict}};
 use tri::{Code, Position, Response, Text, Version, prelude::*};
 
 #[pyfunction]
@@ -110,15 +110,6 @@ impl PySurvey {
 
 #[pymethods]
 impl PySurvey {
-    #[new]
-    #[pyo3(signature = (title=None))]
-    fn new(title: Option<String>) -> Self {
-        todo!()
-        // let mut survey = tri::Survey::empty();
-        // survey.title = title;
-        // Self::from(survey)
-    }
-
     /// Export content back to sss classic
     fn to_sss_classic(&self) -> PyResult<String> {
         self.inner
@@ -251,18 +242,6 @@ impl PyRecord {
 
 #[pymethods]
 impl PyRecord {
-    #[new]
-    #[pyo3(signature = (id='A'))]
-    fn new(id: char) -> Self {
-        todo!()
-        // Self {
-        //     inner: Storage::from_owned(tri::Record {
-        //         id,
-        //         ..Default::default()
-        //     }),
-        // }
-    }
-
     /// Export content back to sss classic
     fn to_sss_classic(&self, py: Python<'_>) -> PyResult<String> {
         self.with_record_read(py, |record| record.to_sss_classic())?
@@ -442,19 +421,6 @@ impl PyQuestion {
 
 #[pymethods]
 impl PyQuestion {
-    #[new]
-    #[pyo3(signature = (name="", label="", index=0))]
-    fn new(name: &str, label: &str, index: u64) -> Self {
-        todo!()
-        // Self {
-        //     inner: Storage::from_owned(tri::Question {
-        //         index,
-        //         name: name.to_string(),
-        //         label: Text::new(label),
-        //         ..Default::default()
-        //     }),
-        // }
-    }
 
     fn to_sss_classic(&self, py: Python<'_>) -> PyResult<String> {
         self.with_question_read(py, |question| question.to_sss_classic())?
@@ -521,6 +487,26 @@ impl PyQuestion {
         self.with_question_write(py, |mut question| {
             question.location = location;
         })
+    }
+
+    #[getter]
+    pub fn get_format(&self, py: Python<'_>) -> PyResult<PyFormat> {
+        self.with_question_read(py, |inner| inner.format.clone().into())
+    }
+
+    #[setter]
+    pub fn set_format(&mut self, format: &Bound<'_, PyAny>) -> PyResult<()> {
+        if let Ok(arg) = format.extract::<&str>() {
+            let format= tri::CodeFormat::from_str(arg)
+                .map_err(exceptions::PyValueError::new_err(format!(
+                    "Unidentified format option: '{}'. Exepct to be one of: [{}]",
+                    arg, tri::CodeFormat::all_format_names().collect::<Vec<&str>>()
+                )))?;
+            todo!()
+            // self.with_question_write(format.py(), |inner| inner)
+        } else {
+            todo!()
+        }
     }
 }
 
@@ -598,6 +584,9 @@ impl PyResponse {
     }
 }
 
+
+/// the attribute `code` in triple-s <value> tag can be u64, f64 (non-NAN and non-inf) & String
+/// hence the use of enum `CodeInterface` here to accomdate different datatypes
 enum CodeInterface {
     Int(Code<u64>),
     Float(Code<f64>),
@@ -1144,6 +1133,22 @@ impl PyMeta {
             .write_meta()
             .standard = value;
         Ok(())
+    }
+}
+
+// ============================= Enums/ Flags =============================
+#[pyclass(name="Format")]
+pub struct PyFormat(pub tri::CodeFormat);
+
+impl From<tri::CodeFormat> for PyFormat {
+    fn from(value: tri::CodeFormat) -> Self {
+        Self(value)
+    }
+}
+
+impl From<PyFormat> for tri::CodeFormat {
+    fn from(value: PyFormat) -> Self {
+        value.0
     }
 }
 

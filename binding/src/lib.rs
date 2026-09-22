@@ -1,9 +1,9 @@
 mod survey;
+// mod interface;
 use pyo3::prelude::*;
 
 #[pymodule(gil_used = false)]
 pub mod triple_s {
-
     #[pymodule_export]
     pub use super::survey::{
         PyCode,
@@ -12,6 +12,7 @@ pub mod triple_s {
         PyRecord,
         PyResponse,
         PySurvey,
+        PyFormat,
         read_file
     };
     use super::*;
@@ -20,24 +21,4 @@ pub mod triple_s {
     fn init(_m: &Bound<'_, PyModule>) -> PyResult<()> {
         Ok(())
     }
-}
-
-
-#[cfg(test)]
-mod test {
-    #[test]
-    fn test_create_question_from_rust() {
-        todo!("This is indended to create an API for python side to create new instance")
-    }
-
-    #[test]
-    fn test_create_survey_from_rust() {
-        todo!("This is indended to create an API for python side to create new instance")
-    }
-    
-    #[test]
-    fn test_create_response_from_rust() {
-        todo!("This is indended to create an API for python side to create new instance")
-    }
-
 }
