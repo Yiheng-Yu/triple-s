@@ -570,8 +570,10 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 name = "triple-s-python"
 version = "0.2.0"
 dependencies = [
+ "anyhow",
  "parking_lot",
  "pyo3",
+ "rayon",
  "triple_s",
 ]
 

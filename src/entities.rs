@@ -895,6 +895,13 @@ impl Text {
     pub fn to_sss_classic(&self) -> String {
         self.value.clone()
     }
+
+    pub fn contains_variant(&self, variant: &TextVariant) -> bool {
+        self.variant.par_iter().find_any(|item| 
+            item.has_same_attribute(variant)
+        )
+        .is_some()
+    }
 }
 
 /// From sss xml 2.0 onwards supports multi-language

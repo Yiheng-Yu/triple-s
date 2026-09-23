@@ -17,7 +17,7 @@ impl From<PyFormat> for sss::CodeFormat {
     }
 }
 
-// TODO!
+// TODO! Add documentation
 #[pyclass(dict, module = "triple_s", name = "Mode")]
 pub struct PyMode(pub sss::Mode);
 
