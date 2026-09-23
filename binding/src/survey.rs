@@ -2,7 +2,7 @@ extern crate triple_s;
 use std::{str::FromStr, sync::Arc};
 
 use parking_lot::{
-    RawRwLock, RwLock, lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard, RwLock},
+    RawRwLock, RwLock, lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
 };
 use pyo3::{
     exceptions,
@@ -34,19 +34,10 @@ pub fn read_file(path: &str) -> PyResult<PySurvey> {
 
 /// Survey
 /// More detail can be found at: https://triple-s.org/documentation/manuals/
-#[pyclass(module = "triple_s", name = "Survey", from_py_object)]
+#[pyclass(module = "triple_s", name = "Survey")]
 pub struct PySurvey {
     meta: Arc<RwLock<sss::Meta>>, // holy hell this works
     record: Arc<RwLock<sss::Record>>,
-}
-
-impl Clone for PySurvey {
-    fn clone(&self) -> Self {
-        Self {
-            meta: Arc::new(RwLock::new(self.meta.read().clone())),
-            record: Arc::new(RwLock::new(self.record.read().clone())),
-        }
-    }
 }
 
 impl From<sss::Survey> for PySurvey {
@@ -67,11 +58,19 @@ impl From<PySurvey> for sss::Survey {
     }
 }
 
+impl PySurvey {
+    fn to_backend_object(&self) -> Survey {
+        let meta = self.meta.read().clone();
+        let record = self.record.read().clone();
+        Survey { meta, record }
+    }
+}
+
 #[pymethods]
 impl PySurvey {
     /// Export content back to sss classic
     fn to_sss_classic(&self) -> PyResult<String> {
-        let instance: Survey = self.clone().into();
+        let instance: Survey = self.to_backend_object();
         instance.to_sss_classic().map_err(to_backend_err)
     }
 
@@ -93,10 +92,13 @@ impl PySurvey {
         }
     }
 
-    /// returns a dee[] copy of current instance.
+    /// returns a deep copy of current instance.
     /// updating the copied `Survey` instance would not affect the original `Survey` instance it copied from.
     fn deepcopy(&self) -> Self {
-        self.clone()
+        Self {
+            meta: Arc::new(RwLock::new(self.meta.read().clone())),
+            record: Arc::new(RwLock::new(self.record.read().clone())),
+        }
     }
 
     #[getter]
@@ -233,7 +235,7 @@ impl PyRecord {
     fn append(&mut self, question: PyQuestion) -> PyResult<()> {
         let question_name = question.get_name()?;
         if !self.read().has_question(&question_name) {
-            let instance = question.0.clone().into_inner();
+            let instance = question.0.clone().read().clone();
             self.write().content.push(instance);
             Ok(())
         } else {
@@ -279,7 +281,7 @@ impl Clone for PyQuestion {
 
 impl From<&Question> for PyQuestion {
     fn from(value: &Question) -> Self {
-        let content = RwLock::from(*value);
+        let content = RwLock::from(value.clone());
         let content = Arc::new(content);
         Self(content)
     }
@@ -292,10 +294,6 @@ impl From<Question> for PyQuestion {
 }
 
 impl PyQuestion {
-    pub(crate) fn from_arc(item: &Arc<RwLock<Question>>) -> Self {
-        Self(item.clone())
-    }
-
     pub(crate) fn read(&self) -> ArcRwLockReadGuard<RawRwLock, Question> {
         self.0.read_arc()
     }

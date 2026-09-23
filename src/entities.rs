@@ -66,7 +66,7 @@ impl Survey {
     }
 
     /// find question via question name, case insensitive
-    pub fn get_question(&self, question_name: &str) -> Option<Arc<RwLock<Question>>> {
+    pub fn get_question(&self, question_name: &str) -> Option<&Question> {
         self.record.get_question(question_name)
     }
 
