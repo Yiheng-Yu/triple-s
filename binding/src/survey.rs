@@ -1336,6 +1336,11 @@ impl PyVariant {
 
         Ok(instance.into())
     }
+
+    #[getter]
+    fn get_value(&self) -> String {
+        self.0.read().value.clone()
+    }
 }
 
 #[pyclass(name = "Format", module = "config")]
@@ -1391,19 +1396,19 @@ mod test {
 
     #[test]
     fn test_create_new_variant() {
-        const CONTENT: &str = "variant";
+        const VALUE: &str = "variant";
         const LANGUAGE: &str = "gb";
         const MODE: Mode = Mode::Analysis;
         const MODE_STR: &str = "analysis";
 
         let instance = PyVariant::new(
-            CONTENT.clone().into(),
+            VALUE.into(),
             Some(LANGUAGE.into()),
             Some(MODE_STR.into())
         )
         .unwrap();
 
-        assert_eq!(instance.get_content().as_str(), CONTENT);
+        assert_eq!(instance.get_value().as_str(), VALUE);
         // TODO!
         // assert_eq!(instance.get_language().as_ref(), )
     }
