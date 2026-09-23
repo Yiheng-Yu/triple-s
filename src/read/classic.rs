@@ -279,7 +279,9 @@ where
                             .is_some_and(|tag| tag == "VARIABLE")
                         {
                             // just in case of future stupid me,,,
-                            panic!("should not expect 'variable' end tag because it should already be checked earlier on!")
+                            panic!(
+                                "should not expect 'variable' end tag because it should already be checked earlier on!"
+                            )
                         }
                     } else {
                         let error = BadLine::new(format!(
@@ -314,13 +316,12 @@ where
                     question_builder.responses.children.push(node);
                 }
 
-                "size" => {  // only used for 'character' type
-                    question_builder
-                        .responses
-                        .children
-                        .push(node);
+                "size" => {
+                    // only used for 'character' type
+                    question_builder.responses.children.push(node);
                 }
-                _ => { // variable attributes
+                _ => {
+                    // variable attributes
                     let res = question_builder.attributes.insert(node.tag.clone(), node);
                     if let Some(old) = res {
                         let error = BadLine::new(format!(

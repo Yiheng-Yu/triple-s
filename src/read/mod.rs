@@ -19,15 +19,29 @@ use rayon::prelude::*;
 
 use crate::{
     entities::{
-        Code, CodeFormat, Language, Mode, Position, Question, Response, Spread, Survey, Text, TextVariant, Usage, Version,
-    }, error::{
+        Code,
+        CodeFormat,
+        Language,
+        Mode,
+        Position,
+        Question,
+        Response,
+        Spread,
+        Survey,
+        Text,
+        TextVariant,
+        Usage,
+        Version,
+    },
+    error::{
         self,
         BadLine,
         DuplicatedKey,
         InternalError,
         MissingAttributeError,
         MissingValueError,
-    }, prelude::*,
+    },
+    prelude::*,
 };
 
 #[derive(Debug, PartialEq)]
@@ -351,9 +365,8 @@ impl QuestionBuilder {
             Response::NumericCategory(item) => {
                 let mut item = item.write();
 
-                let first_entry = data
-                    .first()
-                    .ok_or(MissingValueError::new("values", "value"))?;
+                let first_entry =
+                    data.first().ok_or(MissingValueError::new("values", "value"))?;
 
                 if first_entry.tag.as_ref() == "range" {
                     let (from, to) = get_range::<u64>(first_entry, true)?;
@@ -540,7 +553,7 @@ impl QuestionBuilder {
             .with_context(|| format!("When parsing question {}", question_name))?;
         let response = match &output.format {
             CodeFormat::Literal => Response::new_single_literal()?,
-             _ => response,
+            _ => response,
         };
         let response = Self::build_response(response, self.responses.children, is_classic)
             .with_context(|| format!("When parsing question {}", question_name))?;

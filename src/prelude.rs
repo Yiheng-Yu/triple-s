@@ -2,10 +2,7 @@ use std::fmt::Display;
 
 use anyhow::Result;
 
-use crate::{
-    error::NotFiniteError,
-};
-
+use crate::error::NotFiniteError;
 
 mod sealed {
     pub trait Sealed {}

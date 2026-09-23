@@ -1,9 +1,9 @@
 use std::{
-    any::type_name, 
-    collections::HashMap, 
-    fmt::{Display, Write}, 
-    range::Range, 
-    str::FromStr, 
+    any::type_name,
+    collections::HashMap,
+    fmt::{Display, Write},
+    range::Range,
+    str::FromStr,
     sync::{Arc, LazyLock},
 };
 
@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use chrono::{NaiveDate, NaiveTime};
 use parking_lot::RwLock;
 use rayon::prelude::*;
-use strum::{EnumString, EnumIter, IntoEnumIterator};
+use strum::{EnumIter, EnumString, IntoEnumIterator};
 
 use crate::{
     error::{BadLine, DuplicatedKey, UnsupportedFeature},
@@ -70,21 +70,22 @@ impl Survey {
         self.record
             .content
             .par_iter()
-            .find_first(|question| question.read().name.to_uppercase() == name.to_uppercase())
-            .map(|found| found.clone())
+            .find_first(|question| question.read().name.to_uppercase() == name.to_uppercase()).cloned()
     }
 
     pub fn to_sss_classic(&self) -> Result<String> {
         let mut output = String::from("SSS\n");
         // survey meta
-        append_line(&mut output, format!("VERSION {}", self.meta.version.as_str()));
+        append_line(
+            &mut output,
+            format!("VERSION {}", self.meta.version.as_str()),
+        );
         for (name, value) in [
             ("DATE", &self.meta.date),
             ("TIME", &self.meta.time),
             ("ORIGIN", &self.meta.origin),
             ("USER", &self.meta.user),
-            ("STANDARD",  &self.meta.standard)
-            // sss classic does not have 'style' field
+            ("STANDARD", &self.meta.standard), // sss classic does not have 'style' field
         ] {
             if let Some(value) = value {
                 append_line(&mut output, format!("{name} {}", quote(value)));
@@ -93,10 +94,7 @@ impl Survey {
 
         // survey content
         append_line(&mut output, "SURVEY");
-        for (name, value) in [
-            ("NAME", &self.meta.name),
-            ("TITLE", &self.meta.title)
-        ] {
+        for (name, value) in [("NAME", &self.meta.name), ("TITLE", &self.meta.title)] {
             if let Some(value) = value {
                 append_line(&mut output, format!("{name} {}", quote(value)));
             }
@@ -162,8 +160,8 @@ impl Meta {
 
     // pub fn to_sss_classic(&self) -> String {
     //     let mut output = String::new();
-    //     append_line(&mut output, format!("VERSION {}", self.version.as_str()));
-    //     for (name, value) in [
+    //     append_line(&mut output, format!("VERSION {}",
+    // self.version.as_str()));     for (name, value) in [
     //         ("DATE", &self.date),
     //         ("TIME", &self.time),
     //         ("ORIGIN", &self.origin),
@@ -174,8 +172,8 @@ impl Meta {
     //             append_line(&mut output, format!("{name} {}", quote(value)));
     //         }
     //     }
-    //     for (name, value) in [("STANDARD", &self.standard), ("STYLE", &self.style)] {
-    //         if let Some(value) = value {
+    //     for (name, value) in [("STANDARD", &self.standard), ("STYLE",
+    // &self.style)] {         if let Some(value) = value {
     //             append_line(&mut output, format!("{name} {}", quote(value)));
     //         }
     //     }
@@ -186,14 +184,15 @@ impl Meta {
 #[derive(Debug, EnumString, PartialEq, Default, Clone)]
 pub enum DataSource {
     /// Supported from sss 2.0 onwards.
-    /// the data representation is comma separated values, using one field 
-    /// for each variable, with data values similar to the fixed format. Note 
-    /// that for data in csv format the position element refers to the 
-    /// field number. 
+    /// the data representation is comma separated values, using one field
+    /// for each variable, with data values similar to the fixed format. Note
+    /// that for data in csv format the position element refers to the
+    /// field number.
     Csv,
 
     /// The data representation is fixed format fields.
-    /// Basically `.asc` text file that formatted bit like csv but without any column header.
+    /// Basically `.asc` text file that formatted bit like csv but without any
+    /// column header.
     #[default]
     Fixed,
 }
@@ -278,7 +277,7 @@ impl Question {
     }
 }
 
-/// describes the role of this variable in the survey. 
+/// describes the role of this variable in the survey.
 /// Only a subset of variable types may have a use attribute (as detailed below)
 #[derive(Clone, Debug, Default, EnumString, EnumIter, PartialEq)]
 pub enum Usage {
@@ -308,7 +307,7 @@ impl CodeFormat {
     pub fn name(&self) -> &str {
         match self {
             Self::Literal => "literal",
-            Self::Numeric => "numeric"
+            Self::Numeric => "numeric",
         }
     }
 
@@ -457,10 +456,7 @@ impl Response {
     }
 
     pub fn is_scale(&self) -> bool {
-        matches!(
-            self,
-            Self::Date(_) | Self::Time(_) | Self::Quantity(_)
-        )
+        matches!(self, Self::Date(_) | Self::Time(_) | Self::Quantity(_))
     }
 
     pub fn is_open_end(&self) -> bool {
@@ -517,8 +513,7 @@ impl FromStr for Response {
         let to_match = s.trim().to_ascii_lowercase();
         match to_match.as_str() {
             "single" => {
-                Self::new_single_numerical().map_err(BadLine::from).map_err(BadLine::from)
-            }
+                Self::new_single_numerical().map_err(BadLine::from)}
             "multiple" => Self::new_multiple().map_err(BadLine::from),
             "quantity" => Self::new_quantity().map_err(BadLine::from),
             "character" => Self::new_character().map_err(BadLine::from),
@@ -526,10 +521,10 @@ impl FromStr for Response {
             "date" => Self::new_range_date().map_err(BadLine::from),
             "time" => Self::new_range_time().map_err(BadLine::from),
             _ => {
-                return Err(BadLine::new(format!(
+                Err(BadLine::new(format!(
                     "Unidentified response kind: '{}'",
                     to_match
-                )));
+                )))
             }
         }
     }
@@ -673,20 +668,15 @@ impl NumericCategory {
     }
 
     // return all entries with duplicated code value
-    pub fn find_duplicated_entries(&self) -> Vec<&Code<u64>>{
+    pub fn find_duplicated_entries(&self) -> Vec<&Code<u64>> {
         let mut groups: HashMap<u64, Vec<&Code<u64>>> = HashMap::new();
 
         for item in self.values.iter() {
             groups.entry(item.code).or_default().push(item);
         }
 
-        groups
-            .into_values()
-            .filter(|group| group.len() > 1)
-            .flatten()
-            .collect()
-        }
-
+        groups.into_values().filter(|group| group.len() > 1).flatten().collect()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -771,7 +761,7 @@ impl<T: CodeType> Code<T> {
         code.validate()?;
 
         Ok(Self {
-            code: code.into(),
+            code,
             label: Text::new(label),
             filter: None,
             score: None,
@@ -898,10 +888,10 @@ impl Text {
     }
 
     pub fn contains_variant(&self, variant: &TextVariant) -> bool {
-        self.variant.par_iter().find_any(|item| 
-            item.has_same_attribute(variant)
-        )
-        .is_some()
+        self.variant
+            .par_iter()
+            .find_any(|item| item.has_same_attribute(variant))
+            .is_some()
     }
 }
 
@@ -1181,25 +1171,25 @@ mod test {
 
     // #[test]
     // fn test_create_question_from_rust() {
-    //     todo!("This is indended to create an API for python side to create new instance")
-    // }
+    //     todo!("This is indended to create an API for python side to create
+    // new instance") }
 
     // #[test]
     // fn test_create_survey_from_rust() {
-    //     todo!("This is indended to create an API for python side to create new instance")
-    // }
+    //     todo!("This is indended to create an API for python side to create
+    // new instance") }
 
     // #[test]
     // fn test_create_response_from_rust() {
-    //     todo!("This is indended to create an API for python side to create new instance")
-    // }
+    //     todo!("This is indended to create an API for python side to create
+    // new instance") }
 
     // #[test]
     // fn test_convert_between_single_and_multiple() {
     //     // have some think about the current design of Response enum
     //     // should type <-> response being two separate things?
-    //     // a master Response struct that contains everything needed, and return
-    //     // thing according current type of response
+    //     // a master Response struct that contains everything needed, and
+    // return     // thing according current type of response
     //     // provide a '.convert(resp_type)' method ?? to switch betwen types
     //     // and raises error when .convert betwen f64 <-> string
     //     //

@@ -17,8 +17,11 @@ fn test_question_from_to_sss_classic() {
     let survey = example_datamap_classic();
 
     for question in survey.record.content.into_iter() {
-        println!("Asserting sss xml question read/write for question: '{}'", question.read().name);
-        
+        println!(
+            "Asserting sss xml question read/write for question: '{}'",
+            question.read().name
+        );
+
         let text = question.read().to_sss_classic().unwrap();
         let parsed = Question::from_string(&text).unwrap();
         assert_eq!(parsed.name, question.read().name);
@@ -34,7 +37,7 @@ fn test_question_from_to_sss_classic() {
                 assert_eq!(parsed_.read().spread, correct.read().spread);
                 assert_eq!(parsed_.read().values, correct.read().values);
             }
-            _ => assert_eq!(parsed.response, question.read().response)
+            _ => assert_eq!(parsed.response, question.read().response),
         }
     }
 }

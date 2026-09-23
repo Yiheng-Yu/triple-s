@@ -1,5 +1,5 @@
-///! Used for testing traits implementations
-use triple_s::{Code};
+/// ! Used for testing traits implementations
+use triple_s::Code;
 
 #[test]
 fn test_code_type_constrain() {

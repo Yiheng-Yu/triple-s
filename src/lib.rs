@@ -1,17 +1,16 @@
 mod entities;
 pub mod error;
-mod read;
 pub mod prelude;
+mod read;
 
 pub use entities::{
-    NumericCategory,
-    TextCategory,
     Character,
     Code,
     CodeFormat,
     Language,
     Meta,
     Mode,
+    NumericCategory,
     Position,
     Quantity,
     Question,
@@ -22,6 +21,7 @@ pub use entities::{
     Spread,
     Survey,
     Text,
+    TextCategory,
     TextVariant,
     Version,
 };
