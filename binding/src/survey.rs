@@ -77,8 +77,27 @@ impl PySurvey {
         instance.to_sss_classic().map_err(to_backend_err)
     }
 
-    /// return s a deep copy of current instance
+    fn __copy__(&self) -> Self {
+        self.copy()
+    }
+
+    fn __deepcopy__(&self) -> Self {
+        self.deepcopy()
+    }
+
+    /// returns a shallow copy of current instance
+    /// NOTE: updating the copied `Survey` instance would also mutate the original `Survey` instance too.
+    /// To obtain a deep copy, use `copy.deepcopy` OR `deepcopy()` method
     fn copy(&self) -> Self {
+        Self {
+            meta: self.meta.clone(),
+            record: self.record.clone()
+        }
+    }
+
+    /// returns a dee[] copy of current instance.
+    /// updating the copied `Survey` instance would not affect the original `Survey` instance it copied from.
+    fn deepcopy(&self) -> Self {
         self.clone()
     }
 

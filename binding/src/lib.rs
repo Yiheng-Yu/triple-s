@@ -15,11 +15,12 @@ pub mod triple_s {
     pub use super::survey::{
         // PyCode,
         PyMeta,
-        // PyQuestion,
+        PyQuestion,
         PyRecord,
         // PyResponse,
         PySurvey,
         PyText,
+        PyVariant,
         PyMode,
         PyFormat,
         PyLanguage,

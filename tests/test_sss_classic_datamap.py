@@ -52,12 +52,10 @@ def test_meta_to_dict(sss):
         time="12:30",
         origin="Example Survey Exporter v4.2",
         user="Survey Administrator",
-        standard="NAMES"
-        )
+        standard="NAMES",
+    )
     assert exported == correct
 
-def test_meta_to_sss_classic(sss):
-    sss.meta.to_sss_classic()
 
 def test_get_set_record_id(sss):
     sss.record.id = "i"
@@ -66,9 +64,10 @@ def test_get_set_record_id(sss):
     with pytest.raises(TypeError):
         sss.record.id = None
 
+
 def test_sss_content_length_check(sss):
     assert len(sss.record.content) == 24
-    
+
 
 def test_variable_read(sss):
     question = sss.content[0]
@@ -79,10 +78,38 @@ def test_variable_response_indexing(sss):
     question = sss.content[0]
     print(question.response)
     with pytest.raises(TypeError):
-        question.response[0] 
+        question.response[0]
 
 
-def sss_get_question(sss):
+def sss_get_question_success(sss):
     for question in sss.content:
         got = sss.get_question(question.name.lower())
         assert got.name == question.name
+
+
+def test_export_to_classic_from_survey(sss):
+    original = sss
+    content = original.to_sss_classic()
+    reloaded = triple_s.Survey.from_classic(content)
+    assert reloaded == original
+
+
+def test_export_to_classic_from_meta(sss):
+    original = sss.meta
+    content = original.to_sss_classic()
+    reloaded = triple_s.Meta.from_classic(content)
+    assert reloaded == original
+
+
+def test_export_to_classic_from_record(sss):
+    original = sss.record
+    content = original.to_sss_classic()
+    reloaded = triple_s.Record.from_classic(content)
+    assert reloaded == original
+
+
+def test_export_to_classic_from_questions(sss):
+    for question in sss.content:
+        content = question.to_sss_classic()
+        reloaded = triple_s.Question.from_classic(content)
+        assert reloaded == question
