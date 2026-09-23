@@ -1,5 +1,5 @@
 mod survey;
-mod configuration;
+// mod configuration;
 mod error;
 
 use pyo3::prelude::*;
@@ -20,17 +20,20 @@ pub mod triple_s {
         // PyResponse,
         PySurvey,
         PyText,
+        PyMode,
+        PyFormat,
+        PyLanguage,
         read_file
     };
 
-    #[pymodule(gil_used = false)]
-    pub mod config {
-        #[pymodule_export]
-        pub use super::configuration::{
-            PyFormat,
-            PyMode,
-        };
-    }
+    // #[pymodule(gil_used = false)]
+    // pub mod config {
+    //     #[pymodule_export]
+    //     pub use super::configuration::{
+    //         PyFormat,
+    //         PyMode,
+    //     };
+    // }
 
     #[pymodule_init]
     fn init(_m: &Bound<'_, PyModule>) -> PyResult<()> {

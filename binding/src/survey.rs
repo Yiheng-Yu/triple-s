@@ -61,53 +61,13 @@ impl From<sss::Survey> for PySurvey {
     }
 }
 
-// impl PySurvey {
-//     /// Acquire the inner 'survey.meta' for reading; surfaces lock poisoning as a
-//     /// `PyException` instead of panicking.
-//     pub(crate) fn read_meta(&self) -> MappedRwLockReadGuard<'_, sss::Meta> {
-//         parking_lot::RwLockReadGuard::map(self.inner.read(), |survey| &survey.meta)
-//     }
-
-//     /// Acquire the inner 'survey.meta' for writing; surfaces lock poisoning as a
-//     /// `PyException` instead of panicking.
-//     pub(crate) fn write_meta(&self) -> MappedRwLockWriteGuard<'_, sss::Meta> {
-//         parking_lot::RwLockWriteGuard::map(self.inner.write(), |survey| &mut survey.meta)
-//     }
-
-//     /// Acquire the inner 'survey.record' for reading; surfaces lock poisoning as a
-//     /// `PyException` instead of panicking.
-//     pub(crate) fn read_record(&self) -> MappedRwLockReadGuard<'_, sss::Record> {
-//         parking_lot::RwLockReadGuard::map(self.inner.read(), |survey| &survey.record)
-//     }
-
-//     /// Acquire the inner 'survey.record' for writing; surfaces lock poisoning as a
-//     /// `PyException` instead of panicking.
-//     pub(crate) fn write_record(&self) -> MappedRwLockWriteGuard<'_, sss::Record> {
-//         parking_lot::RwLockWriteGuard::map(self.inner.write(), |survey| &mut survey.record)
-//     }
-
-//     /// Acquire the inner 'survey.question' for reading; surfaces lock poisoning as a
-//     /// `PyException` instead of panicking.
-//     pub(crate) fn read_question(
-//         &self,
-//         index: usize,
-//     ) -> PyResult<MappedRwLockReadGuard<'_, sss::Question>> {
-//         parking_lot::RwLockReadGuard::try_map(self.inner.read(), |survey| {
-//             survey.record.content.get(index)
-//         })
-//         .map_err(|_| exceptions::PyIndexError::new_err(index))
-//     }
-
-//     /// Acquire the inner 'survey.question' for writing; surfaces lock poisoning as a
-//     /// `PyException` instead of panicking.
-//     pub(crate) fn write_question(
-//         &self,
-//         index: usize,
-//     ) -> PyResult<MappedRwLockWriteGuard<'_, sss::Question>> {
-//         parking_lot::RwLockWriteGuard::try_map(self.inner.write(), |survey| {
-//             survey.record.content.get_mut(index)
-//         })
-//         .map_err(|_| exceptions::PyIndexError::new_err(index))
+// impl From<PySurvey> for sss::Survey {
+//     fn from(value: PySurvey) -> Self {
+//         let instance = value.clone();
+//         Self {
+//             meta: instance.meta,
+//             record: instance.record,
+//         }
 //     }
 // }
 
@@ -153,13 +113,7 @@ impl PySurvey {
 
     #[getter]
     fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
-        let content = self.record
-            .read()
-            .content
-            .clone()
-            .into_iter()
-            .map(|question| PyQuestion::new(&question));
-        PyTuple::new(py, content)
+        self.get_record()?.get_content(py)
     }
 
     //     fn get_question(survey: &Bound<'_, Self>, question_name: &str) -> PyResult<PyQuestion> {
@@ -177,10 +131,10 @@ impl PySurvey {
     //             ))
     //     }
 
-    //     fn __len__(&self) -> PyResult<usize> {
-    //         let length = self.read_record().content.len();
-    //         Ok(length)
-    //     }
+        fn __len__(&self) -> PyResult<usize> {
+            let length = self.record.read().content.len();
+            Ok(length)
+        }
 
     //     fn __repr__(inner: &Bound<'_, Self>) -> PyResult<String> {
     //         let instance = inner.borrow();
@@ -287,8 +241,14 @@ impl PyRecord {
 
     /// List of questions/ variables that the current survey instance contains
     #[getter]
-    fn get_content(&self) -> Vec<PyQuestion> {
-        todo!()
+    fn get_content<'py>(&self, py:Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        let content = self
+            .read()
+            .content
+            .clone()
+            .into_iter()
+            .map(|question| PyQuestion::new(&question));
+        PyTuple::new(py, content)
     }
 
     //     /// List of questions/ variables that the current survey instance contains
@@ -348,20 +308,19 @@ impl PyRecord {
 }
 
 #[pyclass(module = "triple_s", name = "Question")]
-pub struct PyQuestion {
-    inner: Arc<RwLock<Question>>,
-}
-
-// #[pyclass(module = "triple_s", name = "Question")]
-// pub struct PyQuestion {
-//     inner: Storage<PySurvey, sss::Question>,
-// }
+pub struct PyQuestion(Arc<RwLock<Question>>);
 
 impl PyQuestion {
     pub fn new(item: &Arc<RwLock<Question>>) -> Self {
-        Self {
-            inner: item.clone(),
-        }
+        Self(item.clone())
+    }
+
+    pub(crate) fn read(&self) -> ArcRwLockReadGuard<RawRwLock, Question> {
+        self.0.read_arc()
+    }
+
+    pub(crate) fn write(&mut self) -> ArcRwLockWriteGuard<RawRwLock, Question> {
+        self.0.write_arc()
     }
 
     //     pub fn from_inner(inner: &Py<PySurvey>, index: usize) -> Self {
@@ -454,7 +413,7 @@ impl PyQuestion {
 #[pymethods]
 impl PyQuestion {
     fn to_sss_classic(&self) -> PyResult<String> {
-        self.inner
+        self
             .read()
             .to_sss_classic()
             .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
@@ -463,51 +422,56 @@ impl PyQuestion {
     fn __repr__(&self) -> PyResult<String> {
         Ok(format!(
             r#"Question(name="{}")"#,
-            self.inner.read().name
+            self.read().name.clone()
         ))
     }
 
     #[getter]
     fn get_name(&self) -> PyResult<String> {
-        Ok(self.inner.read().name.clone())
+        Ok(self.read().name.clone())
     }
 
     #[setter]
-    fn set_name(&self, value: &str) -> PyResult<()> {
-        self.inner.write().name = value.into();
+    fn set_name(&mut self, value: &str) -> PyResult<()> {
+        self.write().name = value.into();
         Ok(())
     }
 
     #[getter]
     fn get_label(&self) -> PyResult<PyText> {
-        let content = self.inner.read().label.clone();
+        let content = self.read().label.clone();
         let output = PyText::from(content);
         Ok(output)
     }
 
-    // #[setter]
-    // fn set_label(&self, label: &Bound<'_, PyAny>) -> PyResult<()> {
-    //     if let Ok(content) = label.extract::<String>() {
-    //         if self.get_label()?.has_variants() {
-    //             todo!()
-    //         } else {
-    //             todo!()
-    //         }
-    //     } else if let Ok(content) = label.extract::<PyText>() {
-    //         todo!()
-    //     }
-    // }
+    #[setter]
+    fn set_label(&mut self, label: &Bound<'_, PyAny>) -> PyResult<()> {
+        if let Ok(content) = label.extract::<String>() {
+            if self.get_label()?.has_variants() {
+                self.write().label.value = content;
+                Ok(())
+            } else {
+                self.write().label = Text::new(content).into();
+                Ok(())
+            }
+        } else if let Ok(content) = label.extract::<PyText>() {
+            self.write().label = Text::try_from(content)?;
+            Ok(())
+        } else {
+            todo!()
+        }
+    }
 
-    //     #[getter]
-    //     fn get_filter(&self, py: Python<'_>) -> PyResult<Option<String>> {
-    //         self.with_question_read(py, |question| question.filter.clone())
-    //     }
+        #[getter]
+        fn get_filter(&self) -> PyResult<Option<String>> {
+            Ok(self.read().filter.clone())
+        }
 
-    //     #[setter]
-    //     fn set_filter(&self, py: Python<'_>, value: Option<&str>) -> PyResult<()> {
-    //         let value = value.map(|s| s.to_string());
-    //         self.with_question_write(py, |mut question| question.filter = value)
-    //     }
+        #[setter]
+        fn set_filter(&mut self, value: Option<String>) -> PyResult<()> {
+            self.write().filter = value.clone();
+            Ok(())
+        }
 
     //     #[getter]
     //     fn get_response(question: &Bound<'_, Self>) -> PyResult<PyResponse> {
@@ -1146,7 +1110,8 @@ impl PyMeta {
 }
 
 // ============================= Enums/ Flags =============================
-#[pyclass(name = "Text", module = "triple_s")]
+#[pyclass(name = "Text", module = "triple_s", from_py_object)]
+#[derive(Debug, Clone)]
 pub struct PyText(Arc<RwLock<Text>>);
 
 impl From<Text> for PyText {
@@ -1386,5 +1351,52 @@ impl PyVariant {
         };
 
         Ok(instance.into())
+    }
+}
+
+
+#[pyclass(name="Format", module="config")]
+pub struct PyFormat(pub sss::CodeFormat);
+
+impl From<sss::CodeFormat> for PyFormat {
+    fn from(value: sss::CodeFormat) -> Self {
+        Self(value)
+    }
+}
+
+impl From<PyFormat> for sss::CodeFormat {
+    fn from(value: PyFormat) -> Self {
+        value.0
+    }
+}
+
+// TODO! Add documentation
+#[pyclass(dict, module = "triple_s", name = "Mode")]
+pub struct PyMode(pub sss::Mode);
+
+impl From<sss::Mode> for PyMode {
+    fn from(value: sss::Mode) -> Self {
+        Self(value)
+    }
+}
+
+impl From<PyMode> for sss::Mode {
+    fn from(value: PyMode) -> Self {
+        value.0
+    }
+}
+
+#[pyclass(dict, module = "triple_s", name = "Language")]
+pub struct PyLanguage(pub sss::Language);
+
+impl From<sss::Language> for PyLanguage {
+    fn from(value: sss::Language) -> Self {
+        Self(value)
+    }
+}
+
+impl From<PyLanguage> for sss::Language {
+    fn from(value: PyLanguage) -> Self {
+        value.0
     }
 }
