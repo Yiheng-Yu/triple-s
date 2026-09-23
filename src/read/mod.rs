@@ -301,9 +301,9 @@ impl SurveyBuilder {
             .par_drain(..)
             .map(|item| {
                 let question = item.build(is_classic)?;
-                Ok(Arc::new(RwLock::new(question)))
+                Ok(question)
             })
-            .collect::<Result<Vec<Arc<RwLock<Question>>>>>()?;
+            .collect::<Result<Vec<Question>>>()?;
 
         Ok(output)
     }

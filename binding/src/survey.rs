@@ -209,18 +209,19 @@ impl PyRecord {
             .content
             .clone()
             .into_iter()
-            .map(|question| PyQuestion::new(&question));
+            .map(PyQuestion::from);
         PyTuple::new(py, content)
     }
 
     fn get(&self, question_name: &str) -> Option<PyQuestion> {
         self.read()
             .get_question(question_name)
-            .map(|item| PyQuestion(item))
+            .map(PyQuestion::from)
     }
 
     fn __getitem__<'py>(&self, index: &Bound<'py, PyAny>) -> PyResult<PyQuestion> {
         if let Ok(number) = index.extract::<usize>() {
+            // self.read()
             todo!()
         } else if let Ok(question_name) = index.extract::<String>() {
             todo!()
@@ -232,7 +233,7 @@ impl PyRecord {
     fn append(&mut self, question: PyQuestion) -> PyResult<()> {
         let question_name = question.get_name()?;
         if !self.read().has_question(&question_name) {
-            let instance = question.0.clone();
+            let instance = question.0.clone().into_inner();
             self.write().content.push(instance);
             Ok(())
         } else {
@@ -273,6 +274,14 @@ impl Clone for PyQuestion {
     fn clone(&self) -> Self {
         let deepcopy = self.0.clone().read().clone();
         deepcopy.into()
+    }
+}
+
+impl From<&Question> for PyQuestion {
+    fn from(value: &Question) -> Self {
+        let content = RwLock::from(*value);
+        let content = Arc::new(content);
+        Self(content)
     }
 }
 

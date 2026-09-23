@@ -9,7 +9,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use chrono::{NaiveDate, NaiveTime};
-use parking_lot::{RawRwLock, RwLock, lock_api::ArcRwLockReadGuard};
+use parking_lot::RwLock;
 use rayon::prelude::*;
 use strum::{EnumIter, EnumString, IntoEnumIterator};
 
@@ -212,7 +212,7 @@ pub struct Record {
     pub href: Option<String>,
 
     pub data_source: DataSource,
-    pub content: Vec<Arc<RwLock<Question>>>,
+    pub content: Vec<Question>,
 }
 
 impl Record {
@@ -225,7 +225,7 @@ impl Record {
         let mut output = String::new();
         append_line(&mut output, format!("RECORD {}", self.id));
         for question in self.content.iter() {
-            output.push_str(&question.read().to_sss_classic()?);
+            output.push_str(&question.to_sss_classic()?);
         }
         append_line(&mut output, "END RECORD");
         Ok(output)
@@ -236,20 +236,19 @@ impl Record {
     pub fn has_question(&self, question_name: &str) -> bool {
         self.content
             .par_iter()
-            .find_first(|question| question.read().name.eq_ignore_ascii_case(question_name))
+            .find_first(|question| question.name.eq_ignore_ascii_case(question_name))
             .is_some()
     }
 
     pub fn get_question(
         &self,
         question_name: &str,
-    ) -> Option<Arc<RwLock<Question>>> {
+    ) -> Option<&Question> {
         self.content
             .par_iter()
             .find_first(|question| {
-                question.read().name.to_uppercase() == question_name.to_uppercase()
+                question.name.to_uppercase() == question_name.to_uppercase()
             })
-            .map(|found| found.clone())
     }
 }
 
