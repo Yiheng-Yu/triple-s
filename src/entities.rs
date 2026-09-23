@@ -9,7 +9,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use chrono::{NaiveDate, NaiveTime};
-use parking_lot::RwLock;
+use parking_lot::{RawRwLock, RwLock, lock_api::ArcRwLockReadGuard};
 use rayon::prelude::*;
 use strum::{EnumIter, EnumString, IntoEnumIterator};
 
@@ -66,11 +66,8 @@ impl Survey {
     }
 
     /// find question via question name, case insensitive
-    pub fn get_question(&self, name: &str) -> Option<Arc<RwLock<Question>>> {
-        self.record
-            .content
-            .par_iter()
-            .find_first(|question| question.read().name.to_uppercase() == name.to_uppercase()).cloned()
+    pub fn get_question(&self, question_name: &str) -> Option<Arc<RwLock<Question>>> {
+        self.record.get_question(question_name)
     }
 
     pub fn to_sss_classic(&self) -> Result<String> {
@@ -232,6 +229,27 @@ impl Record {
         }
         append_line(&mut output, "END RECORD");
         Ok(output)
+    }
+
+    /// check if question name `question_name` exists in `self.content` field
+    /// case insensitive
+    pub fn has_question(&self, question_name: &str) -> bool {
+        self.content
+            .par_iter()
+            .find_first(|question| question.read().name.eq_ignore_ascii_case(question_name))
+            .is_some()
+    }
+
+    pub fn get_question(
+        &self,
+        question_name: &str,
+    ) -> Option<Arc<RwLock<Question>>> {
+        self.content
+            .par_iter()
+            .find_first(|question| {
+                question.read().name.to_uppercase() == question_name.to_uppercase()
+            })
+            .map(|found| found.clone())
     }
 }
 
@@ -512,20 +530,17 @@ impl FromStr for Response {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let to_match = s.trim().to_ascii_lowercase();
         match to_match.as_str() {
-            "single" => {
-                Self::new_single_numerical().map_err(BadLine::from)}
+            "single" => Self::new_single_numerical().map_err(BadLine::from),
             "multiple" => Self::new_multiple().map_err(BadLine::from),
             "quantity" => Self::new_quantity().map_err(BadLine::from),
             "character" => Self::new_character().map_err(BadLine::from),
             "logical" => Self::new_logical().map_err(BadLine::from),
             "date" => Self::new_range_date().map_err(BadLine::from),
             "time" => Self::new_range_time().map_err(BadLine::from),
-            _ => {
-                Err(BadLine::new(format!(
-                    "Unidentified response kind: '{}'",
-                    to_match
-                )))
-            }
+            _ => Err(BadLine::new(format!(
+                "Unidentified response kind: '{}'",
+                to_match
+            ))),
         }
     }
 }

@@ -2,9 +2,7 @@ extern crate triple_s;
 use std::{str::FromStr, sync::Arc};
 
 use parking_lot::{
-    RawRwLock,
-    RwLock,
-    lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
+    RawRwLock, RwLock, lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard, RwLock},
 };
 use pyo3::{
     exceptions,
@@ -106,11 +104,6 @@ impl PySurvey {
         Ok(PyMeta::from_parent(&self))
     }
 
-    // #[getter]
-    // fn get_meta<'py>(inner: &Bound<'_, Self>) -> PyResult<PyMeta> {
-    // Ok(PyMeta::from_rust(inner))
-    // }
-
     #[getter]
     fn get_title<'py>(&self) -> Option<String> {
         self.meta.read().title.clone()
@@ -146,11 +139,6 @@ impl PySurvey {
     //             ))
     //     }
 
-    fn __len__(&self) -> PyResult<usize> {
-        let length = self.record.read().content.len();
-        Ok(length)
-    }
-
     //     fn __repr__(inner: &Bound<'_, Self>) -> PyResult<String> {
     //         let instance = inner.borrow();
     //         let py = inner.py();
@@ -182,51 +170,6 @@ impl PyRecord {
     pub(crate) fn write(&self) -> ArcRwLockWriteGuard<RawRwLock, Record> {
         self.0.write_arc()
     }
-
-    //     pub fn len(&self, py: Python<'_>) -> usize {
-    //         match &self.inner {
-    //             Storage::Attached { inner, .. } => inner.borrow(py).read_record().content.len(),
-    //             Storage::Owned(item) => item.read().content.len(),
-    //         }
-    //     }
-
-    //     fn with_record_read<R>(
-    //         &self,
-    //         py: Python<'_>,
-    //         f: impl FnOnce(MappedRwLockReadGuard<'_, sss::Record>) -> R,
-    //     ) -> PyResult<R> {
-    //         match &self.inner {
-    //             Storage::Attached { inner, .. } => {
-    //                 let item = inner.bind(py).borrow();
-    //                 let item = item.read_record();
-    //                 Ok(f(item))
-    //             }
-    //             Storage::Owned(item) => {
-    //                 let item = item.read();
-    //                 let item = parking_lot::RwLockReadGuard::map(item, |item| item);
-    //                 Ok(f(item))
-    //             }
-    //         }
-    // }
-
-    //     fn with_record_write<R>(
-    //         &self,
-    //         py: Python<'_>,
-    //         f: impl FnOnce(MappedRwLockWriteGuard<'_, sss::Record>) -> R,
-    //     ) -> PyResult<R> {
-    //         match &self.inner {
-    //             Storage::Attached { inner, .. } => {
-    //                 let item = inner.bind(py).borrow_mut();
-    //                 let item = item.write_record();
-    //                 Ok(f(item))
-    //             }
-    //             Storage::Owned(item) => {
-    //                 let item = item.write();
-    //                 let item = parking_lot::RwLockWriteGuard::map(item, |item| item);
-    //                 Ok(f(item))
-    //             }
-    //         }
-    //     }
 }
 
 #[pymethods]
@@ -236,6 +179,10 @@ impl PyRecord {
     //         self.with_record_read(py, |record| record.to_sss_classic())?
     //             .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     //     }
+
+    fn __len__(&self) -> usize {
+        self.read().content.len()
+    }
 
     /// One RECORD keyword appears after SURVEY (or after TITLE if present).
     /// It is used to introduce the definition of the variables.
@@ -266,39 +213,35 @@ impl PyRecord {
         PyTuple::new(py, content)
     }
 
-    //     /// List of questions/ variables that the current survey instance contains
-    //     #[getter]
-    //     fn content(&self, py: Python<'_>) -> PyResult<Vec<PyQuestion>> {
-    //         match &self.inner {
-    //             Storage::Attached { inner, .. } => Ok((0..self.len(py))
-    //                 .map(|index| PyQuestion::from_inner(&inner, index))
-    //                 .collect()),
-    //             Storage::Owned(item) => Ok(item
-    //                 .read()
-    //                 .content
-    //                 .iter()
-    //                 .map(PyQuestion::from_storage)
-    //                 .collect()),
-    //         }
-    //     }
+    fn get(&self, question_name: &str) -> Option<PyQuestion> {
+        self.read()
+            .get_question(question_name)
+            .map(|item| PyQuestion(item))
+    }
 
-    //     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<PyQuestion> {
-    //         let length = self.content(py)?.len();
-    //         let lookup = normalize_index(index, length)?; // also checks if index really exists, raise IndexError if otherwise
-    //         match &self.inner {
-    //             Storage::Attached { inner, .. } => Ok(PyQuestion::from_inner(&inner, lookup)),
-    //             Storage::Owned(item) => item
-    //                 .read()
-    //                 .content
-    //                 .get(lookup)
-    //                 .map(PyQuestion::from_storage)
-    //                 .ok_or(exceptions::PyIndexError::new_err(index)),
-    //         }
-    //     }
+    fn __getitem__<'py>(&self, index: &Bound<'py, PyAny>) -> PyResult<PyQuestion> {
+        if let Ok(number) = index.extract::<usize>() {
+            todo!()
+        } else if let Ok(question_name) = index.extract::<String>() {
+            todo!()
+        } else  {
+            todo!()
+        }
+    }
 
-    //     fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
-    //         Ok(self.len(py))
-    //     }
+    fn append(&mut self, question: PyQuestion) -> PyResult<()> {
+        let question_name = question.get_name()?;
+        if !self.read().has_question(&question_name) {
+            let instance = question.0.clone();
+            self.write().content.push(instance);
+            Ok(())
+        } else {
+            todo!()
+        }
+    }
+
+    // // todo!!
+    // fn extend(&mut self)
 
     //     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
     //         // only show first n amount of members
@@ -322,11 +265,25 @@ impl PyRecord {
     //     }
 }
 
-#[pyclass(module = "triple_s", name = "Question")]
+#[pyclass(module = "triple_s", name = "Question", from_py_object)]
 pub struct PyQuestion(Arc<RwLock<Question>>);
 
+/// does a deep copy
+impl Clone for PyQuestion {
+    fn clone(&self) -> Self {
+        let deepcopy = self.0.clone().read().clone();
+        deepcopy.into()
+    }
+}
+
+impl From<Question> for PyQuestion {
+    fn from(value: Question) -> Self {
+        Self(Arc::new(RwLock::new(value)))
+    }
+}
+
 impl PyQuestion {
-    pub fn new(item: &Arc<RwLock<Question>>) -> Self {
+    pub(crate) fn from_arc(item: &Arc<RwLock<Question>>) -> Self {
         Self(item.clone())
     }
 
@@ -427,6 +384,11 @@ impl PyQuestion {
 
 #[pymethods]
 impl PyQuestion {
+    #[new]
+    fn new() -> Self {
+        todo!()
+    }
+
     fn to_sss_classic(&self) -> PyResult<String> {
         self.read()
             .to_sss_classic()
