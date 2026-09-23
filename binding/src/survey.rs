@@ -1341,6 +1341,16 @@ impl PyVariant {
     fn get_value(&self) -> String {
         self.0.read().value.clone()
     }
+
+    #[getter]
+    fn get_mode(&self) -> PyMode {
+        self.0.read().mode.clone().into()
+    }
+
+    #[getter]
+    fn get_language(&self) -> Option<PyLanguage> {
+        self.0.read().language.as_ref().map(|item| PyLanguage::from(item.clone()))
+    }
 }
 
 #[pyclass(name = "Format", module = "config")]
@@ -1360,6 +1370,7 @@ impl From<PyFormat> for sss::CodeFormat {
 
 // TODO! Add documentation
 #[pyclass(dict, module = "triple_s", name = "Mode")]
+#[derive(Debug, PartialEq)]
 pub struct PyMode(pub sss::Mode);
 
 impl From<sss::Mode> for PyMode {
@@ -1409,7 +1420,11 @@ mod test {
         .unwrap();
 
         assert_eq!(instance.get_value().as_str(), VALUE);
-        // TODO!
-        // assert_eq!(instance.get_language().as_ref(), )
+        assert_eq!(instance.get_mode().0, MODE);
+    }
+
+    #[test]
+    fn test_modify_text_variant() {
+        panic!("TODO!")
     }
 }
