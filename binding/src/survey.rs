@@ -151,10 +151,16 @@ impl PySurvey {
         Ok(PyRecord::from_parent(&self))
     }
 
-    //     #[getter]
-    //     fn get_content<'py>(inner: &Bound<'_, Self>) -> PyResult<Vec<PyQuestion>> {
-    //         PyRecord::from_rust(inner).content(inner.py())
-    //     }
+    #[getter]
+    fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        let content = self.record
+            .read()
+            .content
+            .clone()
+            .into_iter()
+            .map(|question| PyQuestion::new(&question));
+        PyTuple::new(py, content)
+    }
 
     //     fn get_question(survey: &Bound<'_, Self>, question_name: &str) -> PyResult<PyQuestion> {
     //         let query = question_name.to_uppercase();
