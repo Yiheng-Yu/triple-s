@@ -17,11 +17,8 @@ def test_shallow_copy_meta(sss):
 
 
 def test_deep_copy_meta(sss):
-    original = sss.copy()
-    copied = original.copy()
-    print("Before editing:")
-    print(f"Original: {original.meta.name}")
-    print(f"Copy: {copied.meta.name}")
+    original = sss.deepcopy()
+    copied = original.deepcopy()
 
     NEW_NAME = "NEW NAME"
     copied.meta.name = "NEW NAME"
@@ -29,20 +26,37 @@ def test_deep_copy_meta(sss):
     assert original.meta.name != NEW_NAME
 
     ANOTHER_NAME = "Another name"
-    meta = copied.meta.copy()
+    meta = copied.meta.deepcopy()
     meta.name = ANOTHER_NAME
     assert copied.meta.name != ANOTHER_NAME
     assert copied.meta.name == NEW_NAME
     assert meta.name == ANOTHER_NAME
 
 
-def test_shallow_copy_survey(sss):
+def test_shallow_copy_meta(sss):
+    original = sss.deepcopy()
+    copied = original.copy()
+    
+    NEW_NAME = "NEW NAME"
+    copied.meta.name = "NEW NAME"
+    with pytest.raises(AssertionError):
+        assert copied.meta.name == NEW_NAME
+        assert original.meta.name != NEW_NAME
+
+def test_deep_copy_record(sss):
     raise NotImplementedError
 
 
-def test_deep_copy_survey(sss):
+def test_shallow_copy_record(sss):
     raise NotImplementedError
 
+
+def test_deep_copy_question(sss):
+    raise NotImplementedError
+
+
+def test_shallow_copy_question(sss):
+    raise NotImplementedError
 
 # todo: set up another buch of unit tests!
 
