@@ -1383,3 +1383,28 @@ impl From<PyLanguage> for sss::Language {
         value.0
     }
 }
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_create_new_variant() {
+        const CONTENT: &str = "variant";
+        const LANGUAGE: &str = "gb";
+        const MODE: Mode = Mode::Analysis;
+        const MODE_STR: &str = "analysis";
+
+        let instance = PyVariant::new(
+            CONTENT.clone().into(),
+            Some(LANGUAGE.into()),
+            Some(MODE_STR.into())
+        )
+        .unwrap();
+
+        assert_eq!(instance.get_content().as_str(), CONTENT);
+        // TODO!
+        // assert_eq!(instance.get_language().as_ref(), )
+    }
+}
