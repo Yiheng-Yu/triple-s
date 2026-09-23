@@ -19,14 +19,13 @@ use triple_s::{
     Mode,
     Question,
     Record,
+    Survey,
     Text,
     TextVariant,
     Version,
 };
 
-use crate::{
-    error::{RustBackendError, to_backend_err},
-};
+use crate::error::{RustBackendError, to_backend_err};
 
 #[pyfunction]
 pub fn read_file(path: &str) -> PyResult<PySurvey> {
@@ -55,31 +54,28 @@ impl Clone for PySurvey {
 impl From<sss::Survey> for PySurvey {
     fn from(value: sss::Survey) -> Self {
         Self {
-            meta: value.meta,
+            meta: Arc::new(RwLock::new(value.meta)),
             record: Arc::new(RwLock::new(value.record)),
         }
     }
 }
 
-// impl From<PySurvey> for sss::Survey {
-//     fn from(value: PySurvey) -> Self {
-//         let instance = value.clone();
-//         Self {
-//             meta: instance.meta,
-//             record: instance.record,
-//         }
-//     }
-// }
+impl From<PySurvey> for sss::Survey {
+    fn from(value: PySurvey) -> Self {
+        Self {
+            meta: value.meta.read().clone(),
+            record: value.record.read().clone(),
+        }
+    }
+}
 
 #[pymethods]
 impl PySurvey {
-    //     /// Export content back to sss classic
-    //     fn to_sss_classic(&self) -> PyResult<String> {
-    //         self.inner
-    //             .read()
-    //             .to_sss_classic()
-    //             .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
-    //     }
+    /// Export content back to sss classic
+    fn to_sss_classic(&self) -> PyResult<String> {
+        let instance: Survey = self.clone().into();
+        instance.to_sss_classic().map_err(to_backend_err)
+    }
 
     /// return s a deep copy of current instance
     fn copy(&self) -> Self {
@@ -131,10 +127,10 @@ impl PySurvey {
     //             ))
     //     }
 
-        fn __len__(&self) -> PyResult<usize> {
-            let length = self.record.read().content.len();
-            Ok(length)
-        }
+    fn __len__(&self) -> PyResult<usize> {
+        let length = self.record.read().content.len();
+        Ok(length)
+    }
 
     //     fn __repr__(inner: &Bound<'_, Self>) -> PyResult<String> {
     //         let instance = inner.borrow();
@@ -153,7 +149,7 @@ impl PySurvey {
 
 /// Content of a survey
 #[pyclass(module = "triple_s", name = "Record")]
-pub struct PyRecord (Arc<RwLock<Record>>);
+pub struct PyRecord(Arc<RwLock<Record>>);
 
 impl PyRecord {
     pub fn from_parent(survey: &PySurvey) -> Self {
@@ -241,7 +237,7 @@ impl PyRecord {
 
     /// List of questions/ variables that the current survey instance contains
     #[getter]
-    fn get_content<'py>(&self, py:Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+    fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let content = self
             .read()
             .content
@@ -413,8 +409,7 @@ impl PyQuestion {
 #[pymethods]
 impl PyQuestion {
     fn to_sss_classic(&self) -> PyResult<String> {
-        self
-            .read()
+        self.read()
             .to_sss_classic()
             .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
@@ -462,16 +457,16 @@ impl PyQuestion {
         }
     }
 
-        #[getter]
-        fn get_filter(&self) -> PyResult<Option<String>> {
-            Ok(self.read().filter.clone())
-        }
+    #[getter]
+    fn get_filter(&self) -> PyResult<Option<String>> {
+        Ok(self.read().filter.clone())
+    }
 
-        #[setter]
-        fn set_filter(&mut self, value: Option<String>) -> PyResult<()> {
-            self.write().filter = value.clone();
-            Ok(())
-        }
+    #[setter]
+    fn set_filter(&mut self, value: Option<String>) -> PyResult<()> {
+        self.write().filter = value.clone();
+        Ok(())
+    }
 
     //     #[getter]
     //     fn get_response(question: &Bound<'_, Self>) -> PyResult<PyResponse> {
@@ -1164,11 +1159,12 @@ impl PyText {
                 .language
                 .as_ref()
                 .map_or_default(|lan| format!("language '{}'", lan.to_string()));
-            let delimiter = if (variant.mode != Mode::None) & (variant.language.as_ref().is_some()) {
-                " and "
-            } else {
-                ""
-            };
+            let delimiter =
+                if (variant.mode != Mode::None) & (variant.language.as_ref().is_some()) {
+                    " and "
+                } else {
+                    ""
+                };
             let message = format!(
                 "Unable to add text variant because variant with {}{}{} already exists! Call `set_variant` to overwrite existing text variant.",
                 msg_mode, delimiter, msg_lan
@@ -1354,8 +1350,7 @@ impl PyVariant {
     }
 }
 
-
-#[pyclass(name="Format", module="config")]
+#[pyclass(name = "Format", module = "config")]
 pub struct PyFormat(pub sss::CodeFormat);
 
 impl From<sss::CodeFormat> for PyFormat {

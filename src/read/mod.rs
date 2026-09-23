@@ -211,13 +211,13 @@ impl SurveyBuilder {
     pub fn build(mut self) -> Result<Survey> {
         let mut output = Survey::empty();
 
-        output.meta.write().title = self
+        output.meta.title = self
             .attributes
             .remove("title")
             .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
             .transpose()?;
 
-        output.meta.write().name = self
+        output.meta.name = self
             .attributes
             .remove("name")
             .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
@@ -242,37 +242,37 @@ impl SurveyBuilder {
             }
         }
 
-        output.meta.write().origin = self
+        output.meta.origin = self
             .attributes
             .remove("origin")
             .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
             .transpose()?;
 
-        output.meta.write().user = self
+        output.meta.user = self
             .attributes
             .remove("user")
             .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
             .transpose()?;
 
-        output.meta.write().date = self
+        output.meta.date = self
             .attributes
             .remove("date")
             .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
             .transpose()?;
 
-        output.meta.write().time = self
+        output.meta.time = self
             .attributes
             .remove("time")
             .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
             .transpose()?;
 
-        output.meta.write().standard = self
+        output.meta.standard = self
             .attributes
             .remove("standard")
             .and_then(|val| val.value.map(|v| unquote(v, false)))
             .transpose()?;
 
-        output.meta.write().version = self
+        output.meta.version = self
             .attributes
             .remove("version")
             .ok_or(MissingAttributeError::new("sss", "version"))?

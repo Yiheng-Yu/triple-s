@@ -46,7 +46,7 @@ impl Version {
 
 #[derive(Debug, Clone)]
 pub struct Survey {
-    pub meta: Arc<RwLock<Meta>>,
+    pub meta: Meta,
     pub record: Record,
 }
 
@@ -57,9 +57,10 @@ impl Survey {
     }
 
     pub fn empty() -> Self {
-        let meta = Meta::with_version(Version::V1_1);
+        // let meta = Meta::with_version(Version::V1_1);
         Self {
-            meta: Arc::new(RwLock::new(meta)),
+            // meta: Arc::new(RwLock::new(meta)),
+            meta: Meta::with_version(Version::V1_1),
             record: Record::default(),
         }
     }
@@ -76,13 +77,13 @@ impl Survey {
     pub fn to_sss_classic(&self) -> Result<String> {
         let mut output = String::from("SSS\n");
         // survey meta
-        append_line(&mut output, format!("VERSION {}", self.meta.read().version.as_str()));
+        append_line(&mut output, format!("VERSION {}", self.meta.version.as_str()));
         for (name, value) in [
-            ("DATE", &self.meta.read().date),
-            ("TIME", &self.meta.read().time),
-            ("ORIGIN", &self.meta.read().origin),
-            ("USER", &self.meta.read().user),
-            ("STANDARD",  &self.meta.read().standard)
+            ("DATE", &self.meta.date),
+            ("TIME", &self.meta.time),
+            ("ORIGIN", &self.meta.origin),
+            ("USER", &self.meta.user),
+            ("STANDARD",  &self.meta.standard)
             // sss classic does not have 'style' field
         ] {
             if let Some(value) = value {
@@ -93,8 +94,8 @@ impl Survey {
         // survey content
         append_line(&mut output, "SURVEY");
         for (name, value) in [
-            ("NAME", &self.meta.read().name),
-            ("TITLE", &self.meta.read().title)
+            ("NAME", &self.meta.name),
+            ("TITLE", &self.meta.title)
         ] {
             if let Some(value) = value {
                 append_line(&mut output, format!("{name} {}", quote(value)));

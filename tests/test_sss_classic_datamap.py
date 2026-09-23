@@ -56,10 +56,8 @@ def test_meta_to_dict(sss):
         )
     assert exported == correct
 
-
 def test_meta_to_sss_classic(sss):
     sss.meta.to_sss_classic()
-
 
 def test_get_set_record_id(sss):
     sss.record.id = "i"
