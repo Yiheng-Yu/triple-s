@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sss version="3.0">
+  <survey>
+    <title>Typed response codes</title>
+    <record ident="A">
+      <variable ident="1" type="single">
+        <name>INTEGER</name>
+        <label>Integer response</label>
+        <position start="1"/>
+        <values>
+          <range from="1" to="5"/>
+          <value code="9">Unknown</value>
+        </values>
+      </variable>
+      <variable ident="2" type="quantity">
+        <name>QUANTITY</name>
+        <label>Quantity response</label>
+        <position start="2" finish="8"/>
+        <values>
+          <range from="-12.5" to="25.5"/>
+          <value code="-99.5">Missing</value>
+          <value code=" 999.25 ">Unknown</value>
+        </values>
+      </variable>
+      <variable ident="3" type="single" format="literal">
+        <name>LITERAL</name>
+        <label>Literal response</label>
+        <position start="9" finish="11"/>
+        <values>
+          <value code="001">Leading zeroes</value>
+          <value code="A1">Alphanumeric</value>
+          <value code=" A&amp;B ">Significant spaces and entity</value>
+        </values>
+      </variable>
+      <variable ident="4" type="multiple">
+        <name>MULTIPLE</name>
+        <label>Multiple response</label>
+        <position start="12" finish="13"/>
+        <spread subfields="2" width="1"/>
+        <values>
+          <value code="1">First</value>
+          <value code="2">Second</value>
+        </values>
+      </variable>
+    </record>
+  </survey>
+</sss>

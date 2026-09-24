@@ -1,0 +1,263 @@
+SSS
+VERSION 1.1
+
+NOTE "HTML-rich Triple-S survey example"
+NOTE "HTML markup is stored inside SSS text strings."
+
+DATE "13th September 2026"
+TIME "12:30"
+ORIGIN "Example Survey Exporter v4.2"
+USER "Survey Administrator"
+
+STANDARD NAMES
+
+SURVEY
+
+TITLE "Customer Experience Survey - HTML Test"
+
+RECORD A
+
+VARIABLE 1
+NAME "RESPID"
+LABEL "Respondent identifier"
+TYPE QUANTITY
+POSITION 1 TO 6
+VALUES
+1 TO 999999
+END VALUES
+END VARIABLE
+
+VARIABLE 2
+NAME "AGE"
+LABEL "<p>What is your <strong>age</strong>?</p>"
+TYPE SINGLE
+POSITION 7
+VALUES
+1 "Under 18"
+2 "18 to 24"
+3 "25 to 34"
+4 "35 to 44"
+5 "45 to 54"
+6 "55 to 64"
+7 "65 or older"
+8 "Prefer not to say" SPECIAL
+END VALUES
+END VARIABLE
+
+VARIABLE 3
+NAME "SAT"
+LABEL "<p><strong>How satisfied</strong> are you with our service?</p><p>Please select one answer.</p>"
+TYPE SINGLE
+POSITION 8
+VALUES
+1 "<strong>Very dissatisfied</strong>"
+2 "Dissatisfied"
+3 "Neither satisfied nor dissatisfied"
+4 "Satisfied"
+5 "<strong>Very satisfied</strong>"
+9 "Don't know" SPECIAL
+END VALUES
+END VARIABLE
+
+VARIABLE 4
+NAME "FEATURES"
+LABEL "<p>Which features have you used?</p><ul><li>Online ordering</li><li>Mobile application</li><li>Live chat</li><li>Customer support</li></ul>"
+TYPE MULTIPLE
+POSITION 9 TO 14
+VALUES
+1 "Online ordering"
+2 "Mobile application"
+3 "Live chat"
+4 "Customer support"
+5 "Email support"
+6 "Telephone support"
+END VALUES
+END VARIABLE
+
+VARIABLE 5
+NAME "FEATURES2"
+LABEL "<p>Which services have you used?</p><p>You may select <em>more than one</em>.</p>"
+TYPE MULTIPLE
+POSITION 15 TO 20
+SPREAD 3 OF 3
+VALUES
+1 "Online ordering"
+2 "Mobile application"
+3 "Customer support"
+4 "Live chat"
+5 "Telephone support"
+6 "Other"
+END VALUES
+END VARIABLE
+
+VARIABLE 6
+NAME "VISITS"
+LABEL "<p>How many times have you visited us in the last <strong>12 months</strong>?</p>"
+TYPE QUANTITY
+POSITION 21 TO 23
+VALUES
+0 TO 999
+END VALUES
+END VARIABLE
+
+VARIABLE 7
+NAME "SPEND"
+LABEL "<p>Approximately how much have you spent?</p><p>Please enter an amount in <strong>GBP</strong>.</p>"
+TYPE QUANTITY
+POSITION 24 TO 31
+VALUES
+0.00 TO 500.00 WITH
+999.99 "Don't know" SPECIAL
+END VALUES
+END VARIABLE
+
+VARIABLE 8
+NAME "CHANGE"
+LABEL "<p>Has your spending changed?</p><p>Enter a negative number for a decrease.</p>"
+TYPE QUANTITY
+POSITION 32 TO 41
+VALUES
+-9999.99 TO 9999.99
+END VALUES
+END VARIABLE
+
+VARIABLE 9
+NAME "COMMENTS"
+LABEL "<p>Please tell us about your experience.</p><p>You can include <strong>any comments</strong> that may help us improve.</p>"
+TYPE CHARACTER
+POSITION 42 TO 1041
+SIZE 1000
+END VARIABLE
+
+VARIABLE 10
+NAME "WEBSITE"
+LABEL "<p>Which website did you use?</p><p>For example, visit <a href={22}https://example.com{22}>our website</a>.</p>"
+TYPE CHARACTER
+POSITION 1042 TO 1241
+SIZE 200
+END VARIABLE
+
+VARIABLE 11
+NAME "PRODUCT"
+LABEL "<p>Which product did you purchase?</p><img src={22}https://example.com/images/product.jpg{22} alt={22}Product photograph{22}>"
+TYPE SINGLE
+POSITION 1242
+VALUES
+1 "Product A"
+2 "Product B"
+3 "Product C"
+4 "Product D"
+5 "Other"
+END VALUES
+END VARIABLE
+
+VARIABLE 12
+NAME "PRODUCTINFO"
+LABEL "<div class={22}product-information{22}><p><strong>Product information</strong></p><img src={22}https://example.com/product.png{22} alt={22}Product image{22} width={22}400{22} height={22}300{22}><p>Visit <a href={22}https://example.com/products{22}>the product catalogue</a>.</p></div>"
+TYPE CHARACTER
+POSITION 1243 TO 3242
+SIZE 2000
+END VARIABLE
+
+VARIABLE 13
+NAME "HELP"
+LABEL "<p>Need help?</p><p>Visit our <a href={22}https://example.com/help{22} target={22}_blank{22}>Help Centre</a>.</p><p><img src={22}https://example.com/images/help.png{22} alt={22}Help icon{22}></p>"
+TYPE LOGICAL
+POSITION 3243
+END VARIABLE
+
+VARIABLE 14
+NAME "TERMS"
+LABEL "<p>Please confirm that you have read the <a href={22}https://example.com/terms{22}>terms and conditions</a>.</p>"
+TYPE LOGICAL
+POSITION 3244
+END VARIABLE
+
+VARIABLE 15
+NAME "RATING"
+LABEL "<div class={22}rating{22}><p>How would you rate our service?</p><table><tr><th>Score</th><th>Description</th></tr><tr><td>1</td><td>Very poor</td></tr><tr><td>2</td><td>Poor</td></tr><tr><td>3</td><td>Average</td></tr><tr><td>4</td><td>Good</td></tr><tr><td>5</td><td>Excellent</td></tr></table></div>"
+TYPE SINGLE
+POSITION 3245
+VALUES
+1 "Very poor"
+2 "Poor"
+3 "Average"
+4 "Good"
+5 "Excellent"
+END VALUES
+END VARIABLE
+
+VARIABLE 16
+NAME "ENTITIES"
+LABEL "<p>HTML entities: &amp; &lt; &gt; &quot; &apos; &nbsp;</p><p>Example: <strong>2 &lt; 3</strong> and <strong>4 &gt; 3</strong>.</p>"
+TYPE CHARACTER
+POSITION 3246 TO 4245
+SIZE 1000
+END VARIABLE
+
+VARIABLE 17
+NAME "NESTED"
+LABEL "<div class={22}question{22}><p>This is <strong>bold <em>and italic</em></strong> text.</p><p><a href={22}https://example.com{22}><span>Nested link text</span></a></p></div>"
+TYPE CHARACTER
+POSITION 4246 TO 5245
+SIZE 1000
+END VARIABLE
+
+VARIABLE 18
+NAME "BREAKS"
+LABEL "<p>First line<br>Second line<br />Third line</p><hr><p>Fourth line</p>"
+TYPE CHARACTER
+POSITION 5246 TO 6245
+SIZE 1000
+END VARIABLE
+
+VARIABLE 19
+NAME "HTMLCOMMENT"
+LABEL "<p>Visible text.</p><!-- This is an HTML comment. --><p>More visible text.</p>"
+TYPE CHARACTER
+POSITION 6246 TO 7245
+SIZE 1000
+END VARIABLE
+
+VARIABLE 20
+NAME "FORMATTING"
+LABEL "<h1>Survey heading</h1><h2>Important information</h2><p><b>Bold</b> <strong>strong</strong> <i>italic</i> <em>emphasised</em> <u>underlined</u> <s>struck through</s>.</p><hr><p>Line one<br>Line two</p>"
+TYPE CHARACTER
+POSITION 7246 TO 8245
+SIZE 1000
+END VARIABLE
+
+VARIABLE 21
+NAME "IMAGE"
+LABEL "<p>Product image:</p><img src={22}https://cdn.example.com/images/product.jpg{22} alt={22}Blue product on a white background{22} title={22}Product image{22}>"
+TYPE CHARACTER
+POSITION 8246 TO 9245
+SIZE 1000
+END VARIABLE
+
+VARIABLE 22
+NAME "LINK"
+LABEL "<p>More information is available <a href={22}https://example.com/info?a=1&amp;b=2{22} target={22}_blank{22} rel={22}noopener noreferrer{22}>here</a>.</p>"
+TYPE CHARACTER
+POSITION 9246 TO 10245
+SIZE 1000
+END VARIABLE
+
+VARIABLE 23
+NAME "QUOTE"
+LABEL "<blockquote><p>The customer said: {22}The service was excellent.{22}</p></blockquote>"
+TYPE CHARACTER
+POSITION 10246 TO 11245
+SIZE 1000
+END VARIABLE
+
+VARIABLE 24
+NAME "MIXED"
+LABEL "<section class={22}survey-question{22}><h2>Final question</h2><p>Would you recommend us?</p><ul><li><strong>Yes</strong> - definitely</li><li><em>Maybe</em> - not sure</li><li>No - probably not</li></ul><p><a href={22}https://example.com/recommend{22}>Tell us why</a>.</p><img src={22}https://example.com/images/thanks.png{22} alt={22}Thank you{22}></section>"
+TYPE LOGICAL
+POSITION 11246
+END VARIABLE
+
+END RECORD
+END SURVEY
+END SSS
