@@ -99,19 +99,19 @@ pub enum Mode {
     Interview,
 }
 
-// impl Mode {
-//     pub fn try_as_str(&self) -> Option<&'static str> {
-//         match self {
-//             Self::None => None,
-//             Self::Analysis => Some("analysis"),
-//             Self::Interview => Some("interview"),
-//         }
-//     }
+impl Mode {
+    pub fn try_as_str(&self) -> Option<&'static str> {
+        match self {
+            Self::None => None,
+            Self::Analysis => Some("analysis"),
+            Self::Interview => Some("interview"),
+        }
+    }
 
-//     pub fn available_options() -> Vec<&'static str> {
-//         Self::iter().filter_map(|mode| mode.try_as_str()).collect()
-//     }
-// }
+    pub fn available_options() -> Vec<&'static str> {
+        Self::iter().filter_map(|mode| mode.try_as_str()).collect()
+    }
+}
 
 // impl<'a, 'py> FromPyObject<'a, 'py> for Mode {
 //     type Error = PyErr;
