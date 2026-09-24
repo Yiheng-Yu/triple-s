@@ -1,2 +1,2 @@
-use crate::{Question, Survey, Response, Record, Meta};
+use crate::{Question, Survey, Response, Record, SurveyInfo};
 

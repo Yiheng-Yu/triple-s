@@ -23,17 +23,17 @@ class Location:
     def start(self, /, value: int) -> None: ...
 
 @final
-class Meta:
+class SurveyInfo:
     """
     meta information about the survey entity.
     """
-    def __new__(cls, /, version: "str", name: "str | None" = None, title: "str | None" = None, date: "str | None" = None, time: "str | None" = None, origin: "str | None" = None, user: "str | None" = None, style: "str | None" = None, language_options: "list[str] | None" = None, mode_options: "list[str | None] | None" = None, standard: "str | None" = None) -> Meta:
+    def __new__(cls, /, version: "str", name: "str | None" = None, title: "str | None" = None, date: "str | None" = None, time: "str | None" = None, origin: "str | None" = None, user: "str | None" = None, style: "str | None" = None, language_options: "list[str] | None" = None, mode_options: "list[str | None] | None" = None, standard: "str | None" = None) -> SurveyInfo:
         """
         Create survey metadata for the given Triple-S version.
         Optional text fields default to None; languages default to [], modes to [None].
         Modes accept "analysis", "interview", or None. Invalid versions or modes raise ValueError.
         """
-    def copy(self, /) -> "Meta":
+    def copy(self, /) -> "SurveyInfo":
         """
         make a shallow copy of current instance.
         """
@@ -47,7 +47,7 @@ class Meta:
         """
         Set the date.
         """
-    def deepcopy(self, /) -> "Meta":
+    def deepcopy(self, /) -> "SurveyInfo":
         """
         make a deep copy of current instance
         """
@@ -284,7 +284,7 @@ class Survey:
         find question via question name, case insensitive
         """
     @property
-    def meta(self, /) -> Meta:
+    def meta(self, /) -> SurveyInfo:
         """
         Survey metadata; changes are shared with this survey.
         """

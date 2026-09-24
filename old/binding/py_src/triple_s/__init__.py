@@ -1,5 +1,5 @@
 from .triple_s import (
-    Meta,
+    SurveyInfo,
     Question,
     Record,
     Format,

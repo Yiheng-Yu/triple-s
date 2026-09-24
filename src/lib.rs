@@ -7,13 +7,15 @@ mod utils;
 pub use entities::{
     CodeFormat,
     DataSource,
-    Meta,
+    SurveyInfo,
     Mode,
     Survey,
     Text,
     Usage,
     Variant,
     Version,
+    Location,
+    Question,
 };
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -28,13 +30,15 @@ mod triple_s {
     pub use super::{
         CodeFormat,
         DataSource,
-        Meta,
+        SurveyInfo,
         Mode,
         Survey,
         Text,
         Usage,
         Variant,
         Version,
+        Location,
+        Question,
     };
 
     #[pymodule_init]

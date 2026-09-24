@@ -6,7 +6,7 @@ use pyo3::{
     PyResult,
     exceptions,
     prelude::*,
-    types::{PyDict, PyTuple},
+    types::{PyDict, PyFloat, PyTuple},
 };
 
 use super::{Mode, Version};
@@ -15,10 +15,10 @@ use crate::{prelude::*, utils};
 
 #[cfg_attr(
     feature = "pyo3",
-    pyclass(dict, weakref, module = "triple_s", name = "Meta", from_py_object)
+    pyclass(dict, weakref, module = "triple_s", name = "SurveyInfo", from_py_object, get_all, set_all)
 )]
 #[derive(Debug, Clone)]
-pub struct Meta {
+pub struct SurveyInfo {
     /// The version attribute is used to indicate the version of the Triple-S
     /// standard that applies to this specification.
     pub version: Version,
@@ -59,7 +59,7 @@ pub struct Meta {
     pub standard: Option<String>,
 }
 
-impl Meta {
+impl SurveyInfo {
     pub fn with_version(version: Version) -> Self {
         Self {
             version,
@@ -79,97 +79,8 @@ impl Meta {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl Meta {
-    #[getter(version)]
-    fn get_version(&self) -> Version {
-        self.version.clone()
-    }
-
-    #[setter(version)]
-    fn set_version(&mut self, value: Version) {
-        self.version = value;
-    }
-
-    #[getter(name)]
-    fn get_name(&self) -> Option<String> {
-        self.name.clone()
-    }
-
-    #[setter(name)]
-    fn set_name(&mut self, value: Option<String>) {
-        self.name = value;
-    }
-
-    #[getter(title)]
-    fn get_title(&self) -> Option<String> {
-        self.title.clone()
-    }
-
-    #[setter(title)]
-    fn set_title(&mut self, value: Option<String>) {
-        self.title = value;
-    }
-
-    #[getter(date)]
-    fn get_date(&self) -> Option<String> {
-        self.date.clone()
-    }
-
-    #[setter(date)]
-    fn set_date(&mut self, value: Option<String>) {
-        self.date = value;
-    }
-
-    #[getter(time)]
-    fn get_time(&self) -> Option<String> {
-        self.time.clone()
-    }
-
-    #[setter(time)]
-    fn set_time(&mut self, value: Option<String>) {
-        self.time = value;
-    }
-
-    #[getter(origin)]
-    fn get_origin(&self) -> Option<String> {
-        self.origin.clone()
-    }
-
-    #[setter(origin)]
-    fn set_origin(&mut self, value: Option<String>) {
-        self.origin = value;
-    }
-
-    #[getter(user)]
-    fn get_user(&self) -> Option<String> {
-        self.user.clone()
-    }
-
-    #[setter(user)]
-    fn set_user(&mut self, value: Option<String>) {
-        self.user = value;
-    }
-
-    #[getter(style)]
-    fn get_style(&self) -> Option<String> {
-        self.style.clone()
-    }
-
-    #[setter(style)]
-    fn set_style(&mut self, value: Option<String>) {
-        self.style = value;
-    }
-
-    #[getter(standard)]
-    fn get_standard(&self) -> Option<String> {
-        self.standard.clone()
-    }
-
-    #[setter(standard)]
-    fn set_standard(&mut self, value: Option<String>) {
-        self.standard = value;
-    }
-
+impl SurveyInfo {
+    
     #[getter(language_options)]
     fn get_language_options<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         PyTuple::new(py, self.language_options.iter())
@@ -192,13 +103,13 @@ impl Meta {
         Ok(())
     }
 
-    /// Create survey metadata for the given Triple-S version.
+    /// Create survey metadata for a Triple-S version given as a string or float.
     /// Optional text fields default to None; languages and modes default to
     /// empty tuples. Modes accept "analysis", "interview", or None. Invalid
     /// versions or modes raise ValueError.
     #[new]
     #[pyo3(signature = (
-        version: "str",
+        version: "str | float",
         name: "str | None" = None,
         title: "str | None" = None,
         date: "str | None" = None,
@@ -211,7 +122,7 @@ impl Meta {
         standard: "str | None" = None,
     ))]
     fn py_new(
-        version: &str,
+        version: Bound<'_, PyAny>,
         name: Option<String>,
         title: Option<String>,
         date: Option<String>,
@@ -223,7 +134,16 @@ impl Meta {
         mode_options: Option<Vec<Bound<'_, PyAny>>>,
         standard: Option<String>,
     ) -> PyResult<Self> {
-        let version = Version::from_str(version)
+        let version = if let Ok(version) = version.extract::<String>() {
+            version
+        } else if let Ok(value) = version.extract::<f64>() {
+            format!("{:.1}", value)
+        } else {
+            return Err(exceptions::PyTypeError::new_err(
+                "version must be a str or float",
+            ));
+        };
+        let version = Version::from_str(&version)
             .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))?;
 
         let mode_options = parse_mode_options(mode_options.unwrap_or_default())?;
@@ -231,17 +151,17 @@ impl Meta {
             validate_language_options(language_options.unwrap_or_default())?;
 
         Ok(Self {
-            version: version,
-            name: name,
-            title: title,
-            date: date,
-            time: time,
-            origin: origin,
-            user: user,
-            style: style,
-            language_options: language_options,
-            mode_options: mode_options,
-            standard: standard,
+            version,
+            name,
+            title,
+            date,
+            time,
+            origin,
+            user,
+            style,
+            language_options,
+            mode_options,
+            standard,
         })
     }
 

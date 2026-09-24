@@ -10,7 +10,7 @@ use pyo3::{
     types::{PyDict, PyList, PyTuple},
 };
 use triple_s::{
-    self as sss, Meta, Mode, Position, Question, Record, Survey, Text, TextVariant, Version,
+    self as sss, SurveyInfo, Mode, Position, Question, Record, Survey, Text, TextVariant, Version,
 };
 
 use crate::{
@@ -31,7 +31,7 @@ pub fn read_file(path: &str) -> PyResult<PySurvey> {
 /// More detail can be found at: https://triple-s.org/documentation/manuals/
 #[pyclass(module = "triple_s", name = "Survey")]
 pub struct PySurvey {
-    meta: Arc<RwLock<sss::Meta>>, // holy hell this works
+    meta: Arc<RwLock<sss::SurveyInfo>>, // holy hell this works
     record: Arc<RwLock<sss::Record>>,
 }
 
@@ -508,9 +508,9 @@ impl PyLocation {
 }
 
 /// meta information about the survey entity.
-#[pyclass(dict, weakref, module = "triple_s", name = "Meta", from_py_object)]
+#[pyclass(dict, weakref, module = "triple_s", name = "SurveyInfo", from_py_object)]
 pub struct PyMeta {
-    inner: Arc<RwLock<Meta>>,
+    inner: Arc<RwLock<SurveyInfo>>,
 }
 
 impl Clone for PyMeta {
@@ -531,11 +531,11 @@ impl PyMeta {
         }
     }
 
-    pub(crate) fn read(&self) -> ArcRwLockReadGuard<RawRwLock, Meta> {
+    pub(crate) fn read(&self) -> ArcRwLockReadGuard<RawRwLock, SurveyInfo> {
         self.inner.read_arc()
     }
 
-    pub(crate) fn write(&mut self) -> ArcRwLockWriteGuard<RawRwLock, Meta> {
+    pub(crate) fn write(&mut self) -> ArcRwLockWriteGuard<RawRwLock, SurveyInfo> {
         self.inner.write_arc()
     }
 }
@@ -591,7 +591,7 @@ impl PyMeta {
             .unwrap_or_else(|| vec![Mode::None]);
 
         Ok(Self {
-            inner: lock_it_up(Meta {
+            inner: lock_it_up(SurveyInfo {
                 version,
                 name,
                 title,
@@ -630,7 +630,7 @@ impl PyMeta {
     //     }
 
     /// make a shallow copy of current instance.
-    #[pyo3(signature = () -> "Meta")]
+    #[pyo3(signature = () -> "SurveyInfo")]
     fn copy(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -638,7 +638,7 @@ impl PyMeta {
     }
 
     /// make a deep copy of current instance
-    #[pyo3(signature = () -> "Meta")]
+    #[pyo3(signature = () -> "SurveyInfo")]
     fn deepcopy(&self) -> Self {
         self.clone()
     }

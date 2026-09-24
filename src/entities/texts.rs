@@ -76,6 +76,17 @@ impl Text {
     }
 }
 
+impl DeepCopy for Text {
+    type Output = Self;
+
+    fn deepcopy(&self) -> Self::Output {
+        Self {
+            value: self.value.deepcopy(),
+            variants: self.variants.clone().iter().map(Variant::deepcopy).collect()
+        }
+    }
+}
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Text {
@@ -118,7 +129,7 @@ impl Text {
         let variant = if let Ok(variant) = variant.extract::<Variant>() {
             variant
         } else if let Ok(value) = variant.extract::<String>() {
-            Variant::from_parts(value, mode, language.map(str::to_owned))
+            Variant::new(value, mode, language.map(str::to_owned))
                 .map_err(py_value_error)?
         } else {
             let type_received = variant.get_type().name()?.extract::<String>()?;
@@ -167,17 +178,11 @@ fn py_value_error(error: anyhow::Error) -> PyErr {
     feature = "pyo3",
     pyclass(name = "Variant", module = "triple_s", from_py_object)
 )]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Variant {
     pub value: ArcLock<String>,
     mode: ArcLock<Mode>,
     language: ArcLock<Option<String>>,
-}
-
-impl Default for Variant {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl DeepCopy for Variant {
@@ -199,24 +204,20 @@ impl PartialEq for Variant {
 }
 
 impl Variant {
-    pub fn new() -> Self {
-        Self {
-            value: lock_it_up(String::new()),
-            mode: lock_it_up(Mode::None),
-            language: lock_it_up(None),
-        }
-    }
-
-    pub fn from_parts(
+    pub fn new(
         value: impl Into<String>,
         mode: Option<&str>,
         language: Option<String>,
     ) -> Result<Self> {
-        let variant = Self::new();
-        variant.set_value(value);
-        variant.set_mode(mode)?;
-        variant.set_language(language)?;
-        Ok(variant)
+        let instance = Self {
+            value: lock_it_up(value.into()),
+            mode: lock_it_up(Mode::None),
+            language: lock_it_up(None),
+        };
+
+        instance.set_mode(mode)?;
+        instance.set_language(language)?;
+        Ok(instance)
     }
 
     pub fn has_same_attribute(&self, other: &Self) -> bool {
@@ -265,7 +266,7 @@ impl Variant {
     #[new]
     #[pyo3(signature = (value:"str", mode:"str"=None, language:"str"=None))]
     fn py_new(value: String, mode: Option<&str>, language: Option<String>) -> PyResult<Self> {
-        Self::from_parts(value, mode, language).map_err(py_value_error)
+        Self::new(value, mode, language).map_err(py_value_error)
     }
 
     #[getter(value)]
@@ -313,12 +314,10 @@ impl Variant {
         self.deepcopy()
     }
 
-    fn __repr__(&self) -> String {
-        format!(
-            "Variant(value={:?}, mode={:?}, language={:?})",
-            self.get_value(),
-            self.get_mode(),
-            self.get_language()
-        )
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let value = self.get_value().into_pyobject(py)?.repr()?;
+        let mode = self.py_get_mode().into_pyobject(py)?.repr()?;
+        let language = self.get_language().into_pyobject(py)?.repr()?;
+        Ok(format!("Variant(value={value}, mode={mode}, language={language})"))
     }
 }

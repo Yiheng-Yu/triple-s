@@ -18,13 +18,13 @@ def test_create_meta_all_fields():
         "mode_options": [None, "analysis", "interview"],
         "standard": "standardnames",
     }
-    meta = triple_s.Meta(**fields)
+    meta = triple_s.SurveyInfo(**fields)
     for field, expected in fields.items():
         if isinstance(expected, list):
             expected = tuple(expected)
         assert getattr(meta, field) == expected, field
 
-    defaults = triple_s.Meta("1.2")
+    defaults = triple_s.SurveyInfo("1.2")
     for field in fields:
         expected = {
             "version": "1.2",
@@ -33,14 +33,14 @@ def test_create_meta_all_fields():
         }.get(field)
         assert getattr(defaults, field) == expected, field
 
-    empty = triple_s.Meta("1.2", language_options=[], mode_options=[])
+    empty = triple_s.SurveyInfo("1.2", language_options=[], mode_options=[])
     assert empty.language_options == ()
     assert empty.mode_options == ()
 
     with pytest.raises(ValueError):
-        triple_s.Meta("invalid")
+        triple_s.SurveyInfo("invalid")
     with pytest.raises(ValueError):
-        triple_s.Meta("1.2", mode_options=["invalid"])
+        triple_s.SurveyInfo("1.2", mode_options=["invalid"])
 
 @pytest.fixture
 def survey():

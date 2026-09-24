@@ -20,16 +20,16 @@ use rayon::prelude::*;
 use crate::{
     entities::{
         // Code,
-        // CodeFormat,
+        CodeFormat,
         Mode,
-        // Position,
+        Location,
         Question,
         // Response,
         // Spread,
         Survey,
-        // Text,
-        // TextVariant,
-        // Usage,
+        Text,
+        Variant,
+        Usage,
         Version,
     },
     error::{
@@ -446,24 +446,24 @@ impl QuestionBuilder {
         Ok(response)
     }
 
-    fn parse_location_classic(node: &Node) -> Result<Position> {
+    fn parse_location_classic(node: &Node) -> Result<Location> {
         let value = node
             .value
             .as_ref()
-            .ok_or(error::MissingValueError::new("variable", "position"))?;
+            .ok_or(error::MissingValueError::new("variable", "Location"))?;
 
         let range = Range::<u64>::from_text(value)?;
-        Ok(Position {
+        Ok(Location {
             from: range.start,
             to: range.end,
         })
     }
 
-    fn parse_location_xml(node: &Node) -> Result<Position> {
+    fn parse_location_xml(node: &Node) -> Result<Location> {
         let from = node
             .attributes
             .get("start")
-            .ok_or(error::MissingValueError::new("position", "start"))?
+            .ok_or(error::MissingValueError::new("Location", "start"))?
             .parse::<u64>()?;
 
         let to = node
@@ -473,7 +473,7 @@ impl QuestionBuilder {
             .transpose()?
             .unwrap_or(from);
 
-        Ok(Position { from, to })
+        Ok(Location { from, to })
     }
 
     pub fn build(mut self, is_classic: bool) -> Result<Question> {
@@ -507,17 +507,17 @@ impl QuestionBuilder {
         output.label = parse_text(label, is_classic)
             .with_context(|| format!("When parsing question {}", question_name))?;
 
-        let position = self
+        let Location = self
             .attributes
-            .remove("position")
-            .ok_or(error::MissingAttributeError::new("variable", "position"))
+            .remove("Location")
+            .ok_or(error::MissingAttributeError::new("variable", "Location"))
             .with_context(|| format!("When parsing question {}", question_name))?;
 
         output.location = if is_classic {
-            Self::parse_location_classic(&position)
+            Self::parse_location_classic(&Location)
                 .with_context(|| format!("When parsing question {}", question_name))?
         } else {
-            Self::parse_location_xml(&position)
+            Self::parse_location_xml(&Location)
                 .with_context(|| format!("When parsing question {}", question_name))?
         };
 
@@ -649,15 +649,14 @@ fn parse_text(mut node: Node, is_classic: bool) -> Result<Text> {
         let mode = variant
             .attributes
             .get("mode")
-            .map(|mode| Mode::from_str(mode))
-            .transpose()?
-            .unwrap_or_default();
-        let variant = TextVariant::new(
+            .map(|s| s.as_ref());
+        
+        let variant = Variant::new(
             value,
             mode,
             language
         )?;
-        text.set_variant(variant);
+        text.add_variant(variant);
     }
     Ok(text)
 }

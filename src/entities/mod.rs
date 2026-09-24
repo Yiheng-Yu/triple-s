@@ -2,29 +2,32 @@ mod flags;
 mod meta;
 mod question;
 mod record;
-mod response;
+mod responses;
 mod texts;
 
 pub use flags::{CodeFormat, DataSource, Mode, Usage, Version};
-pub use meta::Meta;
+pub use meta::SurveyInfo;
+
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-pub use question::Question;
+
+pub use question::{Location, Question};
 pub use record::Record;
+pub use responses::Response;
 pub use texts::{Text, Variant};
 
 use crate::utils::ArcLock;
 
 #[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "Survey"))]
 pub struct Survey {
-    pub meta: Meta, // holy hell this works
+    pub meta: SurveyInfo, // holy hell this works
     pub record: Record,
 }
 
 impl Survey {
     pub fn empty() -> Self {
         Self {
-            meta: Meta::with_version(Version::V1_2),
+            meta: SurveyInfo::with_version(Version::V1_2),
             record: Record::default(),
         }
     }

@@ -8,7 +8,7 @@ pub use entities::{
     Code,
     CodeFormat,
     Language,
-    Meta,
+    SurveyInfo,
     Mode,
     NumericCategory,
     Position,

@@ -1,8 +1,9 @@
+
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use strum::{EnumIter, EnumString};
 
-use crate::prelude::Flag;
+use crate::prelude::{DeepCopy, Flag};
 
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, EnumString, EnumIter)]
@@ -70,6 +71,14 @@ impl Flag for Mode {
     }
 }
 
+impl DeepCopy for Mode {
+    type Output = Self;
+
+    fn deepcopy(&self) -> Self::Output {
+        self.clone()
+    }
+}
+
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Debug, EnumString, PartialEq, Default, Clone, Eq, EnumIter)]
 pub enum DataSource {
@@ -98,7 +107,14 @@ impl Flag for DataSource {
     }
 }
 
-// TODO! ADD DOCUMENTATION
+impl DeepCopy for DataSource {
+    type Output = Self;
+
+    fn deepcopy(&self) -> Self::Output {
+        self.clone()
+    }
+}
+
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Debug, Clone, EnumString, EnumIter, Default, PartialEq)]
 pub enum CodeFormat {
@@ -107,6 +123,14 @@ pub enum CodeFormat {
     Numeric,
     #[strum(serialize = "literal")]
     Literal,
+}
+
+impl DeepCopy for CodeFormat {
+    type Output = Self;
+
+    fn deepcopy(&self) -> Self::Output {
+        self.clone()
+    }
 }
 
 impl Flag for CodeFormat {
@@ -142,5 +166,13 @@ impl Flag for Usage {
             Self::Serial => "serial",
             Self::Weight => "weight",
         }
+    }
+}
+
+impl DeepCopy for Usage {
+    type Output = Self;
+
+    fn deepcopy(&self) -> Self::Output {
+        self.clone()
     }
 }

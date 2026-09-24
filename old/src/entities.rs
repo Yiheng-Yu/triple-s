@@ -46,7 +46,7 @@ impl Version {
 
 #[derive(Debug, Clone)]
 pub struct Survey {
-    pub meta: Meta,
+    pub meta: SurveyInfo,
     pub record: Record,
 }
 
@@ -57,10 +57,10 @@ impl Survey {
     }
 
     pub fn empty() -> Self {
-        // let meta = Meta::with_version(Version::V1_1);
+        // let meta = SurveyInfo::with_version(Version::V1_1);
         Self {
             // meta: Arc::new(RwLock::new(meta)),
-            meta: Meta::with_version(Version::V1_1),
+            meta: SurveyInfo::with_version(Version::V1_1),
             record: Record::default(),
         }
     }
@@ -110,7 +110,7 @@ impl Survey {
 
 /// meta information about the survey entity.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Meta {
+pub struct SurveyInfo {
     /// The version attribute is used to indicate the version of the Triple-S
     /// standard that applies to this specification.
     pub version: Version,
@@ -138,7 +138,7 @@ pub struct Meta {
     pub standard: Option<String>,
 }
 
-impl Meta {
+impl SurveyInfo {
     pub fn with_version(version: Version) -> Self {
         Self {
             version,

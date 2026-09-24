@@ -33,59 +33,18 @@ class DataSource:
     def __repr__(self, /) -> str: ...
 
 @final
-class Meta:
-    def __new__(cls, /, version: "str", name: "str | None" = None, title: "str | None" = None, date: "str | None" = None, time: "str | None" = None, origin: "str | None" = None, user: "str | None" = None, style: "str | None" = None, language_options: "list[str] | None" = None, mode_options: "list[Mode | str | None] | None" = None, standard: "str | None" = None) -> Meta:
-        """
-        Create survey metadata for the given Triple-S version.
-        Optional text fields default to None; languages and modes default to
-        empty tuples. Modes accept "analysis", "interview", or None. Invalid
-        versions or modes raise ValueError.
-        """
+class Location:
+    """
+    Defines the part of the data record that is allocated to holding the value of the variable.
+    """
     @property
-    def date(self, /) -> str |None: ...
-    @date.setter
-    def date(self, /, value: str |None) -> None: ...
+    def from(self, /) -> int: ...
+    @from.setter
+    def from(self, /, value: int) -> None: ...
     @property
-    def language_options(self, /) -> tuple: ...
-    @language_options.setter
-    def language_options(self, /, values: Sequence[str]) -> None: ...
-    @property
-    def mode_options(self, /) -> tuple: ...
-    @mode_options.setter
-    def mode_options(self, /, values: Sequence[Any]) -> None: ...
-    @property
-    def name(self, /) -> str |None: ...
-    @name.setter
-    def name(self, /, value: str |None) -> None: ...
-    @property
-    def origin(self, /) -> str |None: ...
-    @origin.setter
-    def origin(self, /, value: str |None) -> None: ...
-    @property
-    def standard(self, /) -> str |None: ...
-    @standard.setter
-    def standard(self, /, value: str |None) -> None: ...
-    @property
-    def style(self, /) -> str |None: ...
-    @style.setter
-    def style(self, /, value: str |None) -> None: ...
-    @property
-    def time(self, /) -> str |None: ...
-    @time.setter
-    def time(self, /, value: str |None) -> None: ...
-    @property
-    def title(self, /) -> str |None: ...
-    @title.setter
-    def title(self, /, value: str |None) -> None: ...
-    def to_dict(self, /) -> "dict[str, str]": ...
-    @property
-    def user(self, /) -> str |None: ...
-    @user.setter
-    def user(self, /, value: str |None) -> None: ...
-    @property
-    def version(self, /) -> Version: ...
-    @version.setter
-    def version(self, /, value: Version) -> None: ...
+    def to(self, /) -> int: ...
+    @to.setter
+    def to(self, /, value: int) -> None: ...
 
 @final
 class Mode:
@@ -115,7 +74,147 @@ class Mode:
     def __repr__(self, /) -> str: ...
 
 @final
+class Question: ...
+
+@final
 class Survey: ...
+
+@final
+class SurveyInfo:
+    def __new__(cls, /, version: "str | float", name: "str | None" = None, title: "str | None" = None, date: "str | None" = None, time: "str | None" = None, origin: "str | None" = None, user: "str | None" = None, style: "str | None" = None, language_options: "list[str] | None" = None, mode_options: "list[Mode | str | None] | None" = None, standard: "str | None" = None) -> SurveyInfo:
+        """
+        Create survey metadata for a Triple-S version given as a string or float.
+        Optional text fields default to None; languages and modes default to
+        empty tuples. Modes accept "analysis", "interview", or None. Invalid
+        versions or modes raise ValueError.
+        """
+    @property
+    def date(self, /) -> str |None:
+        """
+        date of the creation
+        """
+    @date.setter
+    def date(self, /, value: str |None) -> None:
+        """
+        date of the creation
+        """
+    @property
+    def language_options(self, /) -> tuple: ...
+    @property
+    def language_options(self, /) -> list[str]:
+        """
+        ** Introduced since sss 1.2 **
+        list of all available language options
+        """
+    @language_options.setter
+    def language_options(self, /, values: Sequence[str]) -> None: ...
+    @language_options.setter
+    def language_options(self, /, value: Sequence[str]) -> None:
+        """
+        ** Introduced since sss 1.2 **
+        list of all available language options
+        """
+    @property
+    def mode_options(self, /) -> list[Mode]:
+        """
+        ** Introduced since sss 1.2 **
+        list of all available `mode` options
+        """
+    @property
+    def mode_options(self, /) -> tuple: ...
+    @mode_options.setter
+    def mode_options(self, /, values: Sequence[Any]) -> None: ...
+    @mode_options.setter
+    def mode_options(self, /, value: Sequence[Mode]) -> None:
+        """
+        ** Introduced since sss 1.2 **
+        list of all available `mode` options
+        """
+    @property
+    def name(self, /) -> str |None:
+        """
+        name of the survey
+        """
+    @name.setter
+    def name(self, /, value: str |None) -> None:
+        """
+        name of the survey
+        """
+    @property
+    def origin(self, /) -> str |None: ...
+    @origin.setter
+    def origin(self, /, value: str |None) -> None: ...
+    @property
+    def standard(self, /) -> str |None:
+        """
+        ** Deprecated after sss version 1.2 **
+        (Optional) indicate that some aspect of the triple-s definition meets a
+        defined standard that may reduce the amount of checking required by an
+        import program. The only value that option_setting may have in
+        version 1.2 is 'standardnames'.
+        """
+    @standard.setter
+    def standard(self, /, value: str |None) -> None:
+        """
+        ** Deprecated after sss version 1.2 **
+        (Optional) indicate that some aspect of the triple-s definition meets a
+        defined standard that may reduce the amount of checking required by an
+        import program. The only value that option_setting may have in
+        version 1.2 is 'standardnames'.
+        """
+    @property
+    def style(self, /) -> str |None:
+        """
+        html css styling
+        """
+    @style.setter
+    def style(self, /, value: str |None) -> None:
+        """
+        html css styling
+        """
+    @property
+    def time(self, /) -> str |None:
+        """
+        time of the creation
+        """
+    @time.setter
+    def time(self, /, value: str |None) -> None:
+        """
+        time of the creation
+        """
+    @property
+    def title(self, /) -> str |None:
+        """
+        title of the survey
+        """
+    @title.setter
+    def title(self, /, value: str |None) -> None:
+        """
+        title of the survey
+        """
+    def to_dict(self, /) -> "dict[str, str]": ...
+    @property
+    def user(self, /) -> str |None:
+        """
+        user who created it
+        """
+    @user.setter
+    def user(self, /, value: str |None) -> None:
+        """
+        user who created it
+        """
+    @property
+    def version(self, /) -> Version:
+        """
+        The version attribute is used to indicate the version of the Triple-S
+        standard that applies to this specification.
+        """
+    @version.setter
+    def version(self, /, value: Version) -> None:
+        """
+        The version attribute is used to indicate the version of the Triple-S
+        standard that applies to this specification.
+        """
 
 @final
 class Text:
