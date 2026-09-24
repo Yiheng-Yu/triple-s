@@ -833,19 +833,34 @@ impl Spread {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone)]
 pub struct Text {
     /// the default value
-    pub value: String,
+    pub value: Arc<RwLock<String>>,
 
     /// variants
     pub variant: Vec<TextVariant>,
 }
 
+impl PartialEq for Text {
+    fn eq(&self, other: &Self) -> bool {
+        self.value.read().as_str() == other.value.read().as_str()
+            && self.variant.len() == other.variant.len()
+            && self.variant.iter().all(|variant| {
+                other.variant.iter().any(|other| {
+                    other.has_same_attribute(variant)
+                        && other.value == variant.value
+                })
+            })
+    }
+}
+
+
+
 impl From<String> for Text {
     fn from(value: String) -> Self {
         Self {
-            value,
+            value: lock_it_up(value),
             variant: Vec::new(),
         }
     }
@@ -854,7 +869,7 @@ impl From<String> for Text {
 impl From<std::sync::Arc<str>> for Text {
     fn from(value: std::sync::Arc<str>) -> Self {
         Self {
-            value: value.to_string(),
+            value: lock_it_up(value.to_string()),
             variant: Vec::new(),
         }
     }
@@ -868,7 +883,7 @@ impl Display for Text {
         write!(
             f,
             r"Text(\n\tvalue='{}'\n\tvariant={}>",
-            self.value, variants
+            &self.value.read(), variants
         )
     }
 }
@@ -876,7 +891,7 @@ impl Display for Text {
 impl Text {
     pub fn new(content: impl Into<String>) -> Self {
         Self {
-            value: content.into(),
+            value: lock_it_up(content.into()),
             variant: Vec::new(),
         }
     }
@@ -894,7 +909,7 @@ impl Text {
     }
 
     pub fn to_sss_classic(&self) -> String {
-        self.value.clone()
+        self.value.read().clone()
     }
 
     pub fn contains_variant(&self, variant: &TextVariant) -> bool {
@@ -1126,6 +1141,11 @@ fn format_range<T: Display>(from: T, to: T, delimiter: &str) -> String {
 #[inline]
 fn is_sss_classic(text: &str) -> bool {
     !text.trim().starts_with('<')
+}
+
+#[inline]
+pub fn lock_it_up<T>(item: T) -> Arc<RwLock<T>> {
+    Arc::new(RwLock::new(item))
 }
 
 #[cfg(test)]

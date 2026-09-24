@@ -2,9 +2,7 @@ extern crate triple_s;
 use std::{str::FromStr, sync::Arc};
 
 use parking_lot::{
-    RawRwLock,
-    RwLock,
-    lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
+    RawRwLock, RwLock, lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
 };
 use pyo3::{
     exceptions,
@@ -12,20 +10,12 @@ use pyo3::{
     types::{PyDict, PyList, PyTuple},
 };
 use triple_s::{
-    self as sss,
-    Meta,
-    Mode,
-    Question,
-    Record,
-    Survey,
-    Text,
-    TextVariant,
-    Version,
+    self as sss, Meta, Mode, Position, Question, Record, Survey, Text, TextVariant, Version,
 };
 
 use crate::{
     repr,
-    utils::{lock_it_up, normalize_py_index, to_backend_err}
+    utils::{self, lock_it_up, normalize_py_index, to_backend_err},
 };
 
 /// Read a Triple-S file and return its survey.
@@ -225,10 +215,7 @@ impl PyRecord {
     #[getter]
     fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let guard = self.read();
-        let content = guard
-            .content
-            .iter()
-            .map(|item| PyQuestion::from_arc(item.clone()));
+        let content = guard.content.iter().map(PyQuestion::from_arc);
         PyTuple::new(py, content)
     }
 
@@ -237,20 +224,21 @@ impl PyRecord {
     fn get(&self, question_name: &str) -> Option<PyQuestion> {
         self.read()
             .get_question(question_name)
-            .map(|item| PyQuestion(item.clone()))
+            .map(PyQuestion::from_arc)
     }
 
     /// Return a question by index or name; raise IndexError if absent.
     fn __getitem__<'py>(&self, index: &Bound<'py, PyAny>) -> PyResult<PyQuestion> {
-        if let Ok(number) = index.extract::<usize>() {
+        if let Ok(number) = index.extract::<isize>() {
             let guard = self.read();
-            let result = guard
-                .content
-                .get(number)
+            let total_length = self.__len__();
+            let sanitised = utils::normalize_py_index(number, total_length)
                 .ok_or(exceptions::PyIndexError::new_err(number))?;
-            let result = PyQuestion(result.clone());
-
-            Ok(result)
+            guard
+                .content
+                .get(sanitised)
+                .map(PyQuestion::from_arc)
+                .ok_or(exceptions::PyIndexError::new_err(number))
         } else if let Ok(question_name) = index.extract::<String>() {
             self.get(&question_name)
                 .ok_or(exceptions::PyIndexError::new_err(question_name))
@@ -269,11 +257,14 @@ impl PyRecord {
         let question_name = question.get_name()?;
         if !self.read().has_question(&question_name) {
             let instance = question.0.clone().read().clone();
-            let instance = Arc::new(RwLock::new(instance));
+            let instance = lock_it_up(instance);
             self.write().content.push(instance);
             Ok(())
         } else {
-            todo!()
+            Err(exceptions::PyValueError::new_err(format!(
+                "Unable to append question '{}' because a question with same name already exists.",
+                question_name,
+            )))
         }
     }
 
@@ -329,7 +320,7 @@ impl From<Question> for PyQuestion {
 }
 
 impl PyQuestion {
-    pub(crate) fn from_arc(question: Arc<RwLock<Question>>) -> Self {
+    pub(crate) fn from_arc(question: &Arc<RwLock<Question>>) -> Self {
         Self(question.clone())
     }
 
@@ -340,92 +331,6 @@ impl PyQuestion {
     pub(crate) fn write(&mut self) -> ArcRwLockWriteGuard<RawRwLock, Question> {
         self.0.write_arc()
     }
-
-    //     pub fn from_inner(inner: &Py<PySurvey>, index: usize) -> Self {
-    //         Self {
-    //             inner: Storage::Attached {
-    //                 inner: inner.clone(),
-    //                 index: index as u64,
-    //             },
-    //         }
-    //     }
-
-    //     fn with_question_read<R>(
-    //         &self,
-    //         py: Python<'_>,
-    //         f: impl FnOnce(MappedRwLockReadGuard<'_, sss::Question>) -> R,
-    //     ) -> PyResult<R> {
-    //         match &self.inner {
-    //             Storage::Attached { inner, index } => {
-    //                 let inner = inner.bind(py).borrow();
-    //                 let index = (*index).try_into().map_err(|_| {
-    //                     PyErr::new::<exceptions::PyIndexError, _>("index is too large")
-    //                 })?;
-    //                 let question = inner.read_question(index)?;
-
-    //                 Ok(f(question))
-    //             }
-    //             Storage::Owned(item) => {
-    //                 let item = item.read();
-    //                 let item = parking_lot::RwLockReadGuard::map(item, |item| item);
-    //                 Ok(f(item))
-    //             }
-    //         }
-    //     }
-
-    //     fn with_question_write<R>(
-    //         &self,
-    //         py: Python<'_>,
-    //         f: impl FnOnce(MappedRwLockWriteGuard<'_, sss::Question>) -> R,
-    //     ) -> PyResult<R> {
-    //         match &self.inner {
-    //             Storage::Attached { inner, index } => {
-    //                 let inner = inner.bind(py).borrow_mut();
-    //                 let index = (*index).try_into().map_err(|_| {
-    //                     PyErr::new::<exceptions::PyIndexError, _>("index is too large")
-    //                 })?;
-    //                 let question = inner.write_question(index)?;
-    //                 Ok(f(question))
-    //             }
-    //             Storage::Owned(item) => {
-    //                 let item = item.write();
-    //                 let item = parking_lot::RwLockWriteGuard::map(item, |item| item);
-    //                 Ok(f(item))
-    //             }
-    //         }
-    //     }
-
-    //     pub(crate) fn with_location_read<R>(
-    //         &self,
-    //         py: Python<'_>,
-    //         f: impl FnOnce(&sss::Position) -> R,
-    //     ) -> PyResult<R> {
-    //         self.with_question_read(py, |question| f(&question.location))
-    //     }
-
-    //     pub(crate) fn with_location_write<R>(
-    //         &self,
-    //         py: Python<'_>,
-    //         f: impl FnOnce(&mut sss::Position) -> R,
-    //     ) -> PyResult<R> {
-    //         self.with_question_write(py, |mut question| f(&mut question.location))
-    //     }
-
-    //     pub(crate) fn with_response<R>(
-    //         &self,
-    //         py: Python<'_>,
-    //         f: impl FnOnce(&sss::Response) -> R,
-    //     ) -> PyResult<R> {
-    //         self.with_question_read(py, |question| f(&question.response))
-    //     }
-
-    //     pub(crate) fn with_response_mut<R>(
-    //         &self,
-    //         py: Python<'_>,
-    //         f: impl FnOnce(&mut sss::Response) -> R,
-    //     ) -> PyResult<R> {
-    //         self.with_question_write(py, |mut question| f(&mut question.response))
-    //     }
 }
 
 #[pymethods]
@@ -478,7 +383,7 @@ impl PyQuestion {
     fn set_label(&mut self, label: &Bound<'_, PyAny>) -> PyResult<()> {
         if let Ok(content) = label.extract::<String>() {
             if self.get_label()?.has_variants() {
-                self.write().label.value = content;
+                *self.write().label.value.write() = content;
                 Ok(())
             } else {
                 self.write().label = Text::new(content).into();
@@ -510,10 +415,13 @@ impl PyQuestion {
     //         Ok(PyResponse::from_inner(question))
     //     }
 
-    //     #[getter]
-    //     pub fn get_location(question: &Bound<'_, Self>) -> PyResult<PyLocation> {
-    //         Ok(PyLocation::from_inner(question))
-    //     }
+    #[getter]
+    pub fn get_location(&self) -> PyResult<PyLocation> {
+        let item = self.read().location.clone();
+        let guard = RwLock::from(item);
+        let content = Arc::from(guard);
+        Ok(PyLocation(content))
+    }
 
     //     #[setter]
     //     pub fn set_location(&self, py: Python<'_>, value: &Bound<'_, PyLocation>) -> PyResult<()> {
@@ -548,389 +456,56 @@ impl PyQuestion {
     //     }
 }
 
-// #[pyclass(module = "triple_s", name = "Response", subclass)]
-// pub struct PyResponse {
-//     inner: Storage<PyQuestion, sss::Response>,
-// }
+#[pyclass(module = "triple_s", name = "Location")]
+pub struct PyLocation(Arc<RwLock<Position>>);
 
-// impl PyResponse {
-//     pub fn from_inner(question: &Bound<'_, PyQuestion>) -> Self {
-//         Self {
-//             inner: Storage::Attached { inner: question.clone().unbind(), index: 0}
-//         }
-//     }
+impl PyLocation {
+    pub(crate) fn read(&self) -> ArcRwLockReadGuard<RawRwLock, Position> {
+        self.0.read_arc()
+    }
 
-//     fn with_response<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&sss::Response) -> R,
-//     ) -> PyResult<R> {
-//         match &self.inner {
-//             Storage::Attached {inner, ..} => {
-//                 inner.bind(py).borrow().with_response(py, |response| f(&response))
-//             }
-//             Storage::Owned(inner) => {
-//                 Ok(f(&inner.read()))
-//             }
-//         }
-//     }
+    pub(crate) fn write(&mut self) -> ArcRwLockWriteGuard<RawRwLock, Position> {
+        self.0.write_arc()
+    }
+}
 
-//     fn with_response_mut<R>(
-//         &mut self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&mut sss::Response) -> R,
-//     ) -> PyResult<R> {
-//         match &mut self.inner {
-//             Storage::Attached {inner, ..} => {
-//                 inner.bind(py).borrow_mut().with_response_mut(py, |mut response| f(&mut response))
-//             }
-//             Storage::Owned(inner) => {
-//                 Ok(f(&mut inner.write()))
-//             }
-//         }
-//     }
-// }
+#[pymethods]
+impl PyLocation {
+    // #[new]
+    // #[pyo3(signature = (from, to))]
+    // fn new(from: u64, to: u64) -> Self {
+    //     Self {
+    //         inner: Storage::Owned(Arc::new(RwLock::new(Position { from, to }))),
+    //     }
+    // }
 
-// #[pymethods]
-// impl PyResponse {
-//     #[getter]
-//     fn item(slf: &Bound<'_, Self>) -> PyResult<Option<Vec<PyCode>>> {
-//         let py = slf.py();
-//         slf.borrow().with_response(py, |response| {
-//             match response {
-//                 Response::NumericCategory(item) => {
-//                     let items = (0..item.read().values.len())
-//                         .map(|idx| PyCode::from_inner(slf, idx as u64))
-//                         .collect::<Vec<PyCode>>();
-//                     Some(items)
-//                 }
-//                 Response::TextCategory(item) => {
-//                     let items = (0..item.read().values.len())
-//                         .map(|idx| PyCode::from_inner(slf, idx as u64))
-//                         .collect::<Vec<PyCode>>();
-//                     Some(items)
-//                 }
-//                 _ => None
-//             }
-//         })
-//     }
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("Location(from={}, to={})", self.read().from, self.read().to))
+    }
 
-//     /// alias for `item`
-//     #[getter]
-//     fn content(slf: &Bound<'_, Self>) -> PyResult<Option<Vec<PyCode>>> {
-//         Self::item(slf)
-//     }
-// }
+    /// Start of a data location
+    #[getter]
+    fn get_start(&self) -> PyResult<u64> {
+        Ok(self.read().from)  // `from` is a reserved python keyword
+    }
 
-// /// the attribute `code` in triple-s <value> tag can be u64, f64 (non-NAN and non-inf) & String
-// /// hence the use of enum `CodeInterface` here to accomdate different datatypes
-// enum CodeInterface {
-//     Int(Code<u64>),
-//     Float(Code<f64>),
-//     String(Code<String>)
-// }
+    #[setter]
+    fn set_start(&mut self, value: u64) -> PyResult<()> {
+        self.write().from = value;
+        Ok(())
+    }
 
-// /// A possible answer that a respondent can choose in a single-/ multi- response question
-// #[pyclass(module = "triple_s", name = "Choice")]
-// pub struct PyCode {
-//     storage: Storage<PyResponse, CodeInterface>,
-// }
+    #[getter]
+    fn get_end(&self) -> PyResult<u64> {
+        Ok(self.read().to)
+    }
 
-// impl PyCode {
-//     pub(crate) fn with_integer_code<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&Code<u64>) -> R,
-//     ) -> PyResult<R> {
-//         match &self.storage {
-//             Storage::Attached { inner, index } => inner
-//                 .bind(py)
-//                 .try_borrow()?
-//                 .with_response(py, |response| match response {
-//                     Response::NumericCategory(member) => member
-//                         .read()
-//                         .values
-//                         .get(*index as usize)
-//                         .ok_or_else(|| exceptions::PyIndexError::new_err(*index))
-//                         .map(f),
-//                     _ => Err(exceptions::PyTypeError::new_err(
-//                         "Expected a NumericCategory response",
-//                     )),
-//                 })?,
-//             // Owned choices store their code at index zero.
-//             Storage::Owned(item) => match &*item.read() {
-//                 CodeInterface::Int(value) => Ok(f(value)),
-//                 _ => Err(exceptions::PyTypeError::new_err("Expected integer codes")),
-//             },
-//         }
-//     }
-
-//     pub(crate) fn with_integer_code_mute<R>(
-//         &mut self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&mut Code<u64>) -> R,
-//     ) -> PyResult<R> {
-//         match &mut self.storage {
-//             Storage::Attached { inner, index } => inner
-//                 .bind(py)
-//                 .try_borrow_mut()?
-//                 .with_response_mut(py, |response| match response {
-//                     Response::NumericCategory(member) => member
-//                         .write()
-//                         .values
-//                         .get_mut(*index as usize)
-//                         .ok_or_else(|| exceptions::PyIndexError::new_err(*index))
-//                         .map(f),
-//                     _ => Err(exceptions::PyTypeError::new_err(
-//                         "Expected a NumericCategory response",
-//                     )),
-//                 })?,
-//             // Owned choices store their code at index zero.
-//             Storage::Owned(item) => match &mut *item.write() {
-//                 CodeInterface::Int(value) => Ok(f(value)),
-//                 _ => Err(exceptions::PyTypeError::new_err("Expected integer codes")),
-//             },
-//         }
-//     }
-
-//     pub(crate) fn with_string_code<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&Code<String>) -> R,
-//     ) -> PyResult<R> {
-//         match &self.storage {
-//             Storage::Attached { inner, index } => inner
-//                 .bind(py)
-//                 .try_borrow()?
-//                 .with_response(py, |response| match response {
-//                     Response::TextCategory(member) => member
-//                         .read()
-//                         .values
-//                         .get(*index as usize)
-//                         .ok_or_else(|| exceptions::PyIndexError::new_err(*index))
-//                         .map(f),
-//                     _ => Err(exceptions::PyTypeError::new_err(
-//                         "Expected a TextCategory response",
-//                     )),
-//                 })?,
-//             // Owned choices store their code at index zero.
-//             Storage::Owned(item) => match &*item.read() {
-//                 CodeInterface::String(value) => Ok(f(value)),
-//                 _ => Err(exceptions::PyTypeError::new_err("Expected string codes")),
-//             },
-//         }
-//     }
-
-//     pub(crate) fn with_string_code_mute<R>(
-//         &mut self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&mut Code<String>) -> R,
-//     ) -> PyResult<R> {
-//         match &mut self.storage {
-//             Storage::Attached { inner, index } => inner
-//                 .bind(py)
-//                 .try_borrow_mut()?
-//                 .with_response_mut(py, |response| match response {
-//                     Response::TextCategory(member) => member
-//                         .write()
-//                         .values
-//                         .get_mut(*index as usize)
-//                         .ok_or_else(|| exceptions::PyIndexError::new_err(*index))
-//                         .map(f),
-//                     _ => Err(exceptions::PyTypeError::new_err(
-//                         "Expected a TextCategory response",
-//                     )),
-//                 })?,
-//             // Owned choices store their code at index zero.
-//             Storage::Owned(item) => match &mut *item.write() {
-//                 CodeInterface::String(value) => Ok(f(value)),
-//                 _ => Err(exceptions::PyTypeError::new_err("Expected string codes")),
-//             },
-//         }
-//     }
-
-//     pub fn from_inner(response: &Bound<'_, PyResponse>, index: u64) -> Self {
-//         Self {
-//             storage: Storage::Attached {
-//                 inner: response.clone().unbind(),
-//                 index,
-//             },
-//         }
-//     }
-// }
-
-// #[pymethods]
-// impl PyCode {
-//     #[new]
-//     #[pyo3(signature = (code, label))]
-//     fn new(
-//         code: &Bound<'_, PyAny>,
-//         label: String,
-//     ) -> PyResult<Self>{
-//         let inner = if let Ok(code) = code.extract::<u64>() {
-//             let item = Code::new(code, label)
-//                 .map_err(|err| exceptions::PyRuntimeError::new_err(err.backtrace().to_string()))?;
-//             CodeInterface::Int(item)
-//         } else if let Ok(code) = code.extract::<String>() {
-//             let item = Code::new(code, label)
-//                 .map_err(|err| exceptions::PyRuntimeError::new_err(err.backtrace().to_string()))?;
-//             CodeInterface::String(item)
-//         } else if let Ok(code) = code.extract::<f64>() {
-//             let item = Code::new(code, label)
-//                 .map_err(|err| exceptions::PyRuntimeError::new_err(err.backtrace().to_string()))?;
-//             CodeInterface::Float(item)
-//         } else {
-//             return Err(pyo3::exceptions::PyTypeError::new_err(
-//                     "code must be an int, float or str",
-//                 ))
-//         };
-//         Ok(Self { storage: Storage::from_owned(inner)} )
-//     }
-
-//     // todo! need to acoomdate different data types!!
-//     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-//         todo!()
-//     }
-
-//     /// Code used to uniquely identify the current answer option.
-//     #[getter]
-//     fn code(&self, py: Python<'_>) -> PyResult<u64> {
-//         todo!()
-//     }
-
-//     /// Text label of the current answer option
-//     #[getter]
-//     fn label(&self, py: Python<'_>) -> PyResult<String> {
-//         todo!()
-//     }
-
-//     #[setter]
-//     fn set_label(&mut self, py: Python<'_>, value: &str) -> PyResult<()> {
-//         todo!()
-//     }
-
-//     /// Response filter of the current answer option.
-//     /// This attribute is not part of the .sss file itself, but can be very useful for extending current library to read other survey data maps modified from .sss xml (i.e., `.sif` from SnapSurveys, `.qps` from QPSMR etc).
-//     /// An exmaple use case be setting up something like this:
-//     /// Q1: How often do you drive?
-//     /// choice 1: Never
-//     /// choice 2: Always
-//     ///
-//     /// Q2: Do you enjoy driving?
-//     /// choice 1: nah (ONLY shown for those who selected '2' in Q1)
-//     /// choice 2: okay-ish (ONLY shown for those who selected '2' in Q1)
-//     /// choice 3: very much
-//     #[getter]
-//     fn filter(&self, py: Python<'_>) -> PyResult<Option<String>> {
-//         self.with_integer_code(py, |choice| choice.filter.clone())
-//     }
-
-//     #[setter]
-//     fn set_filter(&mut self, py: Python<'_>, value: Option<&str>) -> PyResult<()> {
-//         self.with_integer_code_mute(py, |choice| {
-//             choice.filter = value.map(|s| s.to_string())
-//         })
-//     }
-
-//     /// (Optional) indicator for special values (e.g. mannotationissing data codes).
-//     /// Removed from SSS 1.2 onwards.
-//     #[getter]
-//     fn is_special(&self, py: Python<'_>) -> PyResult<bool> {
-//         self.with_integer_code(py, |choice| choice.is_special)
-//     }
-
-//     #[setter]
-//     fn set_is_special(&mut self, py: Python<'_>, value: bool) -> PyResult<()> {
-//         self.with_integer_code_mute(py, |choice| choice.is_special = value)
-//     }
-// }
-
-// #[pyclass(module = "triple_s", name = "Location")]
-// pub struct PyLocation {
-//     inner: Storage<PyQuestion, Position>,
-// }
-
-// impl PyLocation {
-//     pub(crate) fn from_inner(question: &Bound<'_, PyQuestion>) -> Self {
-//         Self {
-//             inner: Storage::Attached {
-//                 inner: question.clone().unbind(),
-//                 index: 0,
-//             },
-//         }
-//     }
-
-//     fn with_location_read<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&sss::Position) -> R,
-//     ) -> PyResult<R> {
-//         match &self.inner {
-//             Storage::Owned(location) => {
-//                 let location = location.read();
-//                 Ok(f(&location))
-//             }
-
-//             Storage::Attached { inner, .. } => {
-//                 inner.bind(py).borrow().with_location_read(py, f)
-//             }
-//         }
-//     }
-
-//     fn with_location_write<R>(
-//         &self,
-//         py: Python<'_>,
-//         f: impl FnOnce(&mut sss::Position) -> R,
-//     ) -> PyResult<R> {
-//         match &self.inner {
-//             Storage::Owned(location) => {
-//                 let mut location = location.write();
-//                 Ok(f(&mut *location))
-//             }
-
-//             Storage::Attached { inner, .. } => {
-//                 inner.bind(py).borrow_mut().with_location_write(py, f)
-//             }
-//         }
-//     }
-// }
-
-// #[pymethods]
-// impl PyLocation {
-//     #[new]
-//     #[pyo3(signature = (from, to))]
-//     fn new(from: u64, to: u64) -> Self {
-//         Self {
-//             inner: Storage::Owned(Arc::new(RwLock::new(Position { from, to }))),
-//         }
-//     }
-
-//     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-//         self.with_location_read(py, |loc| {
-//             format!("Location(from={}, to={})", loc.from, loc.to)
-//         })
-//     }
-
-//     #[getter]
-//     fn get_from(&self, py: Python<'_>) -> PyResult<u64> {
-//         self.with_location_read(py, |loc| loc.from.clone())
-//     }
-
-//     #[setter]
-//     fn set_from(&self, py: Python<'_>, value: u64) -> PyResult<()> {
-//         self.with_location_write(py, |loc| loc.from = value)
-//     }
-
-//     #[getter]
-//     fn get_to(&self, py: Python<'_>) -> PyResult<u64> {
-//         self.with_location_read(py, |loc| loc.to.clone())
-//     }
-
-//     #[setter]
-//     fn set_to(&self, py: Python<'_>, value: u64) -> PyResult<()> {
-//         self.with_location_write(py, |loc| loc.to = value)
-//     }
-// }
+    #[setter]
+    fn set_end(&mut self, value: u64) -> PyResult<()> {
+        self.write().to = value;
+        Ok(())
+    }
+}
 
 /// meta information about the survey entity.
 #[pyclass(dict, weakref, module = "triple_s", name = "Meta", from_py_object)]
@@ -1001,11 +576,16 @@ impl PyMeta {
             .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))?;
         let mode_options = mode_options
             .map(|options| {
-                options.into_iter().map(|mode| {
-                    mode.as_deref().map(Mode::from_str).transpose()
-                        .map(Option::unwrap_or_default)
-                        .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
-                }).collect::<PyResult<Vec<Mode>>>()
+                options
+                    .into_iter()
+                    .map(|mode| {
+                        mode.as_deref()
+                            .map(Mode::from_str)
+                            .transpose()
+                            .map(Option::unwrap_or_default)
+                            .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
+                    })
+                    .collect::<PyResult<Vec<Mode>>>()
             })
             .transpose()?
             .unwrap_or_else(|| vec![Mode::None]);
@@ -1031,7 +611,10 @@ impl PyMeta {
     /// list of all available `mod` options
     #[getter]
     fn get_mode_options<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
-        let options = self.read().mode_options.iter()
+        let options = self
+            .read()
+            .mode_options
+            .iter()
             .map(Mode::try_as_str)
             .collect::<Vec<_>>();
         PyTuple::new(py, options)
@@ -1244,7 +827,7 @@ impl From<Text> for PyText {
     fn from(value: Text) -> Self {
         let variants = value.variant.into_iter().map(PyVariant::from).collect();
         Self {
-            value: Arc::new(RwLock::new(value.value)),
+            value: value.value.clone(),
             variants: Arc::new(RwLock::new(variants)),
         }
     }
@@ -1261,7 +844,7 @@ impl TryFrom<PyText> for Text {
 
     fn try_from(value: PyText) -> Result<Self, Self::Error> {
         Ok(Self {
-            value: value.value.read().clone(),
+            value: value.value.clone(),
             variant: value
                 .variants
                 .read()
@@ -1449,8 +1032,11 @@ impl PyText {
 pub struct VariantList(Arc<RwLock<Vec<PyVariant>>>);
 
 impl Clone for VariantList {
+    /// makes a DEEP COPY of variants
     fn clone(&self) -> Self {
-        let interior = self.0.read()
+        let interior = self
+            .0
+            .read()
             .clone()
             .into_iter()
             .map(|item| item.deepcopy())
@@ -1569,13 +1155,17 @@ impl VariantList {
             let to_extend = v_list.read().clone();
             self.extend(to_extend)
         } else if let Ok(v_list) = other.extract::<Vec<PyVariant>>() {
-            let v_list = v_list.into_iter()
+            let v_list = v_list
+                .into_iter()
                 .map(|item| item.deepcopy())
                 .collect::<Vec<PyVariant>>();
             self.extend(v_list)
         } else {
             let name = other.get_type().name()?.extract::<String>()?;
-            Err(exceptions::PyTypeError::new_err(format!("Expect list of Variant instance, got: {}", name)))
+            Err(exceptions::PyTypeError::new_err(format!(
+                "Expect list of Variant instance, got: {}",
+                name
+            )))
         }
     }
 }

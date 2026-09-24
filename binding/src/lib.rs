@@ -1,6 +1,7 @@
 mod survey;
 mod utils;
 mod repr;
+mod responses;
 
 use pyo3::prelude::*;
 
@@ -22,6 +23,7 @@ pub mod triple_s {
         PyText,
         PyVariant,
         PyFormat,
+        PyLocation,
         VariantList,
         read_file
     };

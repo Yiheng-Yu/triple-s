@@ -8,6 +8,21 @@ class Format:
     """
 
 @final
+class Location:
+    def __repr__(self, /) -> str: ...
+    @property
+    def end(self, /) -> int: ...
+    @end.setter
+    def end(self, /, value: int) -> None: ...
+    @property
+    def start(self, /) -> int:
+        """
+        Start of a data location
+        """
+    @start.setter
+    def start(self, /, value: int) -> None: ...
+
+@final
 class Meta:
     """
     meta information about the survey entity.
@@ -171,6 +186,8 @@ class Question:
         """
         Set the label from text or a Text instance.
         """
+    @property
+    def location(self, /) -> Location: ...
     @property
     def name(self, /) -> str:
         """

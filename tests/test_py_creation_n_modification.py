@@ -132,9 +132,49 @@ def test_modify_question_label_via_survey_indexing(survey):
     assert survey.record.content[3].label.value == NEW_LABEL
     assert survey.record.content[3].label.value != original_label
 
+    tmp = question.label
+    TMP_LABEL = "label for tmp"
+    tmp.value = TMP_LABEL
+    assert tmp.value == TMP_LABEL
+    assert question.label.value == TMP_LABEL
+    assert survey.record.content[3].label.value == TMP_LABEL
 
-def test_create_question():
-    raise NotImplementedError
+def test_insert_label_variant_via_survey_indexing(survey):
+    VARIANT_TEXT = "text"
+    VARIANT_LANGUAGE = "es"
+    VARIANT_MODE = "interview"
+    INDEX = 5
+    variant = triple_s.Variant(VARIANT_TEXT, mode=VARIANT_MODE, language=VARIANT_LANGUAGE)
+
+    len_original = len(survey.record.content[INDEX].label.variants)
+    question = survey.record.content[INDEX]
+    variants = question.label.variants
+
+    # question.label.variants.append(variant)
+    variants.append(variant)
+    assert len(variants) == (len_original + 1)
+    assert len(question.label.variants) == (len_original + 1)
+    assert len(survey.record.content[INDEX].label.variants) == (len_original + 1)
+
+    NEW_LABEL = "new label"
+    variant.value = NEW_LABEL
+    assert variants[-1].value == NEW_LABEL
+    assert question.variants[-1].value == NEW_LABEL
+    assert survey.record.content[INDEX].label.variants[-1].value == NEW_LABEL
+    
+
+
+def test_modify_question_location(question):
+    question.location.start = 300
+    assert question.location.start == 300
+
+    tmp = quesiton.location
+    assert tmp.location.start == 300
+    tmp.location.end = 999
+    assert question.location.end == 999
+
+# def test_create_question():
+#     raise NotImplementedError
 
 
 # def test_modify_question_name_success(sss):

@@ -6,6 +6,7 @@ from .triple_s import (
     Survey,
     Text,
     Variant,
+    Location,
     read_file,
 )
 

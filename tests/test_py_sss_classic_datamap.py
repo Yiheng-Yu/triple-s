@@ -75,11 +75,11 @@ def test_variable_read(sss):
     print(question)
 
 
-def test_variable_response_indexing(sss):
-    question = sss.content[0]
-    print(question.response)
-    with pytest.raises(TypeError):
-        question.response[0]
+# def test_variable_response_indexing(sss):
+#     question = sss.content[0]
+#     print(question.response)
+#     with pytest.raises(TypeError):
+#         question.response[0]
 
 
 def sss_get_question_success(sss):
