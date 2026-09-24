@@ -14,7 +14,7 @@ use rayon::prelude::*;
 use strum::{EnumIter, EnumString, IntoEnumIterator};
 
 use crate::{
-    error::{BadLine, DuplicatedKey, UnsupportedFeature},
+    error::{BadLine, DuplicatedKey, LanguageTagError, UnsupportedFeature},
     prelude::*,
 };
 
@@ -66,7 +66,7 @@ impl Survey {
     }
 
     /// find question via question name, case insensitive
-    pub fn get_question(&self, question_name: &str) -> Option<&Question> {
+    pub fn get_question(&self, question_name: &str) -> Option<&Arc<RwLock<Question>>> {
         self.record.get_question(question_name)
     }
 
@@ -212,7 +212,8 @@ pub struct Record {
     pub href: Option<String>,
 
     pub data_source: DataSource,
-    pub content: Vec<Question>,
+    pub content: Vec<Arc<RwLock<Question>>>, /* NOTE: THIS KEPT AS ARC RWLOCK IS VERY
+                                              * IMPORTANT FOR PYTHON BINDING TO WORK!!! */
 }
 
 impl Record {
@@ -225,7 +226,7 @@ impl Record {
         let mut output = String::new();
         append_line(&mut output, format!("RECORD {}", self.id));
         for question in self.content.iter() {
-            output.push_str(&question.to_sss_classic()?);
+            output.push_str(&question.read().to_sss_classic()?);
         }
         append_line(&mut output, "END RECORD");
         Ok(output)
@@ -236,19 +237,14 @@ impl Record {
     pub fn has_question(&self, question_name: &str) -> bool {
         self.content
             .par_iter()
-            .find_first(|question| question.name.eq_ignore_ascii_case(question_name))
+            .find_first(|question| question.read().name.eq_ignore_ascii_case(question_name))
             .is_some()
     }
 
-    pub fn get_question(
-        &self,
-        question_name: &str,
-    ) -> Option<&Question> {
-        self.content
-            .par_iter()
-            .find_first(|question| {
-                question.name.to_uppercase() == question_name.to_uppercase()
-            })
+    pub fn get_question(&self, question_name: &str) -> Option<&Arc<RwLock<Question>>> {
+        self.content.par_iter().find_first(|question| {
+            question.read().name.to_uppercase() == question_name.to_uppercase()
+        })
     }
 }
 
@@ -930,46 +926,48 @@ impl Text {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextVariant {
     pub value: String,
-    pub language: Option<Language>,
     pub mode: Mode,
-}
-
-impl Display for TextVariant {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            r#"TextVariant(value="{}", language={}, mode={:?})"#,
-            self.value,
-            self.language.as_ref().map(|s| s.0.to_string()).unwrap_or("None".into()),
-            self.mode
-        )
-    }
+    language: Option<String>,
 }
 
 impl TextVariant {
-    pub fn new<S>(value: S, mode: Mode, language: S) -> Self
+    pub fn new<S>(value: S, mode: Mode, language: Option<S>) -> Result<Self>
     where S: Into<String> {
-        Self {
+        let language = language
+            .map(|lan| {
+                let lan = lan.into();
+                Self::validate_language_tag(&lan).map(|_| lan)
+            })
+            .transpose()?;
+
+        Ok(Self {
             value: value.into(),
             mode,
-            language: Language(language.into()).some(),
-        }
+            language: language,
+        })
     }
 
-    pub fn with_language(
-        content: impl Into<String>,
-        language_name: impl Into<String>,
-    ) -> Self {
+    pub fn with_language(content: impl Into<String>, language: impl Into<String>) -> Self {
         Self {
             value: content.into(),
-            language: Language(language_name.into()).some(),
+            language: Some(language.into()),
             mode: Mode::None,
         }
     }
 
     /// set `language` to `Language::Name(value)`
-    pub fn set_language(&mut self, new: impl Into<String>) {
-        self.language = Language(new.into()).some();
+    pub fn set_language(&mut self, new: Option<&str>) -> Result<()> {
+        if let Some(language) = new {
+            Self::validate_language_tag(language)?;
+            self.language = Some(language.into());
+        } else {
+            self.language = None
+        };
+        Ok(())
+    }
+
+    pub fn get_language(&self) -> Option<String> {
+        self.language.clone()
     }
 
     /// reset `language` back to `Default`
@@ -980,6 +978,17 @@ impl TextVariant {
     /// check if instance of `other` has the same attributes as `self`
     pub fn has_same_attribute(&self, other: &Self) -> bool {
         (self.mode == other.mode) & (self.language == other.language)
+    }
+
+    fn validate_language_tag(language: &str) -> Result<()> {
+        let _ = oxilangtag::LanguageTag::parse(language).map_err(|err| {
+            LanguageTagError(format!(
+                "Error parsing language tag: {}. Detail: {}",
+                language,
+                err.to_string()
+            ))
+        })?;
+        Ok(())
     }
 }
 
@@ -1047,7 +1056,7 @@ impl Display for Language {
 /// - None: default value when no 'mode' value was defined.
 /// - Analysis: mode 'analysis'
 /// - Interview: mode 'interview'
-#[derive(Debug, PartialEq, Clone, EnumString, Eq)]
+#[derive(Debug, PartialEq, Clone, EnumString, Eq, EnumIter)]
 #[strum(ascii_case_insensitive)]
 #[derive(Default)]
 pub enum Mode {
@@ -1057,6 +1066,20 @@ pub enum Mode {
     Analysis,
     #[strum(serialize = "interview")]
     Interview,
+}
+
+impl Mode {
+    pub fn try_as_str(&self) -> Option<&'static str> {
+        match self {
+            Self::None => None,
+            Self::Analysis => Some("analysis"),
+            Self::Interview => Some("interview"),
+        }
+    }
+
+    pub fn all_mode_options() -> Vec<&'static str> {
+        Self::iter().filter_map(|mode| mode.try_as_str()).collect()
+    }
 }
 
 // Helper functions
@@ -1136,8 +1159,8 @@ mod test {
     #[test]
     fn test_text_variant_overwrite() {
         let mut instance = Text::new("base text");
-        let v1 = TextVariant::new("variant 1", Mode::None, "GB");
-        let v2 = TextVariant::new("variant 2", Mode::None, "GB");
+        let v1 = TextVariant::new("variant 1", Mode::None, Some("GB")).unwrap();
+        let v2 = TextVariant::new("variant 2", Mode::None, Some("GB")).unwrap();
 
         instance.set_variant(v1);
         assert_eq!(instance.variant.len(), 1);
@@ -1145,13 +1168,13 @@ mod test {
         assert_eq!(instance.variant.len(), 1);
         assert_eq!(&instance.variant[0].value, "variant 2");
 
-        let v3 = TextVariant::new("variant", Mode::None, "GBR");
+        let v3 = TextVariant::new("variant", Mode::None, Some("GB")).unwrap();
         instance.set_variant(v3);
-        assert_eq!(instance.variant.len(), 2);
+        assert_eq!(instance.variant.len(), 1, "{:?}", instance.variant);
 
-        let v4 = TextVariant::new("variant", Mode::Analysis, "GBR");
+        let v4 = TextVariant::new("variant", Mode::Analysis, Some("GB")).unwrap();
         instance.set_variant(v4);
-        assert_eq!(instance.variant.len(), 3)
+        assert_eq!(instance.variant.len(), 2, "{:?}", instance.variant)
     }
 
     #[test]

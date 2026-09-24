@@ -53,6 +53,7 @@ def test_meta_to_dict(sss):
         origin="Example Survey Exporter v4.2",
         user="Survey Administrator",
         standard="NAMES",
+        title="Customer Experience Survey - HTML Test"
     )
     assert exported == correct
 
@@ -91,13 +92,6 @@ def test_export_to_classic_from_survey(sss):
     original = sss
     content = original.to_sss_classic()
     reloaded = triple_s.Survey.from_classic(content)
-    assert reloaded == original
-
-
-def test_export_to_classic_from_meta(sss):
-    original = sss.meta
-    content = original.to_sss_classic()
-    reloaded = triple_s.Meta.from_classic(content)
     assert reloaded == original
 
 

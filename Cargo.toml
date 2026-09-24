@@ -32,6 +32,7 @@ crate-type = ["rlib"]
 [dependencies]
 anyhow = { version = "1.0.104", features = ["backtrace"] }
 chrono = "0.4.45"
+oxilangtag = "0.1.6"
 parking_lot = "0.12.5"
 quick-xml = { version = "0.42.0", features = ["encoding", "serialize"] }
 rayon = "1.12.0"

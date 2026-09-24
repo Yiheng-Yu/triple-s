@@ -21,7 +21,6 @@ use crate::{
     entities::{
         Code,
         CodeFormat,
-        Language,
         Mode,
         Position,
         Question,
@@ -301,9 +300,10 @@ impl SurveyBuilder {
             .par_drain(..)
             .map(|item| {
                 let question = item.build(is_classic)?;
-                Ok(question)
+                let guard = Arc::new(RwLock::new(question));
+                Ok(guard)
             })
-            .collect::<Result<Vec<Question>>>()?;
+            .collect::<Result<Vec<Arc<RwLock<Question>>>>>()?;
 
         Ok(output)
     }
@@ -643,7 +643,7 @@ fn parse_text(mut node: Node, is_classic: bool) -> Result<Text> {
             .attributes
             .get("xml:lang")
             .or_else(|| variant.attributes.get("lang"))
-            .map(|language| Language::new(language.to_string()));
+            .map(|language| language.to_string());
 
         let mode = variant
             .attributes
@@ -651,11 +651,12 @@ fn parse_text(mut node: Node, is_classic: bool) -> Result<Text> {
             .map(|mode| Mode::from_str(mode))
             .transpose()?
             .unwrap_or_default();
-        text.set_variant(TextVariant {
+        let variant = TextVariant::new(
             value,
-            language,
             mode,
-        });
+            language
+        )?;
+        text.set_variant(variant);
     }
     Ok(text)
 }

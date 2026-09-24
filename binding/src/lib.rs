@@ -1,6 +1,6 @@
 mod survey;
-// mod configuration;
-mod error;
+mod utils;
+mod repr;
 
 use pyo3::prelude::*;
 
@@ -9,7 +9,7 @@ pub mod triple_s {
     use super::*;
 
     #[pymodule_export]
-    pub use super::error::RustBackendError;
+    pub use super::utils::RustBackendError;
 
     #[pymodule_export]
     pub use super::survey::{
@@ -21,20 +21,10 @@ pub mod triple_s {
         PySurvey,
         PyText,
         PyVariant,
-        PyMode,
         PyFormat,
-        PyLanguage,
+        VariantList,
         read_file
     };
-
-    // #[pymodule(gil_used = false)]
-    // pub mod config {
-    //     #[pymodule_export]
-    //     pub use super::configuration::{
-    //         PyFormat,
-    //         PyMode,
-    //     };
-    // }
 
     #[pymodule_init]
     fn init(_m: &Bound<'_, PyModule>) -> PyResult<()> {

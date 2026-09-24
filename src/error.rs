@@ -322,3 +322,14 @@ impl fmt::Display for NotFiniteError {
 }
 
 impl Error for NotFiniteError {}
+
+#[derive(Debug)]
+pub struct LanguageTagError(pub String);
+
+impl Error for LanguageTagError {}
+
+impl fmt::Display for LanguageTagError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}

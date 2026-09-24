@@ -2,17 +2,17 @@ extern crate triple_s;
 use std::{str::FromStr, sync::Arc};
 
 use parking_lot::{
-    RawRwLock, RwLock, lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
+    RawRwLock,
+    RwLock,
+    lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
 };
 use pyo3::{
     exceptions,
     prelude::*,
-    types::{PyList, PyTuple},
+    types::{PyDict, PyList, PyTuple},
 };
-use rayon::prelude::*;
 use triple_s::{
     self as sss,
-    Language,
     Meta,
     Mode,
     Question,
@@ -23,7 +23,10 @@ use triple_s::{
     Version,
 };
 
-use crate::error::{RustBackendError, to_backend_err};
+use crate::{
+    repr,
+    utils::{lock_it_up, normalize_py_index, to_backend_err}
+};
 
 #[pyfunction]
 pub fn read_file(path: &str) -> PyResult<PySurvey> {
@@ -88,7 +91,7 @@ impl PySurvey {
     fn copy(&self) -> Self {
         Self {
             meta: self.meta.clone(),
-            record: self.record.clone()
+            record: self.record.clone(),
         }
     }
 
@@ -117,6 +120,16 @@ impl PySurvey {
     }
 
     #[getter]
+    fn get_name(&self) -> Option<String> {
+        self.meta.read().name.clone()
+    }
+
+    #[setter]
+    fn set_name(&self, name: Option<String>) {
+        self.meta.write().name = name;
+    }
+
+    #[getter]
     fn get_record<'py>(&self) -> PyResult<PyRecord> {
         Ok(PyRecord::from_parent(&self))
     }
@@ -126,20 +139,9 @@ impl PySurvey {
         self.get_record()?.get_content(py)
     }
 
-    //     fn get_question(survey: &Bound<'_, Self>, question_name: &str) -> PyResult<PyQuestion> {
-    //         let query = question_name.to_uppercase();
-    //         survey
-    //             .borrow()
-    //             .read_record()
-    //             .content
-    //             .iter()
-    //             .enumerate()
-    //             .find(|(_, question)| question.name.to_uppercase() == query)
-    //             .map(|(index, _)| PyQuestion::from_inner(&survey.clone().unbind(), index))
-    //             .ok_or(exceptions::PyKeyError::new_err(
-    //                 question_name.to_string(),
-    //             ))
-    //     }
+    fn get_question(&self, question_name: &str) -> PyResult<Option<PyQuestion>> {
+        self.get_record().map(|record| record.get(question_name))
+    }
 
     //     fn __repr__(inner: &Bound<'_, Self>) -> PyResult<String> {
     //         let instance = inner.borrow();
@@ -176,11 +178,10 @@ impl PyRecord {
 
 #[pymethods]
 impl PyRecord {
-    //     /// Export content back to sss classic
-    //     fn to_sss_classic(&self, py: Python<'_>) -> PyResult<String> {
-    //         self.with_record_read(py, |record| record.to_sss_classic())?
-    //             .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
-    //     }
+    /// Export content back to sss classic
+    fn to_sss_classic(&self) -> PyResult<String> {
+        self.read().to_sss_classic().map_err(to_backend_err)
+    }
 
     fn __len__(&self) -> usize {
         self.read().content.len()
@@ -206,29 +207,39 @@ impl PyRecord {
     /// List of questions/ variables that the current survey instance contains
     #[getter]
     fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
-        let content = self
-            .read()
+        let guard = self.read();
+        let content = guard
             .content
-            .clone()
-            .into_iter()
-            .map(PyQuestion::from);
+            .iter()
+            .map(|item| PyQuestion::from_arc(item.clone()));
         PyTuple::new(py, content)
     }
 
     fn get(&self, question_name: &str) -> Option<PyQuestion> {
         self.read()
             .get_question(question_name)
-            .map(PyQuestion::from)
+            .map(|item| PyQuestion(item.clone()))
     }
 
     fn __getitem__<'py>(&self, index: &Bound<'py, PyAny>) -> PyResult<PyQuestion> {
         if let Ok(number) = index.extract::<usize>() {
-            // self.read()
-            todo!()
+            let guard = self.read();
+            let result = guard
+                .content
+                .get(number)
+                .ok_or(exceptions::PyIndexError::new_err(number))?;
+            let result = PyQuestion(result.clone());
+
+            Ok(result)
         } else if let Ok(question_name) = index.extract::<String>() {
-            todo!()
-        } else  {
-            todo!()
+            self.get(&question_name)
+                .ok_or(exceptions::PyIndexError::new_err(question_name))
+        } else {
+            let type_name = index.get_type().name()?.extract::<String>()?;
+            Err(exceptions::PyTypeError::new_err(format!(
+                "`index` must be question index (as `int`) or question name (as `str`), found: {}",
+                type_name
+            )))
         }
     }
 
@@ -236,6 +247,7 @@ impl PyRecord {
         let question_name = question.get_name()?;
         if !self.read().has_question(&question_name) {
             let instance = question.0.clone().read().clone();
+            let instance = Arc::new(RwLock::new(instance));
             self.write().content.push(instance);
             Ok(())
         } else {
@@ -294,6 +306,10 @@ impl From<Question> for PyQuestion {
 }
 
 impl PyQuestion {
+    pub(crate) fn from_arc(question: Arc<RwLock<Question>>) -> Self {
+        Self(question.clone())
+    }
+
     pub(crate) fn read(&self) -> ArcRwLockReadGuard<RawRwLock, Question> {
         self.0.read_arc()
     }
@@ -889,6 +905,7 @@ pub struct PyMeta {
 }
 
 impl Clone for PyMeta {
+    /// creates a deep copy of current instance
     fn clone(&self) -> Self {
         let instance = self.inner.read().clone();
         Self {
@@ -903,10 +920,74 @@ impl PyMeta {
             inner: survey.meta.clone(),
         }
     }
+
+    pub(crate) fn read(&self) -> ArcRwLockReadGuard<RawRwLock, Meta> {
+        self.inner.read_arc()
+    }
+
+    pub(crate) fn write(&mut self) -> ArcRwLockWriteGuard<RawRwLock, Meta> {
+        self.inner.write_arc()
+    }
 }
 
 #[pymethods]
 impl PyMeta {
+    /// Create survey metadata for the given Triple-S version.
+    /// Optional text fields default to None; languages default to [], modes to [None].
+    /// Modes accept "analysis", "interview", or None. Invalid versions or modes raise ValueError.
+    #[new]
+    #[pyo3(signature = (version, name=None, title=None, date=None, time=None, origin=None, user=None, style=None, language_options=None, mode_options=None, standard=None))]
+    fn new(
+        version: &str,
+        name: Option<String>,
+        title: Option<String>,
+        date: Option<String>,
+        time: Option<String>,
+        origin: Option<String>,
+        user: Option<String>,
+        style: Option<String>,
+        language_options: Option<Vec<String>>,
+        mode_options: Option<Vec<Option<String>>>,
+        standard: Option<String>,
+    ) -> PyResult<Self> {
+        let version = Version::from_str(version)
+            .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))?;
+        let mode_options = mode_options
+            .map(|options| {
+                options.into_iter().map(|mode| {
+                    mode.as_deref().map(Mode::from_str).transpose()
+                        .map(Option::unwrap_or_default)
+                        .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
+                }).collect::<PyResult<Vec<Mode>>>()
+            })
+            .transpose()?
+            .unwrap_or_else(|| vec![Mode::None]);
+
+        Ok(Self {
+            inner: lock_it_up(Meta {
+                version,
+                name,
+                title,
+                date,
+                time,
+                origin,
+                user,
+                style,
+                language_options: language_options.unwrap_or_default(),
+                mode_options,
+                standard,
+            }),
+        })
+    }
+
+    #[getter]
+    fn get_mode_options<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        let options = self.read().mode_options.iter()
+            .map(Mode::try_as_str)
+            .collect::<Vec<_>>();
+        PyTuple::new(py, options)
+    }
+
     //     #[new]
     //     #[pyo3(signature = (survey=None, version=None))]
     //     fn new(
@@ -914,88 +995,43 @@ impl PyMeta {
     //         survey: Option<&Bound<'_, PySurvey>>,
     //         version: Option<String>,
     //     ) -> PyResult<Self> {
-    //         todo!()
-    //         // let version = version
-    //         //     .as_deref()
-    //         //     .map(Version::from_str)
-    //         //     .transpose()
-    //         //     .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))?;
-
-    //         // if let Some(survey) = survey {
-    //         //     if let Some(version) = version {
-    //         //         survey.borrow_mut().write_meta().version = version;
-    //         //     }
-    //         //     return Ok(Self::from_rust(survey));
-    //         // }
-
-    //         // let mut survey = sss::Survey::empty();
-    //         // survey.meta = sss::Meta::with_version(version.unwrap_or(Version::V1_1));
-    //         // Ok(Self {
-    //         //     inner: Py::new(py, PySurvey::from(survey))?,
-    //         // })
     //     }
 
-    //     /// Export meta back to sss classic
-    //     fn to_sss_classic(&self, py: Python<'_>) -> String {
-    //         self.inner.bind(py).borrow().read_meta().to_sss_classic()
-    //     }
-
-    //     fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
-    //         let dict = PyDict::new(py);
-
-    //         dict.set_item("version", self.get_version(py)?)?;
-
-    //         if let Some(value) = self.get_date(py)? {
-    //             dict.set_item("date", value)?;
-    //         };
-
-    //         if let Some(value) = self.get_time(py)? {
-    //             dict.set_item("time", value)?;
-    //         };
-
-    //         if let Some(value) = self.get_origin(py)? {
-    //             dict.set_item("origin", value)?;
-    //         };
-
-    //         if let Some(value) = self.get_user(py)? {
-    //             dict.set_item("user", value)?;
-    //         };
-
-    //         if let Some(value) = self.get_standard(py)? {
-    //             dict.set_item("standard", value)?;
-    //         };
-
-    //         Ok(dict.unbind())
-    //     }
+    /// make a shallow copy of current instance.
+    fn copy(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
 
     /// make a deep copy of current instance
-    fn copy(&self) -> Self {
+    fn deepcopy(&self) -> Self {
         self.clone()
     }
 
     /// SSS Version
     #[getter]
     fn get_version(&self) -> PyResult<&str> {
-        Ok(self.inner.read().version.as_str())
+        Ok(self.read().version.as_str())
     }
 
     #[setter]
-    fn set_version(&self, value: String) -> PyResult<()> {
+    fn set_version(&mut self, value: String) -> PyResult<()> {
         let version = Version::from_str(&value)
             .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))?;
-        self.inner.write().version = version;
+        self.write().version = version;
         Ok(())
     }
 
     /// (Optional) name fo the survey
     #[getter]
     fn get_name(&self) -> PyResult<Option<String>> {
-        Ok(self.inner.read().name.clone())
+        Ok(self.read().name.clone())
     }
 
     #[setter]
-    fn set_name(&self, value: Option<String>) -> PyResult<()> {
-        self.inner.write().name = value;
+    fn set_name(&mut self, value: Option<String>) -> PyResult<()> {
+        self.write().name = value;
         Ok(())
     }
 
@@ -1006,8 +1042,8 @@ impl PyMeta {
     }
 
     #[setter]
-    fn set_date(&self, value: Option<String>) -> PyResult<()> {
-        self.inner.write().date = value;
+    fn set_date(&mut self, value: Option<String>) -> PyResult<()> {
+        self.write().date = value;
         Ok(())
     }
 
@@ -1018,8 +1054,8 @@ impl PyMeta {
     }
 
     #[setter]
-    fn set_time(&self, value: Option<String>) -> PyResult<()> {
-        self.inner.write().time = value;
+    fn set_time(&mut self, value: Option<String>) -> PyResult<()> {
+        self.write().time = value;
         Ok(())
     }
 
@@ -1029,8 +1065,8 @@ impl PyMeta {
     }
 
     #[setter]
-    fn set_title(&self, value: Option<String>) -> PyResult<()> {
-        self.inner.write().title = value;
+    fn set_title(&mut self, value: Option<String>) -> PyResult<()> {
+        self.write().title = value;
         Ok(())
     }
 
@@ -1041,8 +1077,8 @@ impl PyMeta {
     }
 
     #[setter]
-    fn set_origin(&self, value: Option<String>) -> PyResult<()> {
-        self.inner.write().origin = value;
+    fn set_origin(&mut self, value: Option<String>) -> PyResult<()> {
+        self.write().origin = value;
         Ok(())
     }
 
@@ -1053,8 +1089,8 @@ impl PyMeta {
     }
 
     #[setter]
-    fn set_user(&self, value: Option<String>) -> PyResult<()> {
-        self.inner.write().user = value;
+    fn set_user(&mut self, value: Option<String>) -> PyResult<()> {
+        self.write().user = value;
         Ok(())
     }
 
@@ -1064,8 +1100,8 @@ impl PyMeta {
     }
 
     #[setter]
-    fn set_style(&self, value: Option<String>) -> PyResult<()> {
-        self.inner.write().style = value;
+    fn set_style(&mut self, value: Option<String>) -> PyResult<()> {
+        self.write().style = value;
         Ok(())
     }
 
@@ -1086,27 +1122,75 @@ impl PyMeta {
     }
 
     #[setter]
-    fn set_standard(&self, value: Option<String>) -> PyResult<()> {
-        self.inner.write().standard = value;
+    fn set_standard(&mut self, value: Option<String>) -> PyResult<()> {
+        self.write().standard = value;
         Ok(())
+    }
+
+    #[getter]
+    fn get_language_options<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        let options = self.read().language_options.clone();
+        PyTuple::new(py, options)
+    }
+
+    fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
+        let dict = PyDict::new(py);
+
+        dict.set_item("version", self.get_version()?)?;
+
+        if let Some(value) = self.get_name()? {
+            dict.set_item("name", value)?;
+        };
+
+        if let Some(value) = self.get_title()? {
+            dict.set_item("title", value)?;
+        }
+
+        if let Some(value) = self.get_date()? {
+            dict.set_item("date", value)?;
+        };
+
+        if let Some(value) = self.get_time()? {
+            dict.set_item("time", value)?;
+        };
+
+        if let Some(value) = self.get_origin()? {
+            dict.set_item("origin", value)?;
+        };
+
+        if let Some(value) = self.get_user()? {
+            dict.set_item("user", value)?;
+        };
+
+        if let Some(value) = self.get_standard()? {
+            dict.set_item("standard", value)?;
+        };
+
+        Ok(dict.unbind())
     }
 }
 
 // ============================= Enums/ Flags =============================
 #[pyclass(name = "Text", module = "triple_s", from_py_object)]
 #[derive(Debug, Clone)]
-pub struct PyText(Arc<RwLock<Text>>);
+pub struct PyText {
+    pub(crate) value: Arc<RwLock<String>>,
+    pub(crate) variants: Arc<RwLock<Vec<PyVariant>>>,
+}
 
 impl From<Text> for PyText {
     fn from(value: Text) -> Self {
-        Self(Arc::new(RwLock::new(value)))
+        let variants = value.variant.into_iter().map(PyVariant::from).collect();
+        Self {
+            value: Arc::new(RwLock::new(value.value)),
+            variants: Arc::new(RwLock::new(variants)),
+        }
     }
 }
 
 impl From<String> for PyText {
     fn from(value: String) -> Self {
-        let content = Text::new(value);
-        content.into()
+        Text::new(value).into()
     }
 }
 
@@ -1114,55 +1198,46 @@ impl TryFrom<PyText> for Text {
     type Error = pyo3::PyErr;
 
     fn try_from(value: PyText) -> Result<Self, Self::Error> {
-        let inside = Arc::into_inner(value.0)
-            .ok_or(RustBackendError::new_err("Unable to move instance of `Text` out of `PyText` because there are some other threads are still accessing it."))?;
-        Ok(inside.into_inner())
+        Ok(Self {
+            value: value.value.read().clone(),
+            variant: value
+                .variants
+                .read()
+                .clone()
+                .into_iter()
+                .map(TextVariant::try_from)
+                .collect::<PyResult<Vec<_>>>()?,
+        })
     }
 }
 
 impl PyText {
-    pub fn from_text_instance(value: Arc<RwLock<Text>>) -> Self {
-        Self(value)
-    }
-
-    pub fn read(&self) -> ArcRwLockReadGuard<RawRwLock, Text> {
-        self.0.read_arc()
-    }
-
-    pub fn write(&mut self) -> ArcRwLockWriteGuard<RawRwLock, Text> {
-        self.0.write_arc()
-    }
-
-    fn try_insert_variant(&mut self, variant: TextVariant) -> PyResult<()> {
-        if !self.read().contains_variant(&variant) {
-            self.write().set_variant(variant);
-            Ok(())
-        } else {
-            let msg_mode = match variant.mode {
-                Mode::None => "".into(),
-                Mode::Analysis => "mode 'analysis'",
-                Mode::Interview => "mode 'interview'",
-            };
-            let msg_lan = variant
-                .language
-                .as_ref()
-                .map_or_default(|lan| format!("language '{}'", lan.to_string()));
-            let delimiter =
-                if (variant.mode != Mode::None) & (variant.language.as_ref().is_some()) {
-                    " and "
-                } else {
-                    ""
-                };
-            let message = format!(
-                "Unable to add text variant because variant with {}{}{} already exists! Call `set_variant` to overwrite existing text variant.",
-                msg_mode, delimiter, msg_lan
-            );
-            Err(exceptions::PyValueError::new_err(message))
+    fn try_insert_variant(&mut self, variant: PyVariant) -> PyResult<()> {
+        let incoming = variant.0.read().clone();
+        if self
+            .variants
+            .read()
+            .iter()
+            .any(|item| item.0.read().has_same_attribute(&incoming))
+        {
+            return Err(exceptions::PyValueError::new_err(
+                "A variant with this mode and language already exists; use set_variant to overwrite it",
+            ));
         }
+        self.variants.write().push(variant);
+        Ok(())
     }
 
-    fn insert_or_overwrite_variant(&mut self, variant: TextVariant) {
-        self.write().set_variant(variant);
+    fn insert_or_overwrite_variant(&mut self, variant: PyVariant) {
+        let incoming = variant.0.read().clone();
+        for item in self.variants.read().iter() {
+            let mut existing = item.0.write();
+            if existing.has_same_attribute(&incoming) {
+                existing.value = incoming.value;
+                return;
+            }
+        }
+        self.variants.write().push(variant);
     }
 }
 
@@ -1171,41 +1246,68 @@ impl PyText {
     #[new]
     #[pyo3(signature=(content, *variants:"Variant"))]
     fn new(content: String, variants: &Bound<'_, PyTuple>) -> PyResult<Self> {
-        let mut instance: Self = Text::new(content).into();
-        instance.write().variant = variants
-            .extract::<Vec<PyVariant>>()?
-            .into_par_iter()
-            .map(TextVariant::try_from)
-            .collect::<PyResult<Vec<TextVariant>>>()?;
+        let variants = variants.extract::<Vec<PyVariant>>()?;
+        Ok(Self {
+            value: lock_it_up(content),
+            variants: lock_it_up(variants),
+        })
+    }
 
-        Ok(instance)
+    fn _repr_html_(&self) -> PyResult<String> {
+        repr::html_print_pytext(&self)
+    }
+
+    fn __copy__(&self) -> Self {
+        self.copy()
+    }
+
+    fn __deepcopy__(&self) -> Self {
+        self.deepcopy()
+    }
+
+    fn copy(&self) -> PyText {
+        self.clone()
+    }
+
+    fn deepcopy(&self) -> PyText {
+        let variant = self
+            .variants
+            .read()
+            .iter()
+            .map(|variant| PyVariant::from(variant.0.read().clone()))
+            .collect::<Vec<PyVariant>>();
+
+        Self {
+            value: lock_it_up(self.value.read().clone()),
+            variants: lock_it_up(variant),
+        }
     }
 
     /// checks if there were any text variants
     fn has_variants(&self) -> bool {
-        self.0.read().variant.len() > 0
+        !self.variants.read().is_empty()
     }
 
     #[getter]
-    fn get_variants<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
-        let variants = self
-            .read()
-            .variant
-            .par_iter()
-            .map(|item| PyVariant::from(item.clone()))
-            .collect::<Vec<PyVariant>>();
+    fn get_value(&self) -> PyResult<String> {
+        Ok(self.value.read().clone())
+    }
 
-        PyTuple::new(py, variants)
+    #[setter]
+    fn set_value(&mut self, value: String) -> PyResult<()> {
+        *self.value.write() = value;
+        Ok(())
+    }
+
+    #[getter]
+    fn get_variants(&self) -> PyResult<VariantList> {
+        Ok(VariantList(self.variants.clone()))
     }
 
     #[setter]
     fn set_variants(&mut self, variants: &Bound<'_, PyList>) -> PyResult<()> {
-        self.write().variant = variants
-            .extract::<Vec<PyVariant>>()?
-            .into_par_iter()
-            .map(TextVariant::try_from)
-            .collect::<PyResult<Vec<TextVariant>>>()?;
-
+        let variants = variants.extract::<Vec<PyVariant>>()?;
+        self.variants = lock_it_up(variants);
         Ok(())
     }
 
@@ -1235,11 +1337,9 @@ impl PyText {
         language: Option<String>,
     ) -> PyResult<()> {
         if let Ok(variant) = variant.extract::<PyVariant>() {
-            let variant = TextVariant::try_from(variant)?;
             self.try_insert_variant(variant)
         } else if let Ok(content) = variant.extract::<String>() {
-            let pyvariant = PyVariant::new(content, language, mode)?;
-            let variant = TextVariant::try_from(pyvariant)?;
+            let variant = PyVariant::new(content, language, mode)?;
             self.try_insert_variant(variant)
         } else {
             Err(exceptions::PyValueError::new_err(
@@ -1274,12 +1374,10 @@ impl PyText {
         language: Option<String>,
     ) -> PyResult<()> {
         if let Ok(variant) = variant.extract::<PyVariant>() {
-            let variant = TextVariant::try_from(variant)?;
             self.insert_or_overwrite_variant(variant);
             Ok(())
         } else if let Ok(content) = variant.extract::<String>() {
-            let pyvariant = PyVariant::new(content, language, mode)?;
-            let variant = TextVariant::try_from(pyvariant)?;
+            let variant = PyVariant::new(content, language, mode)?;
             self.insert_or_overwrite_variant(variant);
             Ok(())
         } else {
@@ -1290,9 +1388,133 @@ impl PyText {
     }
 }
 
+#[pyclass(name = "VariantList", module = "triple_s", from_py_object)]
+pub struct VariantList(Arc<RwLock<Vec<PyVariant>>>);
+
+impl Clone for VariantList {
+    fn clone(&self) -> Self {
+        let interior = self.0.read()
+            .clone()
+            .into_iter()
+            .map(|item| item.deepcopy())
+            .collect::<Vec<PyVariant>>();
+        Self(lock_it_up(interior))
+    }
+}
+
+impl VariantList {
+    pub fn from_py_variants(variants: Vec<PyVariant>) -> Self {
+        Self(lock_it_up(variants))
+    }
+
+    pub(crate) fn read(&self) -> ArcRwLockReadGuard<RawRwLock, Vec<PyVariant>> {
+        self.0.read_arc()
+    }
+
+    pub(crate) fn write(&self) -> ArcRwLockWriteGuard<RawRwLock, Vec<PyVariant>> {
+        self.0.write_arc()
+    }
+
+    fn try_insert_variant(&mut self, variant: PyVariant) -> PyResult<()> {
+        let incoming = variant.0.read().clone();
+        if self
+            .read()
+            .iter()
+            .any(|item| item.0.read().has_same_attribute(&incoming))
+        {
+            return Err(exceptions::PyValueError::new_err(
+                "A variant with this mode and language already exists; use set_variant to overwrite it",
+            ));
+        }
+        self.write().push(variant);
+        Ok(())
+    }
+
+    // fn insert_or_overwrite_variant(&mut self, variant: PyVariant) {
+    //     let incoming = variant.0.read().clone();
+    //     for item in self.read().iter() {
+    //         let mut existing = item.0.write();
+    //         if existing.has_same_attribute(&incoming) {
+    //             existing.value = incoming.value;
+    //             return;
+    //         }
+    //     }
+    //     self.write().push(variant);
+    // }
+}
+
+#[pymethods]
+impl VariantList {
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let collection = PyList::new(py, self.read().clone())?;
+        py.import("pprint")?
+            .getattr("pformat")?
+            .call1((collection,))?
+            .extract()
+    }
+
+    fn __len__(&self) -> PyResult<usize> {
+        Ok(self.read().len())
+    }
+
+    fn __getitem__(&self, index: isize) -> PyResult<PyVariant> {
+        let index = normalize_py_index(index, self.read().len())
+            .ok_or(exceptions::PyIndexError::new_err(index))?;
+        Ok(self
+            .read()
+            .get(index)
+            .ok_or(exceptions::PyIndexError::new_err(index))?
+            .clone())
+    }
+
+    fn append(&mut self, variant: PyVariant) -> PyResult<()> {
+        self.write().push(variant);
+        Ok(())
+    }
+
+    fn extend(&mut self, variants: Vec<PyVariant>) -> PyResult<()> {
+        for variant in variants {
+            self.try_insert_variant(variant)?
+        }
+        Ok(())
+    }
+
+    /// remove first text variant in the list, and returns it.
+    fn popleft(&mut self) -> PyResult<Option<PyVariant>> {
+        if self.read().is_empty() {
+            Ok(None)
+        } else {
+            let removed = self.write().remove(0);
+            let removed = removed.deepcopy();
+            Ok(Some(removed))
+        }
+    }
+
+    /// remove the last text variant in the list, and returns it.
+    fn pop(&mut self) -> PyResult<Option<PyVariant>> {
+        let poped = self.write().pop().map(|item| item.deepcopy());
+        Ok(poped)
+    }
+
+    fn __iadd__(&mut self, other: &Bound<'_, PyAny>) -> PyResult<()> {
+        if let Ok(v_list) = other.extract::<VariantList>() {
+            let to_extend = v_list.read().clone();
+            self.extend(to_extend)
+        } else if let Ok(v_list) = other.extract::<Vec<PyVariant>>() {
+            let v_list = v_list.into_iter()
+                .map(|item| item.deepcopy())
+                .collect::<Vec<PyVariant>>();
+            self.extend(v_list)
+        } else {
+            let name = other.get_type().name()?.extract::<String>()?;
+            Err(exceptions::PyTypeError::new_err(format!("Expect list of Variant instance, got: {}", name)))
+        }
+    }
+}
+
 #[pyclass(name = "Variant", module = "triple_s", from_py_object)]
 #[derive(Debug, Clone)]
-pub struct PyVariant(Arc<RwLock<TextVariant>>);
+pub struct PyVariant(pub(crate) Arc<RwLock<TextVariant>>);
 
 impl From<TextVariant> for PyVariant {
     fn from(value: TextVariant) -> Self {
@@ -1304,9 +1526,7 @@ impl TryFrom<PyVariant> for TextVariant {
     type Error = pyo3::PyErr;
 
     fn try_from(value: PyVariant) -> Result<Self, Self::Error> {
-        let inside = Arc::into_inner(value.0)
-            .ok_or(exceptions::PyRuntimeError::new_err("Unable to move instance of `TextVariant` out of `PyVariant` because there are some other threads are still accessing it."))?;
-        Ok(inside.into_inner())
+        Ok(value.0.read().clone())
     }
 }
 
@@ -1321,20 +1541,52 @@ impl PyVariant {
             ));
         };
 
-        let language = language.map(Language::new);
         let mode = mode
             .map(|s| Mode::from_str(&s))
             .transpose()
             .map_err(|err| to_backend_err(err.into()))?
             .unwrap_or_default();
 
-        let instance = TextVariant {
-            value: content,
-            language: language,
-            mode: mode,
-        };
+        let instance = TextVariant::new(content, mode, language)
+            .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))?;
 
         Ok(instance.into())
+    }
+
+    pub fn __repr__(&self) -> PyResult<String> {
+        let mut repr = format!(r#"Variant(value='{}'"#, &self.0.read().value);
+        repr = if let Some(mode) = self.get_mode() {
+            format!("{}, mode='{}'", repr, mode)
+        } else {
+            repr
+        };
+        repr = if let Some(language) = self.get_language() {
+            format!("{}, language='{}'", repr, language)
+        } else {
+            repr
+        };
+        let repr = format!("{})", repr);
+        Ok(repr)
+    }
+
+    fn _repr_html_(&self) -> PyResult<String> {
+        repr::html_print_pyvariant(&self)
+    }
+
+    fn copy(&self) -> Self {
+        Self(self.0.clone())
+    }
+
+    fn __copy__(&self) -> Self {
+        self.copy()
+    }
+
+    fn deepcopy(&self) -> Self {
+        Self(lock_it_up(self.0.read().clone()))
+    }
+
+    fn __deepcopy__(&self) -> Self {
+        self.deepcopy()
     }
 
     #[getter]
@@ -1342,14 +1594,46 @@ impl PyVariant {
         self.0.read().value.clone()
     }
 
-    #[getter]
-    fn get_mode(&self) -> PyMode {
-        self.0.read().mode.clone().into()
+    #[setter]
+    fn set_value(&self, value: String) -> PyResult<()> {
+        self.0.write().value = value;
+        Ok(())
     }
 
     #[getter]
-    fn get_language(&self) -> Option<PyLanguage> {
-        self.0.read().language.as_ref().map(|item| PyLanguage::from(item.clone()))
+    pub fn get_mode(&self) -> Option<String> {
+        self.0.read().mode.try_as_str().map(|s| s.to_string())
+    }
+
+    #[setter]
+    fn set_mode(&self, mode: Option<&str>) -> PyResult<()> {
+        let mode = mode
+            .map(Mode::from_str)
+            .transpose()
+            .map_err(|err| {
+                exceptions::PyValueError::new_err(format!(
+                    "{}, value should only be one of {:?}",
+                    err.to_string(),
+                    Mode::all_mode_options().as_slice()
+                ))
+            })?
+            .unwrap_or_default();
+
+        self.0.write().mode = mode;
+        Ok(())
+    }
+
+    #[getter]
+    pub fn get_language(&self) -> Option<String> {
+        self.0.read().get_language()
+    }
+
+    #[setter]
+    fn set_language(&self, language: Option<&str>) -> PyResult<()> {
+        self.0
+            .write()
+            .set_language(language)
+            .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
     }
 }
 
@@ -1368,39 +1652,6 @@ impl From<PyFormat> for sss::CodeFormat {
     }
 }
 
-// TODO! Add documentation
-#[pyclass(dict, module = "triple_s", name = "Mode")]
-#[derive(Debug, PartialEq)]
-pub struct PyMode(pub sss::Mode);
-
-impl From<sss::Mode> for PyMode {
-    fn from(value: sss::Mode) -> Self {
-        Self(value)
-    }
-}
-
-impl From<PyMode> for sss::Mode {
-    fn from(value: PyMode) -> Self {
-        value.0
-    }
-}
-
-#[pyclass(dict, module = "triple_s", name = "Language")]
-pub struct PyLanguage(pub sss::Language);
-
-impl From<sss::Language> for PyLanguage {
-    fn from(value: sss::Language) -> Self {
-        Self(value)
-    }
-}
-
-impl From<PyLanguage> for sss::Language {
-    fn from(value: PyLanguage) -> Self {
-        value.0
-    }
-}
-
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -1409,18 +1660,17 @@ mod test {
     fn test_create_new_variant() {
         const VALUE: &str = "variant";
         const LANGUAGE: &str = "gb";
-        const MODE: Mode = Mode::Analysis;
         const MODE_STR: &str = "analysis";
 
         let instance = PyVariant::new(
             VALUE.into(),
             Some(LANGUAGE.into()),
-            Some(MODE_STR.into())
+            Some(MODE_STR.into()),
         )
         .unwrap();
 
         assert_eq!(instance.get_value().as_str(), VALUE);
-        assert_eq!(instance.get_mode().0, MODE);
+        assert_eq!(instance.get_mode(), Some(MODE_STR.into()));
     }
 
     #[test]
