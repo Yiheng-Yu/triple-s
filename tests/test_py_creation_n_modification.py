@@ -133,7 +133,7 @@ def test_modify_question_label_via_survey_indexing(survey):
     assert survey.record.content[3].label.value != original_label
 
 
-def test_create_question(sss):
+def test_create_question():
     raise NotImplementedError
 
 

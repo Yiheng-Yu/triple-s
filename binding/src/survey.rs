@@ -28,7 +28,9 @@ use crate::{
     utils::{lock_it_up, normalize_py_index, to_backend_err}
 };
 
+/// Read a Triple-S file and return its survey.
 #[pyfunction]
+#[pyo3(signature = (path: "str") -> "Survey")]
 pub fn read_file(path: &str) -> PyResult<PySurvey> {
     let survey = sss::read_sss_file(path)
         .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))?;
@@ -77,10 +79,13 @@ impl PySurvey {
         instance.to_sss_classic().map_err(to_backend_err)
     }
 
+    /// Return a shallow copy sharing the underlying data.
     fn __copy__(&self) -> Self {
         self.copy()
     }
 
+    /// Return an independent deep copy.
+    #[pyo3(signature = () -> "Survey")]
     fn __deepcopy__(&self) -> Self {
         self.deepcopy()
     }
@@ -104,41 +109,50 @@ impl PySurvey {
         }
     }
 
+    /// Survey metadata; changes are shared with this survey.
     #[getter]
     fn get_meta<'py>(&self) -> PyResult<PyMeta> {
         Ok(PyMeta::from_parent(&self))
     }
 
+    /// Return the title.
     #[getter]
     fn get_title<'py>(&self) -> Option<String> {
         self.meta.read().title.clone()
     }
 
+    /// Set the title.
     #[setter]
     fn set_title<'py>(&self, title: Option<String>) {
         self.meta.write().title = title;
     }
 
+    /// Return the name.
     #[getter]
     fn get_name(&self) -> Option<String> {
         self.meta.read().name.clone()
     }
 
+    /// Set the name.
     #[setter]
     fn set_name(&self, name: Option<String>) {
         self.meta.write().name = name;
     }
 
+    /// Survey record; changes are shared with this survey.
     #[getter]
     fn get_record<'py>(&self) -> PyResult<PyRecord> {
         Ok(PyRecord::from_parent(&self))
     }
 
+    /// Return the survey questions as a tuple.
     #[getter]
     fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         self.get_record()?.get_content(py)
     }
 
+    /// find question via question name, case insensitive
+    #[pyo3(signature = (question_name: "str") -> "Question | None")]
     fn get_question(&self, question_name: &str) -> PyResult<Option<PyQuestion>> {
         self.get_record().map(|record| record.get(question_name))
     }
@@ -163,6 +177,7 @@ impl PySurvey {
 pub struct PyRecord(Arc<RwLock<Record>>);
 
 impl PyRecord {
+    /// Create a view sharing the parent survey’s data.
     pub fn from_parent(survey: &PySurvey) -> Self {
         Self(survey.record.clone())
     }
@@ -183,6 +198,7 @@ impl PyRecord {
         self.read().to_sss_classic().map_err(to_backend_err)
     }
 
+    /// Return the number of questions.
     fn __len__(&self) -> usize {
         self.read().content.len()
     }
@@ -198,6 +214,7 @@ impl PyRecord {
         Ok(self.read().id.clone())
     }
 
+    /// Set the id.
     #[setter]
     fn set_id(&mut self, value: char) -> PyResult<()> {
         self.write().id = value;
@@ -215,12 +232,15 @@ impl PyRecord {
         PyTuple::new(py, content)
     }
 
+    /// Find a question by name, ignoring case; return None if absent.
+    #[pyo3(signature = (question_name: "str") -> "Question | None")]
     fn get(&self, question_name: &str) -> Option<PyQuestion> {
         self.read()
             .get_question(question_name)
             .map(|item| PyQuestion(item.clone()))
     }
 
+    /// Return a question by index or name; raise IndexError if absent.
     fn __getitem__<'py>(&self, index: &Bound<'py, PyAny>) -> PyResult<PyQuestion> {
         if let Ok(number) = index.extract::<usize>() {
             let guard = self.read();
@@ -243,6 +263,8 @@ impl PyRecord {
         }
     }
 
+    /// Append an independent copy of a question with a unique name.
+    #[pyo3(signature = (question: "Question") -> "None")]
     fn append(&mut self, question: PyQuestion) -> PyResult<()> {
         let question_name = question.get_name()?;
         if !self.read().has_question(&question_name) {
@@ -280,6 +302,7 @@ impl PyRecord {
     //     }
 }
 
+/// A survey question and its response definition.
 #[pyclass(module = "triple_s", name = "Question", from_py_object)]
 pub struct PyQuestion(Arc<RwLock<Question>>);
 
@@ -407,17 +430,21 @@ impl PyQuestion {
 
 #[pymethods]
 impl PyQuestion {
+    /// Question construction is not implemented yet.
     #[new]
     fn new() -> Self {
         todo!()
     }
 
+    /// Export fragments of `Question` instance from from SSS classic
+    #[pyo3(signature = () -> "str")]
     fn to_sss_classic(&self) -> PyResult<String> {
         self.read()
             .to_sss_classic()
             .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 
+    /// Return a string representation.
     fn __repr__(&self) -> PyResult<String> {
         Ok(format!(
             r#"Question(name="{}")"#,
@@ -425,17 +452,20 @@ impl PyQuestion {
         ))
     }
 
+    /// Return the name.
     #[getter]
     fn get_name(&self) -> PyResult<String> {
         Ok(self.read().name.clone())
     }
 
+    /// Set the name.
     #[setter]
     fn set_name(&mut self, value: &str) -> PyResult<()> {
         self.write().name = value.into();
         Ok(())
     }
 
+    /// Return the question label and its text variants.
     #[getter]
     fn get_label(&self) -> PyResult<PyText> {
         let content = self.read().label.clone();
@@ -443,6 +473,7 @@ impl PyQuestion {
         Ok(output)
     }
 
+    /// Set the label from text or a Text instance.
     #[setter]
     fn set_label(&mut self, label: &Bound<'_, PyAny>) -> PyResult<()> {
         if let Ok(content) = label.extract::<String>() {
@@ -461,11 +492,13 @@ impl PyQuestion {
         }
     }
 
+    /// Return the filter.
     #[getter]
     fn get_filter(&self) -> PyResult<Option<String>> {
         Ok(self.read().filter.clone())
     }
 
+    /// Set the filter.
     #[setter]
     fn set_filter(&mut self, value: Option<String>) -> PyResult<()> {
         self.write().filter = value.clone();
@@ -899,6 +932,7 @@ impl PyQuestion {
 //     }
 // }
 
+/// meta information about the survey entity.
 #[pyclass(dict, weakref, module = "triple_s", name = "Meta", from_py_object)]
 pub struct PyMeta {
     inner: Arc<RwLock<Meta>>,
@@ -915,6 +949,7 @@ impl Clone for PyMeta {
 }
 
 impl PyMeta {
+    /// Create a view sharing the parent survey’s data.
     pub fn from_parent(survey: &PySurvey) -> Self {
         Self {
             inner: survey.meta.clone(),
@@ -936,7 +971,19 @@ impl PyMeta {
     /// Optional text fields default to None; languages default to [], modes to [None].
     /// Modes accept "analysis", "interview", or None. Invalid versions or modes raise ValueError.
     #[new]
-    #[pyo3(signature = (version, name=None, title=None, date=None, time=None, origin=None, user=None, style=None, language_options=None, mode_options=None, standard=None))]
+    #[pyo3(signature = (
+        version: "str",
+        name: "str | None" = None,
+        title: "str | None" = None,
+        date: "str | None" = None,
+        time: "str | None" = None,
+        origin: "str | None" = None,
+        user: "str | None" = None,
+        style: "str | None" = None,
+        language_options: "list[str] | None" = None,
+        mode_options: "list[str | None] | None" = None,
+        standard: "str | None" = None,
+    ))]
     fn new(
         version: &str,
         name: Option<String>,
@@ -980,6 +1027,8 @@ impl PyMeta {
         })
     }
 
+    /// ** Introduced since sss 1.2 **
+    /// list of all available `mod` options
     #[getter]
     fn get_mode_options<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let options = self.read().mode_options.iter()
@@ -998,6 +1047,7 @@ impl PyMeta {
     //     }
 
     /// make a shallow copy of current instance.
+    #[pyo3(signature = () -> "Meta")]
     fn copy(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -1005,16 +1055,19 @@ impl PyMeta {
     }
 
     /// make a deep copy of current instance
+    #[pyo3(signature = () -> "Meta")]
     fn deepcopy(&self) -> Self {
         self.clone()
     }
 
-    /// SSS Version
+    /// The version attribute is used to indicate the version of the Triple-S
+    /// standard that applies to this specification.
     #[getter]
     fn get_version(&self) -> PyResult<&str> {
         Ok(self.read().version.as_str())
     }
 
+    /// Set the version.
     #[setter]
     fn set_version(&mut self, value: String) -> PyResult<()> {
         let version = Version::from_str(&value)
@@ -1029,6 +1082,7 @@ impl PyMeta {
         Ok(self.read().name.clone())
     }
 
+    /// Set the name.
     #[setter]
     fn set_name(&mut self, value: Option<String>) -> PyResult<()> {
         self.write().name = value;
@@ -1041,6 +1095,7 @@ impl PyMeta {
         Ok(self.inner.read().date.clone())
     }
 
+    /// Set the date.
     #[setter]
     fn set_date(&mut self, value: Option<String>) -> PyResult<()> {
         self.write().date = value;
@@ -1053,17 +1108,20 @@ impl PyMeta {
         Ok(self.inner.read().time.clone())
     }
 
+    /// Set the time.
     #[setter]
     fn set_time(&mut self, value: Option<String>) -> PyResult<()> {
         self.write().time = value;
         Ok(())
     }
 
+    /// Return the title.
     #[getter]
     fn get_title(&self) -> PyResult<Option<String>> {
         Ok(self.inner.read().title.clone())
     }
 
+    /// Set the title.
     #[setter]
     fn set_title(&mut self, value: Option<String>) -> PyResult<()> {
         self.write().title = value;
@@ -1076,6 +1134,7 @@ impl PyMeta {
         Ok(self.inner.read().origin.clone())
     }
 
+    /// Set the origin.
     #[setter]
     fn set_origin(&mut self, value: Option<String>) -> PyResult<()> {
         self.write().origin = value;
@@ -1088,51 +1147,53 @@ impl PyMeta {
         Ok(self.inner.read().user.clone())
     }
 
+    /// Set the user.
     #[setter]
     fn set_user(&mut self, value: Option<String>) -> PyResult<()> {
         self.write().user = value;
         Ok(())
     }
 
+    /// Return the style.
     #[getter]
     fn get_style(&self) -> PyResult<Option<String>> {
         Ok(self.inner.read().style.clone())
     }
 
+    /// Set the style.
     #[setter]
     fn set_style(&mut self, value: Option<String>) -> PyResult<()> {
         self.write().style = value;
         Ok(())
     }
 
-    /// This statement is used to indicate that some aspect of the SSS definition meets a defined standard
-    /// that may reduce the amount of checking required by an import program.
-    /// The only standard_option provided in version 1.1 is NAMES. The definition of SSS standard names is:
-    /// - consist of 1-8 characters
-    /// - consist of only the characters A-Z (and a-z) and 0-9
-    /// - start with a letter (A-Z or a-z)
-    /// - case insensitive (i.e. upper and lower case are equivalent)
-    /// - unique within the survey (e.g. Q1 and Q001 are different, q1 and Q1 are the same)
-    /// - appear as the "name_text" without leading, trailing, or embedded blanks
-    /// If all variable names in the SSS definition file conform to this definition then the statement STANDARD
-    /// NAMES should appear between the VERSION and SURVEY statements.
+    /// ** Deprecated after sss version 1.2 **
+    /// (Optional) indicate that some aspect of the triple-s definition meets a
+    /// defined standard that may reduce the amount of checking required by an
+    /// import program. The only value that option_setting may have in
+    /// version 1.2 is 'standardnames'.
     #[getter]
     fn get_standard(&self) -> PyResult<Option<String>> {
         Ok(self.inner.read().standard.clone())
     }
 
+    /// Set the standard.
     #[setter]
     fn set_standard(&mut self, value: Option<String>) -> PyResult<()> {
         self.write().standard = value;
         Ok(())
     }
 
+    /// ** Introduced since sss 1.2 **
+    /// list of all available language options
     #[getter]
     fn get_language_options<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let options = self.read().language_options.clone();
         PyTuple::new(py, options)
     }
 
+    /// Return version and populated name, title, date, time, origin, user, and standard fields.
+    #[pyo3(signature = () -> "dict[str, str]")]
     fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
         let dict = PyDict::new(py);
 
@@ -1171,6 +1232,7 @@ impl PyMeta {
 }
 
 // ============================= Enums/ Flags =============================
+/// Default text with optional language and mode variants.
 #[pyclass(name = "Text", module = "triple_s", from_py_object)]
 #[derive(Debug, Clone)]
 pub struct PyText {
@@ -1243,8 +1305,9 @@ impl PyText {
 
 #[pymethods]
 impl PyText {
+    /// Create default text with optional Variant arguments.
     #[new]
-    #[pyo3(signature=(content, *variants:"Variant"))]
+    #[pyo3(signature = (content: "str", *variants: "Variant"))]
     fn new(content: String, variants: &Bound<'_, PyTuple>) -> PyResult<Self> {
         let variants = variants.extract::<Vec<PyVariant>>()?;
         Ok(Self {
@@ -1253,22 +1316,27 @@ impl PyText {
         })
     }
 
+    /// Return an HTML representation for notebooks.
     fn _repr_html_(&self) -> PyResult<String> {
         repr::html_print_pytext(&self)
     }
 
+    /// Return a shallow copy sharing the underlying data.
     fn __copy__(&self) -> Self {
         self.copy()
     }
 
+    /// Return an independent deep copy.
     fn __deepcopy__(&self) -> Self {
         self.deepcopy()
     }
 
+    /// Return a shallow copy sharing the underlying data.
     fn copy(&self) -> PyText {
         self.clone()
     }
 
+    /// Return an independent deep copy.
     fn deepcopy(&self) -> PyText {
         let variant = self
             .variants
@@ -1288,22 +1356,26 @@ impl PyText {
         !self.variants.read().is_empty()
     }
 
+    /// the default value
     #[getter]
     fn get_value(&self) -> PyResult<String> {
         Ok(self.value.read().clone())
     }
 
+    /// Set the value.
     #[setter]
     fn set_value(&mut self, value: String) -> PyResult<()> {
         *self.value.write() = value;
         Ok(())
     }
 
+    /// variants
     #[getter]
     fn get_variants(&self) -> PyResult<VariantList> {
         Ok(VariantList(self.variants.clone()))
     }
 
+    /// Replace the text variants with the supplied list.
     #[setter]
     fn set_variants(&mut self, variants: &Bound<'_, PyList>) -> PyResult<()> {
         let variants = variants.extract::<Vec<PyVariant>>()?;
@@ -1329,7 +1401,7 @@ impl PyText {
     ///     Create and add a variant from text:
     ///
     ///         obj.add_variant("Hello world", mode="interview", language="en")
-    #[pyo3(signature=(variant:"Variant|str", mode=None, language=None))]
+    #[pyo3(signature = (variant: "Variant | str", mode: "str | None" = None, language: "str | None" = None) -> "None")]
     fn add_variant(
         &mut self,
         variant: &Bound<'_, PyAny>,
@@ -1348,25 +1420,9 @@ impl PyText {
         }
     }
 
-    /// Add a text variant, or overwrite it if variant with same `mode` or `language` exists.
-    ///
-    /// Args:
-    ///     variant (Variant | str): An existing variant or the text content of a
-    ///         new variant.
-    ///     mode (str | None): The mode of the new variant. Only valid when
-    ///         `variant` is a string.
-    ///     language (str | None): The language of the new variant. Only valid when
-    ///         `variant` is a string.
-    ///
-    /// Examples:
-    ///     Add an existing variant:
-    ///
-    ///         obj.set_variant(variant)
-    ///
-    ///     Create and add a variant from text:
-    ///
-    ///         obj.set_variant("Hello world", mode="interview", language="en")
-    #[pyo3(signature=(variant:"Variant|str", mode=None, language=None))]
+    /// Will modify existing variant if they have the same `mode` and `language`
+    /// attribute or append to the current `self.variant` if not
+    #[pyo3(signature = (variant: "Variant | str", mode: "str | None" = None, language: "str | None" = None) -> "None")]
     fn set_variant(
         &mut self,
         variant: &Bound<'_, PyAny>,
@@ -1388,6 +1444,7 @@ impl PyText {
     }
 }
 
+/// A mutable collection of text variants.
 #[pyclass(name = "VariantList", module = "triple_s", from_py_object)]
 pub struct VariantList(Arc<RwLock<Vec<PyVariant>>>);
 
@@ -1403,6 +1460,7 @@ impl Clone for VariantList {
 }
 
 impl VariantList {
+    /// Create a collection from the supplied variants.
     pub fn from_py_variants(variants: Vec<PyVariant>) -> Self {
         Self(lock_it_up(variants))
     }
@@ -1445,6 +1503,7 @@ impl VariantList {
 
 #[pymethods]
 impl VariantList {
+    /// Return a string representation.
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let collection = PyList::new(py, self.read().clone())?;
         py.import("pprint")?
@@ -1453,10 +1512,12 @@ impl VariantList {
             .extract()
     }
 
+    /// Return the number of variants.
     fn __len__(&self) -> PyResult<usize> {
         Ok(self.read().len())
     }
 
+    /// Return a variant by index; negative indices count from the end.
     fn __getitem__(&self, index: isize) -> PyResult<PyVariant> {
         let index = normalize_py_index(index, self.read().len())
             .ok_or(exceptions::PyIndexError::new_err(index))?;
@@ -1467,11 +1528,15 @@ impl VariantList {
             .clone())
     }
 
+    /// Append a variant.
+    #[pyo3(signature = (variant: "Variant") -> "None")]
     fn append(&mut self, variant: PyVariant) -> PyResult<()> {
         self.write().push(variant);
         Ok(())
     }
 
+    /// Append variants; raise ValueError for duplicate mode and language pairs.
+    #[pyo3(signature = (variants: "list[Variant]") -> "None")]
     fn extend(&mut self, variants: Vec<PyVariant>) -> PyResult<()> {
         for variant in variants {
             self.try_insert_variant(variant)?
@@ -1480,6 +1545,7 @@ impl VariantList {
     }
 
     /// remove first text variant in the list, and returns it.
+    #[pyo3(signature = () -> "Variant | None")]
     fn popleft(&mut self) -> PyResult<Option<PyVariant>> {
         if self.read().is_empty() {
             Ok(None)
@@ -1491,11 +1557,13 @@ impl VariantList {
     }
 
     /// remove the last text variant in the list, and returns it.
+    #[pyo3(signature = () -> "Variant | None")]
     fn pop(&mut self) -> PyResult<Option<PyVariant>> {
         let poped = self.write().pop().map(|item| item.deepcopy());
         Ok(poped)
     }
 
+    /// Extend in place from a VariantList or list of variants.
     fn __iadd__(&mut self, other: &Bound<'_, PyAny>) -> PyResult<()> {
         if let Ok(v_list) = other.extract::<VariantList>() {
             let to_extend = v_list.read().clone();
@@ -1512,6 +1580,24 @@ impl VariantList {
     }
 }
 
+/// From sss xml 2.0 onwards supports multi-language
+///
+/// For sss xml 2.0:
+/// ```text
+/// The text for a survey <title>, variable <label> or values
+/// <value> element may contain any number of specialised text elements.
+/// ```
+///
+/// Example sss xml 2.0 text, note that one entry can contain both `label` and
+/// `language` attribute
+/// ```xml
+/// <label>Age
+///     <text xml:lang="en-GB" mode="interview">How old are you?</text>
+///     <text xml:lang="fr" mode="interview">Quel est votre âge?</text>
+///     <text xml:lang="en-GB" mode="analysis">Age of respondent</text>
+///     <text xml:lang="fr" mode="analysis">Âge de répondant</text>
+/// </label>
+/// ```
 #[pyclass(name = "Variant", module = "triple_s", from_py_object)]
 #[derive(Debug, Clone)]
 pub struct PyVariant(pub(crate) Arc<RwLock<TextVariant>>);
@@ -1532,8 +1618,9 @@ impl TryFrom<PyVariant> for TextVariant {
 
 #[pymethods]
 impl PyVariant {
+    /// Create a text variant; supply a language tag or mode (analysis or interview).
     #[new]
-    #[pyo3(signature=(content, language=None, mode=None))]
+    #[pyo3(signature = (content: "str", language: "str | None" = None, mode: "str | None" = None))]
     fn new(content: String, language: Option<String>, mode: Option<String>) -> PyResult<Self> {
         if mode.is_none() & language.is_none() {
             return Err(exceptions::PyValueError::new_err(
@@ -1553,6 +1640,7 @@ impl PyVariant {
         Ok(instance.into())
     }
 
+    /// Return a string representation.
     pub fn __repr__(&self) -> PyResult<String> {
         let mut repr = format!(r#"Variant(value='{}'"#, &self.0.read().value);
         repr = if let Some(mode) = self.get_mode() {
@@ -1569,42 +1657,51 @@ impl PyVariant {
         Ok(repr)
     }
 
+    /// Return an HTML representation for notebooks.
     fn _repr_html_(&self) -> PyResult<String> {
         repr::html_print_pyvariant(&self)
     }
 
+    /// Return a shallow copy sharing the underlying data.
     fn copy(&self) -> Self {
         Self(self.0.clone())
     }
 
+    /// Return a shallow copy sharing the underlying data.
     fn __copy__(&self) -> Self {
         self.copy()
     }
 
+    /// Return an independent deep copy.
     fn deepcopy(&self) -> Self {
         Self(lock_it_up(self.0.read().clone()))
     }
 
+    /// Return an independent deep copy.
     fn __deepcopy__(&self) -> Self {
         self.deepcopy()
     }
 
+    /// Return the variant text.
     #[getter]
     fn get_value(&self) -> String {
         self.0.read().value.clone()
     }
 
+    /// Set the value.
     #[setter]
     fn set_value(&self, value: String) -> PyResult<()> {
         self.0.write().value = value;
         Ok(())
     }
 
+    /// Return analysis, interview, or None for both modes.
     #[getter]
     pub fn get_mode(&self) -> Option<String> {
         self.0.read().mode.try_as_str().map(|s| s.to_string())
     }
 
+    /// Set analysis, interview, or None; raise ValueError for invalid modes.
     #[setter]
     fn set_mode(&self, mode: Option<&str>) -> PyResult<()> {
         let mode = mode
@@ -1623,11 +1720,13 @@ impl PyVariant {
         Ok(())
     }
 
+    /// Return the language tag, or None if unspecified.
     #[getter]
     pub fn get_language(&self) -> Option<String> {
         self.0.read().get_language()
     }
 
+    /// set `language` to `Language::Name(value)`
     #[setter]
     fn set_language(&self, language: Option<&str>) -> PyResult<()> {
         self.0
@@ -1637,6 +1736,7 @@ impl PyVariant {
     }
 }
 
+/// Numeric or literal response code format.
 #[pyclass(name = "Format", module = "config")]
 pub struct PyFormat(pub sss::CodeFormat);
 
