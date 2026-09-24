@@ -5,15 +5,18 @@ mod question;
 mod response;
 mod texts;
 
-pub use flags::{DataSource, Mode, Version};
+pub use flags::{DataSource, Mode, Version, CodeFormat, Usage};
 pub use meta::Meta;
 pub use record::Record;
 pub use question::Question;
+pub use texts::{Text, Variant};
 
 use crate::utils::ArcLock;
+
+#[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
-#[pyclass(module = "triple_s", name = "Survey")]
+#[cfg_attr(feature="pyo3", pyclass(module = "triple_s", name = "Survey"))]
 pub struct Survey {
     pub meta: Meta, // holy hell this works
     pub record: Record,

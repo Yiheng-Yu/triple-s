@@ -1,18 +1,23 @@
 use std::str::FromStr;
 
+#[cfg(feature = "pyo3")]
 use pyo3::{PyResult, exceptions, prelude::*, types::PyDict};
 
-use super::{Mode, Version};
-use crate::utils;
+use crate::{prelude::*, utils};
 
-#[pyclass(
-    dict,
-    weakref,
-    module = "triple_s",
-    name = "Meta",
-    from_py_object,
-    get_all,
-    set_all
+use super::{Mode, Version};
+
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(
+        dict,
+        weakref,
+        module = "triple_s",
+        name = "Meta",
+        from_py_object,
+        get_all,
+        set_all
+    )
 )]
 #[derive(Debug, Clone)]
 pub struct Meta {
@@ -36,7 +41,7 @@ pub struct Meta {
 
     /// user who created it
     pub user: Option<String>,
-    
+
     /// html css styling
     pub style: Option<String>,
 
@@ -74,6 +79,7 @@ impl Meta {
     }
 }
 
+#[cfg(feature = "pyo3")]
 #[pymethods]
 impl Meta {
     /// Create survey metadata for the given Triple-S version.
@@ -94,7 +100,7 @@ impl Meta {
         mode_options: "list[str] | None" = None,
         standard: "str | None" = None,
     ))]
-    fn new(
+    fn py_new(
         version: &str,
         name: Option<String>,
         title: Option<String>,
@@ -107,6 +113,7 @@ impl Meta {
         mode_options: Option<Vec<String>>,
         standard: Option<String>,
     ) -> PyResult<Self> {
+        println!("TODO: MAKE META::NEW AVAIBALE TO ALL FEATURES");
         let version = Version::from_str(version)
             .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))?;
 
@@ -131,7 +138,11 @@ impl Meta {
             .map(|languages| {
                 languages
                     .iter()
-                    .map(|s| utils::validate_language_tag(&s).map(|s| s.to_string()))
+                    .map(|s| {
+                        utils::validate_language_tag(&s)
+                            .map(|s| s.to_string())
+                            .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
+                    })
                     .collect::<PyResult<Vec<String>>>()
             })
             .transpose()?

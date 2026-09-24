@@ -1,3 +1,4 @@
+#[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
 use std::sync::Arc;
@@ -9,7 +10,7 @@ use super::{
     DataSource,
 };
 
-#[pyclass(module = "triple_s", name = "Record", skip_from_py_object)]
+#[cfg_attr(feature="pyo3", pyclass(module = "triple_s", name = "Record", skip_from_py_object))]
 #[derive(Debug, Default, Clone)]
 pub struct Record {
     pub id: char,
@@ -33,6 +34,7 @@ pub struct Record {
     pub content: ArcLock<Vec<ArcLock<Question>>>
 }
 
+#[cfg(feature = "pyo3")]
 #[pymethods]
 impl Record {
 

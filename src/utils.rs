@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use parking_lot::{RwLock};
-use pyo3::{PyErr, exceptions::PyValueError};
+
+use anyhow::{Context, Result};
 pub type ArcLock<T> = Arc<RwLock<T>>;
 
 #[inline]
@@ -24,13 +25,8 @@ pub fn normalize_py_index(index: isize, total: usize) -> Option<usize> {
     }
 }
 
-pub fn validate_language_tag(language: &str) -> Result<&str, PyErr> {
-    let _ = oxilangtag::LanguageTag::parse(language).map_err(|err| {
-        PyValueError::new_err(format!(
-            "Error parsing language tag: {}. Detail: {}",
-            language,
-            err.to_string()
-        ))
-    })?;
+pub fn validate_language_tag(language: &str) -> Result<&str> {
+    let _ = oxilangtag::LanguageTag::parse(language)
+        .with_context(|| format!("Unknown language tag: '{}'.", language))?;
     Ok(language)
 }

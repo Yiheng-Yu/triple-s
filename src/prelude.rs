@@ -37,3 +37,12 @@ pub trait Wrap: Sized {
         Ok(self)
     }
 }
+
+pub trait Flag:strum::IntoEnumIterator {
+    fn as_str(&self) -> &'static str;
+    fn available_options() -> Vec<String> {
+        Self::iter()
+            .map(|version| version.as_str().to_string())
+            .collect()
+    }
+}

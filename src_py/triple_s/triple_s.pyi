@@ -7,6 +7,13 @@ from collections.abc import Sequence
 from typing import Final, final
 
 @final
+class CodeFormat:
+    Literal: Final[CodeFormat]
+    Numeric: Final[CodeFormat]
+    def __int__(self, /) -> int: ...
+    def __repr__(self, /) -> str: ...
+
+@final
 class DataSource:
     Csv: Final[DataSource]
     """
@@ -130,6 +137,7 @@ class Meta:
         """
         title of the survey
         """
+    def to_dict(self, /) -> "dict[str, str]": ...
     @property
     def user(self, /) -> str |None:
         """
@@ -182,6 +190,61 @@ class Mode:
 
 @final
 class Survey: ...
+
+@final
+class Text: ...
+
+@final
+class Usage:
+    """
+    describes the role of this variable in the survey.
+    Only a subset of variable types may have a use attribute (as detailed below)
+    """
+    Null: Final[Usage]
+    """
+    plain data
+    """
+    Serial: Final[Usage]
+    """
+    this variable contains the serial number (or other identification field)
+    """
+    Weight: Final[Usage]
+    """
+    this variable contains the weighting
+    """
+    def __int__(self, /) -> int: ...
+    def __repr__(self, /) -> str: ...
+
+@final
+class Variant:
+    """
+    From sss xml 2.0 onwards supports multi-language
+    
+    For sss xml 2.0:
+    ```text
+    The text for a survey <title>, variable <label> or values
+    <value> element may contain any number of specialised text elements.
+    ```
+    
+    Example sss xml 2.0 text, note that one entry can contain both `label` and
+    `language` attribute
+    ```xml
+    <label>Age
+        <text xml:lang="en-GB" mode="interview">How old are you?</text>
+        <text xml:lang="fr" mode="interview">Quel est votre âge?</text>
+        <text xml:lang="en-GB" mode="analysis">Age of respondent</text>
+        <text xml:lang="fr" mode="analysis">Âge de répondant</text>
+    </label>
+    ```
+    """
+    @property
+    def get_language(self, /) -> str |None: ...
+    @property
+    def get_mode(self, /) -> str: ...
+    @set_language.setter
+    def set_language(self, /, language: str |None) -> None: ...
+    @set_mode.setter
+    def set_mode(self, /, mode: str |None) -> None: ...
 
 @final
 class Version:

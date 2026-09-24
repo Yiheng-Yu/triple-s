@@ -1,3 +1,4 @@
+#[cfg(feature = "pyo3")]
 use pyo3::{
     types::PyString,
     exceptions::PyValueError, 
@@ -7,7 +8,9 @@ use pyo3::{
 use std::convert::Infallible;
 use strum::{EnumIter, EnumString, IntoEnumIterator};
 
-#[pyclass(from_py_object)]
+use crate::prelude::Flag;
+
+#[cfg_attr(feature="pyo3", pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, EnumString, EnumIter)]
 pub enum Version {
     #[strum(serialize = "1.0")]
@@ -22,8 +25,8 @@ pub enum Version {
     V3_0,
 }
 
-impl Version {
-    pub const fn as_str(self) -> &'static str {
+impl Flag for Version {
+    fn as_str(&self) -> &'static str {
         match self {
             Self::V1_0 => "1.0",
             Self::V1_1 => "1.1",
@@ -31,12 +34,6 @@ impl Version {
             Self::V2_0 => "2.0",
             Self::V3_0 => "3.0",
         }
-    }
-
-    pub fn available_options() -> Vec<String> {
-        Self::iter()
-            .map(|version| version.as_str().to_string())
-            .collect()
     }
 }
 
@@ -57,7 +54,7 @@ impl Version {
 /// - None: default value when no 'mode' value was defined.
 /// - Analysis: mode 'analysis'
 /// - Interview: mode 'interview'
-#[pyclass(from_py_object)]
+#[cfg_attr(feature="pyo3", pyclass(from_py_object))]
 #[derive(Debug, Default, PartialEq, Clone, EnumString, Eq, EnumIter)]
 #[strum(ascii_case_insensitive)]
 pub enum Mode {
@@ -69,21 +66,17 @@ pub enum Mode {
     Interview,
 }
 
-impl Mode {
-    pub fn try_as_str(&self) -> Option<&'static str> {
+impl Flag for Mode {
+    fn as_str(&self) -> &'static str {
         match self {
-            Self::None => None,
-            Self::Analysis => Some("analysis"),
-            Self::Interview => Some("interview"),
+            Self::None => "",
+            Self::Analysis => "analysis",
+            Self::Interview => "interview",
         }
-    }
-
-    pub fn available_options() -> Vec<&'static str> {
-        Self::iter().filter_map(|mode| mode.try_as_str()).collect()
     }
 }
 
-#[pyclass(from_py_object)]
+#[cfg_attr(feature="pyo3", pyclass(from_py_object))]
 #[derive(Debug, EnumString, PartialEq, Default, Clone, Eq, EnumIter)]
 pub enum DataSource {
     /// Supported from sss 2.0 onwards.
@@ -102,17 +95,58 @@ pub enum DataSource {
     Fixed,
 }
 
-impl DataSource {
-    pub const fn as_str(&self) -> &'static str {
+impl Flag for DataSource {
+    fn as_str(&self) -> &'static str {
         match self {
             Self::Csv => "csv",
             Self::Fixed => "fixed",
         }
     }
+}
 
-    pub fn available_options() -> Vec<String> {
-        Self::iter()
-            .map(|item| item.as_str().to_string())
-            .collect()
+// TODO! ADD DOCUMENTATION
+#[cfg_attr(feature="pyo3", pyclass(from_py_object))]
+#[derive(Debug, Clone, EnumString, EnumIter, Default, PartialEq)]
+pub enum CodeFormat {
+    #[default]
+    #[strum(serialize = "numeric")]
+    Numeric,
+    #[strum(serialize = "literal")]
+    Literal,
+}
+
+impl Flag for CodeFormat {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Literal => "literal",
+            Self::Numeric => "numeric",
+        }
+    }
+}
+
+/// describes the role of this variable in the survey.
+/// Only a subset of variable types may have a use attribute (as detailed below)
+#[cfg_attr(feature="pyo3", pyclass(from_py_object))]
+#[derive(Clone, Debug, Default, EnumString, EnumIter, PartialEq)]
+pub enum Usage {
+    /// plain data
+    #[default]
+    Null,
+
+    /// this variable contains the serial number (or other identification field)
+    #[strum(serialize = "serial")]
+    Serial,
+    /// this variable contains the weighting
+    #[strum(serialize = "weight")]
+    Weight,
+}
+
+impl Flag for Usage {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Null => "",
+            Self::Serial => "serial",
+            Self::Weight => "weight"
+        }
     }
 }
