@@ -40,36 +40,6 @@ impl Version {
     }
 }
 
-// impl<'a, 'py> FromPyObject<'a, 'py> for Version {
-//     type Error = PyErr;
-
-//     fn extract(obj: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
-//         let value = obj
-//             .extract::<&str>()
-//             .map_err(|_| PyValueError::new_err(
-//                 "version must be a string",
-//             ))?;
-
-//         value.parse::<Version>().map_err(|_| {
-//             PyValueError::new_err(format!(
-//                 "invalid version {:?}; expected one of: {:?}",
-//                 value,
-//                 Self::available_options()
-//             ))
-//         })
-//     }
-// }
-
-// impl<'py> IntoPyObject<'py> for Version {
-//     type Target = PyString;
-//     type Output = Bound<'py, PyString>;
-//     type Error = Infallible;
-
-//     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
-//         Ok(PyString::new(py, self.as_str()))
-//     }
-// }
-
 /// Introduced in SSS Xml 2.0.
 ///
 /// Official documentation:
@@ -113,40 +83,6 @@ impl Mode {
     }
 }
 
-// impl<'a, 'py> FromPyObject<'a, 'py> for Mode {
-//     type Error = PyErr;
-
-//     fn extract(obj: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
-//         // Python None -> Mode::None
-//         if obj.is_none() {
-//             return Ok(Self::None);
-//         }
-
-//         // Python str -> Mode variant
-//         let value = obj.extract::<&str>()?;
-
-//         value.parse::<Self>().map_err(|_| {
-//             PyValueError::new_err(format!(
-//                 "invalid mode: {value:?}; expected one of: {}",
-//                 Self::available_options().join(", ")
-//             ))
-//         })
-//     }
-// }
-
-// impl<'py> IntoPyObject<'py> for Mode {
-//     type Target = PyAny;
-//     type Output = Bound<'py, PyAny>;
-//     type Error = Infallible;
-
-//     fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
-//         match self.try_as_str() {
-//             Some(mode) => Ok(PyString::new(py, mode).into_any()),
-//             None => Ok(py.None().into_bound(py)),
-//         }
-//     }
-// }
-
 #[pyclass(from_py_object)]
 #[derive(Debug, EnumString, PartialEq, Default, Clone, Eq, EnumIter)]
 pub enum DataSource {
@@ -180,32 +116,3 @@ impl DataSource {
             .collect()
     }
 }
-
-// impl<'a, 'py> FromPyObject<'a, 'py> for DataSource {
-//     type Error = PyErr;
-
-//     fn extract(obj: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
-//         let value = obj.extract::<&str>()?;
-
-//         value.parse::<Self>().map_err(|_| {
-//             PyValueError::new_err(format!(
-//                 "invalid data source: {:?}; expected one of: {:?}",
-//                 value,
-//                 Self::available_options()
-//             ))
-//         })
-//     }
-// }
-
-// impl<'py> IntoPyObject<'py> for DataSource {
-//     type Target = PyString;
-//     type Output = Bound<'py, PyString>;
-//     type Error = Infallible;
-
-//     fn into_pyobject(
-//         self,
-//         py: Python<'py>,
-//     ) -> Result<Self::Output, Self::Error> {
-//         Ok(PyString::new(py, self.as_str()))
-//     }
-// }

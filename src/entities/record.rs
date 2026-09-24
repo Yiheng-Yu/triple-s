@@ -28,6 +28,40 @@ pub struct Record {
     pub href: Option<String>,
 
     pub data_source: DataSource,
+
     /* NOTE: THIS KEPT AS ARC RWLOCK IS VERY IMPORTANT FOR PYTHON BINDING TO WORK!!! */
     pub content: ArcLock<Vec<ArcLock<Question>>>
+}
+
+#[pymethods]
+impl Record {
+
+    /// One RECORD keyword appears after SURVEY (or after TITLE if present).
+    /// It is used to introduce the definition of the variables.
+    /// The record_id is any single character A to Z (or a to z).
+    /// The record_id can be used in conjunction with the variable_id (see the VARIABLE keyword later) to
+    /// generate a unique variable name on import.
+    /// For example: RECORD A
+    #[getter]
+    fn get_id(&self) -> PyResult<char> {
+        Ok(self.id.clone())
+    }
+
+    /// Set the id.
+    #[setter]
+    fn set_id(&mut self, value: char) -> PyResult<()> {
+        self.id = value;
+        Ok(())
+    }
+
+    /// (Optional) Used to specify an explicit location for the Data
+    /// File that is described by this Triple-S XML specification. Note that
+    /// using an href attribute ties the specification to the Data File and
+    /// may cause problems if the Metadata File and Data File are moved.
+    #[getter]
+    fn get_data_source(&self) -> PyResult<DataSource> {
+        Ok(self.data_source.clone())
+    }
+
+    // todo: getter/ setter for href, datasource and skip
 }

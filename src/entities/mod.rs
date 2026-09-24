@@ -3,16 +3,14 @@ mod flags;
 mod record;
 mod question;
 mod response;
+mod texts;
 
 pub use flags::{DataSource, Mode, Version};
 pub use meta::Meta;
 pub use record::Record;
 pub use question::Question;
 
-use crate::utils::{self, ArcLock, lock_it_up, normalize_py_index};
-
-use std::sync::Arc;
-use parking_lot::{RwLock};
+use crate::utils::ArcLock;
 use pyo3::prelude::*;
 
 #[pyclass(module = "triple_s", name = "Survey")]
