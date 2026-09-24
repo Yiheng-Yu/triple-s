@@ -46,3 +46,10 @@ pub trait Flag:strum::IntoEnumIterator {
             .collect()
     }
 }
+
+
+pub trait DeepCopy {
+    type Output;
+
+    fn deepcopy(&self) -> Self::Output;
+}

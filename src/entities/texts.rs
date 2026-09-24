@@ -3,22 +3,44 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 
 #[cfg(feature = "pyo3")]
-use pyo3::{exceptions, prelude::*};
+use pyo3::{exceptions, prelude::*, types::PyList};
 
+#[cfg(feature = "pyo3")]
+use crate::utils::normalize_py_index;
 use crate::{
-    entities::Mode, prelude::*, utils::{ArcLock, lock_it_up, validate_language_tag},
+    entities::Mode, 
+    prelude::*, 
+    utils::{ArcLock, ArcList, lock_it_up, validate_language_tag},
 };
 
 #[cfg_attr(
     feature = "pyo3",
     pyclass(name = "Text", module = "triple_s", from_py_object)
 )]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Text {
     /// Default text
     pub value: ArcLock<String>,
     /// text variants
-    pub variants: ArcLock<Vec<ArcLock<Variant>>>,
+    pub variants: ArcList<Variant>
+}
+
+impl Clone for Text {
+    fn clone(&self) -> Self {
+        Self {
+            value: self.value.deepcopy(),
+            variants: self.variants.deepcopy()
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Text {
+    #[getter]
+    fn get_variants(&self) -> VariantList {
+        VariantList(self.variants.clone_ptr())
+    }
 }
 
 /// From sss xml 2.0 onwards supports multi-language
@@ -101,8 +123,11 @@ impl Variant {
 #[pymethods]
 impl Variant {
     #[getter(get_mode)]
-    fn py_get_mode(&self) -> String {
-        self.mode.as_str().to_string()
+    fn py_get_mode(&self) -> Option<String> {
+        match self.mode {
+            Mode::None => None,
+            _ => Some(self.mode.as_str().to_string())
+        }
     }
 
     #[setter(set_mode)]
@@ -121,4 +146,65 @@ impl Variant {
         self.set_language(language)
             .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
     }
+
+    pub fn __repr__(&self) -> PyResult<String> {
+        let mut repr = format!(r#"Variant(value='{}'"#, &self.value.read().as_str());
+        repr = if let Some(mode) = self.py_get_mode() {
+            format!("{}, mode='{}'", repr, mode)
+        } else {
+            repr
+        };
+        repr = if let Some(language) = self.py_get_language() {
+            format!("{}, language='{}'", repr, language)
+        } else {
+            repr
+        };
+        let repr = format!("{})", repr);
+        Ok(repr)
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(name = "VariantList", module = "triple_s", skip_from_py_object)]
+pub struct VariantList(pub ArcList<Variant>);
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl VariantList {
+    fn __len__(&self) -> usize {
+        self.0.len()
+    }
+
+    fn __getitem__(&self, index: isize) -> PyResult<Variant> {
+        let index = normalize_py_index(index, self.0.len())
+            .ok_or_else(|| exceptions::PyIndexError::new_err("list index out of range"))?;
+        self.0
+            .get(index)
+            .map(|value| value.read().clone())
+            .ok_or_else(|| exceptions::PyIndexError::new_err("list index out of range"))
+    }
+
+    fn __copy__(&self) -> Self {
+        Self(self.0.clone_ptr())
+    }
+
+    fn __deepcopy__(&self) -> Self {
+        Self(self.0.deepcopy())
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let items: Vec<Variant> = self
+            .0
+            .read()
+            .iter()
+            .map(|item| item.read().clone())
+            .collect();
+        let collection = PyList::new(py, items)?;
+        py.import("pprint")?
+            .getattr("pformat")?
+            .call1((collection,))?
+            .extract()
+    }
+
+    // todo: append, extend, __iadd__
 }
