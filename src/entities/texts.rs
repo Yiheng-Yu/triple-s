@@ -80,6 +80,10 @@ impl PartialEq for Variant {
 }
 
 impl Variant {
+    pub fn new() -> Self {
+        todo!()
+    }    
+
     /// check if instance of `other` has the same attributes as `self`
     pub fn has_same_attribute(&self, other: &Self) -> bool {
         (self.mode == other.mode)
@@ -122,6 +126,12 @@ impl Variant {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Variant {
+
+    #[new]
+    fn py_new() -> Self {
+        todo!()
+    }
+
     #[getter(get_mode)]
     fn py_get_mode(&self) -> Option<String> {
         match self.mode {

@@ -4,7 +4,7 @@ A Python module implemented in Rust.
 
 from _typeshed import Incomplete
 from collections.abc import Sequence
-from typing import Final, final
+from typing import Any, Final, final
 
 @final
 class CodeFormat:
@@ -192,7 +192,9 @@ class Mode:
 class Survey: ...
 
 @final
-class Text: ...
+class Text:
+    @property
+    def variants(self, /) -> Any: ...
 
 @final
 class Usage:
@@ -237,10 +239,12 @@ class Variant:
     </label>
     ```
     """
+    def __new__(cls, /) -> Variant: ...
+    def __repr__(self, /) -> str: ...
     @property
     def get_language(self, /) -> str |None: ...
     @property
-    def get_mode(self, /) -> str: ...
+    def get_mode(self, /) -> str |None: ...
     @set_language.setter
     def set_language(self, /, language: str |None) -> None: ...
     @set_mode.setter
