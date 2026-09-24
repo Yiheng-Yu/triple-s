@@ -6,7 +6,7 @@ use pyo3::{
     PyResult,
     exceptions,
     prelude::*,
-    types::{PyDict, PyFloat, PyTuple},
+    types::{PyDict, PyTuple},
 };
 
 use super::{Mode, Version};

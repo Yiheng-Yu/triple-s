@@ -107,13 +107,13 @@ class SurveyInfo:
         list of all available language options
         """
     @language_options.setter
-    def language_options(self, /, values: Sequence[str]) -> None: ...
-    @language_options.setter
     def language_options(self, /, value: Sequence[str]) -> None:
         """
         ** Introduced since sss 1.2 **
         list of all available language options
         """
+    @language_options.setter
+    def language_options(self, /, values: Sequence[str]) -> None: ...
     @property
     def mode_options(self, /) -> list[Mode]:
         """

@@ -1,12 +1,12 @@
 mod flags;
-mod meta;
+mod survey_info;
 mod question;
 mod record;
 mod responses;
 mod texts;
 
 pub use flags::{CodeFormat, DataSource, Mode, Usage, Version};
-pub use meta::SurveyInfo;
+pub use survey_info::SurveyInfo;
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
