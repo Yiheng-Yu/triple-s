@@ -1,28 +1,28 @@
-mod entities;
+mod read;
 pub mod error;
 pub mod prelude;
-mod read;
+mod entities;
 
-pub use entities::{
-    Character,
-    Code,
-    CodeFormat,
-    Language,
-    Meta,
-    Mode,
-    NumericCategory,
-    Position,
-    Quantity,
-    Question,
-    RangeDate,
-    RangeTime,
-    Record,
-    Response,
-    Spread,
-    Survey,
-    Text,
-    TextCategory,
-    TextVariant,
-    Version,
-};
-pub use read::{read_from_string, read_sss_file};
+mod utils;
+
+use pyo3::prelude::*;
+
+/// A Python module implemented in Rust.
+#[pymodule]
+mod triple_s {
+    use pyo3::prelude::*;
+
+    #[pymodule_export]
+    pub use super::entities::{
+        Survey,
+        Meta,
+        DataSource,
+        Version,
+        Mode,
+    };
+
+    #[pymodule_init]
+    fn init(_m: &Bound<'_, PyModule>) -> PyResult<()> {
+        Ok(())
+    }
+}

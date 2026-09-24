@@ -19,17 +19,17 @@ use rayon::prelude::*;
 
 use crate::{
     entities::{
-        Code,
-        CodeFormat,
+        // Code,
+        // CodeFormat,
         Mode,
-        Position,
+        // Position,
         Question,
-        Response,
-        Spread,
+        // Response,
+        // Spread,
         Survey,
-        Text,
-        TextVariant,
-        Usage,
+        // Text,
+        // TextVariant,
+        // Usage,
         Version,
     },
     error::{
@@ -41,6 +41,7 @@ use crate::{
         MissingValueError,
     },
     prelude::*,
+    utils::lock_it_up
 };
 
 #[derive(Debug, PartialEq)]

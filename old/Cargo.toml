@@ -1,0 +1,40 @@
+[package]
+name = "triple_s"
+version = "0.2.1"
+edition = "2024"
+description = "Read classic Triple-S survey definition files."
+repository = "https://github.com/Yiheng-Yu/triple-s"
+
+[profile.dev]
+debug = "full"
+opt-level = 0
+overflow-checks = true
+debug-assertions = true
+split-debuginfo = "packed"
+panic="unwind"
+strip = "none"
+lto = "off"
+
+[profile.release]
+debug = "none"
+opt-level = "z"
+overflow-checks = true
+debug-assertions = false
+incremental = false
+strip = true
+lto = "fat"
+codegen-units = 1
+
+[lib]
+name = "triple_s"
+crate-type = ["rlib"]
+
+[dependencies]
+anyhow = { version = "1.0.104", features = ["backtrace"] }
+chrono = "0.4.45"
+oxilangtag = "0.1.6"
+parking_lot = "0.12.5"
+quick-xml = { version = "0.42.0", features = ["encoding", "serialize"] }
+rayon = "1.12.0"
+regex = "1.13.1"
+strum = { version = "0.28", features = ["derive"] }
