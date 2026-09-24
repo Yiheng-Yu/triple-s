@@ -1,21 +1,20 @@
 // mod read;
+mod entities;
 pub mod error;
 pub mod prelude;
-mod entities;
 mod utils;
 
 pub use entities::{
-    Survey,
-    Meta,
-    DataSource,
-    Version,
-    Mode,
     CodeFormat,
+    DataSource,
+    Meta,
+    Mode,
+    Survey,
+    Text,
     Usage,
-    Text, 
     Variant,
+    Version,
 };
-
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
@@ -27,15 +26,15 @@ mod triple_s {
 
     #[pymodule_export]
     pub use super::{
-        Survey,
-        Meta,
-        DataSource,
-        Version,
-        Mode,
         CodeFormat,
+        DataSource,
+        Meta,
+        Mode,
+        Survey,
+        Text,
         Usage,
-        Text, 
         Variant,
+        Version,
     };
 
     #[pymodule_init]

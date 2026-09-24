@@ -2,18 +2,19 @@
 use pyo3::prelude::*;
 
 use crate::{
-    entities::{CodeFormat, Usage, Text},
+    entities::{CodeFormat, Text, Usage},
+    utils::ArcLock,
 };
 
-#[cfg_attr(feature="pyo3", pyclass(module="triple_s", name="question", skip_from_py_object))]
+#[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "question"))]
 #[derive(Debug)]
 pub struct Question {
     pub index: u64,
-    pub name: String,
-    pub label: Text,
-    pub filter: Option<String>,
-    pub format: CodeFormat,
-    pub usage: Usage,
+    pub name: ArcLock<String>,
+    pub label: ArcLock<Text>,
+    pub filter: ArcLock<Option<String>>,
+    pub format: ArcLock<CodeFormat>,
+    pub usage: ArcLock<Usage>,
     // pub location: Position,
     // pub response: Response,
 }

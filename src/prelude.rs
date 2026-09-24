@@ -38,18 +38,38 @@ pub trait Wrap: Sized {
     }
 }
 
-pub trait Flag:strum::IntoEnumIterator {
+pub trait Flag: strum::IntoEnumIterator {
     fn as_str(&self) -> &'static str;
     fn available_options() -> Vec<String> {
-        Self::iter()
-            .map(|version| version.as_str().to_string())
-            .collect()
+        Self::iter().map(|version| version.as_str().to_string()).collect()
     }
 }
 
-
 pub trait DeepCopy {
     type Output;
-
     fn deepcopy(&self) -> Self::Output;
+}
+
+impl DeepCopy for String {
+    type Output = Self;
+
+    fn deepcopy(&self) -> Self {
+        self.clone()
+    }
+}
+
+impl<T: DeepCopy<Output = T>> DeepCopy for Option<T> {
+    type Output = Self;
+
+    fn deepcopy(&self) -> Self {
+        self.as_ref().map(DeepCopy::deepcopy)
+    }
+}
+
+impl<T: DeepCopy<Output = T>> DeepCopy for Vec<T> {
+    type Output = Self;
+
+    fn deepcopy(&self) -> Self {
+        self.iter().map(DeepCopy::deepcopy).collect()
+    }
 }

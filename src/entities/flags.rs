@@ -1,16 +1,10 @@
 #[cfg(feature = "pyo3")]
-use pyo3::{
-    types::PyString,
-    exceptions::PyValueError, 
-    prelude::*,
-    Borrowed,
-};
-use std::convert::Infallible;
-use strum::{EnumIter, EnumString, IntoEnumIterator};
+use pyo3::prelude::*;
+use strum::{EnumIter, EnumString};
 
 use crate::prelude::Flag;
 
-#[cfg_attr(feature="pyo3", pyclass(from_py_object))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, EnumString, EnumIter)]
 pub enum Version {
     #[strum(serialize = "1.0")]
@@ -54,7 +48,7 @@ impl Flag for Version {
 /// - None: default value when no 'mode' value was defined.
 /// - Analysis: mode 'analysis'
 /// - Interview: mode 'interview'
-#[cfg_attr(feature="pyo3", pyclass(from_py_object))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Debug, Default, PartialEq, Clone, EnumString, Eq, EnumIter)]
 #[strum(ascii_case_insensitive)]
 pub enum Mode {
@@ -76,7 +70,7 @@ impl Flag for Mode {
     }
 }
 
-#[cfg_attr(feature="pyo3", pyclass(from_py_object))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Debug, EnumString, PartialEq, Default, Clone, Eq, EnumIter)]
 pub enum DataSource {
     /// Supported from sss 2.0 onwards.
@@ -84,7 +78,7 @@ pub enum DataSource {
     /// for each variable, with data values similar to the fixed format. Note
     /// that for data in csv format the position element refers to the
     /// field number.
-     #[strum(serialize = "csv")]
+    #[strum(serialize = "csv")]
     Csv,
 
     /// The data representation is fixed format fields.
@@ -105,7 +99,7 @@ impl Flag for DataSource {
 }
 
 // TODO! ADD DOCUMENTATION
-#[cfg_attr(feature="pyo3", pyclass(from_py_object))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Debug, Clone, EnumString, EnumIter, Default, PartialEq)]
 pub enum CodeFormat {
     #[default]
@@ -126,7 +120,7 @@ impl Flag for CodeFormat {
 
 /// describes the role of this variable in the survey.
 /// Only a subset of variable types may have a use attribute (as detailed below)
-#[cfg_attr(feature="pyo3", pyclass(from_py_object))]
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Clone, Debug, Default, EnumString, EnumIter, PartialEq)]
 pub enum Usage {
     /// plain data
@@ -146,7 +140,7 @@ impl Flag for Usage {
         match self {
             Self::Null => "",
             Self::Serial => "serial",
-            Self::Weight => "weight"
+            Self::Weight => "weight",
         }
     }
 }

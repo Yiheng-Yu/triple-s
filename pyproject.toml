@@ -22,4 +22,7 @@ testing = ["pytest",]
 python-source = "src_py"
 module-name = "triple_s.triple_s"
 bindings = "pyo3"
-features = ["pyo3/extension-module", "abi3"]
+features = ["pyo3", "pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

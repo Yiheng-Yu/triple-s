@@ -1,16 +1,15 @@
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
-
 #[cfg(feature = "pyo3")]
-use pyo3::{exceptions, prelude::*, types::PyList};
+use pyo3::{exceptions, prelude::*, types::PyTuple};
 
 #[cfg(feature = "pyo3")]
 use crate::utils::normalize_py_index;
 use crate::{
-    entities::Mode, 
-    prelude::*, 
-    utils::{ArcLock, ArcList, lock_it_up, validate_language_tag},
+    entities::Mode,
+    prelude::*,
+    utils::{ArcLock, lock_it_up, validate_language_tag},
 };
 
 #[cfg_attr(
@@ -19,28 +18,130 @@ use crate::{
 )]
 #[derive(Debug)]
 pub struct Text {
-    /// Default text
     pub value: ArcLock<String>,
-    /// text variants
-    pub variants: ArcList<Variant>
+    pub variants: Vec<Variant>,
 }
 
 impl Clone for Text {
     fn clone(&self) -> Self {
         Self {
             value: self.value.deepcopy(),
-            variants: self.variants.deepcopy()
+            variants: self.variants.deepcopy(),
         }
+    }
+}
+
+impl Text {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self {
+            value: lock_it_up(value.into()),
+            variants: Vec::new(),
+        }
+    }
+
+    pub fn get_value(&self) -> String {
+        self.value.read().clone()
+    }
+
+    pub fn set_value(&self, value: impl Into<String>) {
+        *self.value.write() = value.into();
+    }
+
+    pub fn add_variant(&mut self, variant: Variant) -> Result<()> {
+        let copied = variant.deepcopy();
+        anyhow::ensure!(
+            !self.variants.iter().any(|item| item.has_same_attribute(&copied)),
+            "A variant with this mode and language already exists"
+        );
+        self.variants.push(copied);
+        Ok(())
+    }
+
+    pub fn remove_variant(&mut self, index: usize) -> Option<Variant> {
+        if index < self.variants.len() {
+            Some(self.variants.remove(index))
+        } else {
+            None
+        }
+    }
+
+    /// Copy and validate inputs before replacing membership.
+    pub fn set_variants(&mut self, variants: Vec<Variant>) -> Result<()> {
+        let mut replacement = Self::new("");
+        for variant in variants {
+            replacement.add_variant(variant)?;
+        }
+        self.variants = replacement.variants;
+        Ok(())
     }
 }
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Text {
-    #[getter]
-    fn get_variants(&self) -> VariantList {
-        VariantList(self.variants.clone_ptr())
+    #[new]
+    #[pyo3(signature = (value, variants=None))]
+    fn py_new(value: String, variants: Option<Vec<Variant>>) -> PyResult<Self> {
+        let mut text = Self::new(value);
+        text.set_variants(variants.unwrap_or_default()).map_err(py_value_error)?;
+        Ok(text)
     }
+
+    #[getter(value)]
+    fn py_get_value(&self) -> String {
+        self.get_value()
+    }
+
+    #[setter(value)]
+    fn py_set_value(&self, value: String) {
+        self.set_value(value);
+    }
+
+    /// Immutable membership snapshot, containing shared mutable variants.
+    #[getter]
+    fn get_variants<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        PyTuple::new(py, self.variants.iter().cloned())
+    }
+
+    #[setter(variants)]
+    fn py_set_variants(&mut self, variants: Vec<Variant>) -> PyResult<()> {
+        self.set_variants(variants).map_err(py_value_error)
+    }
+
+    #[pyo3(name = "add_variant", signature = (variant, mode=None, language=None))]
+    fn py_add_variant(
+        &mut self,
+        variant: &Bound<'_, PyAny>,
+        mode: Option<&str>,
+        language: Option<&str>,
+    ) -> PyResult<()> {
+        let variant = if let Ok(variant) = variant.extract::<Variant>() {
+            variant
+        } else if let Ok(value) = variant.extract::<String>() {
+            Variant::from_parts(value, mode, language.map(str::to_owned))
+                .map_err(py_value_error)?
+        } else {
+            let type_received = variant.get_type().name()?.extract::<String>()?;
+
+            return Err(exceptions::PyTypeError::new_err(format!(
+                "variant must be a Variant or str, received: '{}",
+                type_received
+            )));
+        };
+        self.add_variant(variant).map_err(py_value_error)
+    }
+
+    #[pyo3(name = "remove_variant")]
+    fn py_remove_variant(&mut self, index: isize) -> PyResult<Variant> {
+        let index = normalize_py_index(index, self.variants.len())
+            .ok_or_else(|| exceptions::PyIndexError::new_err("variant index out of range"))?;
+        Ok(self.variants.remove(index))
+    }
+}
+
+#[cfg(feature = "pyo3")]
+fn py_value_error(error: anyhow::Error) -> PyErr {
+    exceptions::PyValueError::new_err(error.to_string())
 }
 
 /// From sss xml 2.0 onwards supports multi-language
@@ -61,6 +162,7 @@ impl Text {
 ///     <text xml:lang="fr" mode="analysis">Âge de répondant</text>
 /// </label>
 /// ```
+/// `clone()` shares fields; `deepcopy()` creates independent fields.
 #[cfg_attr(
     feature = "pyo3",
     pyclass(name = "Variant", module = "triple_s", from_py_object)
@@ -68,57 +170,91 @@ impl Text {
 #[derive(Debug, Clone)]
 pub struct Variant {
     pub value: ArcLock<String>,
-    mode: Mode,
+    mode: ArcLock<Mode>,
     language: ArcLock<Option<String>>,
+}
+
+impl Default for Variant {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl DeepCopy for Variant {
+    type Output = Self;
+
+    fn deepcopy(&self) -> Self {
+        Self {
+            value: self.value.deepcopy(),
+            mode: lock_it_up(self.get_mode()),
+            language: self.language.deepcopy(),
+        }
+    }
 }
 
 impl PartialEq for Variant {
     fn eq(&self, other: &Self) -> bool {
-        (self.has_same_attribute(other))
-            & (self.value.read().as_str() == other.value.read().as_str())
+        self.has_same_attribute(other) && self.get_value() == other.get_value()
     }
 }
 
 impl Variant {
     pub fn new() -> Self {
-        todo!()
-    }    
+        Self {
+            value: lock_it_up(String::new()),
+            mode: lock_it_up(Mode::None),
+            language: lock_it_up(None),
+        }
+    }
 
-    /// check if instance of `other` has the same attributes as `self`
+    pub fn from_parts(
+        value: impl Into<String>,
+        mode: Option<&str>,
+        language: Option<String>,
+    ) -> Result<Self> {
+        let variant = Self::new();
+        variant.set_value(value);
+        variant.set_mode(mode)?;
+        variant.set_language(language)?;
+        Ok(variant)
+    }
+
     pub fn has_same_attribute(&self, other: &Self) -> bool {
-        (self.mode == other.mode)
-            & (self.language.read().as_ref() == other.language.read().as_ref())
+        self.get_mode() == other.get_mode() && self.get_language() == other.get_language()
     }
 
-    #[inline]
-    pub fn get_mode(&self) -> &Mode {
-        &self.mode
+    pub fn get_value(&self) -> String {
+        self.value.read().clone()
     }
 
-    #[inline]
-    pub fn set_mode(&mut self, mode: Option<&str>) -> Result<()> {
-        let new = if let Some(mode) = mode {
-            Mode::from_str(mode).with_context(|| {
-                format!("Expect to be one of: {:?}", Mode::available_options())
-            })?
-        } else {
-            Mode::None
-        };
-        self.mode = new;
+    pub fn set_value(&self, value: impl Into<String>) {
+        let value = value.into();
+        *self.value.write() = value;
+    }
+
+    pub fn get_mode(&self) -> Mode {
+        self.mode.read().clone()
+    }
+
+    pub fn set_mode(&self, mode: Option<&str>) -> Result<()> {
+        let mode = mode
+            .map(Mode::from_str)
+            .transpose()
+            .with_context(|| format!("Expect one of: {:?}", Mode::available_options()))?
+            .unwrap_or_default();
+        *self.mode.write() = mode;
         Ok(())
     }
 
-    #[inline]
     pub fn get_language(&self) -> Option<String> {
         self.language.read().clone()
     }
 
-    #[inline]
-    pub fn set_language(&mut self, language: Option<String>) -> Result<()> {
-        let language = language.map(|s| validate_language_tag(&s).map(|s| s.to_string()))
-            .transpose()?;
-
-        self.language = lock_it_up(language);
+    pub fn set_language(&self, language: Option<String>) -> Result<()> {
+        let language =
+            language.map(|s| validate_language_tag(&s).map(str::to_owned)).transpose()?;
+        // Update the shared value, rather than replacing the shared pointer.
+        *self.language.write() = language;
         Ok(())
     }
 }
@@ -126,95 +262,63 @@ impl Variant {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Variant {
-
     #[new]
-    fn py_new() -> Self {
-        todo!()
+    #[pyo3(signature = (value:"str", mode:"str"=None, language:"str"=None))]
+    fn py_new(value: String, mode: Option<&str>, language: Option<String>) -> PyResult<Self> {
+        Self::from_parts(value, mode, language).map_err(py_value_error)
     }
 
-    #[getter(get_mode)]
+    #[getter(value)]
+    fn py_get_value(&self) -> String {
+        self.get_value()
+    }
+
+    #[setter(value)]
+    fn py_set_value(&self, value: String) {
+        self.set_value(value);
+    }
+
+    #[getter(mode)]
     fn py_get_mode(&self) -> Option<String> {
-        match self.mode {
+        match self.get_mode() {
             Mode::None => None,
-            _ => Some(self.mode.as_str().to_string())
+            mode => Some(mode.as_str().to_owned()),
         }
     }
 
-    #[setter(set_mode)]
-    fn py_set_mode(&mut self, mode: Option<String>) -> PyResult<()> {
-        self.set_mode(mode.as_ref().map(|s| s.as_str()))
-            .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
+    #[setter(mode)]
+    fn py_set_mode(&self, mode: Option<&str>) -> PyResult<()> {
+        self.set_mode(mode).map_err(py_value_error)
     }
 
-    #[getter(get_language)]
+    #[getter(language)]
     fn py_get_language(&self) -> Option<String> {
         self.get_language()
     }
 
-    #[setter(set_language)]
-    fn py_set_language(&mut self, language: Option<String>) -> PyResult<()> {
-        self.set_language(language)
-            .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
+    #[setter(language)]
+    fn py_set_language(&self, language: Option<String>) -> PyResult<()> {
+        self.set_language(language).map_err(py_value_error)
     }
 
-    pub fn __repr__(&self) -> PyResult<String> {
-        let mut repr = format!(r#"Variant(value='{}'"#, &self.value.read().as_str());
-        repr = if let Some(mode) = self.py_get_mode() {
-            format!("{}, mode='{}'", repr, mode)
-        } else {
-            repr
-        };
-        repr = if let Some(language) = self.py_get_language() {
-            format!("{}, language='{}'", repr, language)
-        } else {
-            repr
-        };
-        let repr = format!("{})", repr);
-        Ok(repr)
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pyclass(name = "VariantList", module = "triple_s", skip_from_py_object)]
-pub struct VariantList(pub ArcList<Variant>);
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl VariantList {
-    fn __len__(&self) -> usize {
-        self.0.len()
-    }
-
-    fn __getitem__(&self, index: isize) -> PyResult<Variant> {
-        let index = normalize_py_index(index, self.0.len())
-            .ok_or_else(|| exceptions::PyIndexError::new_err("list index out of range"))?;
-        self.0
-            .get(index)
-            .map(|value| value.read().clone())
-            .ok_or_else(|| exceptions::PyIndexError::new_err("list index out of range"))
+    fn copy(&self) -> Self {
+        self.deepcopy()
     }
 
     fn __copy__(&self) -> Self {
-        Self(self.0.clone_ptr())
+        self.deepcopy()
     }
 
-    fn __deepcopy__(&self) -> Self {
-        Self(self.0.deepcopy())
+    fn __deepcopy__(&self, _memo: &Bound<'_, PyAny>) -> Self {
+        self.deepcopy()
     }
 
-    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        let items: Vec<Variant> = self
-            .0
-            .read()
-            .iter()
-            .map(|item| item.read().clone())
-            .collect();
-        let collection = PyList::new(py, items)?;
-        py.import("pprint")?
-            .getattr("pformat")?
-            .call1((collection,))?
-            .extract()
+    fn __repr__(&self) -> String {
+        format!(
+            "Variant(value={:?}, mode={:?}, language={:?})",
+            self.get_value(),
+            self.get_mode(),
+            self.get_language()
+        )
     }
-
-    // todo: append, extend, __iadd__
 }

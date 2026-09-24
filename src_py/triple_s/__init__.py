@@ -5,4 +5,7 @@ from .triple_s import (
     Version,
     Mode,
     CodeFormat,
+    Usage,
+    Text, 
+    Variant,
 )

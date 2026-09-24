@@ -1,16 +1,12 @@
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
-use std::sync::Arc;
-use parking_lot::{RwLock};
+use super::{ArcLock, DataSource, Question};
 
-use super::{
-    ArcLock,
-    Question,
-    DataSource,
-};
-
-#[cfg_attr(feature="pyo3", pyclass(module = "triple_s", name = "Record", skip_from_py_object))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(module = "triple_s", name = "Record", skip_from_py_object)
+)]
 #[derive(Debug, Default, Clone)]
 pub struct Record {
     pub id: char,
@@ -30,20 +26,19 @@ pub struct Record {
 
     pub data_source: DataSource,
 
-    /* NOTE: THIS KEPT AS ARC RWLOCK IS VERY IMPORTANT FOR PYTHON BINDING TO WORK!!! */
-    pub content: ArcLock<Vec<ArcLock<Question>>>
+    // NOTE: THIS KEPT AS ARC RWLOCK IS VERY IMPORTANT FOR PYTHON BINDING TO WORK!!!
+    pub content: ArcLock<Vec<ArcLock<Question>>>,
 }
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Record {
-
     /// One RECORD keyword appears after SURVEY (or after TITLE if present).
     /// It is used to introduce the definition of the variables.
     /// The record_id is any single character A to Z (or a to z).
-    /// The record_id can be used in conjunction with the variable_id (see the VARIABLE keyword later) to
-    /// generate a unique variable name on import.
-    /// For example: RECORD A
+    /// The record_id can be used in conjunction with the variable_id (see the
+    /// VARIABLE keyword later) to generate a unique variable name on
+    /// import. For example: RECORD A
     #[getter]
     fn get_id(&self) -> PyResult<char> {
         Ok(self.id.clone())

@@ -1,23 +1,21 @@
+#[cfg(feature = "pyo3")]
 use std::str::FromStr;
 
 #[cfg(feature = "pyo3")]
-use pyo3::{PyResult, exceptions, prelude::*, types::PyDict};
-
-use crate::{prelude::*, utils};
+use pyo3::{
+    PyResult,
+    exceptions,
+    prelude::*,
+    types::{PyDict, PyTuple},
+};
 
 use super::{Mode, Version};
+#[cfg(feature = "pyo3")]
+use crate::{prelude::*, utils};
 
 #[cfg_attr(
     feature = "pyo3",
-    pyclass(
-        dict,
-        weakref,
-        module = "triple_s",
-        name = "Meta",
-        from_py_object,
-        get_all,
-        set_all
-    )
+    pyclass(dict, weakref, module = "triple_s", name = "Meta", from_py_object)
 )]
 #[derive(Debug, Clone)]
 pub struct Meta {
@@ -82,9 +80,121 @@ impl Meta {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Meta {
+    #[getter(version)]
+    fn get_version(&self) -> Version {
+        self.version.clone()
+    }
+
+    #[setter(version)]
+    fn set_version(&mut self, value: Version) {
+        self.version = value;
+    }
+
+    #[getter(name)]
+    fn get_name(&self) -> Option<String> {
+        self.name.clone()
+    }
+
+    #[setter(name)]
+    fn set_name(&mut self, value: Option<String>) {
+        self.name = value;
+    }
+
+    #[getter(title)]
+    fn get_title(&self) -> Option<String> {
+        self.title.clone()
+    }
+
+    #[setter(title)]
+    fn set_title(&mut self, value: Option<String>) {
+        self.title = value;
+    }
+
+    #[getter(date)]
+    fn get_date(&self) -> Option<String> {
+        self.date.clone()
+    }
+
+    #[setter(date)]
+    fn set_date(&mut self, value: Option<String>) {
+        self.date = value;
+    }
+
+    #[getter(time)]
+    fn get_time(&self) -> Option<String> {
+        self.time.clone()
+    }
+
+    #[setter(time)]
+    fn set_time(&mut self, value: Option<String>) {
+        self.time = value;
+    }
+
+    #[getter(origin)]
+    fn get_origin(&self) -> Option<String> {
+        self.origin.clone()
+    }
+
+    #[setter(origin)]
+    fn set_origin(&mut self, value: Option<String>) {
+        self.origin = value;
+    }
+
+    #[getter(user)]
+    fn get_user(&self) -> Option<String> {
+        self.user.clone()
+    }
+
+    #[setter(user)]
+    fn set_user(&mut self, value: Option<String>) {
+        self.user = value;
+    }
+
+    #[getter(style)]
+    fn get_style(&self) -> Option<String> {
+        self.style.clone()
+    }
+
+    #[setter(style)]
+    fn set_style(&mut self, value: Option<String>) {
+        self.style = value;
+    }
+
+    #[getter(standard)]
+    fn get_standard(&self) -> Option<String> {
+        self.standard.clone()
+    }
+
+    #[setter(standard)]
+    fn set_standard(&mut self, value: Option<String>) {
+        self.standard = value;
+    }
+
+    #[getter(language_options)]
+    fn get_language_options<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        PyTuple::new(py, self.language_options.iter())
+    }
+
+    #[setter(language_options)]
+    fn set_language_options(&mut self, values: Vec<String>) -> PyResult<()> {
+        self.language_options = validate_language_options(values)?;
+        Ok(())
+    }
+
+    #[getter(mode_options)]
+    fn get_mode_options<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        PyTuple::new(py, self.mode_options.iter().cloned())
+    }
+
+    #[setter(mode_options)]
+    fn set_mode_options(&mut self, values: Vec<Bound<'_, PyAny>>) -> PyResult<()> {
+        self.mode_options = parse_mode_options(values)?;
+        Ok(())
+    }
+
     /// Create survey metadata for the given Triple-S version.
-    /// Optional text fields default to None; languages default to [], modes to
-    /// [None]. Modes accept "analysis", "interview", or None. Invalid
+    /// Optional text fields default to None; languages and modes default to
+    /// empty tuples. Modes accept "analysis", "interview", or None. Invalid
     /// versions or modes raise ValueError.
     #[new]
     #[pyo3(signature = (
@@ -97,7 +207,7 @@ impl Meta {
         user: "str | None" = None,
         style: "str | None" = None,
         language_options: "list[str] | None" = None,
-        mode_options: "list[str] | None" = None,
+        mode_options: "list[Mode | str | None] | None" = None,
         standard: "str | None" = None,
     ))]
     fn py_new(
@@ -110,43 +220,15 @@ impl Meta {
         user: Option<String>,
         style: Option<String>,
         language_options: Option<Vec<String>>,
-        mode_options: Option<Vec<String>>,
+        mode_options: Option<Vec<Bound<'_, PyAny>>>,
         standard: Option<String>,
     ) -> PyResult<Self> {
-        println!("TODO: MAKE META::NEW AVAIBALE TO ALL FEATURES");
         let version = Version::from_str(version)
             .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))?;
 
-        let mode_options = mode_options
-            .map(|options| {
-                options
-                    .into_iter()
-                    .map(|mode| {
-                        Mode::from_str(&mode).map_err(|err| {
-                            exceptions::PyValueError::new_err(format!(
-                                "{err}. Mode options should be one of: {:?}",
-                                Mode::available_options()
-                            ))
-                        })
-                    })
-                    .collect::<PyResult<Vec<Mode>>>()
-            })
-            .transpose()?
-            .unwrap_or_default();
-
-        let language_options = language_options
-            .map(|languages| {
-                languages
-                    .iter()
-                    .map(|s| {
-                        utils::validate_language_tag(&s)
-                            .map(|s| s.to_string())
-                            .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
-                    })
-                    .collect::<PyResult<Vec<String>>>()
-            })
-            .transpose()?
-            .unwrap_or_default();
+        let mode_options = parse_mode_options(mode_options.unwrap_or_default())?;
+        let language_options =
+            validate_language_options(language_options.unwrap_or_default())?;
 
         Ok(Self {
             version: version,
@@ -206,4 +288,38 @@ impl Meta {
 
         Ok(dict.unbind())
     }
+}
+
+#[cfg(feature = "pyo3")]
+fn validate_language_options(values: Vec<String>) -> PyResult<Vec<String>> {
+    for value in &values {
+        utils::validate_language_tag(value)
+            .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))?;
+    }
+    Ok(values)
+}
+
+#[cfg(feature = "pyo3")]
+fn parse_mode_options(values: Vec<Bound<'_, PyAny>>) -> PyResult<Vec<Mode>> {
+    values
+        .into_iter()
+        .map(|value| {
+            if value.is_none() {
+                Ok(Mode::None)
+            } else if let Ok(mode) = value.extract::<Mode>() {
+                Ok(mode)
+            } else if let Ok(mode) = value.extract::<String>() {
+                Mode::from_str(&mode).map_err(|err| {
+                    exceptions::PyValueError::new_err(format!(
+                        "{err}. Mode options should be one of: {:?}",
+                        Mode::available_options()
+                    ))
+                })
+            } else {
+                Err(exceptions::PyTypeError::new_err(
+                    "mode options must contain Mode objects, strings, or None",
+                ))
+            }
+        })
+        .collect()
 }
