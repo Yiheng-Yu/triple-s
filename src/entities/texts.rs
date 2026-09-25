@@ -178,7 +178,7 @@ impl Text {
         self.set_value(value);
     }
 
-    /// Immutable membership snapshot, containing shared mutable variants.
+    // makes a shallow copy
     #[getter]
     fn get_variants<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let variants_view = self.variants.read().clone().into_iter().map(|item| item.clone());

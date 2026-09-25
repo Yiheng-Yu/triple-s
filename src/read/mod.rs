@@ -19,12 +19,13 @@ use rayon::prelude::*;
 
 use crate::{
     entities::{
-        // Code,
+        Code,
+        Value,
         CodeFormat,
         Location,
         Mode,
         Question,
-        // Response,
+        Response,
         // Spread,
         Survey,
         Text,
@@ -663,43 +664,36 @@ fn parse_text(mut node: Node, is_classic: bool) -> Result<Text> {
     Ok(text)
 }
 
-// #[inline]
-// fn parse_into_choice<T>(node: Node, is_classic: bool) -> Result<Code<T>>
-// where
-//     T: CodeType + FromStr,
-//     T::Err: std::error::Error + Send + Sync + 'static,
-// {
-//     if node.tag.as_ref() != "value" {
-//         return Err(InternalError::new(format!(
-//             "Expected 'value' node, received: '{}'",
-//             node.tag
-//         ))
-//         .into());
-//     };
+#[inline]
+fn parse_into_code(node: Node, is_classic: bool, code_format: CodeFormat) -> Result<Code>
+{
+    if node.tag.as_ref() != "value" {
+        return Err(InternalError::new(format!(
+            "Expected 'value' node, received: '{}'",
+            node.tag
+        ))
+        .into());
+    };
 
-//     let raw_code = node
-//         .attributes
-//         .get("code")
-//         .ok_or(MissingAttributeError::new(node.tag.as_ref(), "code"))?;
-//     let code = raw_code
-//         .parse::<T>()
-//         // String parsing succeeds unchanged; numeric parsing can retry
-// trimmed.         .or_else(|_| raw_code.trim().parse::<T>())
-//         .with_context(|| format!("When parsing code '{}'", raw_code))?;
-//     code.validate().with_context(|| format!("When parsing code '{}'",
-// raw_code))?;
-
-//     let is_special = node.attributes.contains_key("flag");
-//     let text = parse_text(node, is_classic)?;
-//     let choice = Code {
-//         code,
-//         label: text,
-//         filter: None,
-//         is_special,
-//         score: None,
-//     };
-//     Ok(choice)
-// }
+    let raw_code = node
+        .attributes
+        .get("code")
+        .ok_or(MissingAttributeError::new(node.tag.as_ref(), "code"))?;
+    let value = match code_format {
+        CodeFormat::Numeric => {
+            let value = raw_code.parse::<u64>()?;
+            Value::Numeric(value)
+        }
+        CodeFormat::Literal => Value::Literal(raw_code.to_string())
+    };
+    let text = parse_text(node, is_classic)?;
+    Ok(Code {
+        value: lock_it_up(value),
+        label: lock_it_up(text),
+        filter: lock_it_up(None),
+        score: lock_it_up(None)
+    })
+}
 
 // /// from_to == true:
 // /// 'from' 'to'

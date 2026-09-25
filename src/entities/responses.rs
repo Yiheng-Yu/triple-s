@@ -1,7 +1,7 @@
 use std::range::Range;
 
 use crate::{
-    prelude::DeepCopy, utils::{ArcLock, lock_it_up},
+    Text, prelude::DeepCopy, utils::{ArcLock, lock_it_up},
 };
 
 #[cfg(feature="pyo3")]
@@ -16,20 +16,30 @@ pub enum Response {
 
 #[cfg_attr(feature="pyo3", pyclass(name="Category", module="triple_s", from_py_object))]
 pub struct Category {
-    pub values: ArcLock<Vec<ArcLock<Code>>>
+    pub range: ArcLock<Option<Range<u64>>>,
+    // pub spread: ArcLock<Option<Range<u64>>>,
+    pub values: ArcLock<Vec<ArcLock<Code>>>,
 }
 
 impl Clone for Category {
     fn clone(&self) -> Self {
-        todo!()
+        Self {
+            range: self.range.clone(),
+            values: self.values.clone()
+        }
     }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Category {
 }
 
 #[cfg_attr(feature="pyo3", pyclass(name="Code", module="triple_s", from_py_object))]
 #[derive(Debug)]
 pub struct Code {
     pub value: ArcLock<Value>,
-    pub label: ArcLock<String>,
+    pub label: ArcLock<Text>,
     pub filter:ArcLock<Option<String>>,
     pub score: ArcLock<Option<f64>>,
 }
@@ -58,6 +68,20 @@ impl DeepCopy for Code {
 }
 
 impl Code {
+    pub fn new(
+        value: Value,
+        label: impl Into<String>,
+        filter: Option<impl Into<String>>,
+        score: Option<f64>,
+    ) -> Self {
+        Self {
+            value: lock_it_up(value),
+            label: lock_it_up(Text::new(label)),
+            filter: lock_it_up(filter.map(|item| item.into())),
+            score: lock_it_up(score)
+        }
+    }
+
     pub fn new_numeric(
         value: u64,
         label: impl Into<String>,
@@ -66,7 +90,7 @@ impl Code {
     ) -> Self {
         Self {
             value: lock_it_up(Value::Numeric(value)),
-            label: lock_it_up(label.into()),
+            label: lock_it_up(Text::new(label)),
             filter: lock_it_up(filter.map(|item| item.into())),
             score: lock_it_up(score)
         }
@@ -80,7 +104,7 @@ impl Code {
     ) -> Self {
         Self {
             value: lock_it_up(Value::Literal(value.into())),
-            label: lock_it_up(label.into()),
+            label: lock_it_up(Text::new(label)),
             filter: lock_it_up(filter.map(|item| item.into())),
             score: lock_it_up(score)
         }
@@ -90,7 +114,7 @@ impl Code {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Code {
-    
+
 }
 
 #[cfg_attr(feature="pyo3", pyclass(name="Value", module="triple_s", from_py_object))]

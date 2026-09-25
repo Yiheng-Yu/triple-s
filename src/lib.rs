@@ -24,8 +24,8 @@ pub use entities::{
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
-// mod read;
-// pub use read::read_datamap;
+mod read;
+pub use read::read_datamap;
 
 /// A Python module implemented in Rust.
 #[cfg(feature = "pyo3")]
