@@ -13,7 +13,7 @@ use pyo3::{exceptions, prelude::*, types::PyTuple};
 use rayon::prelude::*;
 
 #[cfg(feature = "pyo3")]
-use crate::utils::normalize_py_index;
+use crate::utils::{normalize_py_index, py_value_error};
 use crate::{
     entities::Mode,
     prelude::*,
@@ -66,7 +66,7 @@ impl Text {
         self.value.read().clone()
     }
 
-    pub fn set_value(&self, value: impl Into<String>) {
+    pub fn set_value(&mut self, value: impl Into<String>) {
         *self.value.write() = value.into();
     }
 
@@ -174,7 +174,7 @@ impl Text {
     }
 
     #[setter(value)]
-    fn py_set_value(&self, value: String) {
+    fn py_set_value(&mut self, value: String) {
         self.set_value(value);
     }
 
@@ -218,11 +218,6 @@ impl Text {
             .ok_or_else(|| exceptions::PyIndexError::new_err("variant index out of range"))?;
         Ok(self.variants.write().remove(index))
     }
-}
-
-#[cfg(feature = "pyo3")]
-fn py_value_error(error: anyhow::Error) -> PyErr {
-    exceptions::PyValueError::new_err(error.to_string())
 }
 
 /// From sss xml 2.0 onwards supports multi-language

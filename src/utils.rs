@@ -49,6 +49,12 @@ pub fn get_type_name<'py>(object: &pyo3::Bound<'py, pyo3::PyAny>) -> pyo3::PyRes
         )))
 }
 
+
+#[cfg(feature = "pyo3")]
+pub fn py_value_error(error: anyhow::Error) -> PyErr {
+    exceptions::PyValueError::new_err(error.to_string())
+}
+
 pub fn validate_language_tag(language: &str) -> Result<&str> {
     let _ = oxilangtag::LanguageTag::parse(language)
         .with_context(|| format!("Unknown language tag: '{}'.", language))?;

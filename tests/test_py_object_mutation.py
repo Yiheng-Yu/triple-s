@@ -1,7 +1,7 @@
 from copy import copy, deepcopy
 
 import pytest
-from triple_s import Text, Variant, SurveyInfo, Mode, Question
+from triple_s import Text, Variant, SurveyInfo, Mode, Question, CodeFormat, Usage
 
 # =============================================================================
 # Text & Variant
@@ -223,6 +223,58 @@ def test_meta_setter_fail(field, values, error):
 # =============================================================================
 def create_empty_question():
     return Question("Q1")
+
+
+def test_question_format_getter_setter(question):
+    assert question.format is None
+
+    for value, expected in [
+        ("numeric", "numeric"),
+        ("literal", "literal"),
+        (CodeFormat.Numeric, "numeric"),
+        (CodeFormat.Literal, "literal"),
+        (None, None),
+    ]:
+        question.format = value
+        assert question.format == expected
+
+    question.format = "numeric"
+    for value, error in [
+        ("invalid", ValueError),
+        (42, TypeError),
+        (1.5, TypeError),
+        (Usage.Serial, TypeError),
+    ]:
+        with pytest.raises(error):
+            question.format = value
+        assert question.format == "numeric"
+
+
+def test_question_usage_getter_setter(question):
+    assert question.usage is None
+
+    for value, expected in [
+        ("serial", "serial"),
+        ("weight", "weight"),
+        (Usage.Serial, "serial"),
+        (Usage.Weight, "weight"),
+        (Usage.Null, ""),
+        (None, None),
+    ]:
+        question.usage = value
+        assert question.usage == expected
+
+    question.usage = "serial"
+    for value, error in [
+        ("invalid", ValueError),
+        (42, TypeError),
+        (1.5, TypeError),
+        (CodeFormat.Numeric, TypeError),
+    ]:
+        with pytest.raises(error):
+            question.usage = value
+        assert question.usage == "serial"
+
 
 
 @pytest.fixture
