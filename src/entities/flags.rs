@@ -72,9 +72,7 @@ impl Flag for Mode {
 }
 
 impl DeepCopy for Mode {
-    type Output = Self;
-
-    fn deepcopy(&self) -> Self::Output {
+    fn deepcopy(&self) -> Self {
         self.clone()
     }
 }
@@ -108,9 +106,7 @@ impl Flag for DataSource {
 }
 
 impl DeepCopy for DataSource {
-    type Output = Self;
-
-    fn deepcopy(&self) -> Self::Output {
+    fn deepcopy(&self) -> Self {
         self.clone()
     }
 }
@@ -126,9 +122,7 @@ pub enum CodeFormat {
 }
 
 impl DeepCopy for CodeFormat {
-    type Output = Self;
-
-    fn deepcopy(&self) -> Self::Output {
+    fn deepcopy(&self) -> Self {
         self.clone()
     }
 }
@@ -170,9 +164,7 @@ impl Flag for Usage {
 }
 
 impl DeepCopy for Usage {
-    type Output = Self;
-
-    fn deepcopy(&self) -> Self::Output {
+    fn deepcopy(&self) -> Self {
         self.clone()
     }
 }

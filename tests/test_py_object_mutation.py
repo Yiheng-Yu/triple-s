@@ -1,8 +1,11 @@
 from copy import copy, deepcopy
 
 import pytest
-from triple_s import Text, Variant, SurveyInfo, Mode
+from triple_s import Text, Variant, SurveyInfo, Mode, Question
 
+# ============================================================================= 
+# Text & Variant
+# ============================================================================= 
 
 VARIANT_CHANGES = [("value", "NEW"), ("mode", "interview"), ("language", "fr")]
 
@@ -155,6 +158,10 @@ def test_remove_variant_out_of_range(text, index):
     assert len(text.variants) == 1
 
 
+# ============================================================================= 
+# Meta
+# ============================================================================= 
+
 def test_meta_options_are_tuples():
     meta = SurveyInfo("2.0", language_options=["en-GB"], mode_options=["analysis"])
     assert meta.language_options == ("en-GB",)
@@ -209,7 +216,66 @@ def test_meta_setter_fail(field, values, error):
     with pytest.raises(error):
         SurveyInfo("2.0", **{field: values})
 
+# ============================================================================= 
+# Question
+# =============================================================================
+def create_empty_question():
+    return Question("Q1")
 
-def test_print_meta_doc():
-    doc = help(SurveyInfo).__repr__()
-    print(doc)
+@pytest.fixture
+def question():
+    return create_empty_question()
+
+# [
+#         ("name", "QQ2"),
+#         ("label", "this is an example label"),
+#         ("label", None),
+#         ("filter", "FILTER"),
+#         ("filter", None),
+#     ],
+
+@pytest.mark.parametrize(
+    "attr, value",
+    [
+        pytest.param(
+            "label",
+            Text("this is an example label"),
+            id="label-value-some",
+        ),
+        pytest.param(
+            "label",
+            None,
+            id="label-value-none",
+        ),
+    ],
+)
+def test_question_setter_success(attr, value):
+    example = create_empty_question()
+    print(example)
+    setattr(example, attr, value)
+    
+    attr_example = getattr(example, attr, None)
+    if attr_example is None:
+        assert value is None
+    else:
+        assert attr_example == value
+            
+@pytest.mark.parametrize(
+    "attr, value",
+    [
+        pytest.param(
+            "label",
+            3.2,
+            id="label-value-int",
+        ),
+        pytest.param(
+            "label",
+            55,
+            id="label-value-float",
+        ),
+    ],
+)
+def test_question_setter_fail(attr, value):
+    example = create_empty_question()
+    with pytest.raises(TypeError):
+        setattr(example, attr, value)

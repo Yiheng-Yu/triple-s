@@ -3,6 +3,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*, types::PyTuple};
+use rayon::prelude::*;
 
 #[cfg(feature = "pyo3")]
 use crate::utils::normalize_py_index;
@@ -23,11 +24,25 @@ pub struct Text {
 }
 
 impl Clone for Text {
+    /// cloning the pointer to the actual data behind,
+    /// this clone() will create shareable, mutable copy of the current
+    /// instance.
     fn clone(&self) -> Self {
         Self {
-            value: self.value.deepcopy(),
-            variants: self.variants.deepcopy(),
+            value: self.value.clone(),
+            variants: self.variants.clone(),
         }
+    }
+}
+
+impl PartialEq for Text {
+    /// compares current instance with other instance. 
+    /// variants comparisons are order-independentent (i.e variant [A, B] is considered to be equal with variant [B, A])
+    fn eq(&self, other: &Self) -> bool {
+        if self.value.read().as_str() != other.value.read().as_str() {
+            return false;
+        };
+        self.has_same_variants(other)
     }
 }
 
@@ -74,15 +89,32 @@ impl Text {
         self.variants = replacement.variants;
         Ok(())
     }
+
+    pub fn has_same_variants(&self, other: &Self) -> bool {
+        if self.variants.len() != other.variants.len() {
+            return false;
+        } else if self.variants.len() == 0 {
+            return true
+        } else {
+            self.variants
+                .par_iter()
+                .find_first(|self_var| {
+                    other
+                        .variants
+                        .par_iter()
+                        .find_first(|other_var| other_var == self_var)
+                        .is_some()
+                })
+                .is_some()
+        }
+    }
 }
 
 impl DeepCopy for Text {
-    type Output = Self;
-
-    fn deepcopy(&self) -> Self::Output {
+    fn deepcopy(&self) -> Self {
         Self {
             value: self.value.deepcopy(),
-            variants: self.variants.clone().iter().map(Variant::deepcopy).collect()
+            variants: self.variants.clone().iter().map(Variant::deepcopy).collect(),
         }
     }
 }
@@ -96,6 +128,22 @@ impl Text {
         let mut text = Self::new(value);
         text.set_variants(variants.unwrap_or_default()).map_err(py_value_error)?;
         Ok(text)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    fn __copy__(&self) -> Self {
+        self.deepcopy()
+    }
+
+    fn __deepcopy__(&self) -> Self {
+        self.deepcopy()
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.eq(other)
     }
 
     #[getter(value)]
@@ -129,8 +177,7 @@ impl Text {
         let variant = if let Ok(variant) = variant.extract::<Variant>() {
             variant
         } else if let Ok(value) = variant.extract::<String>() {
-            Variant::new(value, mode, language.map(str::to_owned))
-                .map_err(py_value_error)?
+            Variant::new(value, mode, language).map_err(py_value_error)?
         } else {
             let type_received = variant.get_type().name()?.extract::<String>()?;
 
@@ -186,8 +233,6 @@ pub struct Variant {
 }
 
 impl DeepCopy for Variant {
-    type Output = Self;
-
     fn deepcopy(&self) -> Self {
         Self {
             value: self.value.deepcopy(),
@@ -207,7 +252,7 @@ impl Variant {
     pub fn new(
         value: impl Into<String>,
         mode: Option<&str>,
-        language: Option<String>,
+        language: Option<&str>,
     ) -> Result<Self> {
         let instance = Self {
             value: lock_it_up(value.into()),
@@ -251,7 +296,7 @@ impl Variant {
         self.language.read().clone()
     }
 
-    pub fn set_language(&self, language: Option<String>) -> Result<()> {
+    pub fn set_language(&self, language: Option<&str>) -> Result<()> {
         let language =
             language.map(|s| validate_language_tag(&s).map(str::to_owned)).transpose()?;
         // Update the shared value, rather than replacing the shared pointer.
@@ -264,8 +309,8 @@ impl Variant {
 #[pymethods]
 impl Variant {
     #[new]
-    #[pyo3(signature = (value:"str", mode:"str"=None, language:"str"=None))]
-    fn py_new(value: String, mode: Option<&str>, language: Option<String>) -> PyResult<Self> {
+    #[pyo3(signature = (value:"str", mode:"'analysis'|'interview'|None"=None, language:"str|None"=None))]
+    fn py_new(value: String, mode: Option<&str>, language: Option<&str>) -> PyResult<Self> {
         Self::new(value, mode, language).map_err(py_value_error)
     }
 
@@ -298,18 +343,21 @@ impl Variant {
     }
 
     #[setter(language)]
-    fn py_set_language(&self, language: Option<String>) -> PyResult<()> {
+    fn py_set_language(&self, language: Option<&str>) -> PyResult<()> {
         self.set_language(language).map_err(py_value_error)
     }
 
+    /// makes deepcopy of the current instance.
     fn copy(&self) -> Self {
         self.deepcopy()
     }
 
+    /// makes deepcopy of the current instance.
     fn __copy__(&self) -> Self {
         self.deepcopy()
     }
 
+    /// makes deepcopy of the current instance.
     fn __deepcopy__(&self, _memo: &Bound<'_, PyAny>) -> Self {
         self.deepcopy()
     }
@@ -318,6 +366,31 @@ impl Variant {
         let value = self.get_value().into_pyobject(py)?.repr()?;
         let mode = self.py_get_mode().into_pyobject(py)?.repr()?;
         let language = self.get_language().into_pyobject(py)?.repr()?;
-        Ok(format!("Variant(value={value}, mode={mode}, language={language})"))
+        Ok(format!(
+            "Variant(value={value}, mode={mode}, language={language})"
+        ))
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self.eq(other)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_equal_variant() {
+        let a = Variant::new("variant a", Some("interview"), Some("gb")).unwrap();
+        let b = Variant::new("variant a", Some("interview"), Some("gb")).unwrap();
+        assert_eq!(a, b)
+    }
+
+    #[test]
+    fn test_equal_text() {
+        let a = Text::new("variant a");
+        let b = Text::new("variant a");
+        assert_eq!(a, b)
     }
 }

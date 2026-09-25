@@ -13,7 +13,6 @@ use pyo3::prelude::*;
 
 pub use question::{Location, Question};
 pub use record::Record;
-pub use responses::Response;
 pub use texts::{Text, Variant};
 
 use crate::utils::ArcLock;

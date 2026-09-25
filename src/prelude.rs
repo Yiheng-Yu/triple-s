@@ -46,29 +46,23 @@ pub trait Flag: strum::IntoEnumIterator {
 }
 
 pub trait DeepCopy {
-    type Output;
-    fn deepcopy(&self) -> Self::Output;
+    fn deepcopy(&self) -> Self;
 }
 
 impl DeepCopy for String {
-    type Output = Self;
 
     fn deepcopy(&self) -> Self {
         self.clone()
     }
 }
 
-impl<T: DeepCopy<Output = T>> DeepCopy for Option<T> {
-    type Output = Self;
-
+impl<T:DeepCopy> DeepCopy for Option<T> {
     fn deepcopy(&self) -> Self {
         self.as_ref().map(DeepCopy::deepcopy)
     }
 }
 
-impl<T: DeepCopy<Output = T>> DeepCopy for Vec<T> {
-    type Output = Self;
-
+impl<T:DeepCopy> DeepCopy for Vec<T> {
     fn deepcopy(&self) -> Self {
         self.iter().map(DeepCopy::deepcopy).collect()
     }
