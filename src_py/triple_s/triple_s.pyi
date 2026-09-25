@@ -80,6 +80,10 @@ class Question:
     def __new__(cls, /, name: "str", label: "str" = None, filter: "str" = None, format: "'numeric'|'literal'|None" = None, usage: "'serial'|'weight'|None" = None, location: Location |None = None) -> Question: ...
     def __repr__(self, /) -> str: ...
     @property
+    def filter(self, /) -> str |None: ...
+    @filter.setter
+    def filter(self, /, filter: str |None) -> None: ...
+    @property
     def label(self, /) -> Text |None: ...
     @label.setter
     def label(self, /, label: Any |None) -> None: ...
@@ -107,13 +111,13 @@ class SurveyInfo:
         date of the creation
         """
     @property
+    def language_options(self, /) -> tuple: ...
+    @property
     def language_options(self, /) -> list[str]:
         """
         ** Introduced since sss 1.2 **
         list of all available language options
         """
-    @property
-    def language_options(self, /) -> tuple: ...
     @language_options.setter
     def language_options(self, /, values: Sequence[str]) -> None: ...
     @language_options.setter
@@ -123,13 +127,13 @@ class SurveyInfo:
         list of all available language options
         """
     @property
+    def mode_options(self, /) -> tuple: ...
+    @property
     def mode_options(self, /) -> list[Mode]:
         """
         ** Introduced since sss 1.2 **
         list of all available `mode` options
         """
-    @property
-    def mode_options(self, /) -> tuple: ...
     @mode_options.setter
     def mode_options(self, /, value: Sequence[Mode]) -> None:
         """
@@ -298,6 +302,7 @@ class Variant:
         makes deepcopy of the current instance.
         """
     def __eq__(self, other: object, /) -> bool: ...
+    def __hash__(self, /) -> int: ...
     def __new__(cls, /, value: "str", mode: "'analysis'|'interview'|None" = None, language: "str|None" = None) -> Variant: ...
     def __repr__(self, /) -> str: ...
     def copy(self, /) -> Variant:

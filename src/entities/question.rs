@@ -115,7 +115,9 @@ impl Question {
 
     #[getter]
     fn get_label(&self) -> PyResult<Option<Text>> {
-        let output = self.label.as_ref().map(|label| label.clone());
+        let output = self.label
+            .as_ref()
+            .map(|label| label.clone());
         Ok(output)
     }
 
@@ -142,6 +144,17 @@ impl Question {
             self.label = None;
             Ok(())
         }
+    }
+
+    #[getter]
+    fn get_filter(&self) -> PyResult<Option<String>> {
+        Ok(self.filter.read().clone())
+    }
+
+    #[setter]
+    fn set_filter(&mut self, filter:Option<String>) -> PyResult<()> {
+        self.filter = lock_it_up(filter);
+        Ok(())
     }
 }
 

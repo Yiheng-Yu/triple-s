@@ -1,4 +1,11 @@
-use std::str::FromStr;
+use std::{
+    collections::HashSet,
+    hash::{Hash, Hasher},
+    str::FromStr,
+};
+
+#[cfg(feature="pyo3")]
+use std::hash::DefaultHasher;
 
 use anyhow::{Context, Result};
 #[cfg(feature = "pyo3")]
@@ -20,7 +27,7 @@ use crate::{
 #[derive(Debug)]
 pub struct Text {
     pub value: ArcLock<String>,
-    pub variants: Vec<Variant>,
+    pub variants: ArcLock<Vec<Variant>>,
 }
 
 impl Clone for Text {
@@ -36,8 +43,9 @@ impl Clone for Text {
 }
 
 impl PartialEq for Text {
-    /// compares current instance with other instance. 
-    /// variants comparisons are order-independentent (i.e variant [A, B] is considered to be equal with variant [B, A])
+    /// compares current instance with other instance.
+    /// variants comparisons are order-independentent (i.e variant [A, B] is
+    /// considered to be equal with variant [B, A])
     fn eq(&self, other: &Self) -> bool {
         if self.value.read().as_str() != other.value.read().as_str() {
             return false;
@@ -50,7 +58,7 @@ impl Text {
     pub fn new(value: impl Into<String>) -> Self {
         Self {
             value: lock_it_up(value.into()),
-            variants: Vec::new(),
+            variants: lock_it_up(Vec::new()),
         }
     }
 
@@ -65,42 +73,48 @@ impl Text {
     pub fn add_variant(&mut self, variant: Variant) -> Result<()> {
         let copied = variant.deepcopy();
         anyhow::ensure!(
-            !self.variants.iter().any(|item| item.has_same_attribute(&copied)),
+            !self.variants.read().iter().any(|item| item.has_same_attribute(&copied)),
             "A variant with this mode and language already exists"
         );
-        self.variants.push(copied);
+        self.variants.write().push(copied);
         Ok(())
     }
 
     pub fn remove_variant(&mut self, index: usize) -> Option<Variant> {
-        if index < self.variants.len() {
-            Some(self.variants.remove(index))
+        if index < self.variants.read().len() {
+            Some(self.variants.write().remove(index))
         } else {
             None
         }
     }
 
     /// Copy and validate inputs before replacing membership.
-    pub fn set_variants(&mut self, variants: Vec<Variant>) -> Result<()> {
-        let mut replacement = Self::new("");
-        for variant in variants {
-            replacement.add_variant(variant)?;
-        }
-        self.variants = replacement.variants;
+    pub fn set_variants(&mut self, mut variants: Vec<Variant>) -> Result<()> {
+        // drop duplicated variants first
+        let mut unique = HashSet::new();
+        variants.retain(|item| {
+            unique.insert((item.get_value(), item.get_mode(), item.get_language()))
+        });
+
+        let variants =
+            variants.into_par_iter().map(|item| item.deepcopy()).collect::<Vec<Variant>>();
+        self.variants = lock_it_up(variants);
         Ok(())
     }
 
     pub fn has_same_variants(&self, other: &Self) -> bool {
-        if self.variants.len() != other.variants.len() {
+        if self.variants.read().len() != other.variants.read().len() {
             return false;
-        } else if self.variants.len() == 0 {
-            return true
+        } else if self.variants.read().len() == 0 {
+            return true;
         } else {
             self.variants
+                .read()
                 .par_iter()
                 .find_first(|self_var| {
                     other
                         .variants
+                        .read()
                         .par_iter()
                         .find_first(|other_var| other_var == self_var)
                         .is_some()
@@ -112,9 +126,17 @@ impl Text {
 
 impl DeepCopy for Text {
     fn deepcopy(&self) -> Self {
+        let variants = self
+            .variants
+            .read()
+            .clone()
+            .iter()
+            .map(Variant::deepcopy)
+            .collect::<Vec<Variant>>();
+
         Self {
             value: self.value.deepcopy(),
-            variants: self.variants.clone().iter().map(Variant::deepcopy).collect(),
+            variants: lock_it_up(variants),
         }
     }
 }
@@ -159,7 +181,8 @@ impl Text {
     /// Immutable membership snapshot, containing shared mutable variants.
     #[getter]
     fn get_variants<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
-        PyTuple::new(py, self.variants.iter().cloned())
+        let variants_view = self.variants.read().clone().into_iter().map(|item| item.clone());
+        PyTuple::new(py, variants_view)
     }
 
     #[setter(variants)]
@@ -191,9 +214,9 @@ impl Text {
 
     #[pyo3(name = "remove_variant")]
     fn py_remove_variant(&mut self, index: isize) -> PyResult<Variant> {
-        let index = normalize_py_index(index, self.variants.len())
+        let index = normalize_py_index(index, self.variants.read().len())
             .ok_or_else(|| exceptions::PyIndexError::new_err("variant index out of range"))?;
-        Ok(self.variants.remove(index))
+        Ok(self.variants.write().remove(index))
     }
 }
 
@@ -225,11 +248,21 @@ fn py_value_error(error: anyhow::Error) -> PyErr {
     feature = "pyo3",
     pyclass(name = "Variant", module = "triple_s", from_py_object)
 )]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct Variant {
     pub value: ArcLock<String>,
     mode: ArcLock<Mode>,
     language: ArcLock<Option<String>>,
+}
+
+impl Clone for Variant {
+    fn clone(&self) -> Self {
+        Self {
+            value: self.value.clone(),
+            mode: self.mode.clone(),
+            language: self.language.clone(),
+        }
+    }
 }
 
 impl DeepCopy for Variant {
@@ -245,6 +278,16 @@ impl DeepCopy for Variant {
 impl PartialEq for Variant {
     fn eq(&self, other: &Self) -> bool {
         self.has_same_attribute(other) && self.get_value() == other.get_value()
+    }
+}
+
+impl Eq for Variant {}
+
+impl Hash for Variant {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.get_value().hash(state);
+        self.get_mode().hash(state);
+        self.get_language().hash(state);
     }
 }
 
@@ -373,6 +416,12 @@ impl Variant {
 
     fn __eq__(&self, other: &Self) -> bool {
         self.eq(other)
+    }
+
+    fn __hash__(&self) -> u64 {
+        let mut state = DefaultHasher::new();
+        self.hash(&mut state);
+        state.finish()
     }
 }
 

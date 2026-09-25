@@ -50,7 +50,7 @@ impl Flag for Version {
 /// - Analysis: mode 'analysis'
 /// - Interview: mode 'interview'
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
-#[derive(Debug, Default, PartialEq, Clone, EnumString, Eq, EnumIter)]
+#[derive(Debug, Default, PartialEq, Hash, Clone, EnumString, Eq, EnumIter)]
 #[strum(ascii_case_insensitive)]
 pub enum Mode {
     #[default]

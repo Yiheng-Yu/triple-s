@@ -3,11 +3,12 @@ from copy import copy, deepcopy
 import pytest
 from triple_s import Text, Variant, SurveyInfo, Mode, Question
 
-# ============================================================================= 
+# =============================================================================
 # Text & Variant
-# ============================================================================= 
+# =============================================================================
 
 VARIANT_CHANGES = [("value", "NEW"), ("mode", "interview"), ("language", "fr")]
+
 
 @pytest.fixture
 def variant():
@@ -93,6 +94,7 @@ def test_variant_mutation_through_shared_ref(text, variant, field, value):
     setattr(text.variants[0], field, getattr(variant, field))
     assert getattr(shared[0], field) == getattr(variant, field)
 
+
 def test_variant_sharable_mutation(text):
     shared = text.variants
     with pytest.raises(TypeError):
@@ -133,21 +135,19 @@ def test_add_variant_and_reject_duplicate(text, as_string):
     assert text.variants[-1].value == "another"
 
 
-def test_duplicate_replacement_is_atomic(text, variant):
-    before = text.variants
-    with pytest.raises(ValueError):
-        text.variants = [Variant("new", language="fr"), variant, variant.copy()]
-    assert len(text.variants) == len(before)
-    for field in ("value", "mode", "language"):
-        assert getattr(text.variants[0], field) == getattr(before[0], field)
+def test_drop_duplicated_variant(variant):
+    text = Text("example")
+    assert len(text.variants) == 0
+
+    with_dupe = [Variant("new", language="fr"), variant, variant.copy()]
+    text.variants = with_dupe
+    assert len(text.variants) == len(set(with_dupe))
 
 
 @pytest.mark.parametrize("index", [0, -1])
 def test_remove_variant(text, index):
     removed = text.remove_variant(index)
-    assert (removed.value, removed.mode, removed.language) == (
-        "original", "analysis", "en-GB"
-    )
+    assert (removed.value, removed.mode, removed.language) == ("original", "analysis", "en-GB")
     assert text.variants == ()
 
 
@@ -158,19 +158,20 @@ def test_remove_variant_out_of_range(text, index):
     assert len(text.variants) == 1
 
 
-# ============================================================================= 
+# =============================================================================
 # Meta
-# ============================================================================= 
+# =============================================================================
+
 
 def test_meta_options_are_tuples():
     meta = SurveyInfo("2.0", language_options=["en-GB"], mode_options=["analysis"])
     assert meta.language_options == ("en-GB",)
     assert isinstance(meta.mode_options, tuple)
     assert meta.mode_options == (Mode.Analysis,)
-    
+
     with pytest.raises(TypeError):
         meta.language_options[0] = "fr"
-        
+
     with pytest.raises(TypeError):
         meta.mode_options[0] = Mode.Interview
 
@@ -185,14 +186,14 @@ def test_meta_setter_success():
 
     meta.language_options = ["en", "fr"]
     assert meta.language_options == ("en", "fr")
-    
+
     meta.language_options = ("de",)
     meta.mode_options = ["interview", Mode.Analysis, None]
     assert meta.mode_options == (Mode.Interview, Mode.Analysis, getattr(Mode, "None"))
-    
+
     meta.mode_options = ("analysis",)
     assert meta.mode_options == (Mode.Analysis,)
-    
+
     meta.language_options = []
     meta.mode_options = []
     assert meta.language_options == meta.mode_options == ()
@@ -216,23 +217,17 @@ def test_meta_setter_fail(field, values, error):
     with pytest.raises(error):
         SurveyInfo("2.0", **{field: values})
 
-# ============================================================================= 
+
+# =============================================================================
 # Question
 # =============================================================================
 def create_empty_question():
     return Question("Q1")
 
+
 @pytest.fixture
 def question():
     return create_empty_question()
-
-# [
-#         ("name", "QQ2"),
-#         ("label", "this is an example label"),
-#         ("label", None),
-#         ("filter", "FILTER"),
-#         ("filter", None),
-#     ],
 
 @pytest.mark.parametrize(
     "attr, value",
@@ -247,19 +242,40 @@ def question():
             None,
             id="label-value-none",
         ),
+        pytest.param(
+            "filter",
+            "some filter",
+            id="filter-value-some",
+        ),
+        pytest.param(
+            "filter",
+            None,
+            id="filter-value-none",
+        ),
     ],
 )
 def test_question_setter_success(attr, value):
     example = create_empty_question()
     print(example)
     setattr(example, attr, value)
-    
+
     attr_example = getattr(example, attr, None)
     if attr_example is None:
         assert value is None
     else:
         assert attr_example == value
-            
+
+
+def test_question_variant_setter_success(question):
+    question.label = "this label"
+    assert question.label.value == "this label"
+    print(question.label)
+    question.label.add_variant("this variant", mode="analysis")
+    print(question.label)
+    assert question.label.variants[0].value == "this variant"
+    assert question.label.variants[0].mode == "analysis"
+
+
 @pytest.mark.parametrize(
     "attr, value",
     [
