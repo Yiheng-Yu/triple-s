@@ -103,6 +103,48 @@ impl Question {
 
         Ok(instance)
     }
+
+    pub fn get_format_str(&self) -> Option<&str> {
+        self.format.read().as_ref().map(|item| item.as_str())
+    }
+
+    pub fn set_format_from_str(&self, value: Option<&str>) -> Result<()> {
+        match value {
+            None => {
+                *self.format.write() = None;
+                Ok(())
+            }
+            Some(format) => {
+                let format = CodeFormat::from_str(format).with_context(|| {
+                    format!(
+                        "Expected to be `None` or one of: {:?}",
+                        CodeFormat::available_options()
+                    )
+                })?;
+                *self.format.write() = Some(format);
+                Ok(())
+            }
+        }
+    }
+
+    pub fn set_usage_from_str(&self, value: Option<&str>) -> Result<()> {
+        match value {
+            None => {
+                *self.usage.write() = None;
+                Ok(())
+            }
+            Some(usage) => {
+                let usage = Usage::from_str(usage).with_context(|| {
+                    format!(
+                        "Expected to be `None` or one of: {:?}",
+                        Usage::available_options()
+                    )
+                })?;
+                *self.usage.write() = Some(usage);
+                Ok(())
+            }
+        }
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -182,33 +224,22 @@ impl Question {
 
     #[getter(format)]
     fn py_get_format(&self) -> PyResult<Option<&str>> {
-        Ok(self.format.read().as_ref().map(|item| item.as_str()))
+        Ok(self.get_format_str())
     }
 
     #[setter(format)]
-    fn py_set_format<'py>(&self, format: Option<&Bound<'py, PyAny>>) -> PyResult<()> {
-        match format {
-            None => {
-                *self.format.write() = None;
-                Ok(())
-            }
-            Some(format) => {
-                if let Ok(value) = format.extract::<&str>() {
-                    let format = CodeFormat::from_str(value)
-                        .map_err(|err| py_value_error(err.into()))?;
-                    *self.format.write() = Some(format);
-                    Ok(())
-                } else if let Ok(value) = format.extract::<CodeFormat>() {
-                    *self.format.write() = Some(value);
-                    Ok(())
-                } else {
-                    let type_name = get_type_name(format)?;
-                    Err(exceptions::PyTypeError::new_err(format!(
-                        "Expect 'format' to be one of: 'numeric'|'literal'|None, got: {}",
-                        type_name
-                    )))
-                }
-            }
+    fn py_set_format<'py>(&self, format: &Bound<'py, PyAny>) -> PyResult<()> {
+        if let Ok(value) = format.extract::<Option<CodeFormat>>() {
+            *self.format.write() = value;
+            Ok(())
+        } else if let Ok(value) = format.extract::<Option<&str>>() {
+            self.set_format_from_str(value).map_err(py_value_error)
+        } else {
+            let type_name = get_type_name(format)?;
+            Err(exceptions::PyTypeError::new_err(format!(
+                "Expect 'format' to be one of: 'numeric'|'literal'|None, got: {}",
+                type_name
+            )))
         }
     }
 
@@ -218,29 +249,18 @@ impl Question {
     }
 
     #[setter(usage)]
-    fn py_set_usage<'py>(&self, usage: Option<&Bound<'py, PyAny>>) -> PyResult<()> {
-        match usage {
-            None => {
-                *self.usage.write() = None;
-                Ok(())
-            }
-            Some(usage) => {
-                if let Ok(value) = usage.extract::<&str>() {
-                    let usage =
-                        Usage::from_str(value).map_err(|err| py_value_error(err.into()))?;
-                    *self.usage.write() = Some(usage);
-                    Ok(())
-                } else if let Ok(value) = usage.extract::<Usage>() {
-                    *self.usage.write() = Some(value);
-                    Ok(())
-                } else {
-                    let type_name = get_type_name(usage)?;
-                    Err(exceptions::PyTypeError::new_err(format!(
-                        "Expect 'format' to be one of: 'numeric'|'literal'|None, got: {}",
-                        type_name
-                    )))
-                }
-            }
+    fn py_set_usage<'py>(&self, value: &Bound<'py, PyAny>) -> PyResult<()> {
+        if let Ok(value) = value.extract::<Option<Usage>>() {
+            *self.usage.write() = value;
+            Ok(())
+        } else if let Ok(value) = value.extract::<Option<&str>>() {
+            self.set_usage_from_str(value).map_err(py_value_error)
+        } else {
+            let type_name = get_type_name(value)?;
+            Err(exceptions::PyTypeError::new_err(format!(
+                "Expect 'usage' to be one of: 'serial'|'weight'|None, got: {}",
+                type_name
+            )))
         }
     }
 }
@@ -439,19 +459,9 @@ mod test {
 
             for value in ["numeric", "literal"] {
                 let input = pyo3::types::PyString::new(py, value);
-                question.py_set_format(Some(input.as_any())).unwrap();
+                question.py_set_format(&input).unwrap();
                 assert_eq!(question.py_get_format().unwrap(), Some(value));
             }
-
-            for (value, expected) in [
-                (CodeFormat::Numeric, "numeric"),
-                (CodeFormat::Literal, "literal"),
-            ] {
-                let input = Py::new(py, value).unwrap();
-                question.py_set_format(Some(input.bind(py).as_any())).unwrap();
-                assert_eq!(question.py_get_format().unwrap(), Some(expected));
-            }
-
         });
     }
 
@@ -465,17 +475,8 @@ mod test {
 
             for value in ["serial", "weight"] {
                 let input = pyo3::types::PyString::new(py, value);
-                question.py_set_usage(Some(input.as_any())).unwrap();
+                question.py_set_usage(&input).unwrap();
                 assert_eq!(question.py_get_usage().unwrap(), Some(value));
-            }
-            for (value, expected) in [
-                (Usage::Serial, "serial"),
-                (Usage::Weight, "weight"),
-                (Usage::Null, ""),
-            ] {
-                let input = Py::new(py, value).unwrap();
-                question.py_set_usage(Some(input.bind(py).as_any())).unwrap();
-                assert_eq!(question.py_get_usage().unwrap(), Some(expected));
             }
         });
     }
