@@ -7,11 +7,11 @@ use anyhow::Context;
 use pyo3::{exceptions, prelude::*};
 
 #[cfg(feature = "pyo3")]
-use crate::{prelude::Flag, utils::{lock_it_up, get_type_name}};
+use crate::{prelude::Flag, utils::{get_type_name}};
 use crate::{
     entities::{CodeFormat, Text, Usage},
     prelude::DeepCopy,
-    utils::ArcLock,
+    utils::{ArcLock, lock_it_up},
 };
 
 #[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "Question", from_py_object))]
@@ -23,7 +23,8 @@ pub struct Question {
     pub filter: ArcLock<Option<String>>,
     pub format: ArcLock<CodeFormat>,
     pub usage: ArcLock<Usage>,
-    pub location: ArcLock<Location>,
+    // pub location: ArcLock<Location>,
+    pub location: Location,
     // pub response: Response,
 }
 
@@ -93,7 +94,8 @@ impl Question {
             .unwrap_or_default();
         let usage = lock_it_up(usage);
 
-        let location = lock_it_up(location.unwrap_or_default());
+        // let location = lock_it_up(location.unwrap_or_default());
+        let location = location.unwrap_or_default();
 
         let instance = Self {
             index: 0,
@@ -155,6 +157,11 @@ impl Question {
         self.filter = lock_it_up(filter);
         Ok(())
     }
+
+    #[getter]
+    fn get_location(&self) -> PyResult<Location> {
+        Ok(self.location.clone())
+    }
 }
 
 /// Defines the part of the data record that is allocated to holding the value
@@ -163,27 +170,43 @@ impl Question {
     feature = "pyo3",
     pyclass(module = "triple_s", name = "Location", from_py_object)
 )]
-#[derive(Debug, Clone, PartialEq, Default, Eq)]
+#[derive(Debug, Default)]
 pub struct Location {
-    pub from: u64,
-    pub to: u64,
+    pub from: ArcLock<u64>,
+    pub to: ArcLock<u64>,
 }
 
 impl DeepCopy for Location {
     fn deepcopy(&self) -> Self {
         Self {
-            from: self.from,
-            to: self.to,
+            from: lock_it_up(self.from.read().clone()),
+            to: lock_it_up(self.to.read().clone()),
         }
+    }
+}
+
+impl Clone for Location {
+    fn clone(&self) -> Self {
+        Self {
+            from: self.from.clone(),
+            to: self.to.clone()
+        }
+    }
+}
+
+impl PartialEq for Location {
+    fn eq(&self, other: &Self) -> bool {
+        (self.from.read().clone() == other.from.read().clone())
+        & (self.to.read().clone() == other.to.read().clone())
     }
 }
 
 impl Location {
     pub fn to_sss_classic(&self) -> String {
-        if self.to != self.from {
-            format!("POSITION {} TO {}", self.from, self.to)
+        if self.to.read().clone() != self.from.read().clone() {
+            format!("POSITION {} TO {}", self.from.read(), self.to.read())
         } else {
-            format!("POSITION {}", self.from)
+            format!("POSITION {}", self.from.read())
         }
     }
 }
@@ -206,34 +229,35 @@ impl Location {
             from.clone()
         };
 
-        Ok(Self { from, to })
+        Ok(Self { from: lock_it_up(from), to: lock_it_up(to) })
     }
 
-    #[getter(from)]
+    // `from` is a preserved word in Python hence the alias
+    #[getter(start)]
     fn py_get_from(&self) -> u64 {
-        self.from.clone()
+        self.from.read().clone()
     }
 
-    #[setter(from)]
+    #[setter(start)]
     fn py_set_from(&mut self, from: u64) -> PyResult<()> {
-        self.from = from;
+        *self.from.write() = from;
         Ok(())
     }
 
-    #[getter(to)]
+    #[getter(end)]
     fn py_get_to(&self) -> u64 {
-        self.to.clone()
+        self.to.read().clone()
     }
 
-    #[setter(to)]
+    #[setter(end)]
     fn py_set_to(&mut self, to: u64) -> PyResult<()> {
-        if to >= self.from {
-            self.to = to;
+        if to >= self.from.read().clone() {
+            *self.to.write() = to;
             Ok(())
         } else {
             Err(exceptions::PyValueError::new_err(format!(
                 "Value of `to` cannot be greater than `from` ({}).",
-                &self.from
+                &self.from.read()
             )))
         }
     }

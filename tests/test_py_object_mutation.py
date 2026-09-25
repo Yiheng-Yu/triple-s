@@ -265,7 +265,6 @@ def test_question_setter_success(attr, value):
     else:
         assert attr_example == value
 
-
 def test_question_variant_setter_success(question):
     question.label = "this label"
     assert question.label.value == "this label"
@@ -295,3 +294,22 @@ def test_question_setter_fail(attr, value):
     example = create_empty_question()
     with pytest.raises(TypeError):
         setattr(example, attr, value)
+
+@pytest.mark.parametrize(
+    "attr, value",
+    [
+            pytest.param(
+                "start",
+                3,
+                id="location-start",
+            ),
+            pytest.param(
+                "end",
+                55,
+                id="location-end",
+            ),
+        ],
+    )
+def test_set_question_location_success(question, attr, value):
+    setattr(question.location, attr, value)
+    assert getattr(question.location, attr) == value
