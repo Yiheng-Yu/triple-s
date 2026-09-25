@@ -1,7 +1,9 @@
 from copy import copy, deepcopy
 
 import pytest
-from triple_s import Text, Variant, SurveyInfo, Mode, Question, CodeFormat, Usage
+
+from triple_s import Text, Variant, SurveyInfo, Question
+from triple_s.flags import Mode, CodeFormat, Usage
 
 # =============================================================================
 # Text & Variant
@@ -276,10 +278,10 @@ def test_question_usage_getter_setter(question):
         assert question.usage == "serial"
 
 
-
 @pytest.fixture
 def question():
     return create_empty_question()
+
 
 @pytest.mark.parametrize(
     "attr, value",
@@ -308,7 +310,6 @@ def question():
 )
 def test_question_setter_success(attr, value):
     example = create_empty_question()
-    print(example)
     setattr(example, attr, value)
 
     attr_example = getattr(example, attr, None)
@@ -317,12 +318,12 @@ def test_question_setter_success(attr, value):
     else:
         assert attr_example == value
 
+
 def test_question_variant_setter_success(question):
     question.label = "this label"
     assert question.label.value == "this label"
-    print(question.label)
+
     question.label.add_variant("this variant", mode="analysis")
-    print(question.label)
     assert question.label.variants[0].value == "this variant"
     assert question.label.variants[0].mode == "analysis"
 
@@ -347,21 +348,22 @@ def test_question_setter_fail(attr, value):
     with pytest.raises(TypeError):
         setattr(example, attr, value)
 
+
 @pytest.mark.parametrize(
     "attr, value",
     [
-            pytest.param(
-                "start",
-                3,
-                id="location-start",
-            ),
-            pytest.param(
-                "end",
-                55,
-                id="location-end",
-            ),
-        ],
-    )
+        pytest.param(
+            "start",
+            3,
+            id="location-start",
+        ),
+        pytest.param(
+            "end",
+            55,
+            id="location-end",
+        ),
+    ],
+)
 def test_set_question_location_success(question, attr, value):
     setattr(question.location, attr, value)
     assert getattr(question.location, attr) == value

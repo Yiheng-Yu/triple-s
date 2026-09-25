@@ -1,7 +1,7 @@
 use std::range::Range;
 
 use crate::{
-    utils::ArcLock,
+    prelude::DeepCopy, utils::{ArcLock, lock_it_up},
 };
 
 #[cfg(feature="pyo3")]
@@ -26,29 +26,84 @@ impl Clone for Category {
 }
 
 #[cfg_attr(feature="pyo3", pyclass(name="Code", module="triple_s", from_py_object))]
+#[derive(Debug)]
 pub struct Code {
-    value: Value,
-    label: Option<String>,
-    filter: Option<String>,
-    score: Option<f64>,
+    pub value: ArcLock<Value>,
+    pub label: ArcLock<String>,
+    pub filter:ArcLock<Option<String>>,
+    pub score: ArcLock<Option<f64>>,
 }
 
 impl Clone for Code {
+    /// makes a shallow copy of the data
     fn clone(&self) -> Self {
-        todo!()
+        Self {
+            value: self.value.clone(),
+            label: self.label.clone(),
+            filter: self.filter.clone(),
+            score: self.score.clone(),
+        }
     }
+}
+
+impl DeepCopy for Code {
+    fn deepcopy(&self) -> Self {
+        Self {
+            value: lock_it_up(self.value.read().clone()),
+            label: lock_it_up(self.label.read().clone()),
+            filter: lock_it_up(self.filter.read().clone()),
+            score: lock_it_up(self.score.read().clone()),
+        }
+    }
+}
+
+impl Code {
+    pub fn new_numeric(
+        value: u64,
+        label: impl Into<String>,
+        filter: Option<impl Into<String>>,
+        score: Option<f64>,
+    ) -> Self {
+        Self {
+            value: lock_it_up(Value::Numeric(value)),
+            label: lock_it_up(label.into()),
+            filter: lock_it_up(filter.map(|item| item.into())),
+            score: lock_it_up(score)
+        }
+    }
+
+    pub fn new_literal(
+        value: impl Into<String>,
+        label: impl Into<String>,
+        filter: Option<impl Into<String>>,
+        score: Option<f64>,
+    ) -> Self {
+        Self {
+            value: lock_it_up(Value::Literal(value.into())),
+            label: lock_it_up(label.into()),
+            filter: lock_it_up(filter.map(|item| item.into())),
+            score: lock_it_up(score)
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Code {
+    
 }
 
 #[cfg_attr(feature="pyo3", pyclass(name="Value", module="triple_s", from_py_object))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
-    Int(u64),
-    Str(String)
+    Numeric(u64),
+    Literal(String)
 }
 
 #[cfg_attr(feature="pyo3", pyclass(name="Quantity", module="triple_s", from_py_object))]
 pub struct Quantity {
-    range: Range<f64>,
+    dtype: DType,
+    range: ArcLock<Range<f64>>,
     /// [(special_value, special_label)]
     special: ArcLock<Vec<(f64, String)>>
 }
@@ -57,4 +112,10 @@ impl Clone for Quantity {
     fn clone(&self) -> Self {
         todo!()
     }
+}
+
+enum DType {
+    Date,
+    Time,
+    Float,
 }
