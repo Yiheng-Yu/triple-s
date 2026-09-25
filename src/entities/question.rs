@@ -46,6 +46,12 @@ impl Clone for Question {
     }
 }
 
+impl Default for Question {
+    fn default() -> Self {
+        Self::new("", None, None, None, None, None).unwrap()
+    }
+}
+
 impl DeepCopy for Question {
     fn deepcopy(&self) -> Self {
         Self {

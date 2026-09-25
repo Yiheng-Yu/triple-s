@@ -25,4 +25,4 @@ pub use entities::{
     TextVariant,
     Version,
 };
-pub use read::{read_from_string, read_sss_file};
+pub use read::{read_from_string, read_datamap};

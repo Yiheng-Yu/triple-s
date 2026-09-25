@@ -1,4 +1,4 @@
-use triple_s::{Survey, read_sss_file};
+use triple_s::{Survey, read_datamap};
 
 #[allow(dead_code)]
 const PATH_SSS_XML_GENERATION_ONE: &str = "tests/sss-examples/sss_xml_1.0.xml";
@@ -7,17 +7,17 @@ const PATH_SSS_XML_GENERATION_TWO_EXAMPLE_2: &str = "tests/sss-examples/sss-2.0/
 
 #[allow(dead_code)]
 fn example_datamap_xml_generation_one() -> Survey {
-    read_sss_file(PATH_SSS_XML_GENERATION_ONE).unwrap()
+    read_datamap(PATH_SSS_XML_GENERATION_ONE).unwrap()
 }
 
 #[allow(dead_code)]
 fn example_datamap_xml_generation_two_example_one() -> Survey {
-    read_sss_file(PATH_SSS_XML_GENERATION_TWO_EXAMPLE_1).unwrap()
+    read_datamap(PATH_SSS_XML_GENERATION_TWO_EXAMPLE_1).unwrap()
 }
 
 #[allow(dead_code)]
 fn example_datamap_xml_generation_two_example_two() -> Survey {
-    read_sss_file(PATH_SSS_XML_GENERATION_TWO_EXAMPLE_2).unwrap()
+    read_datamap(PATH_SSS_XML_GENERATION_TWO_EXAMPLE_2).unwrap()
 }
 
 #[allow(dead_code)]

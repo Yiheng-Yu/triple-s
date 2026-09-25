@@ -25,9 +25,9 @@ pip install triple-s
 #### Read a survey
 
 ```python
-from triple_s import read_sss_file
+from triple_s import read_datamap
 
-survey = read_sss_file("path/to/survey.sss")
+survey = read_datamap("path/to/survey.sss")
 
 print(survey.title)
 ```
@@ -89,10 +89,10 @@ triple_s = "0.1"
 Read a Classic or XML Triple-S file:
 
 ```rust
-use triple_s::read_sss_file;
+use triple_s::read_datamap;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let survey = read_sss_file("path/to/survey.sss")?;
+    let survey = read_datamap("path/to/survey.sss")?;
 
     println!("{:?}", survey.title);
     for question in &survey.record.content {
@@ -156,7 +156,7 @@ cargo test
 
 ## CodeFormat support
 
-Both `read_sss_file` and `read_from_string` detect Classic or XML input. Numeric
+Both `read_datamap` and `read_from_string` detect Classic or XML input. Numeric
 categories retain integer codes, quantity values retain floating-point codes,
 and literal single responses retain string codes (including leading zeroes).
 Literal multiple responses return an error. Literal codes cannot be exported to

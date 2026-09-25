@@ -85,7 +85,7 @@ pub fn read_from_string(data: String) -> Result<Survey> {
     builder.build()
 }
 
-pub fn read_sss_file(sss_path: &str) -> Result<Survey> {
+pub fn read_datamap(sss_path: &str) -> Result<Survey> {
     let input: File = File::open(sss_path).map_err(error::FileReadError::from)?;
 
     // identify sss version

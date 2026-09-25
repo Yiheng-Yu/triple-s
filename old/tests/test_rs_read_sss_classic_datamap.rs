@@ -3,7 +3,7 @@ use triple_s::{Question, Response, Survey};
 const PATH_SSS_CLASSIC: &str = "tests/sss-examples/sss_classic.sss";
 
 fn example_datamap_classic() -> Survey {
-    triple_s::read_sss_file(PATH_SSS_CLASSIC).unwrap()
+    triple_s::read_datamap(PATH_SSS_CLASSIC).unwrap()
 }
 
 #[test]

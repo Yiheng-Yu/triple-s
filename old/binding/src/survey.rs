@@ -22,7 +22,7 @@ use crate::{
 #[pyfunction]
 #[pyo3(signature = (path: "str") -> "Survey")]
 pub fn read_file(path: &str) -> PyResult<PySurvey> {
-    let survey = sss::read_sss_file(path)
+    let survey = sss::read_datamap(path)
         .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))?;
     Ok(PySurvey::from(survey))
 }
