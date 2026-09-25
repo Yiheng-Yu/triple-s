@@ -19,7 +19,6 @@ use crate::{
 pub struct Question {
     pub index: u64,
     pub name: ArcLock<String>,
-    // pub label: ArcLock<Text>,
     pub label: Option<Text>,
     pub filter: ArcLock<Option<String>>,
     pub format: ArcLock<CodeFormat>,

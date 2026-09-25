@@ -14,7 +14,13 @@ use pyo3::prelude::*;
 pub use question::{Location, Question};
 pub use record::Record;
 pub use texts::{Text, Variant};
-
+pub use responses::{
+    Code,
+    Value,
+    Response,
+    Category,
+    Quantity,
+};
 use crate::utils::ArcLock;
 
 #[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "Survey"))]

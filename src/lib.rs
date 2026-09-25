@@ -16,6 +16,11 @@ pub use entities::{
     Version,
     Location,
     Question,
+    Code,
+    Value,
+    Response,
+    Category,
+    Quantity,
 };
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -39,6 +44,11 @@ mod triple_s {
         Version,
         Location,
         Question,
+        Code,
+        Value,
+        Response,
+        Category,
+        Quantity,
     };
 
     #[pymodule_init]
