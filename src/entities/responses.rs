@@ -1,5 +1,5 @@
-use std::range::Range;
-
+use std::{mem::type_info::Str, range::Range};
+use anyhow::Result;
 use crate::{
     Text, prelude::DeepCopy, utils::{ArcLock, lock_it_up},
 };
@@ -12,6 +12,12 @@ use pyo3::prelude::*;
 pub enum Response {
     Quantity(Quantity),
     Category(Category),
+}
+
+impl Response {
+    pub fn get_code(key: impl Into<Value>) -> Result<Option<Code>> {
+        todo!()
+    }
 }
 
 #[cfg_attr(feature="pyo3", pyclass(name="Category", module="triple_s", from_py_object))]
@@ -123,6 +129,25 @@ pub enum Value {
     Numeric(u64),
     Literal(String)
 }
+
+impl From<u64> for Value {
+    fn from(value: u64) -> Self {
+        Self::Numeric(value)
+    }
+}
+
+impl From<String> for Value {
+    fn from(value: String) -> Self {
+        Self::Literal(value)
+    }
+}
+
+impl From<&str> for Value {
+    fn from(value: &str) -> Self {
+        Self::Literal(value.to_owned())
+    }
+}
+
 
 #[cfg_attr(feature="pyo3", pyclass(name="Quantity", module="triple_s", from_py_object))]
 pub struct Quantity {
