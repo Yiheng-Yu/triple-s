@@ -38,9 +38,9 @@ use crate::error::NotFiniteError;
 // }
 
 pub trait Flag: strum::IntoEnumIterator {
-    fn as_str(&self) -> &'static str;
+    fn to_string(&self) -> String;
     fn available_options() -> Vec<String> {
-        Self::iter().map(|version| version.as_str().to_string()).collect()
+        Self::iter().map(|version| version.to_string()).collect()
     }
 }
 

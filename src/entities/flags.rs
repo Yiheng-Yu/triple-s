@@ -1,7 +1,7 @@
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-use strum::{EnumIter, EnumString};
+use strum::{EnumIter, EnumString, AsRefStr};
 
 use crate::prelude::{DeepCopy, Flag};
 
@@ -21,13 +21,13 @@ pub enum Version {
 }
 
 impl Flag for Version {
-    fn as_str(&self) -> &'static str {
+    fn to_string(&self) -> String{
         match self {
-            Self::V1_0 => "1.0",
-            Self::V1_1 => "1.1",
-            Self::V1_2 => "1.2",
-            Self::V2_0 => "2.0",
-            Self::V3_0 => "3.0",
+            Self::V1_0 => "1.0".into(),
+            Self::V1_1 => "1.1".into(),
+            Self::V1_2 => "1.2".into(),
+            Self::V2_0 => "2.0".into(),
+            Self::V3_0 => "3.0".into(),
         }
     }
 }
@@ -62,11 +62,11 @@ pub enum Mode {
 }
 
 impl Flag for Mode {
-    fn as_str(&self) -> &'static str {
+    fn to_string(&self) -> String{
         match self {
-            Self::None => "",
-            Self::Analysis => "analysis",
-            Self::Interview => "interview",
+            Self::None => "".into(),
+            Self::Analysis => "analysis".into(),
+            Self::Interview => "interview".into(),
         }
     }
 }
@@ -97,10 +97,10 @@ pub enum DataSource {
 }
 
 impl Flag for DataSource {
-    fn as_str(&self) -> &'static str {
+    fn to_string(&self) -> String{
         match self {
-            Self::Csv => "csv",
-            Self::Fixed => "fixed",
+            Self::Csv => "csv".into(),
+            Self::Fixed => "fixed".into(),
         }
     }
 }
@@ -128,10 +128,10 @@ impl DeepCopy for CodeFormat {
 }
 
 impl Flag for CodeFormat {
-    fn as_str(&self) -> &'static str {
+    fn to_string(&self) -> String{
         match self {
-            Self::Literal => "literal",
-            Self::Numeric => "numeric",
+            Self::Literal => "literal".into(),
+            Self::Numeric => "numeric".into(),
         }
     }
 }
@@ -154,11 +154,11 @@ pub enum Usage {
 }
 
 impl Flag for Usage {
-    fn as_str(&self) -> &'static str {
+    fn to_string(&self) -> String{
         match self {
-            Self::Null => "",
-            Self::Serial => "serial",
-            Self::Weight => "weight",
+            Self::Null => "".into(),
+            Self::Serial => "serial".into(),
+            Self::Weight => "weight".into(),
         }
     }
 }
@@ -166,5 +166,61 @@ impl Flag for Usage {
 impl DeepCopy for Usage {
     fn deepcopy(&self) -> Self {
         self.clone()
+    }
+}
+
+/// type of question
+#[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
+#[derive(Debug, Default, PartialEq, Clone, EnumString, Eq, AsRefStr, EnumIter)]
+#[strum(ascii_case_insensitive, serialize_all = "lowercase")]
+pub enum QType {
+    #[default]
+    None,
+    #[strum(serialize = "single")]
+    Single,
+
+    #[strum(serialize = "multiple")]
+    Multiple,
+
+    #[strum(serialize = "logical")]
+    Logical,
+
+    #[strum(serialize = "quantity")]
+    Quantity,
+
+    #[strum(serialize = "character")]
+    Character,
+    
+    #[strum(serialize = "date")]
+    Date,
+
+    #[strum(serialize = "time")]
+    Time,
+}
+
+impl Flag for QType {
+    fn to_string(&self) -> String {
+        match self {
+            Self::None => "".into(),
+            _ => self.as_ref().into(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::str::FromStr;
+    use strum::IntoEnumIterator;
+    use super::*;
+
+    #[test]
+    fn test_qtype_from_str() {
+        for original in QType::iter() {
+            if original != QType::None {
+                let string = original.to_string();
+                let parsed = QType::from_str(&string).unwrap();
+                assert_eq!(parsed, original)
+            }
+        }
     }
 }

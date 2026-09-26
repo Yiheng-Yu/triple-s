@@ -366,7 +366,7 @@ impl Variant {
     fn py_get_mode(&self) -> Option<String> {
         match self.get_mode() {
             Mode::None => None,
-            mode => Some(mode.as_str().to_owned()),
+            mode => Some(mode.to_string()),
         }
     }
 

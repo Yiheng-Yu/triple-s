@@ -2,13 +2,7 @@ pub mod classic;
 pub mod xml;
 
 use std::{
-    collections::HashMap,
-    fs::File,
-    hash::Hash,
-    io::{BufRead, BufReader, Cursor},
-    range::Range,
-    str::FromStr,
-    sync::Arc,
+    collections::HashMap, fs::File, hash::Hash, io::{BufRead, BufReader, Cursor}, range::Range, str::FromStr, sync::Arc, time::Instant,
 };
 
 use anyhow::{Context, Result};
@@ -19,30 +13,10 @@ use rayon::prelude::*;
 
 use crate::{
     entities::{
-        Code,
-        Value,
-        CodeFormat,
-        Location,
-        Mode,
-        Question,
-        Response,
-        // Spread,
-        Survey,
-        Text,
-        Usage,
-        Variant,
-        Version,
-    },
-    error::{
-        self,
-        BadLine,
-        DuplicatedKey,
-        InternalError,
-        MissingAttributeError,
-        MissingValueError,
-    },
-    prelude::*,
-    utils::lock_it_up,
+        Code, CodeFormat, Location, Mode, QType, Question, Response, Survey, Text, Usage, Value, Variant, Version,
+    }, error::{
+        self, BadLine, DuplicatedKey, InternalError, MissingAttributeError, MissingValueError, UnknownAttribute,
+    }, prelude::*, utils::lock_it_up,
 };
 
 #[derive(Debug, PartialEq)]
@@ -546,16 +520,62 @@ impl QuestionBuilder {
             .remove("filter")
             .and_then(|node| node.value.map(|s| s.to_string()));
 
-        // // build question responses
-        // let response = self
-        //     .attributes
-        //     .remove("type")
-        //     .ok_or(error::MissingAttributeError::new("variable", "type"))
-        //     .with_context(|| format!("When parsing question {}",
-        // question_name))?     .value
-        //     .ok_or(error::MissingValueError::new("variable", "type"))
-        //     .with_context(|| format!("When parsing question {}",
-        // question_name))?;
+        // build question responses
+        let type_name = self
+            .attributes
+            .remove("type")
+            .ok_or(error::MissingAttributeError::new("variable", "type"))
+            .with_context(|| format!("When parsing question {}", question_name))?
+            .value
+            .ok_or(error::MissingValueError::new("variable", "type"))
+            .with_context(|| format!("When parsing question {}", question_name))?;
+
+        let qtype = QType::from_str(type_name.as_ref())
+            .with_context(|| format!(
+                "Error identifying question type. Exepct to be one of: '{:?}', got: '{}'",
+                QType::available_options(), type_name.as_ref()
+            ))
+            .with_context(|| format!("When parsing question {}", question_name))?;
+        
+        let response = ResponseBuilder::from_question_read(
+            self.responses.children.clone()
+        )?;
+
+        todo!()
+
+        // println!("{:#?}", &self.responses.children);
+        // let response_raw = self.responses
+
+        // match type_name.as_ref() {
+        //     "single" => todo!(),
+        //     "multiple" => todo!(),
+        //     "logical" => todo!(),
+        //     "quantity" => todo!(),
+        //     "character" => todo!(),
+        //     "date" => todo!(),
+        //     "time" => todo!(),
+        //     _ => return Err(BadLine::new(format!(
+        //             "Unidentified response kind: '{}'", type_name
+        //         )).into())
+        // };
+
+        // fn from_str(s: &str) -> Result<Self, Self::Err> {
+        //     let to_match = s.trim().to_ascii_lowercase();
+        //     match to_match.as_str() {
+        //         "single" => Self::new_single_numerical().map_err(BadLine::from),
+        //         "multiple" => Self::new_multiple().map_err(BadLine::from),
+        //         "quantity" => Self::new_quantity().map_err(BadLine::from),
+        //         "character" => Self::new_character().map_err(BadLine::from),
+        //         "logical" => Self::new_logical().map_err(BadLine::from),
+        //         "date" => Self::new_range_date().map_err(BadLine::from),
+        //         "time" => Self::new_range_time().map_err(BadLine::from),
+        //         _ => Err(BadLine::new(format!(
+        //             "Unidentified response kind: '{}'",
+        //             to_match
+        //         ))),
+        //     }
+        // }
+
 
         // let response = Response::from_str(&response)
         //     .with_context(|| format!("When parsing question {}",
@@ -693,6 +713,60 @@ fn parse_into_code(node: Node, is_classic: bool, code_format: CodeFormat) -> Res
         filter: lock_it_up(None),
         score: lock_it_up(None)
     })
+}
+
+// extract information from raw data first, build response later
+#[derive(Debug, Default)]
+struct ResponseBuilder {
+    range_from: Option<Arc<str>>,
+    range_to: Option<Arc<str>>,
+    size: Option<u64>,
+    // [[code_value, code_label]]
+    entries: Vec<(Arc<str>, Option<Arc<str>>)>
+}
+
+impl ResponseBuilder {
+    fn extract_value_entry(mut node: Node) -> Result<(Arc<str>, Option<Arc<str>>)> {
+        let value = node.attributes.remove("code")
+            .ok_or(MissingAttributeError::new("value", "code"))?;
+        let label = node.value.clone();
+        Ok((value, label))
+    }
+
+    pub fn from_question_read(mut read: Vec<Node>) -> Result<Self> {
+        let mut instance = Self::default();
+        
+        let mut iterator = read.into_iter();
+        if let Some(mut first_entry) = iterator.next() {
+            if first_entry.tag.as_ref() == "range" {
+                instance.range_from = first_entry.attributes.remove("from");
+                instance.range_to = first_entry.attributes.remove("to");
+                
+            } else if first_entry.tag.as_ref() == "value" {
+                instance.entries.push(Self::extract_value_entry(first_entry)?);
+
+            } else if first_entry.tag.as_ref() == "size" {
+                instance.size = first_entry.value
+                    .as_ref()
+                    .map(|s| s.parse::<u64>())
+                    .transpose()?;
+            } else {
+               return Err(UnknownAttribute::new("values", first_entry.tag.as_ref()).into());
+            }
+        } else {
+            return Ok(Self::default());
+        };
+
+        loop {
+            if let Some(item) = iterator.next() {
+                todo!()
+            } else {
+                break
+            }
+        }
+
+        Ok(instance)
+    }
 }
 
 // /// from_to == true:

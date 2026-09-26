@@ -14,6 +14,7 @@ pub use entities::{
     Variant,
     Version,
     Location,
+    QType,
     Question,
     Code,
     Value,
@@ -72,5 +73,6 @@ mod flags {
         CodeFormat,
         Value,
         Usage,
+        QType,
     };
 }

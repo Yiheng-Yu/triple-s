@@ -110,8 +110,8 @@ impl Question {
         Ok(instance)
     }
 
-    pub fn get_format_str(&self) -> Option<&str> {
-        self.format.read().as_ref().map(|item| item.as_str())
+    pub fn get_format_name(&self) -> Option<String> {
+        self.format.read().as_ref().map(|item| item.to_string())
     }
 
     pub fn set_format_from_str(&self, value: Option<&str>) -> Result<()> {
@@ -229,8 +229,8 @@ impl Question {
     }
 
     #[getter(format)]
-    fn py_get_format(&self) -> PyResult<Option<&str>> {
-        Ok(self.get_format_str())
+    fn py_get_format(&self) -> PyResult<Option<String>> {
+        Ok(self.get_format_name())
     }
 
     #[setter(format)]
@@ -250,8 +250,8 @@ impl Question {
     }
 
     #[getter(usage)]
-    fn py_get_usage(&self) -> PyResult<Option<&str>> {
-        Ok(self.usage.read().as_ref().map(|item| item.as_str()))
+    fn py_get_usage(&self) -> PyResult<Option<String>> {
+        Ok(self.usage.read().as_ref().map(|item| item.to_string()))
     }
 
     #[setter(usage)]
@@ -466,7 +466,7 @@ mod test {
             for value in ["numeric", "literal"] {
                 let input = pyo3::types::PyString::new(py, value);
                 question.py_set_format(&input).unwrap();
-                assert_eq!(question.py_get_format().unwrap(), Some(value));
+                assert_eq!(question.py_get_format().unwrap(), Some(value.into()));
             }
         });
     }
@@ -482,7 +482,7 @@ mod test {
             for value in ["serial", "weight"] {
                 let input = pyo3::types::PyString::new(py, value);
                 question.py_set_usage(&input).unwrap();
-                assert_eq!(question.py_get_usage().unwrap(), Some(value));
+                assert_eq!(question.py_get_usage().unwrap(), Some(value.into()));
             }
         });
     }

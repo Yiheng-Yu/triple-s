@@ -1,26 +1,19 @@
 mod flags;
-mod survey_info;
 mod question;
 mod record;
 mod responses;
+mod survey_info;
 mod texts;
 
-pub use flags::{CodeFormat, DataSource, Mode, Usage, Version};
-pub use survey_info::SurveyInfo;
-
+pub use flags::{CodeFormat, DataSource, Mode, QType, Usage, Version};
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-
 pub use question::{Location, Question};
 pub use record::Record;
+pub use responses::{Category, Code, Quantity, Response, Value};
+pub use survey_info::SurveyInfo;
 pub use texts::{Text, Variant};
-pub use responses::{
-    Code,
-    Value,
-    Response,
-    Category,
-    Quantity,
-};
+
 use crate::utils::ArcLock;
 
 #[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "Survey"))]
