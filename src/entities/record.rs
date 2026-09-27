@@ -1,7 +1,10 @@
+
 use anyhow::Result;
 use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
 #[cfg(feature = "pyo3")]
-use pyo3::prelude::*;
+use pyo3::{exceptions, prelude::*, types::PyTuple};
+#[cfg(feature = "pyo3")]
+use crate::utils::normalize_py_index;
 
 use super::{ArcLock, DataSource, Question};
 
@@ -77,14 +80,23 @@ impl Record {
         self.content.write()
     }
 
+    #[inline]
+    fn get_question_(
+        &self,
+        question_name: &str,
+    ) -> Option<ArcLock<Question>> {
+        self.content
+            .read()
+            .iter()
+            .find(|item| item.read().name().as_str() == question_name)
+            .map(|item| item.clone())
+    }
+
     pub fn get_question(
         &self,
         question_name: &str,
     ) -> Option<ArcRwLockReadGuard<RawRwLock, Question>> {
-        self.content()
-            .iter()
-            .find(|item| item.read().name().as_str() == question_name)
-            .map(|entry| entry.read_arc())
+        self.get_question_(question_name).map(|item| item.read_arc())
     }
 
     pub fn to_sss_classic(&self) -> Result<String> {
@@ -127,5 +139,57 @@ impl Record {
         Ok(self.data_source.clone())
     }
 
+    #[getter]
+    fn get_href(&self) -> PyResult<Option<String>> {
+        Ok(self.href().clone())
+    }
+
+    #[getter]
+    fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        let items = self.content
+            .read()
+            .clone()
+            .into_iter()
+            .map(|item| item.read().clone());
+        PyTuple::new(py, items)
+    }
+
+    #[pyo3(name="get_question", signature=(question_name:"str"))]
+    pub fn py_get_question(&self, question_name: &str) -> Option<Question> {
+        self.get_question_(question_name)
+        .map(|item| item.read().clone())
+    }
+
     // todo: getter/ setter for href, datasource and skip
+
+    fn __len__(&self) -> usize {
+        self.content().len()
+    }
+
+    fn __getitem__<'py>(&self, index: &Bound<'py, PyAny>) -> PyResult<Question> {
+        if let Ok(number) = index.extract::<isize>() {
+            let total_length = self.__len__();
+            let sanitised = normalize_py_index(number, total_length)
+                .ok_or(exceptions::PyIndexError::new_err(number))?;
+
+            self.content.read().get(sanitised)
+                .map(|item| item.read().clone())
+                .ok_or(exceptions::PyIndexError::new_err(number))
+
+        } else if let Ok(question_name) = index.extract::<String>() {
+            self.py_get_question(&question_name)
+                .ok_or(exceptions::PyKeyError::new_err(
+                    format!(
+                        "Unable to find question with name '{}'",
+                        question_name
+                    )
+                ))
+        } else {
+            let type_name = index.get_type().name()?.extract::<String>()?;
+            Err(exceptions::PyTypeError::new_err(format!(
+                "`index` must be question index (as `int`) or question name (as `str`), found: {}",
+                type_name
+            )))
+        }
+    }
 }

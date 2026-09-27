@@ -1,5 +1,5 @@
-use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
-
+#[cfg(feature = "pyo3")]
+use std::hash::DefaultHasher;
 use std::{
     collections::HashSet,
     hash::{Hash, Hasher},
@@ -7,16 +7,14 @@ use std::{
     sync::Arc,
 };
 
-#[cfg(feature="pyo3")]
-use std::hash::DefaultHasher;
-
 use anyhow::{Context, Result};
+use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*, types::PyTuple};
 use rayon::prelude::*;
 
 #[cfg(feature = "pyo3")]
-use crate::utils::{normalize_py_index, py_value_error};
+use crate::utils::{normalize_py_index, py_value_error, single_quote};
 use crate::{
     entities::Mode,
     prelude::*,
@@ -181,8 +179,30 @@ impl Text {
         Ok(text)
     }
 
-    fn __repr__(&self) -> String {
-        format!("{:?}", self)
+    pub(crate) fn __repr__<'py>(&self, py: Python<'py>) -> PyResult<String> {
+        let value = self.value.read();
+        let mut chars = value.chars();
+        let mut preview: String = chars.by_ref().take(25).collect();
+        if chars.next().is_some() {
+            preview.push_str("...");
+        }
+        let preview = single_quote(preview);
+
+        let variants = self.variants.read();
+        if variants.is_empty() {
+            return Ok(format!("Text(value={})", preview));
+        }
+        let variants = variants
+            .iter()
+            .map(|variant| variant.__repr__(py))
+            .collect::<PyResult<Vec<_>>>()?
+            .join(", ");
+
+        Ok(format!(
+            "Text(\n  value={},\n  variants=[{}]\n)",
+            preview, 
+            variants
+        ))
     }
 
     fn __copy__(&self) -> Self {

@@ -1,7 +1,8 @@
 from copy import copy, deepcopy
 
 import pytest
-
+import warnings
+import triple_s
 from triple_s import Text, Variant, SurveyInfo, Question
 from triple_s.flags import Mode, CodeFormat, Usage
 
@@ -10,6 +11,14 @@ from triple_s.flags import Mode, CodeFormat, Usage
 # =============================================================================
 
 VARIANT_CHANGES = [("value", "NEW"), ("mode", "interview"), ("language", "fr")]
+PATH_DATAMAP_XML = "tests/sss-examples/sss_xml_1.0.xml"
+
+
+@pytest.fixture
+def xml():
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return triple_s.read_datamap(PATH_DATAMAP_XML)
 
 
 @pytest.fixture
@@ -163,7 +172,6 @@ def test_remove_variant_out_of_range(text, index):
 # =============================================================================
 # Meta
 # =============================================================================
-
 
 def test_meta_options_are_tuples():
     meta = SurveyInfo("2.0", language_options=["en-GB"], mode_options=["analysis"])
@@ -367,3 +375,21 @@ def test_question_setter_fail(attr, value):
 def test_set_question_location_success(question, attr, value):
     setattr(question.location, attr, value)
     assert getattr(question.location, attr) == value
+
+# =============================================================================
+# Survey
+# =============================================================================
+
+
+def test_survey_mutate_question(xml):
+    example = xml.get_question("Q2")
+    copy1 = example.copy()
+    copy2 = xml.get_question("Q2").copy()
+    example.name = "Q3"
+
+    assert xml.get_question("Q3") is not None
+    assert copy1.name == copy2.name
+    assert copy1.name != example.name
+
+# def test_question_repl(xml):
+    # example = xml.get_question("Q3")

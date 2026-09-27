@@ -6,14 +6,16 @@ mod survey_info;
 mod texts;
 
 pub use flags::{CodeFormat, DataSource, Mode, QuestionType, Usage, Version};
+
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+
 pub use question::{Location, Question, Spread};
 pub use record::Record;
 pub use responses::{Code, Response, Value};
 pub use survey_info::SurveyInfo;
 pub use texts::{Text, Variant};
-use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard};
+use parking_lot::{ArcRwLockReadGuard, RawRwLock};
 
 use crate::utils::ArcLock;
 use crate::prelude::Flag;
@@ -26,21 +28,6 @@ pub struct Survey {
 }
 
 impl Survey {
-    pub fn meta(&self) -> &SurveyInfo {
-        &self.meta
-    }
-
-    pub fn meta_mut(&mut self) -> &mut SurveyInfo {
-        &mut self.meta
-    }
-
-    pub fn record(&self) -> &Record {
-        &self.record
-    }
-
-    pub fn record_mut(&mut self) -> &mut Record {
-        &mut self.record
-    }
 
     pub fn get_question(&self, question_name: &str) -> Option<ArcRwLockReadGuard<RawRwLock, Question>> {
         self.record.get_question(question_name)
@@ -75,5 +62,25 @@ impl Survey {
             meta: SurveyInfo::with_version(Version::V1_2),
             record: Record::default(),
         }
+    }
+}
+
+
+#[cfg(feature="pyo3")]
+#[pymethods]
+impl Survey {
+    #[pyo3(name="get_question", signature=(question_name:"str"))]
+    fn py_get_question(&self, question_name: &str) -> Option<Question> {
+        self.record.py_get_question(question_name)
+    }
+
+    #[getter(record)]
+    fn py_get_record(&self) -> Record {
+        self.record.clone()
+    }
+
+    #[getter(survey_info)]
+    fn py_get_survey_info(&self) -> SurveyInfo {
+        self.meta.clone()
     }
 }

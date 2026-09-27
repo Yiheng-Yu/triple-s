@@ -1,14 +1,18 @@
 use std::str::FromStr;
 
-use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use anyhow::{Context, Result};
+use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*};
 
 #[cfg(feature = "pyo3")]
-use crate::utils::{get_type_name, py_value_error};
+use crate::utils::{get_type_name, py_value_error, single_quote};
 use crate::{
-    EventLog, entities::{CodeFormat, QuestionType, Response, Text, Usage}, error::{self, RangeError}, prelude::{DeepCopy, *}, utils::{ArcLock, lock_it_up},
+    EventLog,
+    entities::{CodeFormat, QuestionType, Response, Text, Usage},
+    error::{self, RangeError},
+    prelude::{DeepCopy, *},
+    utils::{ArcLock, lock_it_up},
 };
 
 #[cfg_attr(
@@ -182,9 +186,9 @@ impl Question {
         let is_classic = !input.trim().starts_with('<');
         let stream = input.lines().map(|line| Ok::<_, error::BadLine>(line.to_owned()));
         let builder = crate::read::classic::collect_question_stream(stream, 0)?;
-       
+
         let (instance, warnings) = builder.build(is_classic)?;
-        let event_log = EventLog {warnings: warnings};
+        let event_log = EventLog { warnings: warnings };
         if let Some(warning) = event_log.warning_summary("Deserialising Question") {
             log::warn!("{}", warning)
         };
@@ -204,7 +208,11 @@ impl Question {
         let question_type = self.question_type.read().clone();
         match question_type {
             QuestionType::Character => {
-                let size = self.response.range.read().as_ref()
+                let size = self
+                    .response
+                    .range
+                    .read()
+                    .as_ref()
                     .map(|range| range.end.to_sss_classic())
                     .transpose()?
                     .unwrap_or_else(|| "0".to_owned());
@@ -216,22 +224,34 @@ impl Question {
                     && self.format.read().as_ref() == Some(&CodeFormat::Literal)
                 {
                     return Err(error::UnsupportedFeature::new(
-                        "SSS Classic", "None numeric code values.",
-                    ).into());
+                        "SSS Classic",
+                        "None numeric code values.",
+                    )
+                    .into());
                 }
                 if question_type == QuestionType::Multiple
-                    && let Some(spread) = &self.spread {
-                        output.push_str(&spread.to_sss_classic());
-                        output.push('\n');
-                    }
-                output.push_str(&format!("TYPE {}\n", question_type.to_string().to_uppercase()));
-                output.push_str(&self.response.to_sss_classic(&question_type)
-                    .with_context(|| format!("Question '{name}'"))?);
+                    && let Some(spread) = &self.spread
+                {
+                    output.push_str(&spread.to_sss_classic());
+                    output.push('\n');
+                }
+                output.push_str(&format!(
+                    "TYPE {}\n",
+                    question_type.to_string().to_uppercase()
+                ));
+                output.push_str(
+                    &self
+                        .response
+                        .to_sss_classic(&question_type)
+                        .with_context(|| format!("Question '{name}'"))?,
+                );
             }
             QuestionType::None | QuestionType::Date | QuestionType::Time => {
                 return Err(error::UnsupportedFeature::new(
-                    "classic", format!("{question_type:?}"),
-                ).into());
+                    "classic",
+                    format!("{question_type:?}"),
+                )
+                .into());
             }
         }
         output.push_str(&format!("END VARIABLE {}\n", self.index));
@@ -366,12 +386,62 @@ impl Question {
             )?));
         };
 
-        Self::new(name, question_type, label, filter, format, usage, location, spread)
-            .map_err(py_value_error)
+        Self::new(
+            name,
+            question_type,
+            label,
+            filter,
+            format,
+            usage,
+            location,
+            spread,
+        )
+        .map_err(py_value_error)
     }
 
-    fn __repr__(&self) -> String {
-        format!("Question(name='{}')", self.name.read().as_str())
+    fn __repr__<'py>(&self, py: Python<'py>) -> PyResult<String> {
+        let mut info = Vec::new();
+        info.push(("name", single_quote(self.name())));
+        info.push((
+            "question_type",
+            single_quote(self.question_type.read().as_ref()),
+        ));
+
+        let label_repl = self.label.as_ref()
+            .map_or(Ok("None".into()), |label| label.__repr__(py))?;
+
+        info.push(("label", label_repl));
+        let formatted = info
+            .into_iter()
+            .map(|(field, value)| format!("{}={}", field, value))
+            .collect::<Vec<String>>()
+            .join(",\n  ");
+
+        Ok(format!("Question(\n  {}\n)", formatted))
+    }
+
+    fn __copy__(&self) -> Self {
+        self.deepcopy()
+    }
+
+    fn __deepcopy__(&self) -> Self {
+        self.deepcopy()
+    }
+
+    /// makes a deep copy of current instance.
+    fn copy(&self) -> Self {
+        self.deepcopy()
+    }
+
+    #[getter]
+    fn get_name(&self) -> PyResult<String> {
+        Ok(self.name.read().to_string())
+    }
+
+    #[setter(name)]
+    fn py_set_name(&mut self, name: &str) -> PyResult<()> {
+        self.set_name(name);
+        Ok(())
     }
 
     #[getter]
@@ -468,6 +538,13 @@ impl Question {
             )))
         }
     }
+
+    #[staticmethod]
+    #[pyo3(name="from_string", signature=(question_fragment:"str"))]
+    fn py_from_string(question_fragment: String) -> PyResult<Self> {
+        Self::from_string(&question_fragment)
+            .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
+    }
 }
 
 /// Defines the part of the data record that is allocated to holding the value
@@ -560,12 +637,13 @@ impl Location {
             )))
         }
     }
-    
+
     pub fn validate(&self) -> Result<(), RangeError> {
         if *self.finish.read() < *self.start.read() {
             Err(RangeError(format!(
                 "Start location ({}) should not exceed finish location ({})!",
-                self.start.read(), self.finish.read()
+                self.start.read(),
+                self.finish.read()
             )))
         } else {
             Ok(())
@@ -629,7 +707,7 @@ pub struct Spread {
 impl PartialEq for Spread {
     fn eq(&self, other: &Self) -> bool {
         (*self.subfield.read() == *other.subfield.read())
-        & (*self.width.read() == *other.width.read())
+            & (*self.width.read() == *other.width.read())
     }
 }
 
@@ -637,7 +715,10 @@ impl Eq for Spread {}
 
 impl Clone for Spread {
     fn clone(&self) -> Self {
-        Self { subfield: self.subfield.clone(), width: self.width.clone() }
+        Self {
+            subfield: self.subfield.clone(),
+            width: self.width.clone(),
+        }
     }
 }
 
@@ -645,7 +726,7 @@ impl DeepCopy for Spread {
     fn deepcopy(&self) -> Self {
         Self {
             subfield: lock_it_up(*self.subfield.read()),
-            width: lock_it_up(self.width.read().as_ref().map(|item| *item))
+            width: lock_it_up(self.width.read().as_ref().map(|item| *item)),
         }
     }
 }
@@ -669,16 +750,17 @@ impl Spread {
 
     pub fn new(num_subfields: u32, subfield_width: Option<u32>) -> Result<Self> {
         if num_subfields == 0 {
-            return Err(error::InvalidArg::new(
-                "`num_subfields` must be a positive integer.",
-            ).into());
+            return Err(
+                error::InvalidArg::new("`num_subfields` must be a positive integer.").into(),
+            );
         }
         if subfield_width == Some(0) {
             return Err(error::InvalidArg::new(
                 "`subfield_width` must be a positive integer or None.",
-            ).into());
+            )
+            .into());
         }
-        
+
         Ok(Self {
             subfield: lock_it_up(num_subfields),
             width: lock_it_up(subfield_width),
@@ -700,8 +782,7 @@ impl Spread {
     #[new]
     #[pyo3(signature=(num_subfields, subfield_width=None))]
     fn py_new(num_subfields: u32, subfield_width: Option<u32>) -> PyResult<Self> {
-        Self::new(num_subfields, subfield_width)
-            .map_err(py_value_error)
+        Self::new(num_subfields, subfield_width).map_err(py_value_error)
     }
 
     #[getter(num_subfields)]
@@ -744,15 +825,16 @@ mod test {
 
     fn new_empty_question() -> Question {
         Question::new(
-            "Q1", 
-            QuestionType::Single, 
-            None, 
-            None, 
-            None, 
-            None, 
+            "Q1",
+            QuestionType::Single,
             None,
-            None
-        ).unwrap()
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap()
     }
 
     fn new_filled_question() -> Question {

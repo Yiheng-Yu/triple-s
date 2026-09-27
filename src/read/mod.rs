@@ -238,14 +238,12 @@ impl SurveyBuilder {
         output.meta.title = self
             .attributes
             .remove("title")
-            .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
-            .transpose()?;
+            .and_then(|val| val.value.map(|v| unquote(v)));
 
         output.meta.name = self
             .attributes
             .remove("name")
-            .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
-            .transpose()?;
+            .and_then(|val| val.value.map(|v| unquote(v)));
 
         if let Some(record) = self.attributes.remove("record") {
             if self.is_classic {
@@ -277,32 +275,27 @@ impl SurveyBuilder {
         output.meta.origin = self
             .attributes
             .remove("origin")
-            .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
-            .transpose()?;
+            .and_then(|val| val.value.map(|v| unquote(v)));
 
         output.meta.user = self
             .attributes
             .remove("user")
-            .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
-            .transpose()?;
+            .and_then(|val| val.value.map(|v| unquote(v)));
 
         output.meta.date = self
             .attributes
             .remove("date")
-            .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
-            .transpose()?;
+            .and_then(|val| val.value.map(|v| unquote(v)));
 
         output.meta.time = self
             .attributes
             .remove("time")
-            .and_then(|val| val.value.map(|v| unquote(v, self.is_classic)))
-            .transpose()?;
+            .and_then(|val| val.value.map(|v| unquote(v)));
 
         output.meta.standard = self
             .attributes
             .remove("standard")
-            .and_then(|val| val.value.map(|v| unquote(v, false)))
-            .transpose()?;
+            .and_then(|val| val.value.map(|v| unquote(v)));
 
         output.meta.version = self
             .attributes
@@ -404,8 +397,8 @@ impl QuestionBuilder {
         *output.name_mut() = self
             .attributes
             .remove("name")
-            .and_then(|val| val.value.map(|name| unquote(name, is_classic)))
-            .transpose()?
+            .and_then(|val| val.value.map(|name| unquote(name)))
+            // .transpose()?
             .ok_or(error::MissingAttributeError::new("variable", "name"))?;
 
         let question_name = output.name().to_string();
@@ -416,7 +409,7 @@ impl QuestionBuilder {
             .remove("label")
             .ok_or(error::MissingAttributeError::new("variable", "label"))
             .with_context(|| format!("When parsing question {}", question_name))?;
-        let label = parse_text(label, is_classic)
+        let label = parse_text(label)
             .with_context(|| format!("When parsing question {}", question_name))?;
         *output.label_mut() = Some(label);
 
@@ -589,24 +582,19 @@ impl QuestionBuilder {
 
 /// unquote texts but raises error if text was not quoted.
 #[inline]
-fn unquote(text: Arc<str>, raise_error: bool) -> Result<String> {
+fn unquote(text: Arc<str>) -> String {
     let to_unquote = text.trim();
-    let result = to_unquote.strip_circumfix('"', '"').map(|s| s.to_string());
-    if raise_error {
-        result.ok_or(
-            error::BadLine::new(format!("Not double-quoted: '{}'", text.as_ref())).into(),
-        )
-    } else {
-        Ok(result.unwrap_or(to_unquote.to_string()))
-    }
+    to_unquote
+        .trim_prefix('"')
+        .trim_suffix('"')
+        .to_string()
 }
 
-fn parse_text(mut node: Node, is_classic: bool) -> Result<Text> {
+fn parse_text(mut node: Node) -> Result<Text> {
     let value = node
         .value
         .take()
-        .map(|value| unquote(value, is_classic))
-        .transpose()?
+        .map(|value| unquote(value))
         .unwrap_or_default();
     let mut text = Text::new(value.as_str());
 
@@ -748,7 +736,7 @@ impl ResponseBuilder {
     fn extract_code(raw: RawCode, format: ValueKind, is_classic: bool) -> Result<Code> {
         let code_name = raw.value.to_string();
 
-        let label = parse_text(raw.label, is_classic).context(format!(
+        let label = parse_text(raw.label).context(format!(
             "When parsing response label for code '{}'",
             code_name
         ))?;

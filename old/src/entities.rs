@@ -85,7 +85,7 @@ impl Survey {
             ("STANDARD", &self.meta.standard), // sss classic does not have 'style' field
         ] {
             if let Some(value) = value {
-                append_line(&mut output, format!("{name} {}", quote(value)));
+                append_line(&mut output, format!("{name} {}", double_quote(value)));
             }
         }
 
@@ -93,7 +93,7 @@ impl Survey {
         append_line(&mut output, "SURVEY");
         for (name, value) in [("NAME", &self.meta.name), ("TITLE", &self.meta.title)] {
             if let Some(value) = value {
-                append_line(&mut output, format!("{name} {}", quote(value)));
+                append_line(&mut output, format!("{name} {}", double_quote(value)));
             }
         }
 
@@ -166,12 +166,12 @@ impl SurveyInfo {
     //         ("TITLE", &self.title),
     //     ] {
     //         if let Some(value) = value {
-    //             append_line(&mut output, format!("{name} {}", quote(value)));
+    //             append_line(&mut output, format!("{name} {}", double_quote(value)));
     //         }
     //     }
     //     for (name, value) in [("STANDARD", &self.standard), ("STYLE",
     // &self.style)] {         if let Some(value) = value {
-    //             append_line(&mut output, format!("{name} {}", quote(value)));
+    //             append_line(&mut output, format!("{name} {}", double_quote(value)));
     //         }
     //     }
     //     output
@@ -273,10 +273,10 @@ impl Question {
     pub fn to_sss_classic(&self) -> Result<String> {
         let mut output = String::new();
         append_line(&mut output, format!("VARIABLE {}", self.index));
-        append_line(&mut output, format!("NAME {}", quote(&self.name)));
+        append_line(&mut output, format!("NAME {}", double_quote(&self.name)));
         append_line(
             &mut output,
-            format!("LABEL {}", quote(self.label.to_sss_classic())),
+            format!("LABEL {}", double_quote(self.label.to_sss_classic())),
         );
         append_line(&mut output, self.location.to_sss_classic());
         let response = &self
@@ -785,7 +785,7 @@ impl<T: CodeType> Code<T> {
                 UnsupportedFeature::new("SSS Classic", "None numeric code values.").into(),
             );
         }
-        let base = format!("{} {}", self.code, quote(self.label.to_sss_classic()));
+        let base = format!("{} {}", self.code, double_quote(self.label.to_sss_classic()));
 
         let content = if self.is_special {
             format!("{} SPECIAL", base)
@@ -1101,8 +1101,13 @@ impl Mode {
 // ------------------------------------------------------------------------
 
 #[inline]
-fn quote(value: impl Display) -> String {
+fn double_quote(value: impl Display) -> String {
     format!(r#""{}""#, value)
+}
+
+#[inline]
+fn single_quote(value: impl Display) -> String {
+    format!(r#"'{}'"#, value)
 }
 
 #[inline]

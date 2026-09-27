@@ -60,3 +60,13 @@ pub fn validate_language_tag(language: &str) -> Result<&str> {
         .with_context(|| format!("Unknown language tag: '{}'.", language))?;
     Ok(language)
 }
+
+// #[inline]
+// fn double_quote(value: impl Display) -> String {
+//     format!(r#""{}""#, value)
+// }
+
+#[inline]
+pub fn single_quote(value: impl std::fmt::Display) -> String {
+    format!(r#"'{}'"#, value)
+}
