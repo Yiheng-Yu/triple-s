@@ -26,9 +26,8 @@ def xml():
 
 
 def test_sss_classic_read(classic):
-    print()
-    for question in classic.record.content:
-        print(question)
+    string = classic.to_classic()
+    print(string)
 
 
 def test_sss_xml_read(xml):

@@ -545,6 +545,12 @@ impl Question {
         Self::from_string(&question_fragment)
             .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
     }
+
+    #[pyo3(name="to_classic")]
+    fn py_to_classic(&self) -> PyResult<String> {
+        self.to_sss_classic()
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
+    }
 }
 
 /// Defines the part of the data record that is allocated to holding the value

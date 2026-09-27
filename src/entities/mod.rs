@@ -8,7 +8,7 @@ mod texts;
 pub use flags::{CodeFormat, DataSource, Mode, QuestionType, Usage, Version};
 
 #[cfg(feature = "pyo3")]
-use pyo3::prelude::*;
+use pyo3::{exceptions, prelude::*};
 
 pub use question::{Location, Question, Spread};
 pub use record::Record;
@@ -82,5 +82,11 @@ impl Survey {
     #[getter(survey_info)]
     fn py_get_survey_info(&self) -> SurveyInfo {
         self.meta.clone()
+    }
+
+    #[pyo3(name="to_classic")]
+    fn py_to_classic(&self) -> PyResult<String> {
+        self.to_sss_classic()
+            .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
     }
 }
