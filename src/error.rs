@@ -1,4 +1,8 @@
-use std::{error::Error, fmt};
+use std::{error::Error, fmt, sync::Arc};
+
+#[cfg(feature = "pyo3")]
+use pyo3::types::PyAnyMethods;
+use strum::IntoStaticStr;
 
 #[derive(Debug)]
 pub struct InternalError {
@@ -217,13 +221,13 @@ impl fmt::Display for UnknownAttribute {
         match self.parent.as_ref() {
             Some(parent) => write!(
                 f,
-                r#"Unexpected XML attribute!: name: "{}", value: "{}", parent: "{}"."#,
+                r#"UnknownAttribute: name: "{}", value: "{}", parent: "{}"."#,
                 self.name, self.value, parent
             ),
             None => {
                 write!(
                     f,
-                    r#"Unexpected XML attribute!: name: "{}", value: "{}"."#,
+                    r#"UnknownAttribute: name: "{}", value: "{}"."#,
                     self.name, self.value
                 )
             }
@@ -252,7 +256,7 @@ impl fmt::Display for MissingAttributeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Element '{}' is missing a required attribute: {}",
+            "MissingAttributeError: Element '{}' is missing a required attribute: '{}'",
             self.tag, self.missing
         )
     }
@@ -279,7 +283,7 @@ impl fmt::Display for MissingValueError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Field '{}' of instance '{}' is empty",
+            "MissingValueError: Field '{}' of instance '{}' is empty",
             self.field, self.instance
         )
     }
@@ -331,5 +335,135 @@ impl Error for LanguageTagError {}
 impl fmt::Display for LanguageTagError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug)]
+pub struct RangeError(pub String);
+
+impl Error for RangeError {}
+
+impl fmt::Display for RangeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "RangeError: {}", self.0)
+    }
+}
+
+// ======================= warnings =======================
+#[derive(Debug)]
+pub struct EventLog {
+    pub warnings: Vec<Warning>,
+}
+
+impl EventLog {
+    pub fn new() -> Self {
+        Self {
+            warnings: Vec::new(),
+        }
+    }
+
+    pub fn push_warnings(&mut self, warnings: Vec<Warning>) {
+        self.warnings.extend(warnings)
+    }
+}
+
+impl Default for EventLog {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+///
+#[derive(Debug)]
+pub struct Warning {
+    pub location: Option<String>,
+    pub subfield: Option<String>,
+    pub kind: WarningKind,
+    pub message: String,
+}
+
+#[derive(Debug, IntoStaticStr)]
+pub enum WarningKind {
+    UnexpectedAttribute,
+    DataLocation,
+}
+
+impl WarningKind {
+    pub fn name(&self) -> Arc<str> {
+        let output: &str = self.into();
+        Arc::from(output)
+    }
+}
+impl EventLog {
+    /// Format one contextual warning table
+    pub fn warning_summary(&self, context: impl Into<String>) -> Option<String> {
+        if self.warnings.is_empty() {
+            return None;
+        }
+
+        let headers = ["#", "Kind", "Location", "Field", "Message"];
+        let rows: Vec<[String; 5]> = self
+            .warnings
+            .iter()
+            .enumerate()
+            .map(|(index, warning)| {
+                [
+                    (index + 1).to_string(),
+                    warning.kind.name().to_string(),
+                    warning.location.as_deref().unwrap_or("-").into(),
+                    warning.subfield.as_deref().unwrap_or("-").into(),
+                    warning.message.clone(),
+                ]
+            })
+            .collect();
+
+        // do some calculations,, to make things look nicer,,,
+        let mut widths = headers.map(str::len);
+        for row in &rows {
+            for (width, value) in widths.iter_mut().zip(row) {
+                *width = (*width).max(value.chars().count());
+            }
+        }
+        let format_row = |row: [&str; 5]| {
+            row.iter()
+                .zip(widths)
+                .map(|(value, width)| format!("{value:<width$}"))
+                .collect::<Vec<_>>()
+                .join(" | ")
+                .trim_end()
+                .to_owned()
+        };
+        let mut summary = format!(
+            "{} raised these warnings ({}):\n\n",
+            context.into(),
+            rows.len()
+        );
+        summary.push_str(&format_row(headers));
+        summary.push('\n');
+        summary.push_str(&widths.map(|width| "-".repeat(width)).join("-+-"));
+        for row in &rows {
+            summary.push('\n');
+            summary.push_str(&format_row(std::array::from_fn(|index| {
+                row[index].as_str()
+            })));
+        }
+        Some(summary)
+    }
+
+    /// Emit one UserWarning summary, respecting Python's warning filters.
+    /// Returns an error when the active filter treats warnings as errors.
+    #[cfg(feature = "pyo3")]
+    pub fn print_warning_summary(
+        &self,
+        py: pyo3::Python<'_>,
+        context: &str,
+    ) -> pyo3::PyResult<()> {
+        if let Some(summary) = self.warning_summary(context) {
+            py.import("warnings")?.call_method1(
+                "warn",
+                (summary, py.get_type::<pyo3::exceptions::PyUserWarning>(), 1),
+            )?;
+        }
+        Ok(())
     }
 }

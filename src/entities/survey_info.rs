@@ -60,6 +60,94 @@ pub struct SurveyInfo {
 }
 
 impl SurveyInfo {
+    pub fn version(&self) -> &Version {
+        &self.version
+    }
+
+    pub fn version_mut(&mut self) -> &mut Version {
+        &mut self.version
+    }
+
+    pub fn name(&self) -> &Option<String> {
+        &self.name
+    }
+
+    pub fn name_mut(&mut self) -> &mut Option<String> {
+        &mut self.name
+    }
+
+    pub fn title(&self) -> &Option<String> {
+        &self.title
+    }
+
+    pub fn title_mut(&mut self) -> &mut Option<String> {
+        &mut self.title
+    }
+
+    pub fn date(&self) -> &Option<String> {
+        &self.date
+    }
+
+    pub fn date_mut(&mut self) -> &mut Option<String> {
+        &mut self.date
+    }
+
+    pub fn time(&self) -> &Option<String> {
+        &self.time
+    }
+
+    pub fn time_mut(&mut self) -> &mut Option<String> {
+        &mut self.time
+    }
+
+    pub fn origin(&self) -> &Option<String> {
+        &self.origin
+    }
+
+    pub fn origin_mut(&mut self) -> &mut Option<String> {
+        &mut self.origin
+    }
+
+    pub fn user(&self) -> &Option<String> {
+        &self.user
+    }
+
+    pub fn user_mut(&mut self) -> &mut Option<String> {
+        &mut self.user
+    }
+
+    pub fn style(&self) -> &Option<String> {
+        &self.style
+    }
+
+    pub fn style_mut(&mut self) -> &mut Option<String> {
+        &mut self.style
+    }
+
+    pub fn standard(&self) -> &Option<String> {
+        &self.standard
+    }
+
+    pub fn standard_mut(&mut self) -> &mut Option<String> {
+        &mut self.standard
+    }
+
+    pub fn language_options(&self) -> &Vec<String> {
+        &self.language_options
+    }
+
+    pub fn language_options_mut(&mut self) -> &mut Vec<String> {
+        &mut self.language_options
+    }
+
+    pub fn mode_options(&self) -> &Vec<Mode> {
+        &self.mode_options
+    }
+
+    pub fn mode_options_mut(&mut self) -> &mut Vec<Mode> {
+        &mut self.mode_options
+    }
+
     pub fn with_version(version: Version) -> Self {
         Self {
             version,

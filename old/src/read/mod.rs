@@ -338,7 +338,7 @@ impl QuestionBuilder {
                     .ok_or(MissingAttributeError::new("response", "size"))?
                     .value
                     .ok_or(error::MissingValueError::new("variable", "size"))?;
-                let range = Range::<u64>::from_text(size.as_ref())?;
+                let range = Range::<u32>::from_text(size.as_ref())?;
 
                 let mut item = RwLockWriteGuard::map(item.write(), |resp| resp);
                 item.size = range.start;
@@ -369,7 +369,7 @@ impl QuestionBuilder {
                     data.first().ok_or(MissingValueError::new("values", "value"))?;
 
                 if first_entry.tag.as_ref() == "range" {
-                    let (from, to) = get_range::<u64>(first_entry, true)?;
+                    let (from, to) = get_range::<u32>(first_entry, true)?;
                     let end = to.ok_or(MissingAttributeError::new("range", "to"))?;
                     item.range = Some(Range { start: from, end });
                 }
@@ -377,8 +377,8 @@ impl QuestionBuilder {
                 item.values = data
                     .par_drain(..)
                     .filter(|val| val.tag.as_ref() != "range")
-                    .map(|node| parse_into_choice::<u64>(node, is_classic))
-                    .collect::<Result<Vec<Code<u64>>>>()?;
+                    .map(|node| parse_into_choice::<u32>(node, is_classic))
+                    .collect::<Result<Vec<Code<u32>>>>()?;
             }
 
             Response::TextCategory(item) => {
@@ -451,7 +451,7 @@ impl QuestionBuilder {
             .as_ref()
             .ok_or(error::MissingValueError::new("variable", "position"))?;
 
-        let range = Range::<u64>::from_text(value)?;
+        let range = Range::<u32>::from_text(value)?;
         Ok(Position {
             from: range.start,
             to: range.end,
@@ -463,12 +463,12 @@ impl QuestionBuilder {
             .attributes
             .get("start")
             .ok_or(error::MissingValueError::new("position", "start"))?
-            .parse::<u64>()?;
+            .parse::<u32>()?;
 
         let to = node
             .attributes
             .get("finish")
-            .map(|s| s.parse::<u64>())
+            .map(|s| s.parse::<u32>())
             .transpose()?
             .unwrap_or(from);
 
@@ -483,7 +483,7 @@ impl QuestionBuilder {
         output.index = self
             .attributes
             .remove(attrib_name)
-            .and_then(|val| val.value.map(|idx| idx.trim().parse::<u64>()))
+            .and_then(|val| val.value.map(|idx| idx.trim().parse::<u32>()))
             .ok_or(error::MissingAttributeError::new("variable", attrib_name))?
             .map_err(|err| BadLine::new(format!("Unable to parse variable index: {}", err)))?;
 
@@ -581,9 +581,9 @@ impl QuestionBuilder {
                     .ok_or(MissingValueError::new("variable", "spread"))
                     .with_context(|| format!("When parsing question {}", question_name))?
                     .trim()
-                    .parse::<u64>()
+                    .parse::<u32>()
                     .with_context(|| format!("When parsing question {}", question_name))?;
-                let width = text.get(1).map(|s| s.parse::<u64>()).transpose()?;
+                let width = text.get(1).map(|s| s.parse::<u32>()).transpose()?;
                 Some(Spread { subfield, width })
             } else {
                 let subfield = node
@@ -592,13 +592,13 @@ impl QuestionBuilder {
                     .ok_or(error::MissingAttributeError::new("variable", "subfields"))
                     .with_context(|| format!("When parsing question {}", question_name))?
                     .as_ref()
-                    .parse::<u64>()
+                    .parse::<u32>()
                     .with_context(|| format!("When parsing question {}", question_name))?;
 
                 let width = node
                     .attributes
                     .remove("width")
-                    .map(|s| s.as_ref().trim().parse::<u64>())
+                    .map(|s| s.as_ref().trim().parse::<u32>())
                     .transpose()
                     .with_context(|| format!("When parsing question {}", question_name))?;
 

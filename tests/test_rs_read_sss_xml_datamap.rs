@@ -24,22 +24,17 @@ fn example_datamap_xml_generation_two_example_two() -> Survey {
 #[test]
 fn test_read_xml_datamap_gen_1() {
     let survey = example_datamap_xml_generation_one();
-    // assert_eq!(survey.record.content.len(), 8);
+    assert_eq!(survey.record.content().len(), 8);
 }
 
 #[test]
 fn test_read_xml_datamap_ver_2_example_1() {
     let survey = example_datamap_xml_generation_two_example_one();
-    // assert_eq!(survey.record.content.len(), 12);
+    assert_eq!(survey.record.content().len(), 12);
 }
 
 #[test]
 fn test_read_xml_datamap_ver_2_example_2() {
     let survey = example_datamap_xml_generation_two_example_two();
-    // assert_eq!(survey.record.content.len(), 12);
+    assert_eq!(survey.record.content().len(), 12);
 }
-
-// // #[test]
-// // fn test_read_xml_datamap_gen_3() {
-// //     let survey = example_datamap_xml_generation_three();
-// // }

@@ -293,7 +293,7 @@ fn extract_attributes(
             let key: Arc<str> = Arc::from(attr.key.into_inner());
             let decoded = attr.normalized_value(XmlVersion::Implicit1_0)?;
             // Literal codes may contain significant leading or trailing spaces.
-            // Numeric code parsing handles its own whitespace.
+            // UnSigned code parsing handles its own whitespace.
             let value: Arc<str> = if key.as_ref() == "code" {
                 Arc::from(decoded.as_ref())
             } else {

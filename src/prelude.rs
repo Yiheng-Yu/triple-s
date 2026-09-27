@@ -1,12 +1,10 @@
 
-use anyhow::Result;
 
-use crate::error::NotFiniteError;
 
 // mod sealed {
 //     pub trait Sealed {}
 
-//     impl Sealed for u64 {}
+//     impl Sealed for u32 {}
 //     impl Sealed for f64 {}
 //     impl Sealed for String {}
 // }
@@ -18,7 +16,7 @@ use crate::error::NotFiniteError;
 //     }
 // }
 
-// impl CodeType for u64 {}
+// impl CodeType for u32 {}
 // impl CodeType for f64 {
 //     fn validate(&self) -> Result<()> {
 //         if self.is_finite() {

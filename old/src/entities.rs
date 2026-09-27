@@ -250,7 +250,7 @@ impl Record {
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Question {
-    pub index: u64,
+    pub index: u32,
     pub name: String,
     pub label: Text,
     pub filter: Option<String>,
@@ -311,7 +311,7 @@ pub enum Usage {
 pub enum CodeFormat {
     #[default]
     #[strum(serialize = "numeric")]
-    Numeric,
+    UnSigned,
     #[strum(serialize = "literal")]
     Literal,
 }
@@ -320,7 +320,7 @@ impl CodeFormat {
     pub fn name(&self) -> &str {
         match self {
             Self::Literal => "literal",
-            Self::Numeric => "numeric",
+            Self::UnSigned => "numeric",
         }
     }
 
@@ -346,7 +346,7 @@ pub enum Response {
     /// instructions
     Note(Arc<RwLock<Note>>),
 
-    /// Single/ Multiple response type with code value being u64, `format`
+    /// Single/ Multiple response type with code value being u32, `format`
     /// attribute `numeric`
     NumericCategory(Arc<RwLock<NumericCategory>>),
 
@@ -591,7 +591,7 @@ impl Quantity {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Character {
-    pub size: u64,
+    pub size: u32,
 }
 
 impl Character {
@@ -630,8 +630,8 @@ pub struct TextCategory {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct NumericCategory {
-    pub values: Vec<Code<u64>>,
-    pub range: Option<Range<u64>>,
+    pub values: Vec<Code<u32>>,
+    pub range: Option<Range<u32>>,
     pub is_single: bool,
     /// toggle `is_single` on/off won't overwrite existing value of `spread`,
     /// but hiding it from the user instead.
@@ -639,7 +639,7 @@ pub struct NumericCategory {
 }
 
 impl NumericCategory {
-    fn new(values: Vec<Code<u64>>, is_single: bool) -> Result<Self> {
+    fn new(values: Vec<Code<u32>>, is_single: bool) -> Result<Self> {
         Ok(Self {
             values,
             is_single,
@@ -648,7 +648,7 @@ impl NumericCategory {
         })
     }
 
-    pub fn try_add_code(&mut self, code: Code<u64>) -> Result<()> {
+    pub fn try_add_code(&mut self, code: Code<u32>) -> Result<()> {
         if let Some(found) = self.values.par_iter().find_first(|item| item.code == code.code) {
             Err(DuplicatedKey::new(found.code, &found.label.value).into())
         } else {
@@ -678,8 +678,8 @@ impl NumericCategory {
     }
 
     // return all entries with duplicated code value
-    pub fn find_duplicated_entries(&self) -> Vec<&Code<u64>> {
-        let mut groups: HashMap<u64, Vec<&Code<u64>>> = HashMap::new();
+    pub fn find_duplicated_entries(&self) -> Vec<&Code<u32>> {
+        let mut groups: HashMap<u32, Vec<&Code<u32>>> = HashMap::new();
 
         for item in self.values.iter() {
             groups.entry(item.code).or_default().push(item);
@@ -746,7 +746,7 @@ impl RangeTime {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Code<T: CodeType> {
-    /// code value, this can be String, Float or u64
+    /// code value, this can be String, Float or u32
     pub code: T,
 
     /// text label
@@ -801,8 +801,8 @@ impl<T: CodeType> Code<T> {
 /// of the variable.
 #[derive(Debug, Clone, PartialEq, Default, Eq)]
 pub struct Position {
-    pub from: u64,
-    pub to: u64,
+    pub from: u32,
+    pub to: u32,
 }
 
 impl Position {
@@ -819,9 +819,9 @@ impl Position {
 pub struct Spread {
     /// The number of subfields within the overall field that is defined by the
     /// <position> element.
-    pub subfield: u64,
+    pub subfield: u32,
     /// Denotes the width of each subfield.
-    pub width: Option<u64>,
+    pub width: Option<u32>,
 }
 
 impl Spread {
@@ -1099,16 +1099,6 @@ impl Mode {
 
 // Helper functions
 // ------------------------------------------------------------------------
-// fn has_duplicate_key<Value: CodeType>(values: &[Code<Value>], code:
-// &Code<Value>) -> Result<()> {     if values.iter().any(|existing|
-// existing.code == code.code) {         return Err(InvalidArg::new(format!(
-//             "Unable to add new code, code value '{}' already exists!",
-//             code.code
-//         ))
-//         .into());
-//     }
-//     Ok(())
-// }
 
 #[inline]
 fn quote(value: impl Display) -> String {
@@ -1200,9 +1190,9 @@ mod test {
     #[test]
     fn test_duplicated_codes() {
         let mut response = NumericCategory::new(vec![], true).unwrap();
-        let code1 = Code::new(1 as u64, "test").unwrap();
-        let code2 = Code::new(2 as u64, "test").unwrap();
-        let code3 = Code::new(3 as u64, "test").unwrap();
+        let code1 = Code::new(1 as u32, "test").unwrap();
+        let code2 = Code::new(2 as u32, "test").unwrap();
+        let code3 = Code::new(3 as u32, "test").unwrap();
 
         response.values.push(code1.clone());
         response.values.push(code1.clone());
@@ -1217,7 +1207,7 @@ mod test {
 
     /// field `code` for struct `Code` can only be one of the:
     /// - None-NaN, None-infinity float
-    /// - u64,
+    /// - u32,
     /// - String
     #[test]
     fn test_allowed_code_types() {

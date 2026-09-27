@@ -1,16 +1,14 @@
 use std::str::FromStr;
 
+use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use anyhow::{Context, Result};
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*};
 
 #[cfg(feature = "pyo3")]
-use crate::utils::{get_type_name, normalize_py_index, py_value_error};
+use crate::utils::{get_type_name, py_value_error};
 use crate::{
-    entities::{CodeFormat, Text, Usage},
-    error,
-    prelude::{DeepCopy, *},
-    utils::{ArcLock, lock_it_up},
+    EventLog, entities::{CodeFormat, QuestionType, Response, Text, Usage}, error::{self, RangeError}, prelude::{DeepCopy, *}, utils::{ArcLock, lock_it_up},
 };
 
 #[cfg_attr(
@@ -19,15 +17,122 @@ use crate::{
 )]
 #[derive(Debug)]
 pub struct Question {
-    pub index: u64,
-    pub name: ArcLock<String>,
-    pub label: Option<Text>,
-    pub filter: ArcLock<Option<String>>,
-    pub format: ArcLock<Option<CodeFormat>>,
-    pub usage: ArcLock<Option<Usage>>,
-    // pub location: ArcLock<Location>,
-    pub location: Location,
-    // pub response: Response,
+    index: u32,
+    name: ArcLock<String>,
+    label: Option<Text>,
+    filter: ArcLock<Option<String>>,
+    format: ArcLock<Option<CodeFormat>>,
+    usage: ArcLock<Option<Usage>>,
+    question_type: ArcLock<QuestionType>,
+    location: Location,
+    spread: Option<Spread>,
+    response: Response,
+}
+
+impl Question {
+    pub fn index(&self) -> &u32 {
+        &self.index
+    }
+
+    pub fn index_mut(&mut self) -> &mut u32 {
+        &mut self.index
+    }
+
+    pub fn label(&self) -> &Option<Text> {
+        &self.label
+    }
+
+    pub fn label_mut(&mut self) -> &mut Option<Text> {
+        &mut self.label
+    }
+
+    pub fn location(&self) -> &Location {
+        &self.location
+    }
+
+    pub fn location_mut(&mut self) -> &mut Location {
+        &mut self.location
+    }
+
+    pub fn spread(&self) -> &Option<Spread> {
+        &self.spread
+    }
+
+    pub fn spread_mut(&mut self) -> &mut Option<Spread> {
+        &mut self.spread
+    }
+
+    pub fn response(&self) -> &Response {
+        &self.response
+    }
+
+    pub fn response_mut(&mut self) -> &mut Response {
+        &mut self.response
+    }
+
+    pub fn set_response(&mut self, response: Response) {
+        self.response = response;
+    }
+
+    pub fn set_name(&self, value: impl Into<String>) {
+        *self.name.write() = value.into();
+    }
+
+    pub fn set_filter(&self, value: Option<String>) {
+        *self.filter.write() = value;
+    }
+
+    pub fn set_format(&self, value: Option<CodeFormat>) {
+        *self.format.write() = value;
+    }
+
+    pub fn set_usage(&self, value: Option<Usage>) {
+        *self.usage.write() = value;
+    }
+
+    pub fn set_question_type(&self, value: QuestionType) {
+        *self.question_type.write() = value;
+    }
+
+    pub fn name(&self) -> RwLockReadGuard<'_, String> {
+        self.name.read()
+    }
+
+    pub fn name_mut(&self) -> RwLockWriteGuard<'_, String> {
+        self.name.write()
+    }
+
+    pub fn filter(&self) -> RwLockReadGuard<'_, Option<String>> {
+        self.filter.read()
+    }
+
+    pub fn filter_mut(&self) -> RwLockWriteGuard<'_, Option<String>> {
+        self.filter.write()
+    }
+
+    pub fn format(&self) -> RwLockReadGuard<'_, Option<CodeFormat>> {
+        self.format.read()
+    }
+
+    pub fn format_mut(&self) -> RwLockWriteGuard<'_, Option<CodeFormat>> {
+        self.format.write()
+    }
+
+    pub fn usage(&self) -> RwLockReadGuard<'_, Option<Usage>> {
+        self.usage.read()
+    }
+
+    pub fn usage_mut(&self) -> RwLockWriteGuard<'_, Option<Usage>> {
+        self.usage.write()
+    }
+
+    pub fn question_type(&self) -> RwLockReadGuard<'_, QuestionType> {
+        self.question_type.read()
+    }
+
+    pub fn question_type_mut(&self) -> RwLockWriteGuard<'_, QuestionType> {
+        self.question_type.write()
+    }
 }
 
 impl Clone for Question {
@@ -35,20 +140,23 @@ impl Clone for Question {
     /// not the data it points to.)
     fn clone(&self) -> Self {
         Self {
-            index: self.index.clone(),
+            index: self.index,
             name: self.name.clone(),
             label: self.label.clone(),
             filter: self.filter.clone(),
             format: self.format.clone(),
             usage: self.usage.clone(),
+            question_type: self.question_type.clone(),
             location: self.location.clone(),
+            spread: self.spread.clone(),
+            response: self.response.clone(),
         }
     }
 }
 
 impl Default for Question {
     fn default() -> Self {
-        Self::new("", None, None, None, None, None).unwrap()
+        Self::new("", QuestionType::None, None, None, None, None, None, None).unwrap()
     }
 }
 
@@ -61,19 +169,84 @@ impl DeepCopy for Question {
             filter: self.filter.deepcopy(),
             format: self.format.deepcopy(),
             usage: self.usage.deepcopy(),
+            question_type: lock_it_up(self.question_type.read().clone()),
             location: self.location.deepcopy(),
+            spread: self.spread.as_ref().map(|item| item.deepcopy()),
+            response: self.response.deepcopy(),
         }
     }
 }
 
 impl Question {
+    pub fn from_string(input: &str) -> Result<Self> {
+        let is_classic = !input.trim().starts_with('<');
+        let stream = input.lines().map(|line| Ok::<_, error::BadLine>(line.to_owned()));
+        let builder = crate::read::classic::collect_question_stream(stream, 0)?;
+       
+        let (instance, warnings) = builder.build(is_classic)?;
+        let event_log = EventLog {warnings: warnings};
+        if let Some(warning) = event_log.warning_summary("Deserialising Question") {
+            log::warn!("{}", warning)
+        };
+
+        Ok(instance)
+    }
+
+    pub fn to_sss_classic(&self) -> Result<String> {
+        let name = self.name.read().clone();
+        let mut output = format!("VARIABLE {}\nNAME \"{name}\"\n", self.index);
+        if let Some(label) = &self.label {
+            output.push_str(&format!("LABEL \"{}\"\n", label.to_sss_classic()));
+        }
+        output.push_str(&self.location.to_sss_classic());
+        output.push('\n');
+
+        let question_type = self.question_type.read().clone();
+        match question_type {
+            QuestionType::Character => {
+                let size = self.response.range.read().as_ref()
+                    .map(|range| range.end.to_sss_classic())
+                    .transpose()?
+                    .unwrap_or_else(|| "0".to_owned());
+                output.push_str(&format!("TYPE CHARACTER\nSIZE {size}\n"));
+            }
+            QuestionType::Logical => output.push_str("TYPE LOGICAL\n"),
+            QuestionType::Single | QuestionType::Multiple | QuestionType::Quantity => {
+                if question_type == QuestionType::Single
+                    && self.format.read().as_ref() == Some(&CodeFormat::Literal)
+                {
+                    return Err(error::UnsupportedFeature::new(
+                        "SSS Classic", "None numeric code values.",
+                    ).into());
+                }
+                if question_type == QuestionType::Multiple
+                    && let Some(spread) = &self.spread {
+                        output.push_str(&spread.to_sss_classic());
+                        output.push('\n');
+                    }
+                output.push_str(&format!("TYPE {}\n", question_type.to_string().to_uppercase()));
+                output.push_str(&self.response.to_sss_classic(&question_type)
+                    .with_context(|| format!("Question '{name}'"))?);
+            }
+            QuestionType::None | QuestionType::Date | QuestionType::Time => {
+                return Err(error::UnsupportedFeature::new(
+                    "classic", format!("{question_type:?}"),
+                ).into());
+            }
+        }
+        output.push_str(&format!("END VARIABLE {}\n", self.index));
+        Ok(output)
+    }
+
     pub fn new(
         name: &str,
+        question_type: QuestionType,
         label: Option<&str>,
         filter: Option<&str>,
         format: Option<&str>,
         usage: Option<&str>,
         location: Option<Location>,
+        spread: Option<Spread>,
     ) -> Result<Self> {
         let name = name.to_string();
         let label = label.map(Text::new);
@@ -100,11 +273,14 @@ impl Question {
         let instance = Self {
             index: 0,
             name: lock_it_up(name),
-            label: label,
-            filter: filter,
-            format: format,
-            usage: usage,
-            location: location,
+            label,
+            filter,
+            format,
+            usage,
+            question_type: lock_it_up(question_type),
+            location,
+            spread,
+            response: Response::default(),
         };
 
         Ok(instance)
@@ -117,7 +293,7 @@ impl Question {
     pub fn set_format_from_str(&self, value: Option<&str>) -> Result<()> {
         match value {
             None => {
-                *self.format.write() = None;
+                self.set_format(None);
                 Ok(())
             }
             Some(format) => {
@@ -127,7 +303,7 @@ impl Question {
                         CodeFormat::available_options()
                     )
                 })?;
-                *self.format.write() = Some(format);
+                self.set_format(Some(format));
                 Ok(())
             }
         }
@@ -136,7 +312,7 @@ impl Question {
     pub fn set_usage_from_str(&self, value: Option<&str>) -> Result<()> {
         match value {
             None => {
-                *self.usage.write() = None;
+                self.set_usage(None);
                 Ok(())
             }
             Some(usage) => {
@@ -146,7 +322,7 @@ impl Question {
                         Usage::available_options()
                     )
                 })?;
-                *self.usage.write() = Some(usage);
+                self.set_usage(Some(usage));
                 Ok(())
             }
         }
@@ -159,21 +335,39 @@ impl Question {
     #[new]
     #[pyo3(signature=(
         name:"str", 
+        question_type:"str|QuestionType",
         label:"str"=None, 
         filter:"str"=None, 
         format:"'numeric'|'literal'|None"=None,
         usage:"'serial'|'weight'|None"=None,
         location=None,
+        spread=None,
     ))]
-    fn py_new(
+    fn py_new<'py>(
         name: &str,
+        question_type: &Bound<'py, PyAny>,
         label: Option<&str>,
         filter: Option<&str>,
         format: Option<&str>,
         usage: Option<&str>,
         location: Option<Location>,
+        spread: Option<Spread>,
     ) -> PyResult<Self> {
-        Self::new(name, label, filter, format, usage, location).map_err(py_value_error)
+        let question_type = if let Ok(value) = question_type.extract::<QuestionType>() {
+            value
+        } else if let Ok(value) = question_type.extract::<&str>() {
+            QuestionType::from_str(value)
+                .with_context(|| format!("Expect 'question_type' to be one of the `QuestionType` flags, or one of: {:?}", QuestionType::available_options()))
+                .with_context(||format!("When initializing question: '{}'", name))
+                .map_err(py_value_error)?
+        } else {
+            return Err(exceptions::PyTypeError::new_err(get_type_name(
+                question_type,
+            )?));
+        };
+
+        Self::new(name, question_type, label, filter, format, usage, location, spread)
+            .map_err(py_value_error)
     }
 
     fn __repr__(&self) -> String {
@@ -217,15 +411,20 @@ impl Question {
         Ok(self.filter.read().clone())
     }
 
-    #[setter]
-    fn set_filter(&mut self, filter: Option<String>) -> PyResult<()> {
-        self.filter = lock_it_up(filter);
+    #[setter(filter)]
+    fn py_set_filter(&self, filter: Option<String>) -> PyResult<()> {
+        self.set_filter(filter);
         Ok(())
     }
 
     #[getter]
     fn get_location(&self) -> PyResult<Location> {
         Ok(self.location.clone())
+    }
+
+    #[getter]
+    fn get_spread(&self) -> PyResult<Option<Spread>> {
+        Ok(self.spread.as_ref().map(|item| item.clone()))
     }
 
     #[getter(format)]
@@ -236,7 +435,7 @@ impl Question {
     #[setter(format)]
     fn py_set_format<'py>(&self, format: &Bound<'py, PyAny>) -> PyResult<()> {
         if let Ok(value) = format.extract::<Option<CodeFormat>>() {
-            *self.format.write() = value;
+            self.set_format(value);
             Ok(())
         } else if let Ok(value) = format.extract::<Option<&str>>() {
             self.set_format_from_str(value).map_err(py_value_error)
@@ -257,7 +456,7 @@ impl Question {
     #[setter(usage)]
     fn py_set_usage<'py>(&self, value: &Bound<'py, PyAny>) -> PyResult<()> {
         if let Ok(value) = value.extract::<Option<Usage>>() {
-            *self.usage.write() = value;
+            self.set_usage(value);
             Ok(())
         } else if let Ok(value) = value.extract::<Option<&str>>() {
             self.set_usage_from_str(value).map_err(py_value_error)
@@ -279,15 +478,15 @@ impl Question {
 )]
 #[derive(Debug, Default)]
 pub struct Location {
-    pub from: ArcLock<u64>,
-    pub to: ArcLock<u64>,
+    start: ArcLock<u32>,
+    finish: ArcLock<u32>,
 }
 
 impl DeepCopy for Location {
     fn deepcopy(&self) -> Self {
         Self {
-            from: lock_it_up(self.from.read().clone()),
-            to: lock_it_up(self.to.read().clone()),
+            start: lock_it_up(*self.start.read()),
+            finish: lock_it_up(*self.finish.read()),
         }
     }
 }
@@ -295,45 +494,88 @@ impl DeepCopy for Location {
 impl Clone for Location {
     fn clone(&self) -> Self {
         Self {
-            from: self.from.clone(),
-            to: self.to.clone(),
+            start: self.start.clone(),
+            finish: self.finish.clone(),
         }
     }
 }
 
 impl PartialEq for Location {
     fn eq(&self, other: &Self) -> bool {
-        (self.from.read().clone() == other.from.read().clone())
-            & (self.to.read().clone() == other.to.read().clone())
+        (*self.start.read() == *other.start.read())
+            & (*self.finish.read() == *other.finish.read())
     }
 }
 
 impl Location {
+    pub fn start(&self) -> RwLockReadGuard<'_, u32> {
+        self.start.read()
+    }
+
+    pub fn start_mut(&self) -> RwLockWriteGuard<'_, u32> {
+        self.start.write()
+    }
+
+    pub fn finish(&self) -> RwLockReadGuard<'_, u32> {
+        self.finish.read()
+    }
+
+    pub fn finish_mut(&self) -> RwLockWriteGuard<'_, u32> {
+        self.finish.write()
+    }
+
+    /// Construct a location, defaulting the finish to the start.
+    pub fn try_new(start: u32, finish: Option<u32>) -> Result<Self, RangeError> {
+        let location = Self {
+            start: lock_it_up(start),
+            finish: lock_it_up(finish.unwrap_or(start)),
+        };
+        location.validate()?;
+        Ok(location)
+    }
+
     pub fn to_sss_classic(&self) -> String {
-        if self.to.read().clone() != self.from.read().clone() {
-            format!("POSITION {} TO {}", self.from.read(), self.to.read())
+        if *self.finish.read() != *self.start.read() {
+            format!("POSITION {} TO {}", self.start.read(), self.finish.read())
         } else {
-            format!("POSITION {}", self.from.read())
+            format!("POSITION {}", self.start.read())
         }
     }
 
     #[inline]
-    pub fn set_from(&mut self, from: u64) -> Result<(), error::InvalidArg> {
-        *self.from.write() = from;
+    pub fn set_start(&mut self, start: u32) -> Result<(), error::InvalidArg> {
+        *self.start.write() = start;
         Ok(())
     }
 
     #[inline]
-    pub fn set_to(&mut self, to: u64) -> Result<(), error::InvalidArg> {
-        if to >= self.from.read().clone() {
-            *self.to.write() = to;
+    pub fn set_finish(&mut self, finish: u32) -> Result<(), error::InvalidArg> {
+        if finish >= *self.start.read() {
+            *self.finish.write() = finish;
             Ok(())
         } else {
             Err(error::InvalidArg::new(format!(
                 "The `end` of a Location cannot be larger than its `start` location ({}).",
-                &self.from.read()
+                self.start.read()
             )))
         }
+    }
+    
+    pub fn validate(&self) -> Result<(), RangeError> {
+        if *self.finish.read() < *self.start.read() {
+            Err(RangeError(format!(
+                "Start location ({}) should not exceed finish location ({})!",
+                self.start.read(), self.finish.read()
+            )))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// finish - start
+    pub fn width(&self) -> Result<u32> {
+        self.validate()?;
+        Ok(self.finish.read().saturating_sub(*self.start.read()))
     }
 }
 
@@ -341,47 +583,157 @@ impl Location {
 #[pymethods]
 impl Location {
     #[new]
-    #[pyo3(signature=(from:"int", to:"int"=None))]
-    fn new(from: u64, to: Option<u64>) -> PyResult<Self> {
-        let to = if let Some(to) = to {
-            if to < from {
-                return Err(exceptions::PyValueError::new_err(format!(
-                    "Value of `to` cannot be greater than `from`."
-                )));
-            } else {
-                to
-            }
-        } else {
-            from.clone()
-        };
-
-        Ok(Self {
-            from: lock_it_up(from),
-            to: lock_it_up(to),
-        })
+    #[pyo3(signature=(start:"int", finish:"int"=None))]
+    fn new(start: u32, finish: Option<u32>) -> PyResult<Self> {
+        Self::try_new(start, finish)
+            .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
     }
 
-    // `from` is a preserved word in Python hence the alias
+    // `start` is a preserved word in Python hence the alias
     #[getter(start)]
-    fn py_get_from(&self) -> u64 {
-        self.from.read().clone()
+    fn py_get_start(&self) -> u32 {
+        self.start.read().clone()
     }
 
     #[setter(start)]
-    fn py_set_from(&mut self, from: u64) -> PyResult<()> {
-        self.set_from(from)
+    fn py_set_start(&mut self, start: u32) -> PyResult<()> {
+        self.set_start(start)
             .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
     }
 
-    #[getter(end)]
-    fn py_get_to(&self) -> u64 {
-        self.to.read().clone()
+    #[getter(finish)]
+    fn py_get_finish(&self) -> u32 {
+        self.finish.read().clone()
     }
 
-    #[setter(end)]
-    fn py_set_to(&mut self, to: u64) -> PyResult<()> {
-        self.set_to(to)
+    #[setter(finish)]
+    fn py_set_finish(&mut self, finish: u32) -> PyResult<()> {
+        self.set_finish(finish)
             .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
+    }
+}
+
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(module = "triple_s", name = "Spread", from_py_object)
+)]
+#[derive(Debug, Default)]
+pub struct Spread {
+    /// The number of subfields within the overall field that is defined by the
+    /// <position> element.
+    pub subfield: ArcLock<u32>,
+    /// Denotes the width of each subfield.
+    pub width: ArcLock<Option<u32>>,
+}
+
+impl PartialEq for Spread {
+    fn eq(&self, other: &Self) -> bool {
+        (*self.subfield.read() == *other.subfield.read())
+        & (*self.width.read() == *other.width.read())
+    }
+}
+
+impl Eq for Spread {}
+
+impl Clone for Spread {
+    fn clone(&self) -> Self {
+        Self { subfield: self.subfield.clone(), width: self.width.clone() }
+    }
+}
+
+impl DeepCopy for Spread {
+    fn deepcopy(&self) -> Self {
+        Self {
+            subfield: lock_it_up(*self.subfield.read()),
+            width: lock_it_up(self.width.read().as_ref().map(|item| *item))
+        }
+    }
+}
+
+impl Spread {
+    pub fn subfield(&self) -> RwLockReadGuard<'_, u32> {
+        self.subfield.read()
+    }
+
+    pub fn subfield_mut(&self) -> RwLockWriteGuard<'_, u32> {
+        self.subfield.write()
+    }
+
+    pub fn width(&self) -> RwLockReadGuard<'_, Option<u32>> {
+        self.width.read()
+    }
+
+    pub fn width_mut(&self) -> RwLockWriteGuard<'_, Option<u32>> {
+        self.width.write()
+    }
+
+    pub fn new(num_subfields: u32, subfield_width: Option<u32>) -> Result<Self> {
+        if num_subfields == 0 {
+            return Err(error::InvalidArg::new(
+                "`num_subfields` must be a positive integer.",
+            ).into());
+        }
+        if subfield_width == Some(0) {
+            return Err(error::InvalidArg::new(
+                "`subfield_width` must be a positive integer or None.",
+            ).into());
+        }
+        
+        Ok(Self {
+            subfield: lock_it_up(num_subfields),
+            width: lock_it_up(subfield_width),
+        })
+    }
+
+    pub fn to_sss_classic(&self) -> String {
+        match &*self.width.read() {
+            Some(width) => format!("SPREAD {} OF {}", self.subfield.read(), width),
+            None => format!("SPREAD {}", self.subfield.read()),
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Spread {
+    /// Width may be omitted; resolving it requires the containing position.
+    #[new]
+    #[pyo3(signature=(num_subfields, subfield_width=None))]
+    fn py_new(num_subfields: u32, subfield_width: Option<u32>) -> PyResult<Self> {
+        Self::new(num_subfields, subfield_width)
+            .map_err(py_value_error)
+    }
+
+    #[getter(num_subfields)]
+    fn py_get_num_subfields(&self) -> u32 {
+        *self.subfield.read()
+    }
+
+    #[setter(num_subfields)]
+    fn py_set_num_subfields(&mut self, num_subfields: u32) -> PyResult<()> {
+        if num_subfields == 0 {
+            return Err(exceptions::PyValueError::new_err(
+                "`num_subfields` must be a positive integer.",
+            ));
+        }
+        *self.subfield.write() = num_subfields;
+        Ok(())
+    }
+
+    #[getter(subfield_width)]
+    fn py_get_subfield_width(&self) -> Option<u32> {
+        *self.width.read()
+    }
+
+    #[setter(subfield_width)]
+    fn py_set_subfield_width(&mut self, subfield_width: Option<u32>) -> PyResult<()> {
+        if subfield_width == Some(0) {
+            return Err(exceptions::PyValueError::new_err(
+                "`subfield_width` must be a positive integer or None.",
+            ));
+        }
+        *self.width.write() = subfield_width;
+        Ok(())
     }
 }
 
@@ -391,13 +743,22 @@ mod test {
     use crate::Variant;
 
     fn new_empty_question() -> Question {
-        Question::new("Q1", None, None, None, None, None).unwrap()
+        Question::new(
+            "Q1", 
+            QuestionType::Single, 
+            None, 
+            None, 
+            None, 
+            None, 
+            None,
+            None
+        ).unwrap()
     }
 
     fn new_filled_question() -> Question {
         let mut question = new_empty_question();
-        question.location.set_from(23).unwrap();
-        question.location.set_to(55).unwrap();
+        question.location.set_start(23).unwrap();
+        question.location.set_finish(55).unwrap();
         question.label = Some(Text::new("some label"));
         question
     }
@@ -405,19 +766,19 @@ mod test {
     #[test]
     fn test_set_question_data_location_success() {
         let mut question = new_empty_question();
-        question.location.set_from(23).unwrap();
-        question.location.set_to(55).unwrap();
+        question.location.set_start(23).unwrap();
+        question.location.set_finish(55).unwrap();
 
-        assert_eq!(question.location.from.read().clone(), 23);
-        assert_eq!(question.location.to.read().clone(), 55);
+        assert_eq!(question.location.start.read().clone(), 23);
+        assert_eq!(question.location.finish.read().clone(), 55);
     }
 
     #[test]
     fn test_set_question_data_location_fail() {
         let mut question = new_empty_question();
-        assert!(question.location.set_from(23).is_ok());
-        assert!(question.location.set_to(23).is_ok());
-        assert!(question.location.set_to(3).is_err());
+        assert!(question.location.set_start(23).is_ok());
+        assert!(question.location.set_finish(23).is_ok());
+        assert!(question.location.set_finish(3).is_err());
     }
 
     #[test]
@@ -425,10 +786,10 @@ mod test {
         let question = new_filled_question();
         let mut location = question.location.clone();
 
-        location.set_from(2).unwrap();
-        assert_eq!(question.location.from.read().clone(), 2);
-        location.set_to(55).unwrap();
-        assert_eq!(question.location.to.read().clone(), 55);
+        location.set_start(2).unwrap();
+        assert_eq!(question.location.start.read().clone(), 2);
+        location.set_finish(55).unwrap();
+        assert_eq!(question.location.finish.read().clone(), 55);
     }
 
     #[test]

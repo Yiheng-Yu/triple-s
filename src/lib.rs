@@ -3,6 +3,7 @@ pub mod error;
 pub mod prelude;
 mod utils;
 
+pub use error::EventLog;
 pub use entities::{
     CodeFormat,
     DataSource,
@@ -14,25 +15,27 @@ pub use entities::{
     Variant,
     Version,
     Location,
-    QType,
+    QuestionType,
     Question,
     Code,
     Value,
     Response,
-    Category,
-    Quantity,
+    Spread,
 };
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
 mod read;
-pub use read::read_datamap;
+pub use read::{read_datamap, read_from_reader, read_from_string};
 
 /// A Python module implemented in Rust.
 #[cfg(feature = "pyo3")]
 #[pymodule]
 mod triple_s {
-    use pyo3::prelude::*;
+    use super::*;
+    use pyo3::exceptions;
+    use crate::read::read_from_reader;
+    use anyhow::Context;
 
     #[pymodule_export]
     use super::flags;
@@ -42,15 +45,28 @@ mod triple_s {
         SurveyInfo,
         Survey,
         Text,
+        Spread,
         Usage,
         Variant,
         Location,
         Question,
         Code,
         Response,
-        Category,
-        Quantity,
     };
+
+    #[pyfunction(name="read_datamap", signature=(datamap_path: "str"))]
+    pub fn py_read_datamap(py: Python<'_>, datamap_path: &str) -> PyResult<Survey> {
+        let input = std::fs::File::open(datamap_path)
+            .map_err(|err| exceptions::PyIOError::new_err(err.to_string()))?;
+        let (survey, read_log) = read_from_reader(std::io::BufReader::new(input))
+            .with_context(|| format!("When reading '{}'", datamap_path))
+            .map_err(|err| exceptions::PyIOError::new_err(err.to_string()))?;
+        if read_log.warnings.len() > 0 {
+            read_log.print_warning_summary(py, &format!("Reading '{datamap_path}'"))?
+        };
+        Ok(survey)
+    }
+
 
     #[pymodule_init]
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -73,6 +89,6 @@ mod flags {
         CodeFormat,
         Value,
         Usage,
-        QType,
+        QuestionType,
     };
 }

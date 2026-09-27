@@ -224,7 +224,7 @@ def test_meta_setter_fail(field, values, error):
 # Question
 # =============================================================================
 def create_empty_question():
-    return Question("Q1")
+    return Question("Q1", "single")
 
 
 def test_question_format_getter_setter(question):
@@ -233,7 +233,7 @@ def test_question_format_getter_setter(question):
     for value, expected in [
         ("numeric", "numeric"),
         ("literal", "literal"),
-        (CodeFormat.Numeric, "numeric"),
+        (CodeFormat.UnSigned, "numeric"),
         (CodeFormat.Literal, "literal"),
         (None, None),
     ]:
@@ -271,7 +271,7 @@ def test_question_usage_getter_setter(question):
         ("invalid", ValueError),
         (42, TypeError),
         (1.5, TypeError),
-        (CodeFormat.Numeric, TypeError),
+        (CodeFormat.UnSigned, TypeError),
     ]:
         with pytest.raises(error):
             question.usage = value
@@ -358,9 +358,9 @@ def test_question_setter_fail(attr, value):
             id="location-start",
         ),
         pytest.param(
-            "end",
+            "finish",
             55,
-            id="location-end",
+            id="location-finish",
         ),
     ],
 )

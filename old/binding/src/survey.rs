@@ -473,7 +473,7 @@ impl PyLocation {
 impl PyLocation {
     // #[new]
     // #[pyo3(signature = (from, to))]
-    // fn new(from: u64, to: u64) -> Self {
+    // fn new(from: u32, to: u32) -> Self {
     //     Self {
     //         inner: Storage::Owned(Arc::new(RwLock::new(Position { from, to }))),
     //     }
@@ -485,23 +485,23 @@ impl PyLocation {
 
     /// Start of a data location
     #[getter]
-    fn get_start(&self) -> PyResult<u64> {
+    fn get_start(&self) -> PyResult<u32> {
         Ok(self.read().from)  // `from` is a reserved python keyword
     }
 
     #[setter]
-    fn set_start(&mut self, value: u64) -> PyResult<()> {
+    fn set_start(&mut self, value: u32) -> PyResult<()> {
         self.write().from = value;
         Ok(())
     }
 
     #[getter]
-    fn get_end(&self) -> PyResult<u64> {
+    fn get_end(&self) -> PyResult<u32> {
         Ok(self.read().to)
     }
 
     #[setter]
-    fn set_end(&mut self, value: u64) -> PyResult<()> {
+    fn set_end(&mut self, value: u32) -> PyResult<()> {
         self.write().to = value;
         Ok(())
     }
@@ -1326,7 +1326,7 @@ impl PyVariant {
     }
 }
 
-/// Numeric or literal response code format.
+/// UnSigned or literal response code format.
 #[pyclass(name = "Format", module = "config")]
 pub struct PyFormat(pub sss::CodeFormat);
 

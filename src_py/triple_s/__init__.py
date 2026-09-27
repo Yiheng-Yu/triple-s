@@ -8,9 +8,8 @@ from .triple_s import (
     Question,
     Code,
     Response,
-    Category,
-    Quantity,
     flags,
+    read_datamap
 )
 
 
@@ -24,7 +23,6 @@ __all__ = [
     "Question",
     "Code",
     "Response",
-    "Category",
-    "Quantity",
     "flags",
+    "read_datamap"
 ]

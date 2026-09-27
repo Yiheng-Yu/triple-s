@@ -1,7 +1,10 @@
+use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
+
 use std::{
     collections::HashSet,
     hash::{Hash, Hasher},
     str::FromStr,
+    sync::Arc,
 };
 
 #[cfg(feature="pyo3")]
@@ -24,7 +27,7 @@ use crate::{
     feature = "pyo3",
     pyclass(name = "Text", module = "triple_s", from_py_object)
 )]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Text {
     pub value: ArcLock<String>,
     pub variants: ArcLock<Vec<Variant>>,
@@ -54,7 +57,29 @@ impl PartialEq for Text {
     }
 }
 
+impl From<Arc<str>> for Text {
+    fn from(value: Arc<str>) -> Self {
+        Self::new(value.as_ref())
+    }
+}
+
 impl Text {
+    pub fn value(&self) -> RwLockReadGuard<'_, String> {
+        self.value.read()
+    }
+
+    pub fn value_mut(&self) -> RwLockWriteGuard<'_, String> {
+        self.value.write()
+    }
+
+    pub fn variants(&self) -> RwLockReadGuard<'_, Vec<Variant>> {
+        self.variants.read()
+    }
+
+    pub fn variants_mut(&self) -> RwLockWriteGuard<'_, Vec<Variant>> {
+        self.variants.write()
+    }
+
     pub fn new(value: impl Into<String>) -> Self {
         Self {
             value: lock_it_up(value.into()),
@@ -104,9 +129,9 @@ impl Text {
 
     pub fn has_same_variants(&self, other: &Self) -> bool {
         if self.variants.read().len() != other.variants.read().len() {
-            return false;
-        } else if self.variants.read().len() == 0 {
-            return true;
+            false
+        } else if self.variants.read().is_empty() {
+            true
         } else {
             self.variants
                 .read()
@@ -121,6 +146,10 @@ impl Text {
                 })
                 .is_some()
         }
+    }
+
+    pub fn to_sss_classic(&self) -> String {
+        self.value.read().clone()
     }
 }
 
@@ -287,6 +316,30 @@ impl Hash for Variant {
 }
 
 impl Variant {
+    pub fn value(&self) -> RwLockReadGuard<'_, String> {
+        self.value.read()
+    }
+
+    pub fn value_mut(&self) -> RwLockWriteGuard<'_, String> {
+        self.value.write()
+    }
+
+    pub fn mode(&self) -> RwLockReadGuard<'_, Mode> {
+        self.mode.read()
+    }
+
+    pub fn mode_mut(&self) -> RwLockWriteGuard<'_, Mode> {
+        self.mode.write()
+    }
+
+    pub fn language(&self) -> RwLockReadGuard<'_, Option<String>> {
+        self.language.read()
+    }
+
+    pub fn language_mut(&self) -> RwLockWriteGuard<'_, Option<String>> {
+        self.language.write()
+    }
+
     pub fn new(
         value: impl Into<String>,
         mode: Option<&str>,
@@ -336,7 +389,7 @@ impl Variant {
 
     pub fn set_language(&self, language: Option<&str>) -> Result<()> {
         let language =
-            language.map(|s| validate_language_tag(&s).map(str::to_owned)).transpose()?;
+            language.map(|s| validate_language_tag(s).map(str::to_owned)).transpose()?;
         // Update the shared value, rather than replacing the shared pointer.
         *self.language.write() = language;
         Ok(())

@@ -1,22 +1,50 @@
 pub mod classic;
 pub mod xml;
-
 use std::{
-    collections::HashMap, fs::File, hash::Hash, io::{BufRead, BufReader, Cursor}, range::Range, str::FromStr, sync::Arc, time::Instant,
+    collections::HashMap,
+    fs::File,
+    hash::Hash,
+    io::{BufRead, BufReader, Cursor, Read},
+    path::Path,
+    range::Range,
+    str::FromStr,
+    sync::Arc,
 };
 
 use anyhow::{Context, Result};
-use chrono::{NaiveDate, NaiveTime};
-use parking_lot::{RwLock, RwLockWriteGuard};
+use log::warn;
 use quick_xml::{encoding::DecodingReader, reader::Reader as XmlReader};
 use rayon::prelude::*;
 
 use crate::{
     entities::{
-        Code, CodeFormat, Location, Mode, QType, Question, Response, Survey, Text, Usage, Value, Variant, Version,
-    }, error::{
-        self, BadLine, DuplicatedKey, InternalError, MissingAttributeError, MissingValueError, UnknownAttribute,
-    }, prelude::*, utils::lock_it_up,
+        Code,
+        CodeFormat,
+        DataSource,
+        Location,
+        Question,
+        QuestionType,
+        Response,
+        Spread,
+        Survey,
+        Text,
+        Usage,
+        Value,
+        Variant,
+        Version,
+    },
+    error::{
+        self,
+        BadLine,
+        DuplicatedKey,
+        EventLog,
+        MissingAttributeError,
+        MissingValueError,
+        UnknownAttribute,
+        Warning,
+    },
+    prelude::*,
+    utils::lock_it_up,
 };
 
 #[derive(Debug, PartialEq)]
@@ -37,58 +65,64 @@ impl FileType {
     }
 }
 
-pub fn read_from_string(data: String) -> Result<Survey> {
-    let data = data.trim().to_string();
-    let first_line =
-        data.lines().next().ok_or(error::FileReadError::new("file seems to be empty"))?;
+pub fn read_datamap(sss_path: impl AsRef<Path>) -> Result<Survey> {
+    let path = sss_path.as_ref();
+    let input = File::open(path)
+        .map_err(error::FileReadError::from)
+        .with_context(|| format!("When opening '{}'", path.display()))?;
 
-    let sss_version = FileType::parse(first_line)?;
-    let builder = match sss_version {
-        FileType::Classic => {
-            let lines = BufReader::new(Cursor::new(data.into_bytes())).lines();
-            classic::create_survey_builder(lines)?
-        }
+    let (survey, read_log) = read_from_reader(BufReader::new(input))
+        .with_context(|| format!("When reading '{}'", path.display()))?;
 
-        FileType::Xml => {
-            let file = BufReader::new(Cursor::new(data.into_bytes()));
-            let decoder = DecodingReader::new(file);
-            let mut reader = XmlReader::from_reader(decoder);
-            reader.config_mut().trim_text(true);
-            xml::create_survey_builder(reader)?
-        }
+    let context = format!("Reading datamap: '{:?}'", path.as_os_str());
+    if let Some(summary) = read_log.warning_summary(context) {
+        warn!("{}", summary);
     };
 
-    builder.build()
+    Ok(survey)
 }
 
-pub fn read_datamap(sss_path: &str) -> Result<Survey> {
-    let input: File = File::open(sss_path).map_err(error::FileReadError::from)?;
+/// Read an already decoded UTF-8 survey without copying the input text.
+pub fn read_from_string(data: impl AsRef<str>) -> Result<Survey> {
+    let (survey, read_log) = read_from_reader(Cursor::new(data.as_ref().as_bytes()))?;
 
-    // identify sss version
-    let mut lines = BufReader::new(input).lines();
-    let first_line = lines
-        .next()
-        .ok_or(error::FileReadError::new("file seems to be empty"))?
-        .with_context(|| format!("When trying to read from: '{}'", sss_path))?;
+    if let Some(summary) = read_log.warning_summary("Reading from string") {
+        warn!("{}", summary);
+    };
 
-    let sss_version = FileType::parse(&first_line)?;
-    let builder = match sss_version {
-        FileType::Classic => {
-            let input = File::open(sss_path).map_err(error::FileReadError::from)?;
-            let lines = BufReader::new(input).lines();
-            classic::create_survey_builder(lines)?
+    Ok(survey)
+}
+
+/// Read either format, accepting a UTF-8 BOM and leading ASCII whitespace.
+/// The detection prefix is replayed so the parser receives the complete
+/// document.
+pub fn read_from_reader<R: BufRead>(mut input: R) -> Result<(Survey, EventLog)> {
+    let mut prefix = Vec::new();
+    let mut first_line = true;
+    loop {
+        if input.read_until(b'\n', &mut prefix)? == 0 {
+            return Err(error::FileReadError::new("file seems to be empty").into());
         }
-
+        if first_line && prefix.starts_with(b"\xef\xbb\xbf") {
+            prefix.drain(..3);
+        }
+        first_line = false;
+        if let Some(start) = prefix.iter().position(|byte| !byte.is_ascii_whitespace()) {
+            prefix.drain(..start);
+            break;
+        }
+        prefix.clear();
+    }
+    let file_type = FileType::parse(std::str::from_utf8(&prefix[..1])?)?;
+    let input = BufReader::new(Cursor::new(prefix).chain(input));
+    let builder = match file_type {
+        FileType::Classic => classic::create_survey_builder(input.lines())?,
         FileType::Xml => {
-            let file = File::open(sss_path)?;
-            let file = BufReader::new(file);
-            let decoder = DecodingReader::new(file);
-            let mut reader = XmlReader::from_reader(decoder);
+            let mut reader = XmlReader::from_reader(DecodingReader::new(input));
             reader.config_mut().trim_text(true);
             xml::create_survey_builder(reader)?
         }
     };
-
     builder.build()
 }
 
@@ -197,8 +231,9 @@ impl SurveyBuilder {
         }
     }
 
-    pub fn build(mut self) -> Result<Survey> {
+    pub fn build(mut self) -> Result<(Survey, EventLog)> {
         let mut output = Survey::empty();
+        let mut log = EventLog::new();
 
         output.meta.title = self
             .attributes
@@ -214,20 +249,28 @@ impl SurveyBuilder {
 
         if let Some(record) = self.attributes.remove("record") {
             if self.is_classic {
-                output.record.id = record
+                *output.record.id_mut() = record
                     .value
                     .and_then(|value| value.chars().next())
                     .ok_or(MissingValueError::new("survey", "record"))?;
             } else {
-                output.record.id = record
+                *output.record.id_mut() = record
                     .attributes
                     .get("ident")
                     .and_then(|value| value.chars().next())
                     .ok_or(MissingAttributeError::new("record", "ident"))?;
 
-                output.record.skip = record.attributes.get("skip").map(ToString::to_string);
-                output.record.href = record.attributes.get("href").map(ToString::to_string);
-                output.record.href = record.attributes.get("format").map(ToString::to_string);
+                *output.record.skip_mut() =
+                    record.attributes.get("skip").map(ToString::to_string);
+                *output.record.href_mut() =
+                    record.attributes.get("href").map(ToString::to_string);
+                *output.record.data_source_mut() = record
+                    .attributes
+                    .get("format")
+                    .map(|value| DataSource::from_str(value))
+                    .transpose()
+                    .context("When parsing record attribute 'format'")?
+                    .unwrap_or_default();
             }
         }
 
@@ -271,17 +314,18 @@ impl SurveyBuilder {
             .ok_or(MissingValueError::new("sss", "version"))?;
 
         let is_classic = self.is_classic;
-        let content = self
+        let results = self
             .questions
             .par_drain(..)
-            .map(|item| {
-                let question = item.build(is_classic)?;
-                let guard = Arc::new(RwLock::new(question));
-                Ok(guard)
-            })
-            .collect::<Result<Vec<Arc<RwLock<Question>>>>>()?;
-        *output.record.content.write() = content;
-        Ok(output)
+            .map(|item| item.build(is_classic))
+            .collect::<Result<Vec<(Question, Vec<Warning>)>>>()?;
+
+        for (question, warnings) in results {
+            output.record.content_mut().push(lock_it_up(question));
+            log.push_warnings(warnings);
+        }
+        output.record.content_mut().shrink_to_fit();
+        Ok((output, log))
     }
 }
 
@@ -299,143 +343,14 @@ impl QuestionBuilder {
         }
     }
 
-    // pub fn build_response(
-    //     mut response: Response,
-    //     mut data: Vec<Node>,
-    //     is_classic: bool,
-    // ) -> Result<Response> {
-    //     match &mut response {
-    //         Response::Logical(_) => (),
-
-    //         Response::Character(item) => {
-    //             let size = data
-    //                 .into_par_iter()
-    //                 .find_first(|node| node.tag.as_ref() == "size")
-    //                 .ok_or(MissingAttributeError::new("response", "size"))?
-    //                 .value
-    //                 .ok_or(error::MissingValueError::new("variable",
-    // "size"))?;             let range =
-    // Range::<u64>::from_text(size.as_ref())?;
-
-    //             let mut item = RwLockWriteGuard::map(item.write(), |resp|
-    // resp);             item.size = range.start;
-    //         }
-
-    //         Response::Quantity(item) => {
-    //             let mut item = RwLockWriteGuard::map(item.write(), |resp|
-    // resp);             let mut iterator = data.into_iter();
-
-    //             // quantity should always start with range node.
-    //             let range_node =
-    //                 iterator.next().ok_or(MissingAttributeError::new("range",
-    // "variable"))?;
-
-    //             let (from, to) = get_range::<f64>(&range_node, true)?;
-    //             item.range.start = from;
-    //             item.range.end = to.ok_or(MissingAttributeError::new("range",
-    // "to"))?;
-
-    //             // then add special values for the rest
-    //             item.values = iterator
-    //                 .map(|node| parse_into_choice::<f64>(node, is_classic))
-    //                 .collect::<Result<Vec<Code<f64>>>>()?;
-    //         }
-
-    //         Response::NumericCategory(item) => {
-    //             let mut item = item.write();
-
-    //             let first_entry =
-    //                 data.first().ok_or(MissingValueError::new("values",
-    // "value"))?;
-
-    //             if first_entry.tag.as_ref() == "range" {
-    //                 let (from, to) = get_range::<u64>(first_entry, true)?;
-    //                 let end = to.ok_or(MissingAttributeError::new("range",
-    // "to"))?;                 item.range = Some(Range { start: from, end
-    // });             }
-
-    //             item.values = data
-    //                 .par_drain(..)
-    //                 .filter(|val| val.tag.as_ref() != "range")
-    //                 .map(|node| parse_into_choice::<u64>(node, is_classic))
-    //                 .collect::<Result<Vec<Code<u64>>>>()?;
-    //         }
-
-    //         Response::TextCategory(item) => {
-    //             item.write().values = data
-    //                 .par_drain(..)
-    //                 .filter(|val| val.tag.as_ref() == "value")
-    //                 .map(|node| parse_into_choice::<String>(node,
-    // is_classic))                 
-    // .collect::<Result<Vec<Code<String>>>>()?;         }
-
-    //         Response::Date(item) => {
-    //             if let Some(node) = data.into_iter().next() {
-    //                 let start = node
-    //                     .attributes
-    //                     .get("from")
-    //                     .map(|val| NaiveDate::parse_from_str(val.as_ref(),
-    // "%Y%m%d"))                     .transpose()?;
-
-    //                 if let Some(start) = start {
-    //                     let end = node
-    //                         .attributes
-    //                         .get("to")
-    //                         .map(|val|
-    // NaiveDate::parse_from_str(val.as_ref(), "%Y%m%d"))                   
-    // .transpose()?                         .unwrap_or(NaiveDate::MAX);
-
-    //                     let mut item = RwLockWriteGuard::map(item.write(),
-    // |resp| resp);                     item.range = Some(Range { start,
-    // end })                 }
-    //             }
-    //         }
-
-    //         Response::Time(item) => {
-    //             if let Some(node) = data.into_iter().next() {
-    //                 let start = node
-    //                     .attributes
-    //                     .get("from")
-    //                     .map(|val| NaiveTime::parse_from_str(val.as_ref(),
-    // "%H%M%S"))                     .transpose()?;
-
-    //                 if let Some(start) = start {
-    //                     let end = node
-    //                         .attributes
-    //                         .get("to")
-    //                         .map(|val|
-    // NaiveTime::parse_from_str(val.as_ref(), "%H%M%S"))                   
-    // .transpose()?                         .unwrap_or(
-    //                             NaiveTime::from_hms_nano_opt(23, 59, 59,
-    // 999_999_999).unwrap(),                         );
-
-    //                     let mut item = RwLockWriteGuard::map(item.write(),
-    // |resp| resp);                     item.range = Some(Range { start,
-    // end })                 }
-    //             }
-    //         }
-
-    //         Response::Note(_) => {
-    //             return Err(InternalError::new(
-    //                 "Customised response type 'Note' should not
-    // exist".to_string(),             )
-    //             .into());
-    //         }
-    //     }
-    //     Ok(response)
-    // }
-
     fn parse_location_classic(node: &Node) -> Result<Location> {
         let value = node
             .value
             .as_ref()
             .ok_or(error::MissingValueError::new("variable", "Position"))?;
 
-        let range = Range::<u64>::from_text(value)?;
-        Ok(Location {
-            from: lock_it_up(range.start),
-            to: lock_it_up(range.end),
-        })
+        let range = Range::<u32>::from_text(value)?;
+        Ok(Location::try_new(range.start, Some(range.end))?)
     }
 
     fn parse_location_xml(node: &Node) -> Result<Location> {
@@ -443,41 +358,57 @@ impl QuestionBuilder {
             .attributes
             .get("start")
             .ok_or(error::MissingValueError::new("Position", "start"))?
-            .parse::<u64>()?;
+            .parse::<u32>()?;
 
         let to = node
             .attributes
             .get("finish")
-            .map(|s| s.parse::<u64>())
+            .map(|s| s.parse::<u32>())
             .transpose()?
             .unwrap_or(from);
 
-        let from = lock_it_up(from);
-        let to = lock_it_up(to);
-        Ok(Location { from, to })
+        Ok(Location::try_new(from, Some(to))?)
     }
 
-    pub fn build(mut self, is_classic: bool) -> Result<Question> {
+    pub fn build(self, is_classic: bool) -> Result<(Question, Vec<Warning>)> {
+        let name = self
+            .attributes
+            .get("name")
+            .and_then(|node| node.value.as_deref())
+            .unwrap_or("<unnamed>")
+            .to_owned();
+        let index = self
+            .attributes
+            .get(if is_classic { "variable" } else { "ident" })
+            .and_then(|node| node.value.as_deref())
+            .unwrap_or("<missing>")
+            .to_owned();
+        self.build_inner(is_classic)
+            .with_context(|| format!("When parsing question {name} (index {index})"))
+    }
+
+    fn build_inner(mut self, is_classic: bool) -> Result<(Question, Vec<Warning>)> {
         let mut output = Question::default();
+        let mut warnings = Vec::new();
 
         // mandatory: question index
         let attrib_name = if is_classic { "variable" } else { "ident" };
-        output.index = self
+        *output.index_mut() = self
             .attributes
             .remove(attrib_name)
-            .and_then(|val| val.value.map(|idx| idx.trim().parse::<u64>()))
+            .and_then(|val| val.value.map(|idx| idx.trim().parse::<u32>()))
             .ok_or(error::MissingAttributeError::new("variable", attrib_name))?
             .map_err(|err| BadLine::new(format!("Unable to parse variable index: {}", err)))?;
 
         // mandatory: question name
-        *output.name.write() = self
+        *output.name_mut() = self
             .attributes
             .remove("name")
             .and_then(|val| val.value.map(|name| unquote(name, is_classic)))
             .transpose()?
             .ok_or(error::MissingAttributeError::new("variable", "name"))?;
 
-        let question_name = output.name.read().to_string();
+        let question_name = output.name().to_string();
 
         // sss classic does not have text variant
         let label = self
@@ -487,7 +418,7 @@ impl QuestionBuilder {
             .with_context(|| format!("When parsing question {}", question_name))?;
         let label = parse_text(label, is_classic)
             .with_context(|| format!("When parsing question {}", question_name))?;
-        output.label = Some(label);
+        *output.label_mut() = Some(label);
 
         let location = self
             .attributes
@@ -495,7 +426,7 @@ impl QuestionBuilder {
             .ok_or(error::MissingAttributeError::new("variable", "position"))
             .with_context(|| format!("When parsing question {}", question_name))?;
 
-        output.location = if is_classic {
+        *output.location_mut() = if is_classic {
             Self::parse_location_classic(&location)
                 .with_context(|| format!("When parsing question {}", question_name))?
         } else {
@@ -503,19 +434,21 @@ impl QuestionBuilder {
                 .with_context(|| format!("When parsing question {}", question_name))?
         };
 
-        *output.format.write() = self
+        *output.format_mut() = self
             .attributes
             .remove("format")
             .and_then(|node| node.value.map(|s| CodeFormat::from_str(s.as_ref())))
-            .transpose()?;
+            .transpose()
+            .context("When parsing field 'format'")?;
 
-        *output.usage.write() = self
+        *output.usage_mut() = self
             .attributes
             .remove("use")
             .and_then(|node| node.value.map(|s| Usage::from_str(s.as_ref())))
-            .transpose()?;
+            .transpose()
+            .context("When parsing field 'use'")?;
 
-        *output.filter.write() = self
+        *output.filter_mut() = self
             .attributes
             .remove("filter")
             .and_then(|node| node.value.map(|s| s.to_string()));
@@ -530,114 +463,127 @@ impl QuestionBuilder {
             .ok_or(error::MissingValueError::new("variable", "type"))
             .with_context(|| format!("When parsing question {}", question_name))?;
 
-        let qtype = QType::from_str(type_name.as_ref())
-            .with_context(|| format!(
-                "Error identifying question type. Exepct to be one of: '{:?}', got: '{}'",
-                QType::available_options(), type_name.as_ref()
-            ))
+        *output.question_type_mut() = QuestionType::from_str(type_name.as_ref())
+            .with_context(|| {
+                format!(
+                    "Error identifying question type. Expect to be one of: '{:?}', got: '{}'",
+                    QuestionType::available_options(),
+                    type_name.as_ref()
+                )
+            })
             .with_context(|| format!("When parsing question {}", question_name))?;
-        
-        let response = ResponseBuilder::from_question_read(
-            self.responses.children.clone()
-        )?;
 
-        todo!()
+        // update spread
+        if let Some(mut node) = self.attributes.remove("spread") {
+            let spread = if is_classic {
+                let raw_spread =
+                    node.value.ok_or(MissingAttributeError::new("spread", "subfields"))?;
 
-        // println!("{:#?}", &self.responses.children);
-        // let response_raw = self.responses
+                let splitted = raw_spread.trim().splitn(2, " OF ").collect::<Vec<&str>>();
+                let subfields = splitted
+                    .first()
+                    .ok_or(MissingAttributeError::new("spread", "subfields"))?
+                    .parse::<u32>()
+                    .context("When parsing spread <subfield>")?;
+                let width = splitted
+                    .get(1)
+                    .map(|value| value.parse::<u32>())
+                    .transpose()
+                    .context("When parsing spread <width>")?;
 
-        // match type_name.as_ref() {
-        //     "single" => todo!(),
-        //     "multiple" => todo!(),
-        //     "logical" => todo!(),
-        //     "quantity" => todo!(),
-        //     "character" => todo!(),
-        //     "date" => todo!(),
-        //     "time" => todo!(),
-        //     _ => return Err(BadLine::new(format!(
-        //             "Unidentified response kind: '{}'", type_name
-        //         )).into())
-        // };
+                Spread::new(subfields, width).context("When parsing spread")?
+            } else {
+                let subfields = node
+                    .attributes
+                    .remove("subfields")
+                    .as_deref()
+                    .map(|item| item.parse::<u32>())
+                    .transpose()
+                    .context("When parsing spread attributes")?
+                    .ok_or(MissingAttributeError::new("spread", "subfields"))?;
 
-        // fn from_str(s: &str) -> Result<Self, Self::Err> {
-        //     let to_match = s.trim().to_ascii_lowercase();
-        //     match to_match.as_str() {
-        //         "single" => Self::new_single_numerical().map_err(BadLine::from),
-        //         "multiple" => Self::new_multiple().map_err(BadLine::from),
-        //         "quantity" => Self::new_quantity().map_err(BadLine::from),
-        //         "character" => Self::new_character().map_err(BadLine::from),
-        //         "logical" => Self::new_logical().map_err(BadLine::from),
-        //         "date" => Self::new_range_date().map_err(BadLine::from),
-        //         "time" => Self::new_range_time().map_err(BadLine::from),
-        //         _ => Err(BadLine::new(format!(
-        //             "Unidentified response kind: '{}'",
-        //             to_match
-        //         ))),
-        //     }
-        // }
+                let width = node
+                    .attributes
+                    .remove("width")
+                    .as_deref()
+                    .map(|item| item.parse::<u32>())
+                    .transpose()
+                    .context("When parsing spread attributes")?;
 
+                Spread::new(subfields, width).context("When parsing spread")?
+            };
+            *output.spread_mut() = Some(spread);
+        };
 
-        // let response = Response::from_str(&response)
-        //     .with_context(|| format!("When parsing question {}",
-        // question_name))?; let response = match &output.format {
-        //     CodeFormat::Literal => Response::new_single_literal()?,
-        //     _ => response,
-        // };
-        // let response = Self::build_response(response,
-        // self.responses.children, is_classic)     .with_context(||
-        // format!("When parsing question {}", question_name))?;
+        let response = ResponseBuilder::from_question_read(self.responses.children)
+            .context("When parsing field 'values'")?;
+        // ..then build respective entries based on the question type and format
+        let question_type = output.question_type().clone();
+        match question_type {
+            QuestionType::Logical | QuestionType::None => (),
+            QuestionType::Single => {
+                if Some(&CodeFormat::Literal) == output.format().as_ref() {
+                    let (response, resp_warnings) =
+                        response.build_literal_category(&question_name, is_classic)?;
 
-        // // update spread
-        // if let Some(mut node) = self.attributes.remove("spread")
-        //     && let Response::NumericCategory(code_values) = &response
-        // {
-        //     // read field `spread` regardless of response type, just in case
-        //     code_values.write().spread = if is_classic {
-        //         let text = node
-        //             .value
-        //             .ok_or(MissingValueError::new("variable", "spread"))
-        //             .with_context(|| format!("When parsing question {}",
-        // question_name))?             .to_uppercase();
+                    output.set_response(response);
+                    warnings.extend(resp_warnings);
+                } else {
+                    let (response, resp_warnings) =
+                        response.build_numeric(ValueKind::UnSigned, is_classic)?;
 
-        //         let text = text
-        //             .splitn(2, "OF")
-        //             .map(|s| s.trim())
-        //             .filter(|s| !s.is_empty())
-        //             .collect::<Vec<&str>>();
+                    output.set_response(response);
+                    warnings.extend(resp_warnings);
+                }
+            }
+            QuestionType::Multiple => {
+                let (response, resp_warnings) =
+                    response.build_numeric(ValueKind::UnSigned, is_classic)?;
+                output.set_response(response);
+                warnings.extend(resp_warnings);
+            }
+            QuestionType::Quantity => {
+                let (response, resp_warnings) =
+                    response.build_numeric(ValueKind::Float, is_classic)?;
+                output.set_response(response);
+                warnings.extend(resp_warnings);
+            }
+            QuestionType::Date | QuestionType::Time => {
+                let (response, resp_warnings) =
+                    response.build_numeric(ValueKind::Signed, is_classic)?;
+                output.set_response(response);
+                warnings.extend(resp_warnings);
+            }
+            QuestionType::Character => {
+                if let Some(size) = response.size {
+                    let width = output.location().width()?;
+                    let response = Response::new(
+                        Some(Range {
+                            start: Value::UnSigned(0),
+                            end: Value::UnSigned(size),
+                        }),
+                        Vec::new(),
+                    );
+                    output.set_response(response);
+                    if size > width {
+                        warnings.push(Warning {
+                            location: Some(question_name.clone()),
+                            subfield: Some("value/size".to_string()),
+                            kind: error::WarningKind::DataLocation,
+                            message: format!(
+                                "Field 'size' ({}) exceeds the width defined in question's data location ({}).",
+                                size, width
+                            )
+                        })
+                    }
+                }
+            }
+        }
 
-        //         let subfield = text
-        //             .first()
-        //             .ok_or(MissingValueError::new("variable", "spread"))
-        //             .with_context(|| format!("When parsing question {}",
-        // question_name))?             .trim()
-        //             .parse::<u64>()
-        //             .with_context(|| format!("When parsing question {}",
-        // question_name))?;         let width = text.get(1).map(|s|
-        // s.parse::<u64>()).transpose()?;         Some(Spread {
-        // subfield, width })     } else {
-        //         let subfield = node
-        //             .attributes
-        //             .remove("subfields")
-        //             .ok_or(error::MissingAttributeError::new("variable",
-        // "subfields"))             .with_context(|| format!("When
-        // parsing question {}", question_name))?             .as_ref()
-        //             .parse::<u64>()
-        //             .with_context(|| format!("When parsing question {}",
-        // question_name))?;
-
-        //         let width = node
-        //             .attributes
-        //             .remove("width")
-        //             .map(|s| s.as_ref().trim().parse::<u64>())
-        //             .transpose()
-        //             .with_context(|| format!("When parsing question {}",
-        // question_name))?;
-
-        //         Some(Spread { subfield, width })
-        //     };
-        // };
-        // output.response = response;
-        Ok(output)
+        for warning in &mut warnings {
+            warning.location = Some(question_name.clone());
+        }
+        Ok((output, warnings))
     }
 }
 
@@ -679,40 +625,25 @@ fn parse_text(mut node: Node, is_classic: bool) -> Result<Text> {
         let mode = variant.attributes.get("mode").map(|s| s.as_ref());
 
         let variant = Variant::new(value, mode, language)?;
-        let _ = text.add_variant(variant)?;
+        text.add_variant(variant)?;
     }
     Ok(text)
 }
 
-#[inline]
-fn parse_into_code(node: Node, is_classic: bool, code_format: CodeFormat) -> Result<Code>
-{
-    if node.tag.as_ref() != "value" {
-        return Err(InternalError::new(format!(
-            "Expected 'value' node, received: '{}'",
-            node.tag
-        ))
-        .into());
-    };
+#[derive(Clone, Copy)]
+pub enum ValueKind {
+    Signed,
+    UnSigned,
+    Float,
+    String,
+}
 
-    let raw_code = node
-        .attributes
-        .get("code")
-        .ok_or(MissingAttributeError::new(node.tag.as_ref(), "code"))?;
-    let value = match code_format {
-        CodeFormat::Numeric => {
-            let value = raw_code.parse::<u64>()?;
-            Value::Numeric(value)
-        }
-        CodeFormat::Literal => Value::Literal(raw_code.to_string())
-    };
-    let text = parse_text(node, is_classic)?;
-    Ok(Code {
-        value: lock_it_up(value),
-        label: lock_it_up(text),
-        filter: lock_it_up(None),
-        score: lock_it_up(None)
-    })
+#[derive(Debug)]
+struct RawCode {
+    value: Arc<str>,
+    label: Node,
+    score: Option<Arc<str>>,
+    filter: Option<Arc<str>>,
 }
 
 // extract information from raw data first, build response later
@@ -720,85 +651,201 @@ fn parse_into_code(node: Node, is_classic: bool, code_format: CodeFormat) -> Res
 struct ResponseBuilder {
     range_from: Option<Arc<str>>,
     range_to: Option<Arc<str>>,
-    size: Option<u64>,
-    // [[code_value, code_label]]
-    entries: Vec<(Arc<str>, Option<Arc<str>>)>
+    size: Option<u32>,
+    entries: Vec<RawCode>,
 }
 
 impl ResponseBuilder {
-    fn extract_value_entry(mut node: Node) -> Result<(Arc<str>, Option<Arc<str>>)> {
-        let value = node.attributes.remove("code")
+    fn extract_value_entry(node: &mut Node) -> Result<RawCode> {
+        let value = node
+            .attributes
+            .remove("code")
             .ok_or(MissingAttributeError::new("value", "code"))?;
-        let label = node.value.clone();
-        Ok((value, label))
+        let score = node.attributes.remove("score");
+        let filter = node.attributes.remove("filter");
+        let mut label = Node::new("label");
+        label.value = node.value.take();
+        label.children = std::mem::take(&mut node.children);
+        label.attributes = std::mem::take(&mut node.attributes);
+        Ok(RawCode {
+            value,
+            label,
+            score,
+            filter,
+        })
     }
 
     pub fn from_question_read(mut read: Vec<Node>) -> Result<Self> {
         let mut instance = Self::default();
-        
-        let mut iterator = read.into_iter();
-        if let Some(mut first_entry) = iterator.next() {
+
+        if let Some((first_entry, rest)) = read.split_first_mut() {
+            // parse 'range' attribute
             if first_entry.tag.as_ref() == "range" {
                 instance.range_from = first_entry.attributes.remove("from");
                 instance.range_to = first_entry.attributes.remove("to");
-                
             } else if first_entry.tag.as_ref() == "value" {
                 instance.entries.push(Self::extract_value_entry(first_entry)?);
-
             } else if first_entry.tag.as_ref() == "size" {
-                instance.size = first_entry.value
+                instance.size = first_entry
+                    .value
                     .as_ref()
-                    .map(|s| s.parse::<u64>())
-                    .transpose()?;
+                    .map(|s| s.parse::<u32>())
+                    .transpose()
+                    .context("When parsing response field 'size'")?;
             } else {
-               return Err(UnknownAttribute::new("values", first_entry.tag.as_ref()).into());
-            }
+                return Err(UnknownAttribute::new("values", first_entry.tag.as_ref()).into());
+            };
+
+            // collect code values
+            let values = rest
+                .par_iter_mut()
+                .map(|item| {
+                    debug_assert!(item.tag.as_ref() == "value");
+                    Self::extract_value_entry(item)
+                })
+                .collect::<Result<Vec<RawCode>>>()?;
+            instance.entries.extend(values);
         } else {
             return Ok(Self::default());
-        };
-
-        loop {
-            if let Some(item) = iterator.next() {
-                todo!()
-            } else {
-                break
-            }
         }
-
         Ok(instance)
     }
+
+    fn extract_range(&self, kind: ValueKind) -> Result<Range<Value>> {
+        if let Some(from) = self.range_from.as_ref() {
+            let from = match kind {
+                ValueKind::Signed => {
+                    let value = from.parse::<i32>()?;
+                    Value::Signed(value)
+                }
+                ValueKind::UnSigned => {
+                    let value = from.parse::<u32>()?;
+                    Value::UnSigned(value)
+                }
+                ValueKind::Float => {
+                    let value = from.parse::<f64>()?;
+                    Value::Float(value)
+                }
+                _ => todo!(),
+            };
+
+            let to = self
+                .range_to
+                .as_ref()
+                .map(|val| from.parse_like(val.as_ref()))
+                .transpose()?
+                .ok_or(MissingAttributeError::new("range", "to"))?;
+
+            Ok(Range {
+                start: from,
+                end: to,
+            })
+        } else {
+            Err(MissingAttributeError::new("range", "from").into())
+        }
+    }
+
+    fn extract_code(raw: RawCode, format: ValueKind, is_classic: bool) -> Result<Code> {
+        let code_name = raw.value.to_string();
+
+        let label = parse_text(raw.label, is_classic).context(format!(
+            "When parsing response label for code '{}'",
+            code_name
+        ))?;
+
+        let score =
+            raw.score.map(|value| value.parse::<f64>()).transpose().context(format!(
+                "When parsing response attribute 'score' for code {}",
+                code_name
+            ))?;
+
+        let value = match format {
+            ValueKind::String => Value::Literal(raw.value.to_string()),
+            ValueKind::UnSigned => {
+                Value::UnSigned(raw.value.parse().context("Invalid unsigned code")?)
+            }
+            ValueKind::Signed => {
+                Value::Signed(raw.value.parse().context("Invalid signed code")?)
+            }
+            ValueKind::Float => {
+                Value::Float(raw.value.parse().context("Invalid floating-point code")?)
+            }
+        };
+        let instance = Code {
+            value: lock_it_up(value),
+            label: lock_it_up(label),
+            filter: lock_it_up(raw.filter.map(|value| value.to_string())),
+            score: lock_it_up(score),
+        };
+        Ok(instance)
+    }
+
+    fn build_entries(
+        self,
+        range: Option<Range<Value>>,
+        kind: ValueKind,
+        is_classic: bool,
+    ) -> Result<Response> {
+        let values = self
+            .entries
+            .into_par_iter()
+            .map(|raw| {
+                let code = Self::extract_code(raw, kind, is_classic)?;
+                Ok(lock_it_up(code))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        // note: the 'special' flag is ignored for code value for now
+        // TODO: MAKE IT NOT IGNORED!
+        Ok(Response {
+            range: lock_it_up(range),
+            values: lock_it_up(values),
+        })
+    }
+
+    fn build_literal_category(
+        self,
+        question_name: &str,
+        is_classic: bool,
+    ) -> Result<(Response, Vec<Warning>)> {
+        let range = if self.range_from.is_some() {
+            Some(
+                self.extract_range(ValueKind::UnSigned)
+                    .context("When parsing response range")?,
+            )
+        } else {
+            None
+        };
+        let has_range = range.is_some();
+        let response = self.build_entries(range, ValueKind::String, is_classic)?;
+
+        let warning = if has_range {
+            vec![Warning {
+                location: Some(question_name.into()),
+                subfield: Some("values".into()),
+                kind: error::WarningKind::UnexpectedAttribute,
+                message: "Value range is not valid when format is 'literal'.".into(),
+            }]
+        } else {
+            Vec::new()
+        };
+
+        Ok((response, warning))
+    }
+
+    fn build_numeric(
+        self,
+        kind: ValueKind,
+        is_classic: bool,
+    ) -> Result<(Response, Vec<Warning>)> {
+        let range = if self.range_from.is_some() {
+            Some(self.extract_range(kind).context("When parsing response range")?)
+        } else {
+            None
+        };
+        Ok((self.build_entries(range, kind, is_classic)?, Vec::new()))
+    }
 }
-
-// /// from_to == true:
-// /// 'from' 'to'
-// /// from_to == false:
-// /// 'start'
-// #[inline]
-// fn get_range<T>(node: &Node, from_to: bool) -> Result<(T, Option<T>)>
-// where
-//     T: CodeType + FromStr,
-//     T::Err: std::error::Error + Send + Sync + 'static,
-// {
-//     let (attr_from, attr_to) = if from_to {
-//         ("from", "to")
-//     } else {
-//         ("start", "finish")
-//     };
-
-//     let from = node
-//         .attributes
-//         .get(attr_from)
-//         .ok_or(MissingAttributeError::new(node.tag.as_ref(), attr_from))?
-//         .parse::<T>()?;
-//     let to = node.attributes.get(attr_to).map(|s|
-// s.as_ref().parse::<T>()).transpose()?;     from.validate()
-//         .with_context(|| format!("Invalid range attribute '{}'",
-// attr_from))?;     if let Some(to) = &to {
-//         to.validate()
-//             .with_context(|| format!("Invalid range attribute '{}'",
-// attr_to))?;     }
-//     Ok((from, to))
-// }
 
 pub fn try_insert<K, V>(
     map: &mut std::collections::HashMap<K, V>,

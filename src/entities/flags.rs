@@ -116,7 +116,7 @@ impl DeepCopy for DataSource {
 pub enum CodeFormat {
     #[default]
     #[strum(serialize = "numeric")]
-    Numeric,
+    UnSigned,
     #[strum(serialize = "literal")]
     Literal,
 }
@@ -131,7 +131,7 @@ impl Flag for CodeFormat {
     fn to_string(&self) -> String{
         match self {
             Self::Literal => "literal".into(),
-            Self::Numeric => "numeric".into(),
+            Self::UnSigned => "numeric".into(),
         }
     }
 }
@@ -173,7 +173,7 @@ impl DeepCopy for Usage {
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Debug, Default, PartialEq, Clone, EnumString, Eq, AsRefStr, EnumIter)]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
-pub enum QType {
+pub enum QuestionType {
     #[default]
     None,
     #[strum(serialize = "single")]
@@ -198,7 +198,7 @@ pub enum QType {
     Time,
 }
 
-impl Flag for QType {
+impl Flag for QuestionType {
     fn to_string(&self) -> String {
         match self {
             Self::None => "".into(),
@@ -215,10 +215,10 @@ mod test {
 
     #[test]
     fn test_qtype_from_str() {
-        for original in QType::iter() {
-            if original != QType::None {
+        for original in QuestionType::iter() {
+            if original != QuestionType::None {
                 let string = original.to_string();
-                let parsed = QType::from_str(&string).unwrap();
+                let parsed = QuestionType::from_str(&string).unwrap();
                 assert_eq!(parsed, original)
             }
         }

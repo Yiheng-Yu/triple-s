@@ -107,8 +107,8 @@ Response codes keep their Rust types:
 
 | Response | Code type | Empty constructor |
 | --- | --- | --- |
-| Numeric single | `u64` | `Response::new_single()` |
-| Numeric multiple | `u64` | `Response::new_multiple()` |
+| UnSigned single | `u32` | `Response::new_single()` |
+| UnSigned multiple | `u32` | `Response::new_multiple()` |
 | Literal single | `String` | `Response::new_literal_single()` |
 | Quantity | `f64` | `Response::new_quantity()` |
 
@@ -156,7 +156,7 @@ cargo test
 
 ## CodeFormat support
 
-Both `read_datamap` and `read_from_string` detect Classic or XML input. Numeric
+Both `read_datamap` and `read_from_string` detect Classic or XML input. UnSigned
 categories retain integer codes, quantity values retain floating-point codes,
 and literal single responses retain string codes (including leading zeroes).
 Literal multiple responses return an error. Literal codes cannot be exported to

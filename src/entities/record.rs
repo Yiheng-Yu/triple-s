@@ -1,3 +1,5 @@
+use anyhow::Result;
+use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
@@ -9,25 +11,90 @@ use super::{ArcLock, DataSource, Question};
 )]
 #[derive(Debug, Default, Clone)]
 pub struct Record {
-    pub id: char,
+    id: char,
 
     // pub format: Option<CodeFormat>,
     /// (Optional) 'skip' attribute can be used to ignore one or more initial
     /// records in the Data File. This will be most useful for csv Data
     /// Files where the first line is often used as documentation (e.g.
     /// names for the columns/fields) for the succeeding values.
-    pub skip: Option<String>,
+    skip: Option<String>,
 
     /// (Optional) Used to specify an explicit location for the Data
     /// File that is described by this Triple-S XML specification. Note that
     /// using an href attribute ties the specification to the Data File and
     /// may cause problems if the Metadata File and Data File are moved.
-    pub href: Option<String>,
+    href: Option<String>,
 
-    pub data_source: DataSource,
+    data_source: DataSource,
 
     // NOTE: THIS KEPT AS ARC RWLOCK IS VERY IMPORTANT FOR PYTHON BINDING TO WORK!!!
-    pub content: ArcLock<Vec<ArcLock<Question>>>,
+    content: ArcLock<Vec<ArcLock<Question>>>,
+}
+
+impl Record {
+    pub fn id(&self) -> &char {
+        &self.id
+    }
+
+    pub fn id_mut(&mut self) -> &mut char {
+        &mut self.id
+    }
+
+    pub fn skip(&self) -> &Option<String> {
+        &self.skip
+    }
+
+    pub fn skip_mut(&mut self) -> &mut Option<String> {
+        &mut self.skip
+    }
+
+    pub fn href(&self) -> &Option<String> {
+        &self.href
+    }
+
+    pub fn href_mut(&mut self) -> &mut Option<String> {
+        &mut self.href
+    }
+
+    pub fn data_source(&self) -> &DataSource {
+        &self.data_source
+    }
+
+    pub fn data_source_mut(&mut self) -> &mut DataSource {
+        &mut self.data_source
+    }
+
+    pub fn set_content(&self, value: Vec<ArcLock<Question>>) {
+        *self.content.write() = value;
+    }
+
+    pub fn content(&self) -> RwLockReadGuard<'_, Vec<ArcLock<Question>>> {
+        self.content.read()
+    }
+
+    pub fn content_mut(&self) -> RwLockWriteGuard<'_, Vec<ArcLock<Question>>> {
+        self.content.write()
+    }
+
+    pub fn get_question(
+        &self,
+        question_name: &str,
+    ) -> Option<ArcRwLockReadGuard<RawRwLock, Question>> {
+        self.content()
+            .iter()
+            .find(|item| item.read().name().as_str() == question_name)
+            .map(|entry| entry.read_arc())
+    }
+
+    pub fn to_sss_classic(&self) -> Result<String> {
+        let mut output = format!("RECORD {}\n", self.id);
+        for question in self.content.read().iter() {
+            output.push_str(&question.read().to_sss_classic()?);
+        }
+        output.push_str("END RECORD\n");
+        Ok(output)
+    }
 }
 
 #[cfg(feature = "pyo3")]

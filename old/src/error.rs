@@ -252,7 +252,7 @@ impl fmt::Display for MissingAttributeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Element '{}' is missing a required attribute: {}",
+            "MissingAttributeError: Element '{}' is missing a required attribute: {}",
             self.tag, self.missing
         )
     }
