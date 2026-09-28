@@ -3,25 +3,25 @@ pub mod error;
 pub mod prelude;
 mod utils;
 
-pub use error::EventLog;
 pub use entities::{
+    Code,
     CodeFormat,
     DataSource,
-    SurveyInfo,
-    Mode,
-    Survey,
-    Text,
-    Usage,
-    Variant,
-    Version,
     Location,
-    QuestionType,
+    Mode,
     Question,
-    Code,
-    Value,
+    QuestionType,
     Response,
     Spread,
+    Survey,
+    SurveyInfo,
+    Text,
+    Usage,
+    Value,
+    Variant,
+    Version,
 };
+use error::EventLog;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
@@ -32,27 +32,26 @@ pub use read::{read_datamap, read_from_reader, read_from_string};
 #[cfg(feature = "pyo3")]
 #[pymodule]
 mod triple_s {
-    use super::*;
-    use pyo3::exceptions;
-    use crate::read::read_from_reader;
     use anyhow::Context;
+    use pyo3::exceptions;
 
     #[pymodule_export]
     use super::flags;
-
+    use super::*;
     #[pymodule_export]
     pub use super::{
-        SurveyInfo,
-        Survey,
-        Text,
-        Spread,
-        Usage,
-        Variant,
+        Code,
         Location,
         Question,
-        Code,
         Response,
+        Spread,
+        Survey,
+        SurveyInfo,
+        Text,
+        Usage,
+        Variant,
     };
+    use crate::read::read_from_reader;
 
     #[pyfunction(name="read_datamap", signature=(datamap_path: "str"))]
     pub fn py_read_datamap(py: Python<'_>, datamap_path: &str) -> PyResult<Survey> {
@@ -66,7 +65,6 @@ mod triple_s {
         };
         Ok(survey)
     }
-
 
     #[pymodule_init]
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -82,13 +80,5 @@ mod triple_s {
 mod flags {
 
     #[pymodule_export]
-    pub use crate::{
-        Mode,
-        Version,
-        DataSource,
-        CodeFormat,
-        Value,
-        Usage,
-        QuestionType,
-    };
+    pub use crate::{CodeFormat, DataSource, Mode, QuestionType, Usage, Value, Version};
 }

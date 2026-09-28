@@ -1,4 +1,4 @@
-use triple_s::{Question, Response, Survey, EventLog};
+use triple_s::{Question, Response, Survey};
 
 const PATH_SSS_CLASSIC: &str = "tests/sss-examples/sss_classic.sss";
 
@@ -39,10 +39,10 @@ fn test_question_from_to_sss_classic() {
         for (parsed_code, expected_code) in parsed_values.iter().zip(expected_values.iter()) {
             let parsed_code = parsed_code.read();
             let expected_code = expected_code.read();
-            assert_eq!(*parsed_code.value(), *expected_code.value());
-            assert_eq!(*parsed_code.label(), *expected_code.label());
-            assert_eq!(*parsed_code.filter(), *expected_code.filter());
-            assert_eq!(*parsed_code.score(), *expected_code.score());
+            assert_eq!(parsed_code.value(), expected_code.value());
+            assert_eq!(parsed_code.label().value(), expected_code.label().value());
+            assert_eq!(parsed_code.filter(), expected_code.filter());
+            assert_eq!(parsed_code.score(), expected_code.score());
         }
     }
 }

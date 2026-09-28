@@ -373,7 +373,6 @@ impl Default for EventLog {
     }
 }
 
-///
 #[derive(Debug)]
 pub struct Warning {
     pub location: Option<String>,

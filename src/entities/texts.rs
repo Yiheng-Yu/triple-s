@@ -3,6 +3,7 @@ use std::hash::DefaultHasher;
 use std::{
     collections::HashSet,
     hash::{Hash, Hasher},
+    io::Cursor,
     str::FromStr,
     sync::Arc,
 };
@@ -11,7 +12,10 @@ use anyhow::{Context, Result};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*, types::PyTuple};
-use rayon::prelude::*;
+use quick_xml::{
+    events::{BytesStart, BytesText, Event},
+    writer::Writer,
+};
 
 #[cfg(feature = "pyo3")]
 use crate::utils::{normalize_py_index, py_value_error, single_quote};
@@ -62,11 +66,11 @@ impl From<Arc<str>> for Text {
 }
 
 impl Text {
-    pub fn value(&self) -> RwLockReadGuard<'_, String> {
-        self.value.read()
+    pub fn value(&self) -> String {
+        self.value.read().to_string()
     }
 
-    pub fn value_mut(&self) -> RwLockWriteGuard<'_, String> {
+    pub fn value_mut(&mut self) -> RwLockWriteGuard<'_, String> {
         self.value.write()
     }
 
@@ -74,7 +78,7 @@ impl Text {
         self.variants.read()
     }
 
-    pub fn variants_mut(&self) -> RwLockWriteGuard<'_, Vec<Variant>> {
+    pub fn variants_mut(&mut self) -> RwLockWriteGuard<'_, Vec<Variant>> {
         self.variants.write()
     }
 
@@ -120,7 +124,7 @@ impl Text {
         });
 
         let variants =
-            variants.into_par_iter().map(|item| item.deepcopy()).collect::<Vec<Variant>>();
+            variants.into_iter().map(|item| item.deepcopy()).collect::<Vec<Variant>>();
         self.variants = lock_it_up(variants);
         Ok(())
     }
@@ -133,13 +137,13 @@ impl Text {
         } else {
             self.variants
                 .read()
-                .par_iter()
-                .find_first(|self_var| {
+                .iter()
+                .find(|self_var| {
                     other
                         .variants
                         .read()
-                        .par_iter()
-                        .find_first(|other_var| other_var == self_var)
+                        .iter()
+                        .find(|other_var| other_var == self_var)
                         .is_some()
                 })
                 .is_some()
@@ -148,6 +152,25 @@ impl Text {
 
     pub fn to_sss_classic(&self) -> String {
         self.value.read().clone()
+    }
+
+    pub fn write_xml<W: std::io::Write>(
+        &self,
+        writer: &mut Writer<W>,
+        tag: &str,
+    ) -> Result<(), std::io::Error> {
+        let value = self.value();
+        writer.create_element(tag).write_inner_content(|child_writer| {
+            child_writer.write_event(
+                Event::Text(BytesText::new(&value))
+            )?;
+            for variant in self.variants.read().iter() {
+                variant.write_xml(child_writer)?;
+            }
+            Ok(())
+        })?;
+
+        Ok(())
     }
 }
 
@@ -200,8 +223,7 @@ impl Text {
 
         Ok(format!(
             "Text(\n  value={},\n  variants=[{}]\n)",
-            preview, 
-            variants
+            preview, variants
         ))
     }
 
@@ -295,7 +317,7 @@ impl Text {
 #[derive(Debug, Default)]
 pub struct Variant {
     pub value: ArcLock<String>,
-    mode: ArcLock<Mode>,
+    mode: ArcLock<Option<Mode>>,
     language: ArcLock<Option<String>>,
 }
 
@@ -336,27 +358,27 @@ impl Hash for Variant {
 }
 
 impl Variant {
-    pub fn value(&self) -> RwLockReadGuard<'_, String> {
-        self.value.read()
+    pub fn value(&self) -> String {
+        self.value.read().to_string()
     }
 
-    pub fn value_mut(&self) -> RwLockWriteGuard<'_, String> {
+    pub fn value_mut(&mut self) -> RwLockWriteGuard<'_, String> {
         self.value.write()
     }
 
-    pub fn mode(&self) -> RwLockReadGuard<'_, Mode> {
-        self.mode.read()
+    pub fn mode(&self) -> Option<Mode> {
+        self.mode.read().clone()
     }
 
-    pub fn mode_mut(&self) -> RwLockWriteGuard<'_, Mode> {
+    pub fn mode_mut(&mut self) -> RwLockWriteGuard<'_, Option<Mode>> {
         self.mode.write()
     }
 
-    pub fn language(&self) -> RwLockReadGuard<'_, Option<String>> {
-        self.language.read()
+    pub fn language(&self) -> Option<String> {
+        self.language.read().as_ref().map(|item| item.clone())
     }
 
-    pub fn language_mut(&self) -> RwLockWriteGuard<'_, Option<String>> {
+    pub fn language_mut(&mut self) -> RwLockWriteGuard<'_, Option<String>> {
         self.language.write()
     }
 
@@ -365,9 +387,9 @@ impl Variant {
         mode: Option<&str>,
         language: Option<&str>,
     ) -> Result<Self> {
-        let instance = Self {
+        let mut instance = Self {
             value: lock_it_up(value.into()),
-            mode: lock_it_up(Mode::None),
+            mode: lock_it_up(None),
             language: lock_it_up(None),
         };
 
@@ -384,22 +406,20 @@ impl Variant {
         self.value.read().clone()
     }
 
-    pub fn set_value(&self, value: impl Into<String>) {
+    pub fn set_value(&mut self, value: impl Into<String>) {
         let value = value.into();
         *self.value.write() = value;
     }
 
-    pub fn get_mode(&self) -> Mode {
+    pub fn get_mode(&self) -> Option<Mode> {
         self.mode.read().clone()
     }
 
-    pub fn set_mode(&self, mode: Option<&str>) -> Result<()> {
-        let mode = mode
+    pub fn set_mode(&mut self, mode: Option<&str>) -> Result<()> {
+        *self.mode.write() = mode
             .map(Mode::from_str)
             .transpose()
-            .with_context(|| format!("Expect one of: {:?}", Mode::available_options()))?
-            .unwrap_or_default();
-        *self.mode.write() = mode;
+            .with_context(|| format!("Expect one of: {:?}", Mode::available_options()))?;
         Ok(())
     }
 
@@ -407,11 +427,31 @@ impl Variant {
         self.language.read().clone()
     }
 
-    pub fn set_language(&self, language: Option<&str>) -> Result<()> {
+    pub fn set_language(&mut self, language: Option<&str>) -> Result<()> {
         let language =
             language.map(|s| validate_language_tag(s).map(str::to_owned)).transpose()?;
         // Update the shared value, rather than replacing the shared pointer.
         *self.language.write() = language;
+        Ok(())
+    }
+
+    pub(crate) fn write_xml<W: std::io::Write>(
+        &self,
+        writer: &mut Writer<W>,
+    ) -> Result<(), std::io::Error> {
+        let mode = self.get_mode().map(|mode| mode.to_string());
+        let language = self.get_language();
+        let text = self.get_value();
+
+        let mut element = writer.create_element("text");
+        if let Some(mode) = &mode {
+            element = element.with_attribute(("mode", mode.as_str()));
+        }
+        if let Some(language) = &language {
+            element = element.with_attribute(("xml:language", language.as_str()));
+        }
+
+        element.write_text_content(BytesText::new(&text))?;
         Ok(())
     }
 }
@@ -431,20 +471,17 @@ impl Variant {
     }
 
     #[setter(value)]
-    fn py_set_value(&self, value: String) {
+    fn py_set_value(&mut self, value: String) {
         self.set_value(value);
     }
 
     #[getter(mode)]
     fn py_get_mode(&self) -> Option<String> {
-        match self.get_mode() {
-            Mode::None => None,
-            mode => Some(mode.to_string()),
-        }
+        self.get_mode().map(|mode| mode.to_string())
     }
 
     #[setter(mode)]
-    fn py_set_mode(&self, mode: Option<&str>) -> PyResult<()> {
+    fn py_set_mode(&mut self, mode: Option<&str>) -> PyResult<()> {
         self.set_mode(mode).map_err(py_value_error)
     }
 
@@ -454,7 +491,7 @@ impl Variant {
     }
 
     #[setter(language)]
-    fn py_set_language(&self, language: Option<&str>) -> PyResult<()> {
+    fn py_set_language(&mut self, language: Option<&str>) -> PyResult<()> {
         self.set_language(language).map_err(py_value_error)
     }
 
@@ -509,5 +546,32 @@ mod test {
         let a = Text::new("variant a");
         let b = Text::new("variant a");
         assert_eq!(a, b)
+    }
+
+    #[test]
+    fn test_variant_write_xml() {
+        let variant = Variant::new("variant a", Some("interview"), Some("gb")).unwrap();
+        let mut writer = Writer::new(Vec::new());
+        writer
+            .create_element("label")
+            .write_inner_content(|inner| variant.write_xml(inner))
+            .unwrap();
+
+        let content = String::from_utf8(writer.into_inner()).unwrap();
+        let correct = r#"<label><text mode="interview" xml:language="gb">variant a</text></label>"#;
+        assert_eq!(content, correct);
+    }
+
+    #[test]
+    fn test_text_write_xml() {
+        let mut text = Text::new("variant a");
+        let variant = Variant::new("variant a", Some("interview"), Some("gb")).unwrap();
+        text.add_variant(variant).unwrap();
+
+        let mut writer = Writer::new(Vec::new());
+        text.write_xml(&mut writer, "some_tag_name").unwrap();
+        let content = String::from_utf8(writer.into_inner()).unwrap();
+        let correct = r#"<some_tag_name>variant a<text mode="interview" xml:language="gb">variant a</text></some_tag_name>"#;
+        assert_eq!(content, correct);
     }
 }

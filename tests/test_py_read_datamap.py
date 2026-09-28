@@ -31,6 +31,5 @@ def test_sss_classic_read(classic):
 
 
 def test_sss_xml_read(xml):
-    print()
     for question in xml.record.content:
         print(question)

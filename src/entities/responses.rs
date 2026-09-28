@@ -2,24 +2,31 @@ use std::range::Range;
 
 use anyhow::Result;
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
+
+#[cfg(feature = "pyo3")]
+use crate::utils::normalize_py_index;
+
 #[cfg(feature = "pyo3")]
 use pyo3::{
+    exceptions,
     prelude::*,
     types::{PyFloat, PyInt, PyString},
 };
+
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{
     Text,
-    error::{InvalidArg, UnsupportedFeature},
     entities::QuestionType,
+    error::{InvalidArg, UnsupportedFeature},
     prelude::DeepCopy,
     utils::{ArcLock, lock_it_up},
 };
 
 #[cfg_attr(
     feature = "pyo3",
-    pyclass(name = "Response", module = "triple_s", from_py_object)
+    // pyclass(name = "Response", module = "triple_s", from_py_object)
+    pyclass(name = "Response", module = "triple_s", skip_from_py_object)
 )]
 #[derive(Debug, Default)]
 pub struct Response {
@@ -52,6 +59,14 @@ impl DeepCopy for Response {
 }
 
 impl Response {
+    
+    pub fn new(range: Option<Range<Value>>, values: Vec<Code>) -> Self {
+        Self {
+            range: lock_it_up(range),
+            values: lock_it_up(values.into_par_iter().map(lock_it_up).collect()),
+        }
+    }
+
     pub fn set_range(&self, value: Option<Range<Value>>) {
         *self.range.write() = value;
     }
@@ -64,7 +79,7 @@ impl Response {
         self.range.read()
     }
 
-    pub fn range_mut(&self) -> RwLockWriteGuard<'_, Option<Range<Value>>> {
+    pub fn range_mut(&mut self) -> RwLockWriteGuard<'_, Option<Range<Value>>> {
         self.range.write()
     }
 
@@ -72,7 +87,7 @@ impl Response {
         self.values.read()
     }
 
-    pub fn values_mut(&self) -> RwLockWriteGuard<'_, Vec<ArcLock<Code>>> {
+    pub fn values_mut(&mut self) -> RwLockWriteGuard<'_, Vec<ArcLock<Code>>> {
         self.values.write()
     }
 
@@ -99,13 +114,100 @@ impl Response {
         Ok(output)
     }
 
-    pub fn new(range: Option<Range<Value>>, values: Vec<Code>) -> Self {
-        Self {
-            range: lock_it_up(range),
-            values: lock_it_up(values.into_par_iter().map(lock_it_up).collect()),
-        }
+    fn get_value_(&self, index: usize) -> Option<ArcLock<Code>> {
+        self.values
+            .read()
+            .get(index)
+            .cloned()
+    }
+
+    /// Reads a response value at the given index.
+    ///
+    /// Calls `f` with a shared reference to the [`Code`] stored at `index` and
+    /// returns the value produced by the closure.
+    ///
+    /// Returns [`None`] if no value exists at `index`.
+    ///
+    /// The read lock is held only for the duration of the closure, so the
+    /// reference passed to `f` cannot escape the closure.
+    /// 
+    /// ```
+    /// # use triple_s::{Code, Response};
+    /// let values = vec![
+    ///     Code::new_unsigned(1, "label 1", None, Some(1.3)),
+    ///     Code::new_unsigned(2, "label 2", None, Some(2.0)),
+    /// ];
+    /// let instance = Response::new(None, values);
+    /// 
+    /// let label = instance.with_value_read(0, |code| code.label().value());
+    /// let filter = instance.with_value_read(0, |code| code.filter());
+    /// let score = instance.with_value_read(0, |code| code.score());
+    /// 
+    /// assert_eq!(label, Some("label 1".to_string()));
+    /// // **hint: you can use [Option::flatten] to get rid of Option<Option<T>>
+    /// assert_eq!(filter, Some(None));
+    /// assert_eq!(score, Some(Some(1.3)));
+    /// ```
+    pub fn with_value_read<R>(
+        &self,
+        index: usize,
+        f: impl FnOnce(&Code) -> R,
+    ) -> Option<R> {
+        self.get_value_(index)
+            .map(|item| f(&item.read()))
+    }
+
+    /// Writes to a response value at the given index.
+    ///
+    /// Calls `f` with a mutable reference to the [`Code`] stored at `index` and
+    /// returns the value produced by the closure.
+    ///
+    /// Returns [`None`] if no value exists at `index`.
+    ///
+    /// The write lock is held only for the duration of the closure, so the
+    /// reference passed to `f` cannot escape the closure.
+    ///
+    /// ```
+    /// # use triple_s::{Code, Response};
+    /// let values = vec![
+    ///     Code::new_unsigned(1, "label 1", None, Some(1.3)),
+    ///     Code::new_unsigned(2, "label 2", None, Some(2.0)),
+    /// ];
+    /// let mut instance = Response::new(None, values);
+    ///
+    /// instance.with_value_write(0, |code| {
+    ///     .. // do your modifications here
+    /// });
+    ///
+    /// // for example:
+    /// let _ = instance.with_value_write(0, |code| *code.score_mut() = Some(2.3));
+    /// let score = instance.with_value_read(0, |code| code.score());
+    /// assert_eq!(score.flatten(), Some(2.3));
+    /// ```
+    pub fn with_value_write<R>(
+        &mut self,
+        index: usize,
+        f: impl FnOnce(&mut Code) -> R,
+    ) -> Option<R> {
+        self.get_value_(index)
+            .map(|item| f(&mut item.write()))
     }
 }
+
+#[cfg(feature="pyo3")]
+#[pymethods]
+impl Response {
+
+    fn __getitem__(&self, index: isize) -> PyResult<Code> {
+        let index = normalize_py_index(index, self.values().len())
+            .ok_or(exceptions::PyIndexError::new_err(index))?;
+        self.get_value_(index)
+            .map(|item| item.read().clone())
+            .ok_or(exceptions::PyIndexError::new_err(index))
+    }
+
+}
+
 
 #[cfg_attr(
     feature = "pyo3",
@@ -143,11 +245,11 @@ impl DeepCopy for Code {
 }
 
 impl Code {
-    pub fn value(&self) -> RwLockReadGuard<'_, Value> {
-        self.value.read()
+    pub fn value(&self) -> Value {
+        self.value.read().clone()
     }
 
-    pub fn value_mut(&self) -> RwLockWriteGuard<'_, Value> {
+    pub fn value_mut(&mut self) -> RwLockWriteGuard<'_, Value> {
         self.value.write()
     }
 
@@ -155,23 +257,23 @@ impl Code {
         self.label.read()
     }
 
-    pub fn label_mut(&self) -> RwLockWriteGuard<'_, Text> {
+    pub fn label_mut(&mut self) -> RwLockWriteGuard<'_, Text> {
         self.label.write()
     }
 
-    pub fn filter(&self) -> RwLockReadGuard<'_, Option<String>> {
-        self.filter.read()
+    pub fn filter(&self) -> Option<String> {
+        self.filter.read().clone()
     }
 
-    pub fn filter_mut(&self) -> RwLockWriteGuard<'_, Option<String>> {
+    pub fn filter_mut(&mut self) -> RwLockWriteGuard<'_, Option<String>> {
         self.filter.write()
     }
 
-    pub fn score(&self) -> RwLockReadGuard<'_, Option<f64>> {
-        self.score.read()
+    pub fn score(&self) -> Option<f64> {
+        *self.score.read()
     }
 
-    pub fn score_mut(&self) -> RwLockWriteGuard<'_, Option<f64>> {
+    pub fn score_mut(&mut self) -> RwLockWriteGuard<'_, Option<f64>> {
         self.score.write()
     }
 
@@ -336,9 +438,9 @@ impl Value {
             Self::UnSigned(value) => Ok(value.to_string()),
             Self::Signed(value) => Ok(value.to_string()),
             Self::Float(value) => Ok(value.to_string()),
-            Self::Literal(_) => Err(UnsupportedFeature::new(
-                "SSS Classic", "None numeric code values.",
-            ).into()),
+            Self::Literal(_) => {
+                Err(UnsupportedFeature::new("SSS Classic", "None numeric code values.").into())
+            }
         }
     }
 
@@ -403,6 +505,36 @@ impl Value {
             }
 
             Self::Literal(_) => Ok(Self::Literal(text.to_owned())),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_get_response_values() {
+        let values = [
+            Code::new_unsigned(1, "label", None, Some(1.3)),
+            Code::new_unsigned(2, "label", None, Some(1.2)),
+            Code::new_unsigned(3, "label", None, Some(2.2)),
+            Code::new_unsigned(4, "label", None, Some(2.2)),
+            Code::new_unsigned(5, "label", None, Some(2.2)),
+        ]
+        .into_iter()
+        .collect::<Vec<Code>>();
+        let instance = Response::new(None, values.clone());
+
+        for (index, correct) in values.into_iter().enumerate() {
+            let label = instance.with_value_read(index, |code| code.label().value().to_string());
+            assert_eq!(label, Some(correct.label().value().to_string()))
+
+            // let item_got = instance.get_value(index).unwrap();
+            // assert_eq!(correct.value().clone(), item_got.value().clone());
+            // assert_eq!(correct.label().deepcopy(), item_got.label().deepcopy());
+            // assert_eq!(correct.filter().clone(), item_got.filter().clone());
+            // assert_eq!(correct.score().clone(), item_got.score().clone());
         }
     }
 }

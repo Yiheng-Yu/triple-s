@@ -235,15 +235,11 @@ impl SurveyBuilder {
         let mut output = Survey::empty();
         let mut log = EventLog::new();
 
-        output.meta.title = self
-            .attributes
-            .remove("title")
-            .and_then(|val| val.value.map(|v| unquote(v)));
+        output.meta.title =
+            self.attributes.remove("title").and_then(|val| val.value.map(unquote));
 
-        output.meta.name = self
-            .attributes
-            .remove("name")
-            .and_then(|val| val.value.map(|v| unquote(v)));
+        output.meta.name =
+            self.attributes.remove("name").and_then(|val| val.value.map(unquote));
 
         if let Some(record) = self.attributes.remove("record") {
             if self.is_classic {
@@ -272,30 +268,20 @@ impl SurveyBuilder {
             }
         }
 
-        output.meta.origin = self
-            .attributes
-            .remove("origin")
-            .and_then(|val| val.value.map(|v| unquote(v)));
+        output.meta.origin =
+            self.attributes.remove("origin").and_then(|val| val.value.map(unquote));
 
-        output.meta.user = self
-            .attributes
-            .remove("user")
-            .and_then(|val| val.value.map(|v| unquote(v)));
+        output.meta.user =
+            self.attributes.remove("user").and_then(|val| val.value.map(unquote));
 
-        output.meta.date = self
-            .attributes
-            .remove("date")
-            .and_then(|val| val.value.map(|v| unquote(v)));
+        output.meta.date =
+            self.attributes.remove("date").and_then(|val| val.value.map(unquote));
 
-        output.meta.time = self
-            .attributes
-            .remove("time")
-            .and_then(|val| val.value.map(|v| unquote(v)));
+        output.meta.time =
+            self.attributes.remove("time").and_then(|val| val.value.map(unquote));
 
-        output.meta.standard = self
-            .attributes
-            .remove("standard")
-            .and_then(|val| val.value.map(|v| unquote(v)));
+        output.meta.standard =
+            self.attributes.remove("standard").and_then(|val| val.value.map(unquote));
 
         output.meta.version = self
             .attributes
@@ -343,7 +329,7 @@ impl QuestionBuilder {
             .ok_or(error::MissingValueError::new("variable", "Position"))?;
 
         let range = Range::<u32>::from_text(value)?;
-        Ok(Location::try_new(range.start, Some(range.end))?)
+        Ok(Location::new(range.start, Some(range.end))?)
     }
 
     fn parse_location_xml(node: &Node) -> Result<Location> {
@@ -360,7 +346,7 @@ impl QuestionBuilder {
             .transpose()?
             .unwrap_or(from);
 
-        Ok(Location::try_new(from, Some(to))?)
+        Ok(Location::new(from, Some(to))?)
     }
 
     pub fn build(self, is_classic: bool) -> Result<(Question, Vec<Warning>)> {
@@ -397,7 +383,7 @@ impl QuestionBuilder {
         *output.name_mut() = self
             .attributes
             .remove("name")
-            .and_then(|val| val.value.map(|name| unquote(name)))
+            .and_then(|val| val.value.map(unquote))
             // .transpose()?
             .ok_or(error::MissingAttributeError::new("variable", "name"))?;
 
@@ -517,33 +503,30 @@ impl QuestionBuilder {
             QuestionType::Single => {
                 if Some(&CodeFormat::Literal) == output.format().as_ref() {
                     let (response, resp_warnings) =
-                        response.build_literal_category(&question_name, is_classic)?;
+                        response.build_literal_category(&question_name)?;
 
                     output.set_response(response);
                     warnings.extend(resp_warnings);
                 } else {
                     let (response, resp_warnings) =
-                        response.build_numeric(ValueKind::UnSigned, is_classic)?;
+                        response.build_numeric(ValueKind::UnSigned)?;
 
                     output.set_response(response);
                     warnings.extend(resp_warnings);
                 }
             }
             QuestionType::Multiple => {
-                let (response, resp_warnings) =
-                    response.build_numeric(ValueKind::UnSigned, is_classic)?;
+                let (response, resp_warnings) = response.build_numeric(ValueKind::UnSigned)?;
                 output.set_response(response);
                 warnings.extend(resp_warnings);
             }
             QuestionType::Quantity => {
-                let (response, resp_warnings) =
-                    response.build_numeric(ValueKind::Float, is_classic)?;
+                let (response, resp_warnings) = response.build_numeric(ValueKind::Float)?;
                 output.set_response(response);
                 warnings.extend(resp_warnings);
             }
             QuestionType::Date | QuestionType::Time => {
-                let (response, resp_warnings) =
-                    response.build_numeric(ValueKind::Signed, is_classic)?;
+                let (response, resp_warnings) = response.build_numeric(ValueKind::Signed)?;
                 output.set_response(response);
                 warnings.extend(resp_warnings);
             }
@@ -552,8 +535,8 @@ impl QuestionBuilder {
                     let width = output.location().width()?;
                     let response = Response::new(
                         Some(Range {
-                            start: Value::UnSigned(0),
-                            end: Value::UnSigned(size),
+                            start: Value::UnSigned(1),
+                            end: Value::UnSigned(size.saturating_add(1)),
                         }),
                         Vec::new(),
                     );
@@ -584,18 +567,11 @@ impl QuestionBuilder {
 #[inline]
 fn unquote(text: Arc<str>) -> String {
     let to_unquote = text.trim();
-    to_unquote
-        .trim_prefix('"')
-        .trim_suffix('"')
-        .to_string()
+    to_unquote.trim_prefix('"').trim_suffix('"').to_string()
 }
 
 fn parse_text(mut node: Node) -> Result<Text> {
-    let value = node
-        .value
-        .take()
-        .map(|value| unquote(value))
-        .unwrap_or_default();
+    let value = node.value.take().map(unquote).unwrap_or_default();
     let mut text = Text::new(value.as_str());
 
     for variant in node.children {
@@ -733,7 +709,7 @@ impl ResponseBuilder {
         }
     }
 
-    fn extract_code(raw: RawCode, format: ValueKind, is_classic: bool) -> Result<Code> {
+    fn extract_code(raw: RawCode, format: ValueKind) -> Result<Code> {
         let code_name = raw.value.to_string();
 
         let label = parse_text(raw.label).context(format!(
@@ -768,17 +744,12 @@ impl ResponseBuilder {
         Ok(instance)
     }
 
-    fn build_entries(
-        self,
-        range: Option<Range<Value>>,
-        kind: ValueKind,
-        is_classic: bool,
-    ) -> Result<Response> {
+    fn build_entries(self, range: Option<Range<Value>>, kind: ValueKind) -> Result<Response> {
         let values = self
             .entries
             .into_par_iter()
             .map(|raw| {
-                let code = Self::extract_code(raw, kind, is_classic)?;
+                let code = Self::extract_code(raw, kind)?;
                 Ok(lock_it_up(code))
             })
             .collect::<Result<Vec<_>>>()?;
@@ -791,11 +762,7 @@ impl ResponseBuilder {
         })
     }
 
-    fn build_literal_category(
-        self,
-        question_name: &str,
-        is_classic: bool,
-    ) -> Result<(Response, Vec<Warning>)> {
+    fn build_literal_category(self, question_name: &str) -> Result<(Response, Vec<Warning>)> {
         let range = if self.range_from.is_some() {
             Some(
                 self.extract_range(ValueKind::UnSigned)
@@ -805,7 +772,7 @@ impl ResponseBuilder {
             None
         };
         let has_range = range.is_some();
-        let response = self.build_entries(range, ValueKind::String, is_classic)?;
+        let response = self.build_entries(range, ValueKind::String)?;
 
         let warning = if has_range {
             vec![Warning {
@@ -821,17 +788,13 @@ impl ResponseBuilder {
         Ok((response, warning))
     }
 
-    fn build_numeric(
-        self,
-        kind: ValueKind,
-        is_classic: bool,
-    ) -> Result<(Response, Vec<Warning>)> {
+    fn build_numeric(self, kind: ValueKind) -> Result<(Response, Vec<Warning>)> {
         let range = if self.range_from.is_some() {
             Some(self.extract_range(kind).context("When parsing response range")?)
         } else {
             None
         };
-        Ok((self.build_entries(range, kind, is_classic)?, Vec::new()))
+        Ok((self.build_entries(range, kind)?, Vec::new()))
     }
 }
 

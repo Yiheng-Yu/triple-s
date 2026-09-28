@@ -9,7 +9,7 @@ use pyo3::{exceptions, prelude::*};
 use crate::utils::{get_type_name, py_value_error, single_quote};
 use crate::{
     EventLog,
-    entities::{CodeFormat, QuestionType, Response, Text, Usage},
+    entities::{CodeFormat, QuestionType, Response, Text, Usage, Value},
     error::{self, RangeError},
     prelude::{DeepCopy, *},
     utils::{ArcLock, lock_it_up},
@@ -102,7 +102,7 @@ impl Question {
         self.name.read()
     }
 
-    pub fn name_mut(&self) -> RwLockWriteGuard<'_, String> {
+    pub fn name_mut(&mut self) -> RwLockWriteGuard<'_, String> {
         self.name.write()
     }
 
@@ -110,7 +110,7 @@ impl Question {
         self.filter.read()
     }
 
-    pub fn filter_mut(&self) -> RwLockWriteGuard<'_, Option<String>> {
+    pub fn filter_mut(&mut self) -> RwLockWriteGuard<'_, Option<String>> {
         self.filter.write()
     }
 
@@ -118,7 +118,7 @@ impl Question {
         self.format.read()
     }
 
-    pub fn format_mut(&self) -> RwLockWriteGuard<'_, Option<CodeFormat>> {
+    pub fn format_mut(&mut self) -> RwLockWriteGuard<'_, Option<CodeFormat>> {
         self.format.write()
     }
 
@@ -126,7 +126,7 @@ impl Question {
         self.usage.read()
     }
 
-    pub fn usage_mut(&self) -> RwLockWriteGuard<'_, Option<Usage>> {
+    pub fn usage_mut(&mut self) -> RwLockWriteGuard<'_, Option<Usage>> {
         self.usage.write()
     }
 
@@ -134,7 +134,7 @@ impl Question {
         self.question_type.read()
     }
 
-    pub fn question_type_mut(&self) -> RwLockWriteGuard<'_, QuestionType> {
+    pub fn question_type_mut(&mut self) -> RwLockWriteGuard<'_, QuestionType> {
         self.question_type.write()
     }
 }
@@ -188,7 +188,7 @@ impl Question {
         let builder = crate::read::classic::collect_question_stream(stream, 0)?;
 
         let (instance, warnings) = builder.build(is_classic)?;
-        let event_log = EventLog { warnings: warnings };
+        let event_log = EventLog { warnings };
         if let Some(warning) = event_log.warning_summary("Deserialising Question") {
             log::warn!("{}", warning)
         };
@@ -208,15 +208,23 @@ impl Question {
         let question_type = self.question_type.read().clone();
         match question_type {
             QuestionType::Character => {
-                let size = self
-                    .response
-                    .range
-                    .read()
-                    .as_ref()
-                    .map(|range| range.end.to_sss_classic())
-                    .transpose()?
-                    .unwrap_or_else(|| "0".to_owned());
-                output.push_str(&format!("TYPE CHARACTER\nSIZE {size}\n"));
+                output.push_str("TYPE CHARACTER\n");
+                if let Some(size_range) = self.response.range().as_ref() {
+                    match size_range.end {
+                        Value::UnSigned(end) => {
+                            let size_string = format!("SIZE {}\n", end.saturating_sub(1));
+                            output.push_str(&size_string);
+                        }
+                        _ => {
+                            let error = error::InternalError::new(format!(
+                                "Unexpected `Value` variant find in question [{}]: '{:?}'",
+                                self.name(),
+                                size_range.end.clone()
+                            ));
+                            return Err(error.into());
+                        }
+                    }
+                }
             }
             QuestionType::Logical => output.push_str("TYPE LOGICAL\n"),
             QuestionType::Single | QuestionType::Multiple | QuestionType::Quantity => {
@@ -407,8 +415,8 @@ impl Question {
             single_quote(self.question_type.read().as_ref()),
         ));
 
-        let label_repl = self.label.as_ref()
-            .map_or(Ok("None".into()), |label| label.__repr__(py))?;
+        let label_repl =
+            self.label.as_ref().map_or(Ok("None".into()), |label| label.__repr__(py))?;
 
         info.push(("label", label_repl));
         let formatted = info
@@ -546,7 +554,7 @@ impl Question {
             .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
     }
 
-    #[pyo3(name="to_classic")]
+    #[pyo3(name = "to_classic")]
     fn py_to_classic(&self) -> PyResult<String> {
         self.to_sss_classic()
             .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
@@ -595,7 +603,7 @@ impl Location {
         self.start.read()
     }
 
-    pub fn start_mut(&self) -> RwLockWriteGuard<'_, u32> {
+    pub fn start_mut(&mut self) -> RwLockWriteGuard<'_, u32> {
         self.start.write()
     }
 
@@ -603,12 +611,12 @@ impl Location {
         self.finish.read()
     }
 
-    pub fn finish_mut(&self) -> RwLockWriteGuard<'_, u32> {
+    pub fn finish_mut(&mut self) -> RwLockWriteGuard<'_, u32> {
         self.finish.write()
     }
 
     /// Construct a location, defaulting the finish to the start.
-    pub fn try_new(start: u32, finish: Option<u32>) -> Result<Self, RangeError> {
+    pub fn new(start: u32, finish: Option<u32>) -> Result<Self, RangeError> {
         let location = Self {
             start: lock_it_up(start),
             finish: lock_it_up(finish.unwrap_or(start)),
@@ -656,10 +664,12 @@ impl Location {
         }
     }
 
-    /// finish - start
+    /// (finish - start) + 1
     pub fn width(&self) -> Result<u32> {
         self.validate()?;
-        Ok(self.finish.read().saturating_sub(*self.start.read()))
+        let difference = self.finish.read().saturating_sub(*self.start.read());
+        let width = difference.saturating_add(1);
+        Ok(width)
     }
 }
 
@@ -668,8 +678,8 @@ impl Location {
 impl Location {
     #[new]
     #[pyo3(signature=(start:"int", finish:"int"=None))]
-    fn new(start: u32, finish: Option<u32>) -> PyResult<Self> {
-        Self::try_new(start, finish)
+    fn py_new(start: u32, finish: Option<u32>) -> PyResult<Self> {
+        Self::new(start, finish)
             .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
     }
 
@@ -742,7 +752,7 @@ impl Spread {
         self.subfield.read()
     }
 
-    pub fn subfield_mut(&self) -> RwLockWriteGuard<'_, u32> {
+    pub fn subfield_mut(&mut self) -> RwLockWriteGuard<'_, u32> {
         self.subfield.write()
     }
 
@@ -750,7 +760,7 @@ impl Spread {
         self.width.read()
     }
 
-    pub fn width_mut(&self) -> RwLockWriteGuard<'_, Option<u32>> {
+    pub fn width_mut(&mut self) -> RwLockWriteGuard<'_, Option<u32>> {
         self.width.write()
     }
 
@@ -901,6 +911,37 @@ mod test {
                 .map(|item| item.variants.read().get(0).unwrap().clone())
                 .unwrap()
         )
+    }
+
+    #[test]
+    fn test_data_width_because_i_am_dumb() {
+        let example = Location::new(1, Some(20)).unwrap();
+        let width_calculated = example.width().unwrap();
+        let actual = (1..21) // rust is 0-indexed, and sss is 1-indexed. there are 20 numbers from 1->20 in sss
+            .map(|i| i)
+            .collect::<Vec<i32>>()
+            .len() as u32;
+        assert_eq!(width_calculated, actual)
+    }
+
+    #[test]
+    fn test_character_question_size_width_because_i_am_dumb() {
+        let fragment = r#"
+        VARIABLE 10
+        NAME "WEBSITE"
+        LABEL "test"
+        TYPE CHARACTER
+        POSITION 1042 TO 1241
+        SIZE 200
+        END VARIABLE
+        "#;
+
+        let parsed = Question::from_string(fragment.trim()).unwrap();
+        let width_calculated = parsed.location().width().unwrap();
+        assert_eq!(width_calculated, 200);
+
+        let string = parsed.to_sss_classic().unwrap();
+        assert!(string.contains("SIZE 200"));
     }
 
     #[cfg(feature = "pyo3")]

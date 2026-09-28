@@ -1,6 +1,3 @@
-
-
-
 // mod sealed {
 //     pub trait Sealed {}
 
@@ -47,19 +44,18 @@ pub trait DeepCopy {
 }
 
 impl DeepCopy for String {
-
     fn deepcopy(&self) -> Self {
         self.clone()
     }
 }
 
-impl<T:DeepCopy> DeepCopy for Option<T> {
+impl<T: DeepCopy> DeepCopy for Option<T> {
     fn deepcopy(&self) -> Self {
         self.as_ref().map(DeepCopy::deepcopy)
     }
 }
 
-impl<T:DeepCopy> DeepCopy for Vec<T> {
+impl<T: DeepCopy> DeepCopy for Vec<T> {
     fn deepcopy(&self) -> Self {
         self.iter().map(DeepCopy::deepcopy).collect()
     }

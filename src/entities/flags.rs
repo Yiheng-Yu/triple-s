@@ -1,7 +1,6 @@
-
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-use strum::{EnumIter, EnumString, AsRefStr};
+use strum::{AsRefStr, EnumIter, EnumString};
 
 use crate::prelude::{DeepCopy, Flag};
 
@@ -21,7 +20,7 @@ pub enum Version {
 }
 
 impl Flag for Version {
-    fn to_string(&self) -> String{
+    fn to_string(&self) -> String {
         match self {
             Self::V1_0 => "1.0".into(),
             Self::V1_1 => "1.1".into(),
@@ -46,15 +45,12 @@ impl Flag for Version {
 /// ```
 ///
 /// Variants:
-/// - None: default value when no 'mode' value was defined.
 /// - Analysis: mode 'analysis'
 /// - Interview: mode 'interview'
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
-#[derive(Debug, Default, PartialEq, Hash, Clone, EnumString, Eq, EnumIter)]
+#[derive(Debug, PartialEq, Hash, Clone, EnumString, Eq, EnumIter)]
 #[strum(ascii_case_insensitive)]
 pub enum Mode {
-    #[default]
-    None,
     #[strum(serialize = "analysis")]
     Analysis,
     #[strum(serialize = "interview")]
@@ -62,9 +58,8 @@ pub enum Mode {
 }
 
 impl Flag for Mode {
-    fn to_string(&self) -> String{
+    fn to_string(&self) -> String {
         match self {
-            Self::None => "".into(),
             Self::Analysis => "analysis".into(),
             Self::Interview => "interview".into(),
         }
@@ -97,7 +92,7 @@ pub enum DataSource {
 }
 
 impl Flag for DataSource {
-    fn to_string(&self) -> String{
+    fn to_string(&self) -> String {
         match self {
             Self::Csv => "csv".into(),
             Self::Fixed => "fixed".into(),
@@ -128,7 +123,7 @@ impl DeepCopy for CodeFormat {
 }
 
 impl Flag for CodeFormat {
-    fn to_string(&self) -> String{
+    fn to_string(&self) -> String {
         match self {
             Self::Literal => "literal".into(),
             Self::UnSigned => "numeric".into(),
@@ -154,7 +149,7 @@ pub enum Usage {
 }
 
 impl Flag for Usage {
-    fn to_string(&self) -> String{
+    fn to_string(&self) -> String {
         match self {
             Self::Null => "".into(),
             Self::Serial => "serial".into(),
@@ -190,7 +185,7 @@ pub enum QuestionType {
 
     #[strum(serialize = "character")]
     Character,
-    
+
     #[strum(serialize = "date")]
     Date,
 
@@ -210,7 +205,9 @@ impl Flag for QuestionType {
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
+
     use strum::IntoEnumIterator;
+
     use super::*;
 
     #[test]

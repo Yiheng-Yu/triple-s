@@ -15,7 +15,15 @@ use crate::{prelude::*, utils};
 
 #[cfg_attr(
     feature = "pyo3",
-    pyclass(dict, weakref, module = "triple_s", name = "SurveyInfo", from_py_object, get_all, set_all)
+    pyclass(
+        dict,
+        weakref,
+        module = "triple_s",
+        name = "SurveyInfo",
+        from_py_object,
+        get_all,
+        set_all
+    )
 )]
 #[derive(Debug, Clone)]
 pub struct SurveyInfo {
@@ -159,7 +167,7 @@ impl SurveyInfo {
             user: None,
             style: None,
             language_options: Vec::new(),
-            mode_options: vec![Mode::None],
+            mode_options: Vec::new(),
             standard: None,
         }
     }
@@ -168,7 +176,6 @@ impl SurveyInfo {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl SurveyInfo {
-    
     #[getter(language_options)]
     fn get_language_options<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         PyTuple::new(py, self.language_options.iter())
@@ -191,10 +198,10 @@ impl SurveyInfo {
         Ok(())
     }
 
-    /// Create survey metadata for a Triple-S version given as a string or float.
-    /// Optional text fields default to None; languages and modes default to
-    /// empty tuples. Modes accept "analysis", "interview", or None. Invalid
-    /// versions or modes raise ValueError.
+    /// Create survey metadata for a Triple-S version given as a string or
+    /// float. Optional text fields default to None; languages and modes
+    /// default to empty tuples. Modes accept "analysis", "interview", or
+    /// None. Invalid versions or modes raise ValueError.
     #[new]
     #[pyo3(signature = (
         version: "str | float",
@@ -312,9 +319,7 @@ fn parse_mode_options(values: Vec<Bound<'_, PyAny>>) -> PyResult<Vec<Mode>> {
     values
         .into_iter()
         .map(|value| {
-            if value.is_none() {
-                Ok(Mode::None)
-            } else if let Ok(mode) = value.extract::<Mode>() {
+            if let Ok(mode) = value.extract::<Mode>() {
                 Ok(mode)
             } else if let Ok(mode) = value.extract::<String>() {
                 Mode::from_str(&mode).map_err(|err| {
@@ -324,9 +329,10 @@ fn parse_mode_options(values: Vec<Bound<'_, PyAny>>) -> PyResult<Vec<Mode>> {
                     ))
                 })
             } else {
-                Err(exceptions::PyTypeError::new_err(
-                    "mode options must contain Mode objects, strings, or None",
-                ))
+                Err(exceptions::PyTypeError::new_err(format!(
+                    "mode options must contain Mode flag or one of the following strings: {:?}",
+                    Mode::available_options()
+                )))
             }
         })
         .collect()

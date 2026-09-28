@@ -5,21 +5,18 @@ mod responses;
 mod survey_info;
 mod texts;
 
+use anyhow::Result;
 pub use flags::{CodeFormat, DataSource, Mode, QuestionType, Usage, Version};
-
+use parking_lot::{ArcRwLockReadGuard, RawRwLock};
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*};
-
 pub use question::{Location, Question, Spread};
 pub use record::Record;
 pub use responses::{Code, Response, Value};
 pub use survey_info::SurveyInfo;
 pub use texts::{Text, Variant};
-use parking_lot::{ArcRwLockReadGuard, RawRwLock};
 
-use crate::utils::ArcLock;
-use crate::prelude::Flag;
-use anyhow::Result;
+use crate::{prelude::Flag, utils::ArcLock};
 
 #[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "Survey"))]
 pub struct Survey {
@@ -28,8 +25,10 @@ pub struct Survey {
 }
 
 impl Survey {
-
-    pub fn get_question(&self, question_name: &str) -> Option<ArcRwLockReadGuard<RawRwLock, Question>> {
+    pub fn get_question(
+        &self,
+        question_name: &str,
+    ) -> Option<ArcRwLockReadGuard<RawRwLock, Question>> {
         self.record.get_question(question_name)
     }
 
@@ -65,8 +64,7 @@ impl Survey {
     }
 }
 
-
-#[cfg(feature="pyo3")]
+#[cfg(feature = "pyo3")]
 #[pymethods]
 impl Survey {
     #[pyo3(name="get_question", signature=(question_name:"str"))]
@@ -84,7 +82,7 @@ impl Survey {
         self.meta.clone()
     }
 
-    #[pyo3(name="to_classic")]
+    #[pyo3(name = "to_classic")]
     fn py_to_classic(&self) -> PyResult<String> {
         self.to_sss_classic()
             .map_err(|err| exceptions::PyRuntimeError::new_err(err.to_string()))
