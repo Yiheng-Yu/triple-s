@@ -1,0 +1,16 @@
+
+site_name: triple-s
+
+theme:
+  name: material
+
+nav:
+  - Home: index.md
+  - API Reference: api.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: ["."]
