@@ -1,4 +1,5 @@
 /target
+/site/
 /python/*
 /python/bin/*
 /python/etc/*

@@ -1,5 +1,5 @@
-
 site_name: triple-s
+docs_dir: docs
 
 theme:
   name: material
@@ -10,7 +10,3 @@ nav:
 
 plugins:
   - search
-  - mkdocstrings:
-      handlers:
-        python:
-          paths: ["."]
