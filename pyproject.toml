@@ -1,0 +1,29 @@
+[build-system]
+requires = ["maturin>=1.15,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "triple-s"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dynamic = ["version"]
+dependencies = [
+    "pandas>=3.0.0",
+    "polars>=1.44"
+]
+
+[project.optional-dependencies]
+testing = ["pytest", "lxml"]
+
+[tool.maturin]
+python-source = "src_py"
+module-name = "triple_s.triple_s"
+bindings = "pyo3"
+features = ["pyo3", "pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
