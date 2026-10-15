@@ -5,21 +5,17 @@ use std::{collections::HashSet, range::Range, str::FromStr};
 use anyhow::{Context, Result};
 use chrono::{NaiveDate, NaiveTime};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
+use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
     exceptions,
     prelude::*,
     types::{PyDict, PyList, PyTuple},
 };
+#[cfg(feature = "pyo3")]
+use pyo3_polars::{PySeries, error::PyPolarsErr};
 use quick_xml::{events::BytesText, writer::Writer};
 use strum::{AsRefStr, EnumIter, EnumString};
-use polars::prelude::*;
-
-#[cfg(feature = "pyo3")]
-use pyo3_polars::{
-    PySeries,
-    error::PyPolarsErr,
-};
 
 #[cfg(feature = "pyo3")]
 use crate::utils::{get_type_name, py_value_error, single_quote};
@@ -753,7 +749,9 @@ impl Question {
         // context later on
         let entry = match question_type {
             QuestionType::Character => Ok(Entry::String(data.to_string())),
-            QuestionType::None => Err(DataReadError("Unable to parse data with question type `None`".to_string())),
+            QuestionType::None => Err(DataReadError(
+                "Unable to parse data with question type `None`".to_string(),
+            )),
             QuestionType::Quantity => {
                 let data = data.trim();
                 if data.is_empty() {
@@ -932,15 +930,13 @@ impl Question {
     /// Export content of the `data` field to polars series
     pub fn to_polars(&self) -> Result<Series, PolarsError> {
         let colname = self.name();
-        let data = self.data().iter()
+        let data = self
+            .data()
+            .iter()
             .map(|item| item.read().clone().into())
             .collect::<Vec<AnyValue>>();
 
-        Series::from_any_values(
-            colname.into(),
-            &data,
-            true,
-        )
+        Series::from_any_values(colname.into(), &data, true)
     }
 }
 
@@ -1454,18 +1450,20 @@ impl Question {
         Ok(self.label.clone())
     }
 
+    /// Raw data for the question
+    /// Data is retrieved via `load_data()` method of `Survey` or `Record`
+    /// object.
     #[getter(data)]
     fn py_get_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let items = self.data.read().clone().into_iter().map(|item| item.read().clone());
+
         PyTuple::new(py, items)
     }
 
     /// Export data as polars.Series
-    #[pyo3(name="to_polars")]
+    #[pyo3(name = "to_polars")]
     fn py_to_polars(&self) -> PyResult<pyo3_polars::PySeries> {
-        self.to_polars()
-        .map(PySeries)
-        .map_err(|err| PyPolarsErr::from(err).into())
+        self.to_polars().map(PySeries).map_err(|err| PyPolarsErr::from(err).into())
     }
 
     /// Export loaded data as a pandas Series named after this question.

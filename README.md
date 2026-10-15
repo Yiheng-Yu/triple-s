@@ -109,19 +109,12 @@ Run the Rust tests with:
 cargo test
 ```
 
-## CodeFormat support
-
-Both `read_datamap` and `read_from_string` detect Classic or XML input. UnSigned
-categories retain integer codes, quantity values retain floating-point codes,
-and literal single responses retain string codes (including leading zeroes).
-Literal multiple responses return an error. Literal codes cannot be exported to
-Classic format.
-
 ## AI usage
 
-I handwrote majorities of the code with *some* support of ai, mostly on writing unit tests, documentation, and some boilerplate code realted with text parsing in `src/classic.rs`.
+I handwrote majorities of the code with some very *minor* support of ai, mostly on writing biolerplate getter & setters, 
+and some boilerplate code realted with text parsing in `src/classic.rs`.
 
-I'm still learning `pyo3` hence I leaned to AI a bit on part of the codes that I am not sure how to do yet, these should only be a very minor part of the codebase. I've no idea why it didn't allow me to run `cargo test`, don't know how to fix it my self, so asked ai for help.
+Otherwise most of the stuffs are writtem by myself.
 
 ## License
 

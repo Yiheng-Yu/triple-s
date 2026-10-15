@@ -354,15 +354,14 @@ mod test {
         assert!(survey.record.to_xml().is_err());
         assert!(survey.to_xml().is_err());
     }
-
-
-    const PATH_ASC: &str = "tests/sss-examples/sss-2.0/example1.asc";
-    const PATH_SSS: &str = "tests/sss-examples/sss-2.0/example1.sss";
-
+    
     #[test]
     fn test_read_asc() {
+        const PATH_ASC: &str = "tests/sss-examples/sss-2.0/example1.asc";
+        const PATH_SSS: &str = "tests/sss-examples/sss-2.0/example1.sss";
+
         let mut survey = crate::read_datamap(PATH_SSS).unwrap();
-        let mut record = survey.record_mut();
+        let record = survey.record_mut();
         
         record.load_data(PATH_ASC).unwrap();
         println!("{:#?}", record.content());

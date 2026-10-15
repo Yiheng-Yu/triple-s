@@ -1,9 +1,14 @@
 //! Corresponds to the `<record>` node and its contents.
 //! Uused for string questions inside the survey.
-use std::{fs::File, io::{BufRead, BufReader}, path::Path};
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    path::Path,
+};
 
 use anyhow::{Context, Result};
 use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
+use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
     IntoPyObjectExt,
@@ -17,15 +22,18 @@ use quick_xml::Writer;
 use strum::{EnumIter, EnumString};
 
 use super::{ArcLock, Question};
-use crate::{error, prelude::{DeepCopy, Flag}, utils::lock_it_up};
-use polars::prelude::*;
-
 #[cfg(feature = "pyo3")]
 use crate::utils::{extract_indicies, get_type_name, normalize_py_index, py_value_error};
+use crate::{
+    error,
+    prelude::{DeepCopy, Flag},
+    utils::lock_it_up,
+};
 
-/// Flags that collects all allowed values of `format` attribute of a `<record>` element.
-/// This is used to indicate types of the data the current datamap file binds to.
-/// 
+/// Flags that collects all allowed values of `format` attribute of a `<record>`
+/// element. This is used to indicate types of the data the current datamap file
+/// binds to.
+///
 /// Introduced in triple-s 2.0
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Debug, EnumString, PartialEq, Default, Clone, Eq, EnumIter)]
@@ -82,7 +90,7 @@ pub struct Record {
 /// ---
 impl Record {
     /// Corresponds to the `ident` attribute of a `<record>` element.
-    /// 
+    ///
     /// Basically it's a single-character from A-Z/ a-z for id.
     pub fn ident(&self) -> &char {
         &self.id
@@ -127,7 +135,7 @@ impl Record {
 
     /// Indicating types of the data the current datamap file binds to
     /// This corresponds to the `format` attribute of a `<record>` element.
-    /// 
+    ///
     /// Introduced in triple-s 2.0
     pub fn data_source(&self) -> Option<&DataSource> {
         self.data_source.as_ref()
@@ -224,7 +232,7 @@ impl Record {
 }
 
 /// Read data file
-/// 
+///
 /// ---
 impl Record {
     /// Load fixed-width or CSV data according to the record's `format`.
@@ -236,24 +244,38 @@ impl Record {
         let file = File::open(path)
             .map_err(error::FileReadError::from)
             .with_context(|| format!("When opening '{}'", path.display()))?;
-        let skip = self.skip.as_deref().unwrap_or("0")
+        let skip = self
+            .skip
+            .as_deref()
+            .unwrap_or("0")
             .parse::<usize>()
             .context("Record skip must be a non-negative integer")?;
-        
+
         if self.data_source() == Some(&DataSource::Csv) {
-            return self.load_csv_data(file, skip)
-                .with_context(|| format!("When reading CSV data from '{}'", path.display()));
+            self.load_csv_data(file, skip)
+                .with_context(|| format!("When reading CSV data from '{}'", path.display()))
+        } else {
+            self.load_asc_data(file, skip)
+                .with_context(|| format!("When reading .asc data from '{}'", path.display()))
         }
-        let lines = BufReader::new(file).lines();  // each line is treated as data from one respondent
-        
+    }
+
+    fn load_asc_data(&mut self, file: File, skip: usize) -> Result<()> {
+        let lines = BufReader::new(file).lines(); // each line is treated as data from one respondent
+
         for (index, line) in lines.enumerate() {
-            let data = line?;
             if index < skip {
                 continue;
             }
+            let data = line?;
             for question in self.content_mut().iter_mut() {
-                let entry = question.read().parse_row(&data)
-                    .with_context(|| format!("When trying to extract data for question {}", question.read().name()))?;
+                let entry = question.read().parse_row(&data).with_context(|| {
+                    format!(
+                        "When trying to extract data from line {} for question `{}`",
+                        index,
+                        question.read().name()
+                    )
+                })?;
                 question.write().data_mut().push(lock_it_up(entry));
             }
         }
@@ -262,32 +284,36 @@ impl Record {
     }
 
     fn load_csv_data(&mut self, file: File, skip: usize) -> Result<()> {
-        let mut reader = csv::ReaderBuilder::new()
-            .has_headers(false)
-            .flexible(true)
-            .from_reader(file);
+        let mut reader =
+            csv::ReaderBuilder::new().has_headers(false).flexible(true).from_reader(file);
         for (index, row) in reader.records().enumerate() {
             let row = row.with_context(|| format!("When reading CSV record {}", index + 1))?;
             if index < skip {
                 continue;
             }
             let questions = self.content();
-            let entries = questions.iter()
-                .map(|question| {
-                    let question = question.read();
-                    let position = *question.location().start() as usize;
-                    let field = position.checked_sub(1)
+            let entries =
+                questions
+                    .iter()
+                    .map(|question| {
+                        let question = question.read();
+                        let position = *question.location().start() as usize;
+                        let field = position.checked_sub(1)
                         .and_then(|column| row.get(column))
                         .with_context(|| format!(
                             "CSV record {} has {} fields; question '{}' requires field {}",
                             index + 1, row.len(), question.name(), position,
                         ))?;
-                    question.parse_field(field).with_context(|| format!(
-                        "When parsing CSV record {}, field {} for question '{}'",
-                        index + 1, position, question.name(),
-                    ))
-                })
-                .collect::<Result<Vec<_>>>()?;
+                        question.parse_field(field).with_context(|| {
+                            format!(
+                                "When parsing CSV record {}, field {} for question '{}'",
+                                index + 1,
+                                position,
+                                question.name(),
+                            )
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?;
             for (question, entry) in questions.iter().zip(entries) {
                 question.write().data_mut().push(lock_it_up(entry));
             }
@@ -297,8 +323,10 @@ impl Record {
 
     /// convert data into polars dataframe
     pub fn to_polars(&self) -> Result<DataFrame, PolarsError> {
-        let columns = self.content().iter()
-                .map(|item| item.read().to_polars().map(Column::from))
+        let columns = self
+            .content()
+            .iter()
+            .map(|item| item.read().to_polars().map(Column::from))
             .collect::<Result<Vec<Column>, PolarsError>>()?;
 
         DataFrame::new_infer_height(columns)
@@ -314,7 +342,7 @@ impl Record {
     }
 
     /// Corresponds to the `ident` attribute of a `<record>` element.
-    /// 
+    ///
     /// Basically it's a single-character from A-Z/ a-z for id.
     #[getter(ident)]
     fn py_get_ident(&self) -> PyResult<char> {
@@ -330,7 +358,7 @@ impl Record {
 
     /// Indicating types of the data the current datamap file binds to
     /// This corresponds to the `format` attribute of a `<record>` element.
-    /// 
+    ///
     /// Introduced in triple-s 2.0
     #[getter(data_source)]
     fn py_get_data_source(&self) -> PyResult<Option<DataSource>> {
@@ -369,8 +397,8 @@ impl Record {
         Ok(())
     }
 
-    /// (Optional) path to the data file the current datamap ties to. 
-    /// 
+    /// (Optional) path to the data file the current datamap ties to.
+    ///
     /// This corresponds to the href attribute of a <record> element.
     #[getter(href)]
     fn py_get_href(&self) -> PyResult<Option<String>> {
@@ -392,14 +420,15 @@ impl Record {
     }
 
     /// Get question by question name, returns 'None' if it doesn't exist.
-    /// 
+    ///
     /// Name matching is not case sensitive.
     #[pyo3(name="get_question", signature=(question_name:"str"))]
     pub fn py_get_question(&self, question_name: &str) -> Option<Question> {
         self.get_question_(question_name).map(|item| item.read().clone())
     }
 
-    /// Load fixed-width or CSV data using the record's format and skip metadata.
+    /// Load fixed-width or CSV data using the record's format and skip
+    /// metadata.
     #[pyo3(name="load_data", signature=(path:"str"))]
     pub fn py_load_data(&mut self, path: &str) -> PyResult<()> {
         self.load_data(path)
@@ -407,11 +436,9 @@ impl Record {
     }
 
     /// Export loaded data into polars dataframe
-    #[pyo3(name="to_polars")]
+    #[pyo3(name = "to_polars")]
     pub fn py_to_polars(&self) -> PyResult<PyDataFrame> {
-        self.to_polars()
-            .map(PyDataFrame)
-            .map_err(|err| PyPolarsErr::from(err).into())
+        self.to_polars().map(PyDataFrame).map_err(|err| PyPolarsErr::from(err).into())
     }
 
     /// Export loaded data as a pandas DataFrame in question order.
