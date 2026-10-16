@@ -125,6 +125,9 @@ pub use member::{question, record, response, survey_info, text};
 mod prelude;
 mod utils;
 
+use std::path::Path;
+use anyhow::Result;
+
 pub use member::{
     Survey,
     question::{CodeFormat, Location, Question, QuestionOptions, QuestionType, Spread, Usage},
@@ -141,6 +144,25 @@ pub use prelude::DeepCopy;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
+// ----------------------------------------------------------------------------
+
+/// Read triple_s file.
+/// 
+/// Arguments:
+/// `path_sss`: path to the triple-s datamap file.
+/// `path_data`: path to the `.asc` or `.csv` data file that pairs with the datamap.
+pub fn read_triple_s(
+    path_sss: impl AsRef<Path>, 
+    path_data: Option<impl AsRef<Path>>
+) -> Result<Survey> {
+    let mut survey = read_datamap(path_sss)?;
+    if let Some(path_data) = path_data {
+        survey.load_data(path_data)?;
+    };
+
+    Ok(survey)
+} 
+
 /// A Python module implemented in Rust.
 #[cfg(feature = "pyo3")]
 #[pymodule]
@@ -148,7 +170,7 @@ mod triple_s {
     use anyhow::Context;
     use pyo3::prelude::*;
 
-    use crate::member::read::read_from_reader;
+    use crate::{member::read::read_from_reader, read_triple_s};
     #[pymodule_export]
     pub use crate::member::{
         Survey,
@@ -159,15 +181,33 @@ mod triple_s {
         text::{Mode, Text, Variant},
     };
 
-    #[pyfunction(name="read_datamap", signature=(datamap_path: "str"))]
-    pub fn py_read_datamap(py: Python<'_>, datamap_path: &str) -> PyResult<Survey> {
-        let input = std::fs::File::open(datamap_path)?;
+    /// Read triple-s datamap
+    /// 
+    /// Args:
+    ///     path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
+    #[pyfunction(name="read_datamap", signature=(path_datamap: "str"))]
+    pub fn py_read_datamap(py: Python<'_>, path_datamap: &str) -> PyResult<Survey> {
+        let input = std::fs::File::open(path_datamap)?;
 
         let (survey, read_log) = read_from_reader(std::io::BufReader::new(input))
-            .with_context(|| format!("When reading '{}'", datamap_path))?;
+            .with_context(|| format!("When reading '{}'", path_datamap))?;
         if read_log.warnings.len() > 0 {
-            read_log.print_warning_summary(py, &format!("Reading '{datamap_path}'"))?
+            read_log.print_warning_summary(py, &format!("Reading '{path_datamap}'"))?
         };
         Ok(survey)
+    }
+ 
+    /// Read triple-s datamap.
+    /// 
+    /// Args:
+    ///     path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
+    ///     path_data (str, *optional*): path to the `.asc` or `.csv` data file.
+    #[pyfunction(name="read_triple_s", signature=(path_datamap: "str", path_data:"str"=None))]
+    pub fn py_read_triple_s(
+        path_datamap: &str,
+        path_data: Option<&str>
+    ) -> PyResult<Survey> {
+        read_triple_s(path_datamap, path_data)
+            .map_err(|err| err.into())
     }
 }

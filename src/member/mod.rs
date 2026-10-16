@@ -6,6 +6,8 @@ pub mod survey_info;
 pub mod entry;
 pub mod text;
 
+use std::path::Path;
+
 use anyhow::Result;
 use parking_lot::{ArcRwLockReadGuard, RawRwLock};
 #[cfg(feature = "pyo3")]
@@ -190,6 +192,13 @@ impl Survey {
     /// (Optional) title of the datamap
     pub fn title(&self) -> Option<&str> {
         self.info.title.as_deref()
+    }
+}
+
+impl Survey {
+    /// load .asc or .csv data that corresponds to the datamap
+    pub fn load_data(&mut self, path_data: impl AsRef<Path>) -> Result<()> {
+        self.record_mut().load_data(path_data)
     }
 }
 
