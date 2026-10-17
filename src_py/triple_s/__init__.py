@@ -17,7 +17,8 @@ from .triple_s import (
     Spread,
     DataRange,
     Value,
-    read_datamap
+    read_datamap,
+    read_triple_s
 )
 
 __all__ = [
@@ -39,5 +40,6 @@ __all__ = [
     "Mode",
     "Spread",
     "Value",
-    "read_datamap"
+    "read_datamap",
+    "read_triple_s"
 ]

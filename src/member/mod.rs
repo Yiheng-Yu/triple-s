@@ -26,27 +26,9 @@ pub use text::{Text, Variant};
 use crate::utils::py_value_error;
 use crate::{prelude::Flag, utils::ArcLock};
 
-/// Represnts the root of a triple-s datamap file. It contains the survey
-/// metadata ([`SurveyInfo`]) and contents of a survey, [`Record`].
-///
-/// See the [Triple-S documentation](https://triple-s.org/documentation/manuals/)
-/// for details about the supported various attributes/ field values/ specifications.
-/// 
-/// # 1. Creating new survey
-///
-/// ```rust
-/// use triple_s::{Survey, SurveyInfo, Version};
-///
-/// let mut info = SurveyInfo::new(Version::V2_0);
-/// info.name = Some("example".into());
-/// info.title = Some("Example Survey".into());
-///
-/// let survey = Survey::new(info);
-///
-/// assert_eq!(survey.name(), Some("example"));
-/// assert_eq!(survey.title(), Some("Example Survey"));
-/// ```
-/// 
+// Rustdoc always uses the Rust guide, including builds with Python bindings.
+#[cfg_attr(any(not(feature = "pyo3"), doc), doc = include_str!("../doc/survey.rust.md"))]
+#[cfg_attr(all(feature = "pyo3", not(doc)), doc = include_str!("../doc/survey.python.rst"))]
 #[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "Survey"))]
 pub struct Survey {
     info: SurveyInfo,

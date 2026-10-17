@@ -9,7 +9,7 @@
 */target/*
 Cargo.lock
 *code-workspace
-
+_build
 /tests/read_non_utf8_test.rs
 
 # Byte-compiled / optimized / DLL files

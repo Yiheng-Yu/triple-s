@@ -17,15 +17,6 @@
 //! The current library provides a (very!) fast and convenient way of reading/
 //! loading/ modfying triple-s files. Supports all triple-s file format
 //! (triple-s classic & xml) up to triple-s 2.0.  
-//! ## Current progression:
-//! Rust:
-//! - Datamap serialisation/ deserialisation: all done ✅.
-//! - Parsing .asc data file: work in progress 🔧
-//!
-//! Python:
-//! - Datamap serialisation/ deserialisation: mostly done, need documentation
-//!   etc.,
-//! - Parsing .asc data file: work in progress 🔧
 //!
 //! # IMPORTANT: Trait `DeepCopy`
 //!
