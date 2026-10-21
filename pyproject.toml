@@ -28,7 +28,7 @@ testing = ["pytest", "lxml"]
 
 [tool.maturin]
 python-source = "src_py"
-module-name = "triple_s.triple_s"
+module-name = "triple_s"
 bindings = "pyo3"
 compatibility = "pypi"
 strip = true

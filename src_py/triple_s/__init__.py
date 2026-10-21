@@ -18,7 +18,7 @@ from .triple_s import (
     DataRange,
     Value,
     read_datamap,
-    read_triple_s
+    read_triple_s,
 )
 
 __all__ = [
