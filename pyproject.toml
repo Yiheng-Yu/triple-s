@@ -3,7 +3,7 @@ requires = ["maturin>=1.15,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "triple-s"
+name = "triple-s-survey"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Rust",
@@ -15,6 +15,13 @@ dependencies = [
     "pandas>=3.0.0",
     "polars>=1.44"
 ]
+description = "A Rust-backed Python parser for Triple-S survey data and datamaps."
+readme = "README.md"
+
+[project.urls]
+Homepage = "https://github.com/Yiheng-Yu/triple-s"
+Repository = "https://github.com/Yiheng-Yu/triple-s"
+Issues = "https://github.com/Yiheng-Yu/triple-s/issues"
 
 [project.optional-dependencies]
 testing = ["pytest", "lxml"]
@@ -23,6 +30,9 @@ testing = ["pytest", "lxml"]
 python-source = "src_py"
 module-name = "triple_s.triple_s"
 bindings = "pyo3"
+compatibility = "pypi"
+strip = true
+sdist-generator = "cargo"
 features = ["pyo3", "pyo3/extension-module"]
 
 [tool.pytest.ini_options]

@@ -188,7 +188,7 @@ mod triple_s {
         Ok(survey)
     }
  
-    /// Read triple-s datamap.
+    /// Read triple-s datamap, and load data afterwards.
     /// 
     /// Args:
     ///     path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.

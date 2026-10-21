@@ -88,7 +88,7 @@ print(question_string)
 
 ## Rust
 
-Add the crate to your project:
+Add the crate to your project, and browse relevant documentations from cargo
 
 ```toml
 [dependencies]
