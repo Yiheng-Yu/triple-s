@@ -2,7 +2,12 @@
 
 A parser for reading parsing [Triple-S](https://www.triple-s.org/) datamap files (.sss), backend by rust via [PyO3](https://pyo3.rs/) and [maturin](https://maturin.rs/).
 
-Still a work in progress. The current plan is to complete support for *reading* triple-s files first, followed by implementing support for *writing* files later.
+Most of the core functions are completed, there are some imporvement coming in the future.
+
+Documentations:
+
+Rust: [docs.rs](https://docs.rs/triple_s/latest/triple_s/index.html)
+Python: 
 
 ## Python
 
@@ -88,7 +93,7 @@ print(question_string)
 
 ## Rust
 
-Add the crate to your project, and browse relevant documentations from cargo
+Add the crate to your project, and browse relevant documentations from [docs.rs](https://docs.rs/triple_s/latest/triple_s/index.html)
 
 ```toml
 [dependencies]

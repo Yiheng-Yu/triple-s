@@ -602,7 +602,9 @@ impl QuestionBuilder {
 #[inline]
 fn unquote(text: Arc<str>) -> String {
     let to_unquote = text.trim();
-    to_unquote.trim_prefix('"').trim_suffix('"').to_string()
+    to_unquote.strip_circumfix('"', '"')
+        .unwrap_or(to_unquote)
+        .to_string()
 }
 
 fn parse_text(mut node: Node, is_classic: bool) -> Result<Text> {
