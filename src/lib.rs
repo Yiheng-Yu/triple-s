@@ -30,7 +30,7 @@
 //! data (the `Arc`), and hence mutating the cloned copy WILL mutate the
 //! original item as well:
 //!
-//! ## Example
+//! ## Example: Mutation through `clone()`
 //!
 //! ```rust
 //! use triple_s::Text;
@@ -50,7 +50,7 @@
 //! mutating the item returned by `deepcopy()` will not update the original
 //! data:
 //!
-//! ## Example
+//! ## Example: Use `deepcopy` to clone the value
 //!
 //! Import `DeepCopy` trait, or call `use triple_s::prelude::*` that does the
 //! same job:
@@ -71,13 +71,14 @@
 //!
 //! # Quick start
 //!
+//! ## Read datamap
 //! You can read a datamap from an existing file:
 //!
 //! ```no_run
 //! use triple_s::read_datamap;
 //!
 //! let path = "path/to/the/datamap.sss";
-//! let datamap = read_datamap(path).unwrap();
+//! let datamap = read_datamap(path)?;
 //! ```
 //! ..or from in-memory string:
 //!
@@ -85,10 +86,28 @@
 //! use triple_s::read_from_string;
 //!
 //! let datamap_string: &str = r#"{..triple-s xml/ classic}"#;
-//! let datamap = read_from_string(datamap_string).unwrap();
+//! let datamap = read_from_string(datamap_string)?;
+//! ```
+//! 
+//! You can then load data with path provided
+//! 
+//! ```no_run
+//! let path_data = "path/to/datafile.asc";
+//! 
+//! datamap.load_data(path_data)?;
+//! ```
+//! 
+//! Alternatively, you can load datamap and data together via `read_triple_s` function:
+//! 
+//! ```no_run
+//! use triple_s::read_triple_s;
+//! 
+//! let path_datamap: &str = "path/to/the/datamap.sss";
+//! let path_data: &str = "path/to/the/data.asc";
+//! let survey = read_triple_s(path_datamap, path_data)?;
 //! ```
 //!
-//! ## Survey
+//! ## Survey object
 //!
 //! [`Survey`] represents a survey definition, it's the root of a triple-s
 //! datamap file. It mainly consists of two parts:

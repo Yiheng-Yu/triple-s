@@ -1,6 +1,6 @@
 [package]
 name = "triple_s"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2024"
 description = "Read classic Triple-S survey definition files."
 repository = "https://github.com/Yiheng-Yu/triple-s"
@@ -85,3 +85,6 @@ pyo3-build-config = { version = ">=0.29.2", features = ["resolve-config"], optio
 [features]
 default = []
 pyo3 = ["dep:pyo3", "dep:pyo3-build-config", "dep:pyo3-polars", "pyo3/abi3", "pyo3/abi3-py310"]
+
+[package.metadata.docs.rs]
+all-features = true
