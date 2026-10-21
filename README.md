@@ -7,7 +7,7 @@ Most of the core functions are completed, there are some imporvement coming in t
 Documentations:
 
 Rust: [docs.rs](https://docs.rs/triple_s/latest/triple_s/index.html)
-Python: 
+Python: *under construction* [readthedocs.org](https://app.readthedocs.org/projects/triple-s/)
 
 ## Python
 
