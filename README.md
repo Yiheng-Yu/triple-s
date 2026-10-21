@@ -16,7 +16,7 @@ Python: *under construction* [readthedocs.org](https://app.readthedocs.org/proje
 Install with:
 
 ```bash
-pip install triple-s
+pip install triple-s-survey
 ```
 
 #### Read a datamap
