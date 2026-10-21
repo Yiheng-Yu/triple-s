@@ -79,22 +79,33 @@
 //!
 //! let path = "path/to/the/datamap.sss";
 //! let datamap = read_datamap(path)?;
+//! 
+//! # Ok::<(), anyhow::Error>(())
 //! ```
+//! 
 //! ..or from in-memory string:
 //!
 //! ```no_run
 //! use triple_s::read_from_string;
 //!
 //! let datamap_string: &str = r#"{..triple-s xml/ classic}"#;
-//! let datamap = read_from_string(datamap_string)?;
+//! let mut datamap = read_from_string(datamap_string)?;
+//! 
+//! # Ok::<(), anyhow::Error>(())
 //! ```
 //! 
 //! You can then load data with path provided
 //! 
 //! ```no_run
-//! let path_data = "path/to/datafile.asc";
+//! use triple_s::read_datamap;
 //! 
+//! let path = "path/to/the/datamap.sss";
+//! let mut datamap = read_datamap(path)?;
+//! 
+//! let path_data = "path/to/datafile.asc";
 //! datamap.load_data(path_data)?;
+//! 
+//! # Ok::<(), anyhow::Error>(())
 //! ```
 //! 
 //! Alternatively, you can load datamap and data together via `read_triple_s` function:
@@ -104,7 +115,9 @@
 //! 
 //! let path_datamap: &str = "path/to/the/datamap.sss";
 //! let path_data: &str = "path/to/the/data.asc";
-//! let survey = read_triple_s(path_datamap, path_data)?;
+//! let survey = read_triple_s(path_datamap, Some(path_data))?;
+//! 
+//! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
 //! ## Survey object
