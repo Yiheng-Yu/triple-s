@@ -25,8 +25,15 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Build package
-        run: uv build
+      - name: Build source distribution
+        run: uv build --sdist
+
+      - name: Build manylinux wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --compatibility pypi --out dist
+          manylinux: "2_28"
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4
