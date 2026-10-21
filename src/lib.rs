@@ -18,57 +18,6 @@
 //! loading/ modfying triple-s files. Supports all triple-s file format
 //! (triple-s classic & xml) up to triple-s 2.0.  
 //!
-//! # IMPORTANT: Trait `DeepCopy`
-//!
-//! In order to accomdate python's (painful) dynamic typing & mutation, most of
-//! the fields for `Survey` and its members (`Question`, `Response` etc,) are
-//! wrapped inside `Arc<parking_lot::RwLock<T>>`. You should be able to access
-//! them via their respective method calls, please refer to the documentation
-//! for each item for the list of fields accessible.
-//!
-//! Because of this, regular `clone()` method will only clone the pointer to the
-//! data (the `Arc`), and hence mutating the cloned copy WILL mutate the
-//! original item as well:
-//!
-//! ## Example: Mutation through `clone()`
-//!
-//! ```rust
-//! use triple_s::Text;
-//!
-//! let original = Text::new("A");
-//! let mut copy = original.clone();
-//!
-//! // this mutates the original data!
-//! *copy.value_mut() = "B".to_string();
-//! assert_eq!(original.value(), copy.value());
-//! assert_eq!(original.value(), "B".to_string());
-//! ```
-//!
-//! All structs in this library comes with `DeepCopy` trait. This trait provides
-//! `deepcopy()` method call that actually clones the data that the `Arc`
-//! pointers points to. This would crete a stand-alone clone of the object, and
-//! mutating the item returned by `deepcopy()` will not update the original
-//! data:
-//!
-//! ## Example: Use `deepcopy` to clone the value
-//!
-//! Import `DeepCopy` trait, or call `use triple_s::prelude::*` that does the
-//! same job:
-//!
-//! ```rust
-//! use triple_s::{DeepCopy, Text};
-//! // Or:
-//! // use triple_s::prelude::*
-//!
-//! let original = Text::new("A");
-//! let mut copy = original.deepcopy();
-//!
-//! *copy.value_mut() = "B".to_string(); // will not update the original
-//!
-//! assert_ne!(original.value(), copy.value());
-//! assert_eq!(original.value(), "A".to_string());
-//! ```
-//!
 //! # Quick start
 //!
 //! ## Read datamap
@@ -141,6 +90,57 @@
 //! its metadata and record directly or find a question by name with
 //! [`Survey::get_question`]. You can also start with [`Survey::empty`] and
 //! build a survey definition programmatically.
+//! 
+//! # IMPORTANT: Trait `DeepCopy`
+//!
+//! In order to accomdate python's (painful) dynamic typing & mutation, most of
+//! the fields for `Survey` and its members (`Question`, `Response` etc,) are
+//! wrapped inside `Arc<parking_lot::RwLock<T>>`. You should be able to access
+//! them via their respective method calls, please refer to the documentation
+//! for each item for the list of fields accessible.
+//!
+//! Because of this, regular `clone()` method will only clone the pointer to the
+//! data (the `Arc`), and hence mutating the cloned copy WILL mutate the
+//! original item as well:
+//!
+//! ## Example: Mutation through `clone()`
+//!
+//! ```rust
+//! use triple_s::Text;
+//!
+//! let original = Text::new("A");
+//! let mut copy = original.clone();
+//!
+//! // this mutates the original data!
+//! *copy.value_mut() = "B".to_string();
+//! assert_eq!(original.value(), copy.value());
+//! assert_eq!(original.value(), "B".to_string());
+//! ```
+//!
+//! All structs in this library comes with `DeepCopy` trait. This trait provides
+//! `deepcopy()` method call that actually clones the data that the `Arc`
+//! pointers points to. This would crete a stand-alone clone of the object, and
+//! mutating the item returned by `deepcopy()` will not update the original
+//! data:
+//!
+//! ## Example: Use `deepcopy` to clone the value
+//!
+//! Import `DeepCopy` trait, or call `use triple_s::prelude::*` that does the
+//! same job:
+//!
+//! ```rust
+//! use triple_s::{DeepCopy, Text};
+//! // Or:
+//! // use triple_s::prelude::*
+//!
+//! let original = Text::new("A");
+//! let mut copy = original.deepcopy();
+//!
+//! *copy.value_mut() = "B".to_string(); // will not update the original
+//!
+//! assert_ne!(original.value(), copy.value());
+//! assert_eq!(original.value(), "A".to_string());
+//! ```
 
 mod member;
 pub mod error;
