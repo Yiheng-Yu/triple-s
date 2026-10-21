@@ -2,7 +2,7 @@ Quickstart
 ==========
 
 Read a datamap
---------------
+-----------------
 
 Import the package as ``triple_s``. Use :func:`triple_s.read_datamap`
 to load a Triple-S Classic or XML datamap without loading respondent data.
@@ -17,7 +17,7 @@ Replace the example paths with your own files.
    print(survey.survey_info.version)
 
 Inspect and edit a question
----------------------------
+---------------------------------
 
 Look up a question by name with ``get_question()``. Names are case
 insensitive, and a missing question returns ``None``.
@@ -33,7 +33,7 @@ Question objects returned by this lookup share their fields with the survey,
 so edits are included when you export the datamap.
 
 Load respondent data
---------------------
+--------------------------
 
 Use the datamap to interpret its matching data file, then convert the loaded
 data into a DataFrame.
@@ -58,7 +58,7 @@ Alternatively, :func:`triple_s.read_triple_s` loads both files in one call:
    survey = read_triple_s("survey.sss", "survey.asc")
 
 Export a datamap
-----------------
+-------------------
 
 Serialise the current survey to XML and save the returned string:
 

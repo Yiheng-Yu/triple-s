@@ -346,7 +346,7 @@ where
     Ok(question_builder)
 }
 
-// ---------------- helper function ----------------
+// ------------------- helper function -------------------
 fn get_question_mut(
     survey_builder: &mut SurveyBuilder,
     current_index: usize,

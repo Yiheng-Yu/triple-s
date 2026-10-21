@@ -198,7 +198,7 @@ where
     }
 }
 
-// -------------- helpers ---------------
+// ----------------- helpers ------------------
 /// A xml-like node, used for parsing sss files of different structure
 #[derive(Debug, Clone)]
 pub struct Node {

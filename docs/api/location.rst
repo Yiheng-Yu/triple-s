@@ -2,6 +2,9 @@ Location
 ========
 
 .. autoclass:: triple_s.Location
-   :members:
-   :undoc-members:
-   :member-order: alphabetical
+
+Attributes
+----------------
+
+.. autoattribute:: triple_s.Location.start
+.. autoattribute:: triple_s.Location.finish

@@ -2,7 +2,7 @@ The root of a Triple-S datamap, containing survey metadata and a record of
 questions.
 
 Read a survey
--------------
+----------------
 
 Load an existing datamap with :func:`triple_s.read_datamap`. Both Triple-S
 Classic and XML datamaps are supported.
@@ -16,7 +16,7 @@ Classic and XML datamaps are supported.
    print(survey.survey_info.name)
 
 Access questions
-----------------
+-------------------
 
 Use ``get_question()`` to look up a question by name. Names are case
 insensitive; a missing question returns ``None``.
@@ -31,7 +31,7 @@ The ``record`` property exposes the survey's :class:`triple_s.Record`;
 ``survey_info`` exposes its :class:`triple_s.SurveyInfo` metadata.
 
 Load and export data
---------------------
+--------------------------
 
 Load respondent data using the record's format and skip settings, then
 export it to a Polars or pandas DataFrame.
@@ -46,7 +46,7 @@ For a datamap whose record uses CSV format, pass the corresponding CSV
 file to ``load_data()`` instead.
 
 Export the datamap
-------------------
+---------------------
 
 .. code-block:: python
 

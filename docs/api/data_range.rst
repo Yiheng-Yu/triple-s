@@ -2,6 +2,16 @@ DataRange
 =========
 
 .. autoclass:: triple_s.DataRange
-   :members:
-   :undoc-members:
-   :member-order: alphabetical
+
+Attributes
+----------------
+
+.. autoattribute:: triple_s.DataRange.end
+.. autoattribute:: triple_s.DataRange.start
+
+Methods
+-------------
+
+.. automethod:: triple_s.DataRange.unsigned
+.. automethod:: triple_s.DataRange.signed
+.. automethod:: triple_s.DataRange.float

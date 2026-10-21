@@ -2,6 +2,9 @@ Spread
 ======
 
 .. autoclass:: triple_s.Spread
-   :members:
-   :undoc-members:
-   :member-order: alphabetical
+
+Attributes
+----------------
+
+.. autoattribute:: triple_s.Spread.subfield_width
+.. autoattribute:: triple_s.Spread.num_subfields

@@ -6,14 +6,14 @@ import sys
 import re
 from pathlib import Path
 
-# -- Project information -----------------------------------------------------
+# -- Project information --------------------------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'triple-s'
 copyright = '2026, Yiheng Yu'
 author = 'Yiheng Yu'
 
-# -- General configuration ---------------------------------------------------
+# -- General configuration ------------------------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
@@ -28,7 +28,7 @@ extensions = [
     "sphinx.ext.viewcode",
     ]
 
-napoleon_use_ivar = True
+napoleon_use_ivar = False
 
 templates_path = ['_templates']
 source_suffix = ".rst"
@@ -38,16 +38,17 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 
 
-# -- Options for HTML output -------------------------------------------------
+# -- Options for HTML output -------------------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = 'furo'
 html_static_path = ['_static']
+html_css_files = ['style.css']
 
 
 def prepare_docstring(app, what, name, obj, options, lines):
     """Render the Rust bindings' Markdown examples as reStructuredText."""
-    if name == "triple_s.Survey":
+    if what == "class" and name.rsplit(".", 1)[-1] == "Survey":
         # Read the Python guide directly so Sphinx does not need a rebuilt
         # native extension after documentation-only changes.
         source = Path(__file__).resolve().parents[1] / "src/doc/survey.python.rst"
@@ -80,7 +81,7 @@ def prepare_docstring(app, what, name, obj, options, lines):
             line = re.sub(r"(?<!`)`([^`]+)`(?!`)", r"``\1``", line)
             heading = re.match(r"^#+ (.+)$", line)
             if heading:
-                result.extend(["", heading[1], "~" * len(heading[1]), ""])
+                result.extend(["", heading[1], "^" * len(heading[1]), ""])
             else:
                 result.append(line)
     # The Question constructor's Attributes block uses unindented fields.

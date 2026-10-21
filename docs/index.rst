@@ -32,14 +32,13 @@ It supports all Triple-S file formats (Triple-S Classic and XML)
 up to Triple-S 2.0.
 
 Installation
-------------
+---------------
 
 Install with ``pip``::
 
    pip install triple-s
 
 See :doc:`getting_started/quickstart` for a working Python workflow and
-:doc:`getting_started/overview` for the main library objects. The
 :doc:`api/index` documents the public Python API.
 
 .. toctree::
@@ -47,5 +46,4 @@ See :doc:`getting_started/quickstart` for a working Python workflow and
    :maxdepth: 3
 
    getting_started/quickstart
-   getting_started/overview
    api/index

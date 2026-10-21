@@ -6,7 +6,7 @@ Multiple-choice responses use one of two layouts, depending on whether
 spread is defined.
 
 Without spread (default)
-------------------------
+------------------------------
 
 When spread is absent (None), each character in the question's data field
 represents a category: 1 means selected and 0 means not selected.
@@ -18,7 +18,7 @@ Positions start at 1 and correspond directly to category codes:
 - Selected codes: [1, 3]
 
 With spread
------------
+--------------
 
 When spread is present, the data contains consecutive slots called
 subfields. The subfield count specifies the number of slots; width

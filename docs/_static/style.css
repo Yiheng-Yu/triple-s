@@ -1,0 +1,13 @@
+/* Show the full toctree in Furo's sidebar without disclosure controls. */
+.sidebar-tree .toctree-checkbox ~ ul {
+  display: block;
+}
+
+.sidebar-tree .toctree-checkbox ~ label {
+  display: none;
+}
+
+/* Keep h2 structure while rendering it at the theme's h3 text size. */
+article h2 {
+  font-size: var(--font-size--h4);
+}
