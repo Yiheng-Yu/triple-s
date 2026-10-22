@@ -65,9 +65,8 @@ pub fn py_value_error(err: anyhow::Error) -> PyErr {
     exceptions::PyValueError::new_err(format!("{err:#}"))
 }
 
-
 pub fn validate_language_tag(language: &str) -> Result<&str> {
-    let _ = language_tags::LanguageTag::parse(language)
+    language_tags::LanguageTag::parse(language)
         .with_context(|| format!("Unknown language tag: '{}'.", language))?
         .validate()
         .with_context(|| format!("Unknown language tag: '{}'.", language))?;

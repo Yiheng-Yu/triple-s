@@ -17,12 +17,11 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 #[cfg(feature = "pyo3")]
 use crate::utils::{extract_indicies, get_type_name, normalize_py_index};
 use crate::{
-    member::{QuestionType, Text},
     error::{self, InvalidArg, MissingAttributeError, UnsupportedFeature},
+    member::{QuestionType, Text},
     prelude::DeepCopy,
     utils::{ArcLock, lock_it_up},
 };
-
 
 #[doc = include_str!("../doc/rs_response.md")]
 #[cfg_attr(
@@ -146,32 +145,24 @@ impl Response {
     }
 
     /// Append a code.
-    /// Raises error if the `code` field of the incoming `Code` instance already exists 
-    /// in current instance's `values` (in this case use `set_value` instead).
-    /// 
+    /// Raises error if the `code` field of the incoming `Code` instance already
+    /// exists in current instance's `values` (in this case use `set_value`
+    /// instead).
+    ///
     /// ```
-    /// use triple_s::{Response, Code};
-    /// 
-    /// let mut response = Response::new(
-    ///     None,
-    ///     Vec::new()
-    /// );
+    /// use triple_s::{Code, Response};
+    ///
+    /// let mut response = Response::new(None, Vec::new());
     /// // adding a value
     /// response.add_value(Code::new_unsigned(1, "Label A", None, Some(0.5)))?;
-    /// 
+    ///
     /// // cannot add new code with different variant:
-    /// assert!(
-    ///     response.add_value(Code::new_signed(2, "Label A", None, Some(0.5)))
-    ///     .is_err()
-    /// );
-    /// 
+    /// assert!(response.add_value(Code::new_signed(2, "Label A", None, Some(0.5))).is_err());
+    ///
     /// // cannot add new code with same `code` field,
     /// // use `set_value` instaed
-    /// assert!(
-    ///     response.add_value(Code::new_unsigned(1, "Label B", None, Some(0.5)))
-    ///     .is_err()
-    /// );
-    /// 
+    /// assert!(response.add_value(Code::new_unsigned(1, "Label B", None, Some(0.5))).is_err());
+    ///
     /// Ok::<(), triple_s::error::InvalidArg>(())
     /// ```
     pub fn add_value(&mut self, value: Code) -> Result<(), InvalidArg> {
@@ -192,30 +183,25 @@ impl Response {
     }
 
     /// Try inserting a new `Code` instance into `Response::values` vec.
-    /// Will overwrite existing entries if new `Code::code()` already exists in `Response::values`
-    /// 
+    /// Will overwrite existing entries if new `Code::code()` already exists in
+    /// `Response::values`
+    ///
     /// # Example
     /// ```
-    /// use triple_s::{Response, Code};
-    /// 
-    /// let mut response = Response::new(
-    ///     None,
-    ///     Vec::new()
-    /// );
+    /// use triple_s::{Code, Response};
+    ///
+    /// let mut response = Response::new(None, Vec::new());
     /// // adding a value
     /// response.set_value(Code::new_unsigned(1, "Label A", None, Some(0.5)))?;
     /// println!("{:?}", response.values());
-    /// 
+    ///
     /// // cannot add new code with different variant:
-    /// assert!(
-    ///     response.set_value(Code::new_signed(2, "Label A", None, Some(0.5)))
-    ///     .is_err()
-    /// );
-    /// 
+    /// assert!(response.set_value(Code::new_signed(2, "Label A", None, Some(0.5))).is_err());
+    ///
     /// // overwrites existing item in `Response::values`,
     /// response.set_value(Code::new_unsigned(1, "Label B", None, Some(0.5)))?;
     /// println!("{:?}", response.values());
-    /// 
+    ///
     /// Ok::<(), triple_s::error::InvalidArg>(())
     /// ```
     pub fn set_value(&mut self, value: Code) -> Result<(), InvalidArg> {
@@ -249,7 +235,8 @@ impl Response {
         self.values.read().get(index).cloned()
     }
 
-    /// Reads a response value at the given index, just to make accessing particular item in the `values` a bit easier
+    /// Reads a response value at the given index, just to make accessing
+    /// particular item in the `values` a bit easier
     ///
     /// Calls `f` with a shared reference to the [`Code`] stored at `index` and
     /// returns the value produced by the closure.
@@ -401,8 +388,9 @@ impl Response {
     }
 
     /// Write to xml event
-    /// 
-    /// Mostly used internally `to_xml`` method calls, exposed as part of public just in case.
+    ///
+    /// Mostly used internally `to_xml`` method calls, exposed as part of public
+    /// just in case.
     pub fn write_xml<W: std::io::Write>(
         &self,
         writer: &mut Writer<W>,
@@ -579,7 +567,7 @@ impl Response {
     }
 
     /// get `Code` inside `self.values` with `code.code` given.
-    /// 
+    ///
     /// Returns `None` if the input `code` was not found.
     #[pyo3(name = "get_code", signature = (code: "str|int|float"))]
     fn py_get_code<'py>(&self, code: &Bound<'py, PyAny>) -> PyResult<Option<Code>> {

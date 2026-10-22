@@ -1,9 +1,9 @@
+pub mod entry;
 pub mod question;
 pub mod read;
 pub mod record;
 pub mod response;
 pub mod survey_info;
-pub mod entry;
 pub mod text;
 
 use std::path::Path;
@@ -12,7 +12,6 @@ use anyhow::Result;
 use parking_lot::{ArcRwLockReadGuard, RawRwLock};
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*};
-
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 pub use question::{CodeFormat, Location, Question, QuestionType, Spread, Usage};
@@ -52,7 +51,8 @@ impl Survey {
         }
     }
 
-    /// Collects survey meta information, i.e., survey name & title, creation date, etc.,
+    /// Collects survey meta information, i.e., survey name & title, creation
+    /// date, etc.,
     #[inline]
     pub fn info(&self) -> &SurveyInfo {
         &self.info
@@ -64,7 +64,8 @@ impl Survey {
         &mut self.info
     }
 
-    /// survey record. For more info please check docuentation of the [`Record`] struct.
+    /// survey record. For more info please check docuentation of the [`Record`]
+    /// struct.
     #[inline]
     pub fn record(&self) -> &Record {
         &self.record
@@ -187,7 +188,8 @@ impl Survey {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Survey {
-    /// get question by question name, returns `None` if question name not exist.
+    /// get question by question name, returns `None` if question name not
+    /// exist.
     #[pyo3(name="get_question", signature=(question_name:"str"))]
     fn py_get_question(&self, question_name: &str) -> Option<Question> {
         self.record.py_get_question(question_name)
@@ -199,13 +201,15 @@ impl Survey {
         self.info.title.clone()
     }
 
-    /// survey record. For more info please check docuentation of the `Record` class.
+    /// survey record. For more info please check docuentation of the `Record`
+    /// class.
     #[getter(record)]
     fn py_get_record(&self) -> Record {
         self.record.clone()
     }
 
-    /// Collects survey meta information, i.e., survey name & title, creation date, etc.,
+    /// Collects survey meta information, i.e., survey name & title, creation
+    /// date, etc.,
     #[getter(survey_info)]
     fn py_get_survey_info(&self) -> SurveyInfo {
         self.info.clone()
@@ -223,7 +227,8 @@ impl Survey {
         self.to_xml().map_err(py_value_error)
     }
 
-    /// Load fixed-width or CSV data using the record's format and skip metadata.
+    /// Load fixed-width or CSV data using the record's format and skip
+    /// metadata.
     #[pyo3(name="load_data", signature=(path:"str"))]
     pub fn py_load_data(&mut self, path: &str) -> PyResult<()> {
         self.record_mut()
@@ -232,9 +237,10 @@ impl Survey {
     }
 
     /// Export loaded data into polars dataframe
-    #[pyo3(name="to_polars")]
+    #[pyo3(name = "to_polars")]
     pub fn py_to_polars(&self) -> PyResult<PyDataFrame> {
-        self.record().to_polars()
+        self.record()
+            .to_polars()
             .map(PyDataFrame)
             .map_err(|err| PyPolarsErr::from(err).into())
     }
@@ -345,7 +351,7 @@ mod test {
         assert!(survey.record.to_xml().is_err());
         assert!(survey.to_xml().is_err());
     }
-    
+
     #[test]
     fn test_read_asc() {
         const PATH_ASC: &str = "tests/sss-examples/sss-2.0/example1.asc";
@@ -353,7 +359,7 @@ mod test {
 
         let mut survey = crate::read_datamap(PATH_SSS).unwrap();
         let record = survey.record_mut();
-        
+
         record.load_data(PATH_ASC).unwrap();
         println!("{:#?}", record.content());
     }

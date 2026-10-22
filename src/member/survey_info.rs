@@ -15,6 +15,8 @@ use strum::{EnumIter, EnumString};
 use super::text::Mode;
 use crate::prelude::Flag;
 #[cfg(feature = "pyo3")]
+use crate::prelude::PyEnum;
+#[cfg(feature = "pyo3")]
 use crate::utils;
 
 #[allow(missing_docs)]
@@ -42,6 +44,19 @@ impl Flag for Version {
             Self::V2_0 => "2.0".into(),
             Self::V3_0 => "3.0".into(),
         }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+impl PyEnum for Version {}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Version {
+    #[pyo3(name = "available_options")]
+    #[staticmethod]
+    fn py_available_options() -> Vec<String> {
+        Self::available_options()
     }
 }
 
@@ -76,8 +91,8 @@ pub struct SurveyInfo {
     /// time of the creation
     pub time: Option<String>,
 
-    /// the originating system (program and operating system), for example: 
-    /// `<origin>MyProg v3, Windows 7</origin>` 
+    /// the originating system (program and operating system), for example:
+    /// `<origin>MyProg v3, Windows 7</origin>`
     pub origin: Option<String>,
 
     /// user who created it
@@ -282,6 +297,7 @@ impl SurveyInfo {
 }
 
 #[cfg(feature = "pyo3")]
+#[inline]
 fn validate_language_options(values: Vec<String>) -> PyResult<Vec<String>> {
     for value in &values {
         utils::validate_language_tag(value)
@@ -291,25 +307,7 @@ fn validate_language_options(values: Vec<String>) -> PyResult<Vec<String>> {
 }
 
 #[cfg(feature = "pyo3")]
+#[inline]
 fn parse_mode_options(values: Vec<Bound<'_, PyAny>>) -> PyResult<Vec<Mode>> {
-    values
-        .into_iter()
-        .map(|value| {
-            if let Ok(mode) = value.extract::<Mode>() {
-                Ok(mode)
-            } else if let Ok(mode) = value.extract::<String>() {
-                Mode::from_str(&mode).map_err(|err| {
-                    exceptions::PyValueError::new_err(format!(
-                        "{err}. Mode options should be one of: {:?}",
-                        Mode::available_options()
-                    ))
-                })
-            } else {
-                Err(exceptions::PyTypeError::new_err(format!(
-                    "mode options must contain Mode flag or one of the following strings: {:?}",
-                    Mode::available_options()
-                )))
-            }
-        })
-        .collect()
+    values.into_iter().map(Mode::from_py_any).collect()
 }
