@@ -14,3 +14,4 @@ Methods
 
 .. automethod:: triple_s.Text.add_variant
 .. automethod:: triple_s.Text.remove_variant
+.. automethod:: triple_s.Text.from_dict
