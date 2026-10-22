@@ -15,9 +15,8 @@ Python: [readthedocs.org](https://app.readthedocs.org/projects/triple-s/) (*unde
 
 Add the crate to your project:
 
-```toml
-[dependencies]
-triple_s = "0.1"
+```bash
+cargo add triple_s
 ```
 
 More detailed documentations can be foud in [docs.rs](https://docs.rs/triple_s/latest/triple_s/index.html)
