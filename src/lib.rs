@@ -225,6 +225,9 @@ mod triple_s {
     /// Args:
     ///     path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
     ///     path_data (str, *optional*): path to the `.asc` or `.csv` data file.
+    /// 
+    /// Returns:
+    ///     [`Survey`] object
     #[pyfunction(name="read_triple_s", signature=(path_datamap: "str", path_data:"str"=None))]
     pub fn py_read_triple_s(
         path_datamap: &str,

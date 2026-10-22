@@ -10,7 +10,21 @@ Rust: [docs.rs](https://docs.rs/triple_s/latest/triple_s/index.html)
 
 Python: [readthedocs.org](https://app.readthedocs.org/projects/triple-s/) (*under construction, more informative documentation coming soon*)
 
+
+## Rust
+
+Add the crate to your project:
+
+```toml
+[dependencies]
+triple_s = "0.1"
+```
+
+More detailed documentations can be foud in [docs.rs](https://docs.rs/triple_s/latest/triple_s/index.html)
+
 ## Python
+
+Python API mirrors that of Rusts', with some minor tweaks to accomdate python's typing system.
 
 ### Getting started
 
@@ -92,14 +106,6 @@ question_string = datamap.record[3].to_classic()
 print(question_string)
 ```
 
-## Rust
-
-Add the crate to your project, and browse relevant documentations from [docs.rs](https://docs.rs/triple_s/latest/triple_s/index.html)
-
-```toml
-[dependencies]
-triple_s = "0.1"
-```
 
 ## Development
 
@@ -117,10 +123,12 @@ cargo test
 
 ## AI usage
 
-I handwrote majorities of the code with some very *minor* support of ai, mostly on writing biolerplate getter & setters, 
-and some boilerplate code realted with text parsing in `src/classic.rs`.
+I handwrote majorities of the code with some very *minor* support of ai, 
+mostly on writing biolerplate getter & setters, the basic html of python's documentation page, 
+and some routine code realted with text parsing in `src/classic.rs`. Also, I used AI to evaluate some of the edge cases
+that I missed.
 
-Otherwise most of the stuffs are writtem by myself.
+Everything else, including the source code, the documentation, api interface, example usage etc., are written by myself. If any error/ typo feel free to pull request.
 
 ## License
 

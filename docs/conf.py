@@ -45,6 +45,23 @@ html_theme = 'furo'
 html_static_path = ['_static']
 html_css_files = ['style.css']
 
+PYTHON_API_CLASSES = {
+    "Code", "CodeFormat", "DataRange", "DataSource", "Location", "Mode",
+    "Question", "QuestionType", "Record", "Response", "Spread", "Survey",
+    "SurveyInfo", "Text", "Usage", "Value", "Variant", "Version",
+}
+PYTHON_API_FUNCTIONS = {"read_datamap", "read_triple_s"}
+
+
+def rustdoc_link(match):
+    """Turn Rust-style symbol links into Sphinx links when they name Python API."""
+    target = match.group(1)
+    if target in PYTHON_API_CLASSES:
+        return f":class:`triple_s.{target}`"
+    if target in PYTHON_API_FUNCTIONS:
+        return f":func:`triple_s.{target}`"
+    return f"``{target}``"
+
 
 def prepare_docstring(app, what, name, obj, options, lines):
     """Render the Rust bindings' Markdown examples as reStructuredText."""
@@ -77,8 +94,8 @@ def prepare_docstring(app, what, name, obj, options, lines):
             result.append("   " + line)
         else:
             # Rustdoc type links and Markdown inline code.
-            line = re.sub(r"\[`([^`]+)`\]", r"``\1``", line)
-            line = re.sub(r"(?<!`)`([^`]+)`(?!`)", r"``\1``", line)
+            line = re.sub(r"\[`([^`]+)`\]", rustdoc_link, line)
+            line = re.sub(r"(?<![\w:`])`([^`]+)`(?!`)", r"``\1``", line)
             heading = re.match(r"^#+ (.+)$", line)
             if heading:
                 result.extend(["", heading[1], "^" * len(heading[1]), ""])
