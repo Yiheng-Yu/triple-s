@@ -51,7 +51,7 @@ use std::{
 use anyhow::{Context, Result};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 #[cfg(feature = "pyo3")]
-use pyo3::{exceptions, prelude::*, types::PyTuple};
+use pyo3::{exceptions::{self, PyTypeError, PyValueError}, prelude::*, types::{PyDict, PyList, PyTuple}};
 use quick_xml::{
     events::{BytesText, Event},
     writer::Writer,
@@ -59,10 +59,9 @@ use quick_xml::{
 use strum::{EnumIter, EnumString};
 
 #[cfg(feature = "pyo3")]
-use crate::utils::{normalize_py_index, py_value_error, single_quote};
+use crate::{error::{MissingKeyError, missing_key_err}, utils::{get_type_name, normalize_py_index, py_value_error, single_quote}};
 use crate::{
-    prelude::*,
-    utils::{ArcLock, lock_it_up, validate_language_tag},
+    error::InvalidArg, prelude::*, utils::{ArcLock, lock_it_up, validate_language_tag},
 };
 
 #[doc = include_str!("../doc/mode.md")]
@@ -381,6 +380,54 @@ impl Text {
         Ok(text)
     }
 
+    /// Create a new [`Text`] instance from a dictionary with the following keys:
+    ///
+    /// - value (str): The text value.
+    /// - variants (list[dict[str, str] | Variant], optional): A list of text
+    ///   variants. Each item may be either an existing [`Variant`] instance or a
+    ///   dictionary used to construct a [`Variant`] via Variant.from_dict.
+    ///
+    /// Returns an error if a required key is missing or a value cannot be
+    /// converted to the expected type.
+    #[pyo3(name="from_dict")]
+    #[staticmethod]
+    fn py_from_dict(content: &Bound<'_, PyDict>) -> PyResult<Self> {
+        let value = content.get_item("value")?
+            .ok_or_else(|| missing_key_err("value"))?
+            .extract::<String>()?;
+
+        match content.get_item("variants")? {
+            None => Self::py_new(value, None),
+            Some(input_variants) => {
+                let type_name = get_type_name(&input_variants)?;
+                let input_variants = input_variants.extract::<Bound<'_, PyList>>()
+                    .map_err(|_| PyValueError::new_err(format!(
+                        "Expect value of `variants` be list of dictionaries or Variant instance, got: '{}'",
+                        type_name
+                    ))
+                )?;
+
+                let variants = input_variants.into_iter()
+                .map(|item| {
+                    if let Ok(variant) = item.extract::<Variant>() {
+                        Ok(variant)
+                    } else if let Ok(content) = item.extract::<Bound<'_, PyDict>>() {
+                        Variant::py_from_dict(content)
+                    } else {
+                        let type_name = get_type_name(&item)?;
+                        Err(PyTypeError::new_err(format!(
+                            "Expect items in `variants` to be dictionary or Variant instance, got: '{}'",
+                            type_name
+                        )))
+                    }
+                })
+                .collect::<PyResult<Vec<Variant>>>()?;
+                
+                Self::py_new(value, Some(variants))
+            }
+        }
+    }
+
     pub(crate) fn __repr__<'py>(&self, py: Python<'py>) -> PyResult<String> {
         let value = self.value.read();
         let mut chars = value.chars();
@@ -554,7 +601,7 @@ impl Variant {
     /// ```rust
     /// use triple_s::text::Variant;
     ///
-    /// let mut example = Variant::new("Original text", None, None).unwrap();
+    /// let mut example = Variant::new("Original text", Some("analysis"), None).unwrap();
     ///
     /// *example.value_mut() = "Updated text".into();
     /// assert_eq!(example.value(), "Updated text");
@@ -574,7 +621,7 @@ impl Variant {
     /// ```rust
     /// use triple_s::text::{Mode, Variant};
     ///
-    /// let mut example = Variant::new("Age", None, None).unwrap();
+    /// let mut example = Variant::new("Age", None, Some("fr")).unwrap();
     ///
     /// *example.mode_mut() = Some(Mode::Analysis);
     /// assert_eq!(example.mode(), Some(Mode::Analysis));
@@ -597,7 +644,7 @@ impl Variant {
     /// ```rust
     /// use triple_s::text::Variant;
     ///
-    /// let mut example = Variant::new("Hello", None, None).unwrap();
+    /// let mut example = Variant::new("Hello", Some("interview"), None).unwrap();
     ///
     /// *example.language_mut() = Some("en-GB".into());
     /// assert_eq!(example.language(), Some("en-GB".into()));
@@ -615,13 +662,19 @@ impl Variant {
     /// ```rust
     /// use triple_s::text::Variant;
     ///
-    /// let variant = Variant::new("variant a", Some("interview"), Some("gb")).unwrap();
+    /// let variant = Variant::new("variant a", Some("interview"), Some("en-GB")).unwrap();
     /// ```
     pub fn new(
         value: impl Into<String>,
         mode: Option<&str>,
         language: Option<&str>,
     ) -> Result<Self> {
+        if mode.is_none() & language.is_none() {
+            return Err(InvalidArg::new(
+                "Missing one of the required keys: ('mode', 'language')"
+            ).into())
+        };
+
         let mut instance = Self {
             value: lock_it_up(value.into()),
             mode: lock_it_up(None),
@@ -705,9 +758,44 @@ impl Variant {
     /// variant = Variant("original", mode="analysis", language="en-GB")
     /// ```
     #[new]
-    #[pyo3(signature = (value:"str", mode:"'analysis'|'interview'|None"=None, language:"str|None"=None))]
-    fn py_new(value: String, mode: Option<&str>, language: Option<&str>) -> PyResult<Self> {
-        Self::new(value, mode, language).map_err(py_value_error)
+    #[pyo3(signature = (value:"str", mode:"'analysis'|'interview'|Mode|None"=None, language:"str|None"=None))]
+    fn py_new(
+        value: String, 
+        mode: Option<Bound<'_, PyAny>>, 
+        language: Option<&str>
+    ) -> PyResult<Self> {
+        let mode = mode.map(|val| {
+            if let Ok(val) = val.extract::<Mode>() { 
+                Ok(val) 
+            } else if let Ok(val) = val.extract::<&str>() {
+                Mode::from_str(val).map_err(|_| exceptions::PyValueError::new_err(format!(
+                    "Expect to be one of ['analysis', 'interview', None] or `Mode` instance, got: '{}'",
+                    val
+                )))
+            } else {
+                let type_name = get_type_name(&val)?;
+                Err(exceptions::PyTypeError::new_err(format!(
+                    "Expect to be one of ['analysis', 'interview'] or `Mode` instance, got: '{}'",
+                    type_name
+                )))
+            }
+            })
+            .transpose()?;
+        let language = language.map(|val| validate_language_tag(val))
+            .transpose()?
+            .map(|item| item.to_string());
+
+        if mode.is_none() & language.is_none() {
+            return Err(MissingKeyError::new_err(
+                "Missing one of the required keys: ('mode', 'language')"
+            ))
+        };
+
+        Ok(Self {
+            value: lock_it_up(value),
+            mode: lock_it_up(mode),
+            language: lock_it_up(language),
+        })
     }
 
     /// makes deepcopy of the current instance.
@@ -775,6 +863,62 @@ impl Variant {
     fn copy(&self) -> Self {
         self.deepcopy()
     }
+
+    /// Create new `Variant` instance from dictionary with the following keys:
+    /// 
+    /// - value (str): content of the text variant
+    /// - mode (str | Mode, *optional*): mode, this can be one of ['analysis', 'interview', None], or one of [`Mode`] enum member.
+    /// - language (str, *optional*): language name
+    /// 
+    /// Note that one of the `mode`, `language` key must present.
+    #[pyo3(name="from_dict")]
+    #[staticmethod]
+    fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
+        let value = content.get_item("value")?
+            .ok_or(missing_key_err("value"))?
+            .extract::<String>()?;
+
+        let mode = content.get_item("mode")?
+            .map(|mode| {
+                if let Ok(val) = mode.extract::<Mode>() { 
+                    Ok(val) 
+                } else if let Ok(val) = mode.extract::<&str>() {
+                    Mode::from_str(val).map_err(|_| exceptions::PyValueError::new_err(format!(
+                        "Expect to be one of ['analysis', 'interview', None] or `Mode` instance, got: '{}'",
+                        val
+                    )))
+                } else {
+                    let type_name = get_type_name(&mode)?;
+                    Err(exceptions::PyTypeError::new_err(format!(
+                        "Expect to be one of ['analysis', 'interview'] or `Mode` instance, got: '{}'",
+                        type_name
+                    )))
+                }
+            })
+            .transpose()?;
+
+        let language = content.get_item("language")?
+            .map(|lang| {
+                let lang = lang.extract::<String>()?;
+                let lang = validate_language_tag(&lang)
+                    .map_err(|err| PyValueError::new_err(format!("{:?}", err)))?
+                    .to_string();
+                Ok::<String, PyErr>(lang)
+            })
+            .transpose()?;
+
+        if mode.is_none() & language.is_none() {
+            return Err(MissingKeyError::new_err(
+                "Missing one of the required keys: ('mode', 'language')"
+            ))
+        };
+
+        Ok(Self {
+            value: lock_it_up(value),
+            mode: lock_it_up(mode),
+            language: lock_it_up(language),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -784,8 +928,8 @@ mod test {
 
     #[test]
     fn test_variant_equal() {
-        let a = Variant::new("variant a", Some("interview"), Some("gb")).unwrap();
-        let b = Variant::new("variant a", Some("interview"), Some("gb")).unwrap();
+        let a = Variant::new("variant a", Some("interview"), Some("en-GB")).unwrap();
+        let b = Variant::new("variant a", Some("interview"), Some("en-GB")).unwrap();
         assert_eq!(a, b)
     }
 
@@ -797,8 +941,15 @@ mod test {
     }
 
     #[test]
+    fn test_variant_new_failure() {
+        assert!(Variant::new("test", None, None).is_err());
+        assert!(Variant::new("test", None, Some("what")).is_err());
+        assert!(Variant::new("test", Some("what"), None).is_err());
+    }
+
+    #[test]
     fn test_variant_write_xml() {
-        let variant = Variant::new("variant a", Some("interview"), Some("gb")).unwrap();
+        let variant = Variant::new("variant a", Some("interview"), Some("en-GB")).unwrap();
         let mut writer = Writer::new(Vec::new());
         writer
             .create_element("label")
@@ -807,20 +958,20 @@ mod test {
 
         let content = String::from_utf8(writer.into_inner()).unwrap();
         let correct =
-            r#"<label><text mode="interview" xml:lang="gb">variant a</text></label>"#;
+            r#"<label><text mode="interview" xml:lang="en-GB">variant a</text></label>"#;
         assert_eq!(content, correct);
     }
 
     #[test]
     fn test_text_write_xml() {
         let mut text = Text::new("variant a");
-        let variant = Variant::new("variant a", Some("interview"), Some("gb")).unwrap();
+        let variant = Variant::new("variant a", Some("interview"), Some("en-GB")).unwrap();
         text.add_variant(variant).unwrap();
 
         let mut writer = Writer::new(Vec::new());
         text.write_xml(&mut writer, "some_tag_name", Vec::new()).unwrap();
         let content = String::from_utf8(writer.into_inner()).unwrap();
-        let correct = r#"<some_tag_name>variant a<text mode="interview" xml:lang="gb">variant a</text></some_tag_name>"#;
+        let correct = r#"<some_tag_name>variant a<text mode="interview" xml:lang="en-GB">variant a</text></some_tag_name>"#;
         assert_eq!(normalize_xml(&content), normalize_xml(correct));
     }
 }

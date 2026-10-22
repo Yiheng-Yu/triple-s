@@ -1856,13 +1856,6 @@ mod test {
             )
             .unwrap();
 
-        let code_with_plain_variant = Code::new_unsigned(4, "Yes", None, None);
-        code_with_plain_variant
-            .label
-            .write()
-            .add_variant(crate::member::Variant::new("Agreed", None, None).unwrap())
-            .unwrap();
-
         let codes = [
             (
                 Code::new_unsigned(1, "label", None, None),
@@ -1887,10 +1880,6 @@ mod test {
             (
                 code_with_analysis_variant,
                 r#"<value code="3">Yes<text mode="analysis">Agreed</text></value>"#,
-            ),
-            (
-                code_with_plain_variant,
-                r#"<value code="4">Yes<text>Agreed</text></value>"#,
             ),
         ];
 

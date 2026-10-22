@@ -194,6 +194,10 @@ mod triple_s {
     use pyo3::prelude::*;
 
     use crate::{member::read::read_from_reader, read_triple_s};
+
+    #[pymodule_export]
+    pub use crate::error::MissingKeyError;
+
     #[pymodule_export]
     pub use crate::member::{
         Survey,

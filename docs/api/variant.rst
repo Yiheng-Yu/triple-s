@@ -14,3 +14,4 @@ Methods
 -------------
 
 .. automethod:: triple_s.Variant.copy
+.. automethod:: triple_s.Variant.from_dict

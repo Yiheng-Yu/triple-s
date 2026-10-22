@@ -5,8 +5,18 @@
 use std::{error::Error, fmt, sync::Arc};
 
 #[cfg(feature = "pyo3")]
-use pyo3::{exceptions, types::PyAnyMethods};
+use pyo3::{create_exception, exceptions, types::PyAnyMethods};
 use strum::IntoStaticStr;
+
+#[cfg(feature = "pyo3")]
+create_exception!(triple_s, MissingKeyError, pyo3::exceptions::PyException);
+
+#[cfg(feature = "pyo3")]
+#[inline]
+pub(crate) fn missing_key_err(key: &str) -> pyo3::PyErr {
+    MissingKeyError::new_err(format!("Missing required key: {}", key))
+}
+
 
 /// Error when some part of the code themselves were wrong, usually means there's something wrong
 /// with the code itself.

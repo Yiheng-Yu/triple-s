@@ -65,16 +65,15 @@ pub fn py_value_error(err: anyhow::Error) -> PyErr {
     exceptions::PyValueError::new_err(format!("{err:#}"))
 }
 
+
 pub fn validate_language_tag(language: &str) -> Result<&str> {
-    let _ = oxilangtag::LanguageTag::parse(language)
+    let _ = language_tags::LanguageTag::parse(language)
+        .with_context(|| format!("Unknown language tag: '{}'.", language))?
+        .validate()
         .with_context(|| format!("Unknown language tag: '{}'.", language))?;
+
     Ok(language)
 }
-
-// #[inline]
-// fn double_quote(value: impl Display) -> String {
-//     format!(r#""{}""#, value)
-// }
 
 /// wrap strings inside pair of single quotation marks. used for python repl.
 #[cfg(feature = "pyo3")]
@@ -98,4 +97,20 @@ pub(crate) fn extract_indicies<'py>(
     .take(indicies.slicelength)
     .into_iter()
     .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::utils::validate_language_tag;
+
+    #[test]
+    fn test_validate_language_tag() {
+        assert!(validate_language_tag("what").is_err());
+        assert!(validate_language_tag("ok").is_err());
+        assert!(validate_language_tag("").is_err());
+
+        assert_eq!(validate_language_tag("en-GB").unwrap(), "en-GB");
+        assert_eq!(validate_language_tag("fr").unwrap(), "fr");
+        assert_eq!(validate_language_tag("en-US").unwrap(), "en-US");
+    }
 }
