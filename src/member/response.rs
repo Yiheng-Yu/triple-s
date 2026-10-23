@@ -1550,7 +1550,7 @@ impl Value {
     /// // Value::Signed -> Value::String
     /// let value = Value::Signed(3);
     /// let string = value.cast::<String>()?;
-    /// assert_eq!(unsigned, Value::String("3".to_string()));
+    /// assert_eq!(string, Value::String("3".to_string()));
     ///
     /// # Ok::<(), triple_s::error::TypeConvertionError>(())
     /// ```
