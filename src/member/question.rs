@@ -1760,17 +1760,14 @@ impl Question {
     ///
     /// 'format' (str|CodeFormat|None, *optional*):
     ///     code format.
-    ///     See CodeFormat.available_options() for list of allowed string
-    /// values.
+    ///     See CodeFormat.available_options() for list of allowed string values.
     ///
     /// 'filter' (str|None, *optional*):
     ///     Question filter.
     ///
     /// 'response' (Response|dict|None, *optional*):
     ///     `Response` instance or dictionary to pass to Response.from_dict(),
-    ///     Would default to the default response values according to each
-    /// question type if left unset
-
+    ///     Would default to the default response values according to each question type if left unset
     #[pyo3(name = "from_dict")]
     #[staticmethod]
     fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
