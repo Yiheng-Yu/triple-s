@@ -9,7 +9,7 @@ use pyo3::{
     IntoPyObjectExt,
     exceptions,
     prelude::*,
-    types::{PyDict, PyFloat, PyInt, PyList, PySlice, PyString, PyTuple},
+    types::{PyDict, PyFloat, PyInt, PySlice, PyString, PyTuple},
 };
 use quick_xml::{events::BytesText, writer::Writer};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
