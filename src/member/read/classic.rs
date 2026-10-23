@@ -7,8 +7,8 @@ pub const SPECIAL: &str = "SPECIAL";
 pub const WITH: &str = "WITH";
 
 use crate::{
-    member::read::{Node, QuestionBuilder, SurveyBuilder},
     error::{BadLine, InternalError},
+    member::read::{Node, QuestionBuilder, SurveyBuilder},
 };
 
 static PATTERN: LazyLock<Regex> = LazyLock::new(|| {
@@ -26,6 +26,7 @@ static PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(&pattern).unwrap()
 });
 
+#[allow(clippy::try_from_instead_of_from_str)]
 impl TryFrom<&str> for Node {
     type Error = anyhow::Error;
 

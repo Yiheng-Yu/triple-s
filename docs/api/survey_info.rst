@@ -21,4 +21,5 @@ Attributes
 Methods
 -------------
 
+.. automethod:: triple_s.SurveyInfo.from_dict
 .. automethod:: triple_s.SurveyInfo.to_dict

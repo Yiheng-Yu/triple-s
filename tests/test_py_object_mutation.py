@@ -33,7 +33,7 @@ def text(variant):
 @pytest.mark.parametrize("cls", [Text, Variant])
 @pytest.mark.parametrize("value", ["NEW", "", "你好"])
 def test_set_text_value(cls, value):
-    obj = cls("original")
+    obj = cls("original", mode="analysis") if cls is Variant else cls("original")
     obj.value = value
     assert obj.value == value
 
@@ -61,7 +61,7 @@ def test_variant_setattr_success(variant, field, value):
     ],
 )
 def test_variant_setattr_fail(cls, field, value, error):
-    obj = cls("original")
+    obj = cls("original", mode="analysis") if cls is Variant else cls("original")
     before = getattr(obj, field)
     with pytest.raises(error):
         setattr(obj, field, value)
@@ -108,7 +108,7 @@ def test_variant_mutation_through_shared_ref(text, variant, field, value):
 def test_variant_sharable_mutation(text):
     shared = text.variants
     with pytest.raises(TypeError):
-        shared[0] = Variant("replacement")
+        shared[0] = Variant("replacement", mode="analysis")
     text.add_variant("another", language="fr")
     assert len(shared) == 1
     assert len(text.variants) == 2
@@ -214,7 +214,7 @@ def test_meta_setter_success():
         ("language_options", ["fr", "bad_tag"], ValueError),
         ("language_options", ["fr", 42], TypeError),
         ("mode_options", ["interview", "invalid"], ValueError),
-        ("mode_options", ["interview", 42], TypeError),
+        ("mode_options", ["interview", 42], ValueError),
     ],
 )
 def test_meta_setter_fail(field, values, error):

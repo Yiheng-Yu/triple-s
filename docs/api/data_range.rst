@@ -15,3 +15,4 @@ Methods
 .. automethod:: triple_s.DataRange.unsigned
 .. automethod:: triple_s.DataRange.signed
 .. automethod:: triple_s.DataRange.float
+.. automethod:: triple_s.DataRange.from_dict

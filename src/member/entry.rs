@@ -5,9 +5,7 @@ use std::collections::HashSet;
 use chrono::{Datelike, NaiveDate, NaiveTime, Timelike};
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::{
-    prelude::*,
-};
+use pyo3::prelude::*;
 
 use crate::DeepCopy;
 
@@ -83,7 +81,6 @@ impl<'a> From<Entry> for AnyValue<'a> {
         }
     }
 }
-
 
 #[cfg(test)]
 mod test {

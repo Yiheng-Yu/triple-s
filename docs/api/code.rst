@@ -18,3 +18,4 @@ Methods
 .. automethod:: triple_s.Code.string
 .. automethod:: triple_s.Code.float
 .. automethod:: triple_s.Code.signed
+.. automethod:: triple_s.Code.from_dict

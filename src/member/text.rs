@@ -2,11 +2,13 @@
 //!
 //! This module provides types for representing textual content in SSS XML.
 //! A [`Text`] contains a default text value and may additionally contain
-//! specialised [`Variant`] values for different languages and usage modes (from sss xml 2.0 onwards).
-//! Currently only two different variant options are available: [`Mode`] and `lang`.  
-//! 
+//! specialised [`Variant`] values for different languages and usage modes (from
+//! sss xml 2.0 onwards). Currently only two different variant options are
+//! available: [`Mode`] and `lang`.
+//!
 //! [`Mode`]: identifies whether a variant is intended for interviewing or analysis.
-//! `language`: identifies the same text but getting translated into various languages. `lang` is basically the same as `xml::lang`.
+//! `language`: identifies the same text but getting translated into various
+//! languages. `lang` is basically the same as `xml::lang`.
 //!
 //! # Example
 //!
@@ -16,21 +18,17 @@
 //! let mut text = Text::new("Age");
 //!
 //! // adding variants
-//! text.add_variant(
-//!     Variant::new(
-//!         "How old are you?",
-//!         Some("interview"),
-//!         Some("en-GB"),
-//!     )?,
-//! )?;
+//! text.add_variant(Variant::new(
+//!     "How old are you?",
+//!     Some("interview"),
+//!     Some("en-GB"),
+//! )?)?;
 //!
-//! text.add_variant(
-//!     Variant::new(
-//!         "Ama hiç türkçe bilmiyorum",
-//!         Some("analysis"),
-//!         Some("tr"),
-//!     )?,
-//! )?;
+//! text.add_variant(Variant::new(
+//!     "Ama hiç türkçe bilmiyorum",
+//!     Some("analysis"),
+//!     Some("tr"),
+//! )?)?;
 //!
 //! # Ok::<(), anyhow::Error>(())
 //! ```
@@ -51,17 +49,26 @@ use std::{
 use anyhow::{Context, Result};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 #[cfg(feature = "pyo3")]
-use pyo3::{exceptions::{self, PyTypeError, PyValueError}, prelude::*, types::{PyDict, PyList, PyTuple}};
+use pyo3::{
+    exceptions::{self, PyTypeError, PyValueError},
+    prelude::*,
+    types::{PyDict, PyList, PyTuple},
+};
 use quick_xml::{
     events::{BytesText, Event},
     writer::Writer,
 };
 use strum::{EnumIter, EnumString};
 
-#[cfg(feature = "pyo3")]
-use crate::{error::{MissingKeyError, missing_key_err}, utils::{get_type_name, normalize_py_index, py_value_error, single_quote}};
 use crate::{
-    error::InvalidArg, prelude::*, utils::{ArcLock, lock_it_up, validate_language_tag},
+    error::InvalidArg,
+    prelude::*,
+    utils::{ArcLock, lock_it_up, validate_language_tag},
+};
+#[cfg(feature = "pyo3")]
+use crate::{
+    error::{MissingKeyError, missing_key_err},
+    utils::{get_type_name, normalize_py_index, py_value_error, single_quote},
 };
 
 #[doc = include_str!("../doc/mode.md")]
@@ -92,9 +99,11 @@ impl DeepCopy for Mode {
     }
 }
 
+#[cfg(feature = "pyo3")]
+impl PyEnum for Mode {}
+
 /// `Text` represents a default text value together with zero or more
 /// specialised [`Variant`] values.
-///
 #[cfg_attr(
     feature = "pyo3",
     pyclass(name = "Text", module = "triple_s", from_py_object)
@@ -200,7 +209,7 @@ impl Text {
         }
     }
 
-    /// Adds a specialised text variant. 
+    /// Adds a specialised text variant.
     /// Returns an error if a variant with the same mode and language is already
     /// present.
     ///
@@ -210,11 +219,7 @@ impl Text {
     /// use triple_s::text::{Text, Variant};
     ///
     /// let mut text = Text::new("Age");
-    /// let variant = Variant::new(
-    ///     "How old are you?",
-    ///     Some("interview"),
-    ///     Some("en-GB"),
-    /// )?;
+    /// let variant = Variant::new("How old are you?", Some("interview"), Some("en-GB"))?;
     ///
     /// text.add_variant(variant)?;
     ///
@@ -234,8 +239,10 @@ impl Text {
 
     /// Removes and returns the variant at the given index.
     /// This method behaves simlar to [`Vec::remove`]:
-    /// - Returns [`None`] if `index` is outside the bounds of the variants list.
-    /// - Removing a variant shifts all variants after it one position to the left.
+    /// - Returns [`None`] if `index` is outside the bounds of the variants
+    ///   list.
+    /// - Removing a variant shifts all variants after it one position to the
+    ///   left.
     ///
     /// # Example
     ///
@@ -243,9 +250,11 @@ impl Text {
     /// use triple_s::text::{Text, Variant};
     ///
     /// let mut text = Text::new("Age");
-    /// text.add_variant(
-    ///     Variant::new("How old are you?", Some("interview"), Some("en-GB"))?,
-    /// )?;
+    /// text.add_variant(Variant::new(
+    ///     "How old are you?",
+    ///     Some("interview"),
+    ///     Some("en-GB"),
+    /// )?)?;
     ///
     /// let removed = text.remove_variant(0);
     ///
@@ -296,6 +305,25 @@ impl Text {
         }
     }
 
+    /// create new instance from PyAny
+    #[cfg(feature = "pyo3")]
+    pub(crate) fn from_py_any(value: Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(val) = value.extract::<Option<String>>() {
+            let val = val.unwrap_or_default();
+            Ok(Self::new(val))
+        } else if let Ok(val) = value.extract::<Bound<'_, PyDict>>() {
+            Self::py_from_dict(&val)
+        } else if let Ok(val) = value.extract::<Text>() {
+            Ok(val)
+        } else {
+            let type_name = get_type_name(&value)?;
+            Err(exceptions::PyTypeError::new_err(format!(
+                "Expect to be Text, str, dict or NoneType kind, got '{}'.",
+                type_name
+            )))
+        }
+    }
+
     /// Returns the default text value in the classic SSS representation.
     /// This method does not output text variants since its not supported
     /// in triple-s classic.
@@ -305,9 +333,11 @@ impl Text {
     /// use triple_s::text::{Text, Variant};
     ///
     /// let mut text = Text::new("Age");
-    /// text.add_variant(
-    ///     Variant::new("How old are you?", Some("interview"), Some("en-GB"))?,
-    /// )?;
+    /// text.add_variant(Variant::new(
+    ///     "How old are you?",
+    ///     Some("interview"),
+    ///     Some("en-GB"),
+    /// )?)?;
     ///
     /// assert_eq!(text.to_classic(), "Age");
     ///
@@ -318,8 +348,8 @@ impl Text {
     }
 
     /// Writes this text and its variants as XML.
-    /// `tag` specifies the name of the enclosing XML element, while `attributes`
-    /// contains attributes to add to that element.
+    /// `tag` specifies the name of the enclosing XML element, while
+    /// `attributes` contains attributes to add to that element.
     pub(crate) fn write_xml<W: std::io::Write>(
         &self,
         writer: &mut Writer<W>,
@@ -380,24 +410,27 @@ impl Text {
         Ok(text)
     }
 
-    /// Create a new [`Text`] instance from a dictionary with the following keys:
+    /// Create a new [`Text`] instance from a dictionary with the following
+    /// keys:
     ///
-    /// - value (str): The text value.
-    /// - variants (list[dict[str, str] | Variant], optional): A list of text
-    ///   variants. Each item may be either an existing [`Variant`] instance or a
-    ///   dictionary used to construct a [`Variant`] via Variant.from_dict.
+    /// - 'value' (str): The text value.
+    /// - 'variants' (list[dict[str, str] | Variant], optional): A list of text
+    ///   variants. Each item may be either an existing [`Variant`] instance or
+    ///   a dictionary used to construct a [`Variant`] via Variant.from_dict.
     ///
     /// Returns an error if a required key is missing or a value cannot be
     /// converted to the expected type.
-    #[pyo3(name="from_dict")]
+    #[pyo3(name = "from_dict")]
     #[staticmethod]
-    fn py_from_dict(content: &Bound<'_, PyDict>) -> PyResult<Self> {
-        let value = content.get_item("value")?
+    pub(crate) fn py_from_dict(content: &Bound<'_, PyDict>) -> PyResult<Self> {
+        let value = content
+            .get_item("value")?
             .ok_or_else(|| missing_key_err("value"))?
             .extract::<String>()?;
 
         match content.get_item("variants")? {
             None => Self::py_new(value, None),
+            Some(variants) if variants.is_none() => Self::py_new(value, None),
             Some(input_variants) => {
                 let type_name = get_type_name(&input_variants)?;
                 let input_variants = input_variants.extract::<Bound<'_, PyList>>()
@@ -422,7 +455,7 @@ impl Text {
                     }
                 })
                 .collect::<PyResult<Vec<Variant>>>()?;
-                
+
                 Self::py_new(value, Some(variants))
             }
         }
@@ -521,7 +554,7 @@ impl Text {
 /// Introduced since sss 2.0 onwards.
 ///
 /// Official documentation:
-/// 
+///
 /// ```text
 /// The text for a survey <title>, variable <label> or values
 /// <value> element may contain any number of specialised text elements.
@@ -671,8 +704,9 @@ impl Variant {
     ) -> Result<Self> {
         if mode.is_none() & language.is_none() {
             return Err(InvalidArg::new(
-                "Missing one of the required keys: ('mode', 'language')"
-            ).into())
+                "Missing one of the required keys: ('mode', 'language')",
+            )
+            .into());
         };
 
         let mut instance = Self {
@@ -688,7 +722,7 @@ impl Variant {
 
     /// check if `other` has same variant as `self`.
     /// very handy.
-    /// 
+    ///
     /// ```rust
     /// use triple_s::Variant;
     ///
@@ -713,7 +747,8 @@ impl Variant {
         Ok(())
     }
 
-    /// updates `language` attribute, this method will validate language tag beforehand.
+    /// updates `language` attribute, this method will validate language tag
+    /// beforehand.
     pub fn set_language(&mut self, language: Option<&str>) -> Result<()> {
         let language =
             language.map(|s| validate_language_tag(s).map(str::to_owned)).transpose()?;
@@ -747,7 +782,7 @@ impl Variant {
 #[pymethods]
 impl Variant {
     /// Create a text variant.
-    /// 
+    ///
     /// Mode and language default to `None`.
     ///
     /// # Examples
@@ -760,13 +795,13 @@ impl Variant {
     #[new]
     #[pyo3(signature = (value:"str", mode:"'analysis'|'interview'|Mode|None"=None, language:"str|None"=None))]
     fn py_new(
-        value: String, 
-        mode: Option<Bound<'_, PyAny>>, 
-        language: Option<&str>
+        value: String,
+        mode: Option<Bound<'_, PyAny>>,
+        language: Option<&str>,
     ) -> PyResult<Self> {
         let mode = mode.map(|val| {
-            if let Ok(val) = val.extract::<Mode>() { 
-                Ok(val) 
+            if let Ok(val) = val.extract::<Mode>() {
+                Ok(val)
             } else if let Ok(val) = val.extract::<&str>() {
                 Mode::from_str(val).map_err(|_| exceptions::PyValueError::new_err(format!(
                     "Expect to be one of ['analysis', 'interview', None] or `Mode` instance, got: '{}'",
@@ -781,14 +816,15 @@ impl Variant {
             }
             })
             .transpose()?;
-        let language = language.map(|val| validate_language_tag(val))
+        let language = language
+            .map(|val| validate_language_tag(val))
             .transpose()?
             .map(|item| item.to_string());
 
         if mode.is_none() & language.is_none() {
             return Err(MissingKeyError::new_err(
-                "Missing one of the required keys: ('mode', 'language')"
-            ))
+                "Missing one of the required keys: ('mode', 'language')",
+            ));
         };
 
         Ok(Self {
@@ -865,28 +901,41 @@ impl Variant {
     }
 
     /// Create new `Variant` instance from dictionary with the following keys:
-    /// 
-    /// - value (str): content of the text variant
-    /// - mode (str | Mode, *optional*): mode, this can be one of ['analysis', 'interview', None], or one of [`Mode`] enum member.
-    /// - language (str, *optional*): language name
-    /// 
+    ///
+    /// - 'value' (str): content of the text variant
+    /// - 'mode' (str | Mode, *optional*): mode, this can be one of ['analysis',
+    ///   'interview', None], or one of [`Mode`] enum member.
+    /// - 'language' (str, *optional*): language name
+    ///
     /// Note that one of the `mode`, `language` key must present.
-    #[pyo3(name="from_dict")]
+    ///
+    /// Example:
+    ///
+    /// ```python
+    /// from triple_s import Variant
+    ///
+    /// value = {"value": "test text", "mode": "analysis", "language": "en-GB"}
+    /// variant = Variant.from_dict(value)
+    /// ```
+    #[pyo3(name = "from_dict")]
     #[staticmethod]
     fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
-        let value = content.get_item("value")?
+        let value = content
+            .get_item("value")?
             .ok_or(missing_key_err("value"))?
             .extract::<String>()?;
 
         let mode = content.get_item("mode")?
             .map(|mode| {
-                if let Ok(val) = mode.extract::<Mode>() { 
-                    Ok(val) 
+                if mode.is_none() {
+                    Ok(None)
+                } else if let Ok(val) = mode.extract::<Mode>() {
+                    Ok(Some(val))
                 } else if let Ok(val) = mode.extract::<&str>() {
                     Mode::from_str(val).map_err(|_| exceptions::PyValueError::new_err(format!(
                         "Expect to be one of ['analysis', 'interview', None] or `Mode` instance, got: '{}'",
                         val
-                    )))
+                    ))).map(Some)
                 } else {
                     let type_name = get_type_name(&mode)?;
                     Err(exceptions::PyTypeError::new_err(format!(
@@ -895,22 +944,27 @@ impl Variant {
                     )))
                 }
             })
-            .transpose()?;
+            .transpose()?
+            .flatten();
 
-        let language = content.get_item("language")?
+        let language = content
+            .get_item("language")?
             .map(|lang| {
-                let lang = lang.extract::<String>()?;
-                let lang = validate_language_tag(&lang)
-                    .map_err(|err| PyValueError::new_err(format!("{:?}", err)))?
-                    .to_string();
-                Ok::<String, PyErr>(lang)
+                lang.extract::<Option<String>>()?
+                    .map(|language| {
+                        validate_language_tag(&language)
+                            .map(str::to_owned)
+                            .map_err(|err| PyValueError::new_err(format!("{:?}", err)))
+                    })
+                    .transpose()
             })
-            .transpose()?;
+            .transpose()?
+            .flatten();
 
-        if mode.is_none() & language.is_none() {
+        if mode.is_none() && language.is_none() {
             return Err(MissingKeyError::new_err(
-                "Missing one of the required keys: ('mode', 'language')"
-            ))
+                "Missing one of the required keys: ('mode', 'language')",
+            ));
         };
 
         Ok(Self {

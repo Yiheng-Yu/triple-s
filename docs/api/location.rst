@@ -8,3 +8,7 @@ Attributes
 
 .. autoattribute:: triple_s.Location.start
 .. autoattribute:: triple_s.Location.finish
+
+Methods
+----------------
+.. autoattribute:: triple_s.Location.from_dict
