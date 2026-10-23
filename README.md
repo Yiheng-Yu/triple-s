@@ -8,7 +8,7 @@ Documentations:
 
 Rust: [docs.rs](https://docs.rs/triple_s/latest/triple_s/index.html)
 
-Python: [readthedocs.org](https://app.readthedocs.org/projects/triple-s/) (*under construction, more informative documentation coming soon*)
+Python: [readthedocs.org](https://triple-s.readthedocs.io/en/latest/) (*under construction, more informative documentation coming soon*)
 
 
 ## Rust
