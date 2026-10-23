@@ -18,15 +18,8 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use crate::utils::{extract_indicies, get_type_name, normalize_py_index};
 use crate::{
     error::{
-        self,
-        InvalidArg,
-        MissingAttributeError,
-        TypeConvertionError,
-        UnsupportedFeature,
-    },
-    member::{QuestionType, Text},
-    prelude::DeepCopy,
-    utils::{ArcLock, lock_it_up},
+        self, InvalidArg, MissingAttributeError, TypeConvertionError, TypeMismatch, UnsupportedFeature,
+    }, member::{QuestionType, Text}, prelude::DeepCopy, utils::{ArcLock, lock_it_up},
 };
 
 #[doc = include_str!("../doc/rs_response.md")]
@@ -235,6 +228,25 @@ impl Response {
 
         self.values.write().push(lock_it_up(value));
         Ok(())
+    }
+
+    /// Cast the `Value` variants in this response's `range` and `values` to `T`.
+    ///
+    /// Returns a copy of this response with the range bounds and each code's
+    /// value converted to `T`. Other code fields, such as labels and scores,
+    /// are preserved.
+    ///
+    /// Returns an error if any value cannot be converted to `T`.
+    pub fn cast<T>(&self) -> Result<Self> 
+    where T: TryFrom<Value, Error = TypeConvertionError> + Into<Value>
+    {
+        let range = self.range().as_ref().map(|range| range.cast::<T>()).transpose()?;
+        let values = self.values()
+            .iter()
+            .map(|item| item.read().cast::<T>())
+            .collect::<Result<Vec<Code>, TypeConvertionError>>()?;
+        
+        Ok(Self::new(range, values))
     }
 
     fn get_value_(&self, index: usize) -> Option<ArcLock<Code>> {
@@ -894,6 +906,33 @@ impl Code {
         }
     }
 
+    /// Convert the current `code` field from one variant to another,
+    /// Please refer to the documentation of [`Value::cast`] for details about type conversion behaviour.
+    /// 
+    /// Example: cast signed -> unsigned
+    /// 
+    /// ```
+    /// use triple_s::{Code, Value};
+    /// 
+    /// // create a new `Code` with signed `code` field:
+    /// let code = Code::new_signed(3, "test", None, None);
+    /// assert_eq!(code.code().clone(), Value::Signed(3));
+    /// 
+    /// let unsigned = code.cast::<u32>()?;
+    /// assert_eq!(unsigned.code().clone(), Value::UnSigned(3));
+    /// 
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn cast<T>(&self) -> Result<Self, TypeConvertionError> 
+    where
+        T: TryFrom<Value, Error = TypeConvertionError> + Into<Value>,
+    {
+        let mut copy = self.deepcopy();
+        *copy.code_mut() = copy.code().cast::<T>()?;
+
+        Ok(copy)
+    }
+
     /// Format as triple-s classic string
     /// Fields incompatible to triple-s classic will be ignored
     pub fn to_classic(&self) -> Result<String> {
@@ -917,6 +956,7 @@ impl Code {
         };
         self.label.read().write_xml(writer, "value", attributes)
     }
+
 }
 
 #[cfg(feature = "pyo3")]
@@ -1770,6 +1810,37 @@ impl DataRange {
             }
         }
     }
+
+    /// Cast field `start`, `end` from one variant to another.
+    /// 
+    /// See [`Value::cast`] documentation for more details about type conversions.
+    /// 
+    /// Example:
+    /// 
+    /// ```
+    /// use triple_s::{DataRange, Value};
+    /// 
+    /// // create a `DataRange` with unsigned `start` and `end` field:
+    /// let unsigned = DataRange::new(
+    ///     Value::UnSigned(0), 
+    ///     Value::UnSigned(1)
+    /// )?;
+    /// 
+    /// // cast to signed integer:
+    /// let signed = unsigned.cast::<i32>()?;
+    /// assert_eq!(signed.end().clone(), Value::Signed(1));
+    /// 
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn cast<T>(&self) -> Result<Self> 
+    where
+        T: TryFrom<Value, Error = TypeConvertionError> + Into<Value>,
+    {
+        let start = self.start().cast::<T>()?;
+        let end = self.end().cast::<T>()?;
+
+        Ok(Self::new(start, end)?)
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -2261,5 +2332,14 @@ mod test {
             Value::String("hello".into()).cast::<String>().unwrap(),
             Value::String("hello".into())
         );
+    }
+
+    #[test]
+    fn test_cast_type_mutation() {
+        let original = DataRange::new(Value::Signed(3), Value::Signed(5)).unwrap();
+        let mut cast = original.cast::<u32>().unwrap();
+        cast.set_start(Value::UnSigned(2)).unwrap();
+
+        assert_eq!(original.start().clone(), Value::Signed(3));
     }
 }
