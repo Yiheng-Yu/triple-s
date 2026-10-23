@@ -1077,6 +1077,22 @@ impl Question {
         Ok(instance)
     }
 
+    /// create new instance from PyAny
+    #[cfg(feature = "pyo3")]
+    pub(crate) fn from_py_any(value: Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(val) = value.extract::<Bound<'_, PyDict>>() {
+            Self::py_from_dict(val)
+        } else if let Ok(val) = value.extract::<Question>() {
+            Ok(val)
+        } else {
+            let type_name = get_type_name(&value)?;
+            Err(exceptions::PyTypeError::new_err(format!(
+                "Expect to be Question, or dict kind, got '{}'.",
+                type_name
+            )))
+        }
+    }
+
     /// Serialises the question as a Triple-S classic `VARIABLE` block.
     /// Returns an error for unsupported types or response definitions,
     /// including literal single-response codes.
@@ -1791,26 +1807,10 @@ impl Question {
             .transpose()?
             .unwrap_or(1);
 
-        let label = content.get_item("label")?.map_or_else(
-            || Ok(Text::new("")),
-            |value| {
-                if value.is_none() {
-                    Ok(Text::new(""))
-                } else if let Ok(text) = value.extract::<Text>() {
-                    Ok(text)
-                } else if let Ok(text) = value.extract::<Bound<'_, PyDict>>() {
-                    Text::py_from_dict(&text)
-                } else if let Ok(text) = value.extract::<String>() {
-                    Ok(Text::new(text))
-                } else {
-                    let type_name = get_type_name(&value)?;
-                    Err(exceptions::PyTypeError::new_err(format!(
-                        "Expect `dict`, `str` or  `TEXT` instance, got: '{}'",
-                        type_name
-                    )))
-                }
-            },
-        )?;
+        let label = content
+            .get_item("label")?
+            .filter(|value| !value.is_none())
+            .map_or(Ok(Text::new("")), Text::from_py_any)?;
 
         let mut instance = QuestionOptions::new(name)
             .with_label(label)
@@ -1872,13 +1872,10 @@ impl Question {
 
             // key exists and value isn't python's NoneType
             Some(value) => {
-                if let Ok(response) = value.extract::<Response>() {
-                    *instance.response_mut() = response;
-                    Ok(instance)
+                let response = if let Ok(response) = value.extract::<Response>() {
+                    response
                 } else if let Ok(response) = value.extract::<Bound<'_, PyDict>>() {
-                    let response = Response::py_from_dict(response)?;
-                    *instance.response_mut() = response;
-                    Ok(instance)
+                    Response::py_from_dict(response)?
                 } else {
                     let type_name = get_type_name(&value)?;
                     let error_message = format!(
@@ -1886,9 +1883,93 @@ impl Question {
                         instance.name(),
                         type_name
                     );
+                    return Err(exceptions::PyTypeError::new_err(error_message));
+                };
 
-                    Err(exceptions::PyTypeError::new_err(error_message))
-                }
+                // cast to correct response type depending on current
+                // question_type
+                let response = match instance.question_type().clone() {
+                    QuestionType::None => response,
+                    QuestionType::Multiple => response
+                        .cast::<u32>()
+                        .with_context(|| {
+                            format!("When trying to process question '{}'", instance.name())
+                        })
+                        .map_err(|err| {
+                            exceptions::PyValueError::new_err(format!("{:?}", err))
+                        })?,
+
+                    QuestionType::Single => match instance.format().as_ref() {
+                        Some(CodeFormat::Literal) => response
+                            .cast::<String>()
+                            .with_context(|| {
+                                format!(
+                                    "When trying to process question '{}'",
+                                    instance.name()
+                                )
+                            })
+                            .map_err(|err| {
+                                exceptions::PyValueError::new_err(format!("{:?}", err))
+                            })?,
+                        _ => response
+                            .cast::<u32>()
+                            .with_context(|| {
+                                format!(
+                                    "When trying to process question '{}'",
+                                    instance.name()
+                                )
+                            })
+                            .map_err(|err| {
+                                exceptions::PyValueError::new_err(format!("{:?}", err))
+                            })?,
+                    },
+                    QuestionType::Logical => response
+                        .cast::<u32>()
+                        .with_context(|| {
+                            format!("When trying to process question '{}'", instance.name())
+                        })
+                        .map_err(|err| {
+                            exceptions::PyValueError::new_err(format!("{:?}", err))
+                        })?,
+                    QuestionType::Quantity => response
+                        .cast::<f64>()
+                        .with_context(|| {
+                            format!("When trying to process question '{}'", instance.name())
+                        })
+                        .map_err(|err| {
+                            exceptions::PyValueError::new_err(format!("{:?}", err))
+                        })?,
+                    QuestionType::Date => response
+                        .cast::<u32>()
+                        .with_context(|| {
+                            format!("When trying to process question '{}'", instance.name())
+                        })
+                        .map_err(|err| {
+                            exceptions::PyValueError::new_err(format!("{:?}", err))
+                        })?,
+                    QuestionType::Time => response
+                        .cast::<u32>()
+                        .with_context(|| {
+                            format!("When trying to process question '{}'", instance.name())
+                        })
+                        .map_err(|err| {
+                            exceptions::PyValueError::new_err(format!("{:?}", err))
+                        })?,
+                    QuestionType::Character => {
+                        return Err(exceptions::PyValueError::new_err(format!(
+                            "Cannot set 'response' for question_type 'character' !"
+                        )))
+                        .with_context(|| {
+                            format!("When trying to process question '{}'", instance.name())
+                        })
+                        .map_err(|err| {
+                            exceptions::PyValueError::new_err(format!("{:?}", err))
+                        })?;
+                    }
+                };
+
+                *instance.response_mut() = response;
+                Ok(instance)
             }
         }
     }

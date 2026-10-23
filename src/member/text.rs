@@ -305,6 +305,25 @@ impl Text {
         }
     }
 
+    /// create new instance from PyAny
+    #[cfg(feature = "pyo3")]
+    pub(crate) fn from_py_any(value: Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(val) = value.extract::<Option<String>>() {
+            let val = val.unwrap_or_default();
+            Ok(Self::new(val))
+        } else if let Ok(val) = value.extract::<Bound<'_, PyDict>>() {
+            Self::py_from_dict(&val)
+        } else if let Ok(val) = value.extract::<Text>() {
+            Ok(val)
+        } else {
+            let type_name = get_type_name(&value)?;
+            Err(exceptions::PyTypeError::new_err(format!(
+                "Expect to be Text, str, dict or NoneType kind, got '{}'.",
+                type_name
+            )))
+        }
+    }
+
     /// Returns the default text value in the classic SSS representation.
     /// This method does not output text variants since its not supported
     /// in triple-s classic.

@@ -11,7 +11,7 @@ use std::path::Path;
 use anyhow::Result;
 use parking_lot::{ArcRwLockReadGuard, RawRwLock};
 #[cfg(feature = "pyo3")]
-use pyo3::{exceptions, prelude::*};
+use pyo3::{exceptions, prelude::*, types::PyDict};
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 pub use question::{CodeFormat, Location, Question, QuestionType, Spread, Usage};
@@ -22,7 +22,7 @@ pub use survey_info::{SurveyInfo, Version};
 pub use text::{Text, Variant};
 
 #[cfg(feature = "pyo3")]
-use crate::utils::py_value_error;
+use crate::utils::{get_type_name, py_value_error};
 use crate::{prelude::Flag, utils::ArcLock};
 
 // Rustdoc always uses the Rust guide, including builds with Python bindings.
@@ -188,6 +188,52 @@ impl Survey {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Survey {
+    /// Create a survey from a dictionary containing optional `survey_info`
+    /// (or `info`) and `record` values. Each value may be its corresponding
+    /// object or a dictionary accepted by that object's `from_dict` method.
+    #[staticmethod]
+    #[pyo3(name = "from_dict")]
+    fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
+        let info = content
+            .get_item("survey_info")?
+            .or(content.get_item("info")?);
+        let info = match info {
+            None => SurveyInfo::new(Version::V1_2),
+            Some(value) if value.is_none() => SurveyInfo::new(Version::V1_2),
+            Some(value) => {
+                if let Ok(info) = value.extract::<SurveyInfo>() {
+                    info
+                } else if let Ok(info) = value.extract::<Bound<'_, PyDict>>() {
+                    SurveyInfo::py_from_dict(info)?
+                } else {
+                    let type_name = get_type_name(&value)?;
+                    return Err(exceptions::PyTypeError::new_err(format!(
+                        "Expect `survey_info` to be a dictionary or `SurveyInfo` instance, got: '{type_name}'"
+                    )));
+                }
+            }
+        };
+
+        let record = match content.get_item("record")? {
+            None => Record::default(),
+            Some(value) if value.is_none() => Record::default(),
+            Some(value) => {
+                if let Ok(record) = value.extract::<PyRef<'_, Record>>() {
+                    record.clone()
+                } else if let Ok(record) = value.extract::<Bound<'_, PyDict>>() {
+                    Record::py_from_dict(record)?
+                } else {
+                    let type_name = get_type_name(&value)?;
+                    return Err(exceptions::PyTypeError::new_err(format!(
+                        "Expect `record` to be a dictionary or `Record` instance, got: '{type_name}'"
+                    )));
+                }
+            }
+        };
+
+        Ok(Self { info, record })
+    }
+
     /// get question by question name, returns `None` if question name not
     /// exist.
     #[pyo3(name="get_question", signature=(question_name:"str"))]

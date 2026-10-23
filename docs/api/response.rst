@@ -15,3 +15,4 @@ Methods
 .. automethod:: triple_s.Response.get_code
 .. automethod:: triple_s.Response.add_value
 .. automethod:: triple_s.Response.set_value
+.. automethod:: triple_s.Response.from_dict

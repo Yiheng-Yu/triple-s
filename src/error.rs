@@ -407,7 +407,7 @@ impl fmt::Display for RangeError {
 pub enum TypeConvertionError {
     /// (source, target, value)
     TypeMismatch(String, String, String),
-    
+
     /// (target, value)
     OutOfRange(String, String),
 }
@@ -416,7 +416,11 @@ impl fmt::Display for TypeConvertionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::TypeMismatch(source_type, target_type, value) => {
-                write!(f, "Cannot convert value [{}] from {} to {}", value, source_type, target_type)
+                write!(
+                    f,
+                    "Cannot convert value [{}] from {} to {}",
+                    value, source_type, target_type
+                )
             }
             Self::OutOfRange(target_type, value) => {
                 write!(f, "Value [{}] is out of range for {}", value, target_type)

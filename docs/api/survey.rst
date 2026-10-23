@@ -14,6 +14,7 @@ Methods
 -------------
 
 .. automethod:: triple_s.Survey.get_question
+.. automethod:: triple_s.Survey.from_dict
 .. automethod:: triple_s.Survey.to_classic
 .. automethod:: triple_s.Survey.to_xml
 .. automethod:: triple_s.Survey.load_data
