@@ -14,3 +14,7 @@ Attributes
 .. autoattribute:: triple_s.QuestionType.Character
 .. autoattribute:: triple_s.QuestionType.Date
 .. autoattribute:: triple_s.QuestionType.Time
+
+Methods
+----------------
+.. autoattribute:: triple_s.QuestionType.available_options

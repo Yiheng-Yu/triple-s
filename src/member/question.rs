@@ -17,8 +17,6 @@ use pyo3_polars::{PySeries, error::PyPolarsErr};
 use quick_xml::{events::BytesText, writer::Writer};
 use strum::{AsRefStr, EnumIter, EnumString};
 
-#[cfg(feature = "pyo3")]
-use crate::utils::{get_type_name, py_value_error, single_quote};
 use crate::{
     Entry,
     EventLog,
@@ -26,6 +24,11 @@ use crate::{
     member::{Code, Response, Text, Value},
     prelude::{DeepCopy, *},
     utils::{ArcLock, lock_it_up},
+};
+#[cfg(feature = "pyo3")]
+use crate::{
+    error::missing_key_err,
+    utils::{get_type_name, py_value_error, single_quote},
 };
 
 /// Creating new question with options given.
@@ -1074,6 +1077,22 @@ impl Question {
         Ok(instance)
     }
 
+    /// create new instance from PyAny
+    #[cfg(feature = "pyo3")]
+    pub(crate) fn from_py_any(value: Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(val) = value.extract::<Bound<'_, PyDict>>() {
+            Self::py_from_dict(val)
+        } else if let Ok(val) = value.extract::<Question>() {
+            Ok(val)
+        } else {
+            let type_name = get_type_name(&value)?;
+            Err(exceptions::PyTypeError::new_err(format!(
+                "Expect to be Question, or dict kind, got '{}'.",
+                type_name
+            )))
+        }
+    }
+
     /// Serialises the question as a Triple-S classic `VARIABLE` block.
     /// Returns an error for unsupported types or response definitions,
     /// including literal single-response codes.
@@ -1715,6 +1734,245 @@ impl Question {
     fn py_to_xml(&self) -> PyResult<String> {
         self.to_xml().map_err(py_value_error)
     }
+
+    /// Create new `Question` instance from dictionary with following keys and
+    /// values:
+    ///
+    /// 'index' (int|None, *optional*): index of a question, default 1,
+    ///
+    /// 'name' (str):
+    ///     name of the question
+    ///
+    /// 'question_type' (str|QuestionType):
+    ///     type of the question.
+    ///     See QuestionType.available_options() for list of allowed string
+    /// values.
+    ///
+    /// 'location' (dict|Location|None, *optional*):
+    ///     data location.
+    ///     See help(Location.from_dict) for allowed keys in the dictionary.
+    ///     If unset, would defult to Location(start=1, finish=1)
+    ///
+    /// 'label' (str|Text|dict):
+    ///     question title.
+    ///     See help(Text.from_dict) for allowed keys in the dictionary.
+    ///     If unset, would defult to Text("")
+    ///
+    /// 'format' (str|CodeFormat|None, *optional*):
+    ///     code format.
+    ///     See CodeFormat.available_options() for list of allowed string
+    /// values.
+    ///
+    /// 'filter' (str|None, *optional*):
+    ///     Question filter.
+    ///
+    /// 'response' (Response|dict|None, *optional*):
+    ///     `Response` instance or dictionary to pass to Response.from_dict(),
+    ///     Would default to the default response values according to each
+    /// question type if left unset
+
+    #[pyo3(name = "from_dict")]
+    #[staticmethod]
+    fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
+        let name =
+            content.get_item("name")?.ok_or(missing_key_err("name"))?.extract::<String>()?;
+
+        let qtype = content
+            .get_item("question_type")?
+            .map(QuestionType::from_py_any)
+            .transpose()?
+            .ok_or(missing_key_err("question_type"))?;
+
+        let format = content
+            .get_item("format")?
+            .filter(|value| !value.is_none())
+            .map(CodeFormat::from_py_any)
+            .transpose()?;
+
+        let usage = content
+            .get_item("usage")?
+            .filter(|value| !value.is_none())
+            .map(Usage::from_py_any)
+            .transpose()?;
+
+        let filter = content
+            .get_item("filter")?
+            .map(|item| item.extract::<Option<String>>())
+            .transpose()?
+            .flatten();
+
+        let index = content
+            .get_item("index")?
+            .map(|item| item.extract::<u32>())
+            .transpose()?
+            .unwrap_or(1);
+
+        let label = content
+            .get_item("label")?
+            .filter(|value| !value.is_none())
+            .map_or(Ok(Text::new("")), Text::from_py_any)?;
+
+        let mut instance = QuestionOptions::new(name)
+            .with_label(label)
+            .with_question_type(qtype)
+            .with_format(format)
+            .with_filter(filter)
+            .with_usage(usage)
+            .with_index(index)
+            .finish()
+            .map_err(|err| exceptions::PyValueError::new_err(format!("{:?}", err)))?;
+
+        // fields that aren't very convinent to build from QuestionOptions
+        // api,,,
+        let location = content
+            .get_item("location")?
+            .filter(|value| !value.is_none())
+            .map(|val| {
+                if let Ok(location) = val.extract::<Location>() {
+                    Ok(location)
+                } else if let Ok(value) = val.extract::<Bound<'_, PyDict>>() {
+                    Location::py_from_dict(value)
+                } else {
+                    let type_name = get_type_name(&val)?;
+                    Err(exceptions::PyTypeError::new_err(format!(
+                        "Expect `dict` or `Location` instance, got: '{}'",
+                        type_name
+                    )))
+                }
+            })
+            .transpose()?
+            .unwrap_or(Location::py_new(1, Some(1))?);
+        *instance.location_mut() = location;
+
+        let spread = content
+            .get_item("spread")?
+            .filter(|value| !value.is_none())
+            .map(|val| {
+                if let Ok(spread) = val.extract::<Spread>() {
+                    Ok(spread)
+                } else if let Ok(value) = val.extract::<Bound<'_, PyDict>>() {
+                    Spread::py_from_dict(value)
+                } else {
+                    let type_name = get_type_name(&val)?;
+                    Err(exceptions::PyTypeError::new_err(format!(
+                        "Expect `dict` or `Spread` instance, got: '{}'",
+                        type_name
+                    )))
+                }
+            })
+            .transpose()?;
+        *instance.spread_mut() = spread;
+
+        match content.get_item("response")? {
+            // key doesn't exist
+            None => Ok(instance),
+
+            // key exists and value is python's NoneType
+            Some(value) if value.is_none() => Ok(instance),
+
+            // key exists and value isn't python's NoneType
+            Some(value) => {
+                let response = if let Ok(response) = value.extract::<Response>() {
+                    response
+                } else if let Ok(response) = value.extract::<Bound<'_, PyDict>>() {
+                    Response::py_from_dict(response)?
+                } else {
+                    let type_name = get_type_name(&value)?;
+                    let error_message = format!(
+                        "Invalida input type when trying to parse 'response' for question '{}': Expect value of 'response' key to be NoneType, dictionary or `Response` instance, got: '{}'",
+                        instance.name(),
+                        type_name
+                    );
+                    return Err(exceptions::PyTypeError::new_err(error_message));
+                };
+
+                // cast to correct response type depending on current
+                // question_type
+                let response = match instance.question_type().clone() {
+                    QuestionType::None => response,
+                    QuestionType::Multiple => response
+                        .cast::<u32>()
+                        .with_context(|| {
+                            format!("When trying to process question '{}'", instance.name())
+                        })
+                        .map_err(|err| {
+                            exceptions::PyValueError::new_err(format!("{:?}", err))
+                        })?,
+
+                    QuestionType::Single => match instance.format().as_ref() {
+                        Some(CodeFormat::Literal) => response
+                            .cast::<String>()
+                            .with_context(|| {
+                                format!(
+                                    "When trying to process question '{}'",
+                                    instance.name()
+                                )
+                            })
+                            .map_err(|err| {
+                                exceptions::PyValueError::new_err(format!("{:?}", err))
+                            })?,
+                        _ => response
+                            .cast::<u32>()
+                            .with_context(|| {
+                                format!(
+                                    "When trying to process question '{}'",
+                                    instance.name()
+                                )
+                            })
+                            .map_err(|err| {
+                                exceptions::PyValueError::new_err(format!("{:?}", err))
+                            })?,
+                    },
+                    QuestionType::Logical => response
+                        .cast::<u32>()
+                        .with_context(|| {
+                            format!("When trying to process question '{}'", instance.name())
+                        })
+                        .map_err(|err| {
+                            exceptions::PyValueError::new_err(format!("{:?}", err))
+                        })?,
+                    QuestionType::Quantity => response
+                        .cast::<f64>()
+                        .with_context(|| {
+                            format!("When trying to process question '{}'", instance.name())
+                        })
+                        .map_err(|err| {
+                            exceptions::PyValueError::new_err(format!("{:?}", err))
+                        })?,
+                    QuestionType::Date => response
+                        .cast::<u32>()
+                        .with_context(|| {
+                            format!("When trying to process question '{}'", instance.name())
+                        })
+                        .map_err(|err| {
+                            exceptions::PyValueError::new_err(format!("{:?}", err))
+                        })?,
+                    QuestionType::Time => response
+                        .cast::<u32>()
+                        .with_context(|| {
+                            format!("When trying to process question '{}'", instance.name())
+                        })
+                        .map_err(|err| {
+                            exceptions::PyValueError::new_err(format!("{:?}", err))
+                        })?,
+                    QuestionType::Character => {
+                        return Err(exceptions::PyValueError::new_err(format!(
+                            "Cannot set 'response' for question_type 'character' !"
+                        )))
+                        .with_context(|| {
+                            format!("When trying to process question '{}'", instance.name())
+                        })
+                        .map_err(|err| {
+                            exceptions::PyValueError::new_err(format!("{:?}", err))
+                        })?;
+                    }
+                };
+
+                *instance.response_mut() = response;
+                Ok(instance)
+            }
+        }
+    }
 }
 
 /// Defines the part of the data record that is allocated to holding the value
@@ -1933,6 +2191,24 @@ impl Location {
         self.set_finish(finish)
             .map_err(|err| exceptions::PyValueError::new_err(format!("{err:#}")))
     }
+
+    /// Creates new instance from dictionary with the following keys:
+    ///
+    /// 'start' (int): start of a data location
+    /// 'finish' (int, *optional*): end of a data location
+    #[staticmethod]
+    #[pyo3(name = "from_dict")]
+    fn py_from_dict(value: Bound<'_, PyDict>) -> PyResult<Self> {
+        let start =
+            value.get_item("start")?.ok_or(missing_key_err("start"))?.extract::<u32>()?;
+        let finish = value
+            .get_item("finish")?
+            .map(|val| val.extract::<Option<u32>>()) // allows dict(start=1, finish=None)
+            .transpose()?
+            .flatten();
+
+        Self::py_new(start, finish)
+    }
 }
 
 #[doc=include_str!("../doc/spread.md")]
@@ -2097,6 +2373,25 @@ impl Spread {
         *self.width.write() = subfield_width;
         Ok(())
     }
+
+    /// Creates new instance from dictionary with the following keys:
+    ///
+    /// 'num_subfields' (int): number of subfields.
+    /// 'subfield_width' (int, *optional*): width of each subfield.
+    #[staticmethod]
+    #[pyo3(name = "from_dict")]
+    fn py_from_dict(value: Bound<'_, PyDict>) -> PyResult<Self> {
+        let num_subfields = value
+            .get_item("num_subfields")?
+            .ok_or(missing_key_err("num_subfields"))?
+            .extract::<u32>()?;
+        let width = value
+            .get_item("subfield_width")?
+            .map(|val| val.extract::<Option<u32>>())
+            .transpose()?
+            .flatten();
+        Self::py_new(num_subfields, width)
+    }
 }
 
 /// Flag for indicating the data type of `code` field in a `<value>` node. Only
@@ -2156,6 +2451,9 @@ impl Flag for CodeFormat {
     }
 }
 
+#[cfg(feature = "pyo3")]
+impl PyEnum for CodeFormat {}
+
 /// describes the role of this variable in the datamap.
 /// Only a subset of variable types may have a use attribute (as detailed below)
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
@@ -2186,6 +2484,19 @@ impl Flag for Usage {
 impl DeepCopy for Usage {
     fn deepcopy(&self) -> Self {
         self.clone()
+    }
+}
+
+#[cfg(feature = "pyo3")]
+impl PyEnum for Usage {}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Usage {
+    #[pyo3(name = "available_options")]
+    #[staticmethod]
+    fn py_available_options() -> Vec<String> {
+        Self::available_options()
     }
 }
 
@@ -2233,6 +2544,19 @@ impl Flag for QuestionType {
             Self::None => "".into(),
             _ => self.as_ref().into(),
         }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+impl PyEnum for QuestionType {}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl QuestionType {
+    #[pyo3(name = "available_options")]
+    #[staticmethod]
+    fn py_available_options() -> Vec<String> {
+        Self::available_options()
     }
 }
 

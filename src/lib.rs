@@ -28,10 +28,10 @@
 //!
 //! let path = "path/to/the/datamap.sss";
 //! let datamap = read_datamap(path)?;
-//! 
+//!
 //! # Ok::<(), anyhow::Error>(())
 //! ```
-//! 
+//!
 //! ..or from in-memory string:
 //!
 //! ```no_run
@@ -39,33 +39,34 @@
 //!
 //! let datamap_string: &str = r#"{..triple-s xml/ classic}"#;
 //! let mut datamap = read_from_string(datamap_string)?;
-//! 
+//!
 //! # Ok::<(), anyhow::Error>(())
 //! ```
-//! 
+//!
 //! You can then load data with path provided
-//! 
+//!
 //! ```no_run
 //! use triple_s::read_datamap;
-//! 
+//!
 //! let path = "path/to/the/datamap.sss";
 //! let mut datamap = read_datamap(path)?;
-//! 
+//!
 //! let path_data = "path/to/datafile.asc";
 //! datamap.load_data(path_data)?;
-//! 
+//!
 //! # Ok::<(), anyhow::Error>(())
 //! ```
-//! 
-//! Alternatively, you can load datamap and data together via `read_triple_s` function:
-//! 
+//!
+//! Alternatively, you can load datamap and data together via `read_triple_s`
+//! function:
+//!
 //! ```no_run
 //! use triple_s::read_triple_s;
-//! 
+//!
 //! let path_datamap: &str = "path/to/the/datamap.sss";
 //! let path_data: &str = "path/to/the/data.asc";
 //! let survey = read_triple_s(path_datamap, Some(path_data))?;
-//! 
+//!
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
@@ -90,7 +91,7 @@
 //! its metadata and record directly or find a question by name with
 //! [`Survey::get_question`]. You can also start with [`Survey::empty`] and
 //! build a survey definition programmatically.
-//! 
+//!
 //! # IMPORTANT: Trait `DeepCopy`
 //!
 //! In order to accomdate python's (painful) dynamic typing & mutation, most of
@@ -142,41 +143,41 @@
 //! assert_eq!(original.value(), "A".to_string());
 //! ```
 
-mod member;
 pub mod error;
+mod member;
 pub use member::{question, record, response, survey_info, text};
 mod prelude;
 mod utils;
 
 use std::path::Path;
-use anyhow::Result;
 
+use anyhow::Result;
+use error::EventLog;
 pub use member::{
     Survey,
+    entry::Entry,
     question::{CodeFormat, Location, Question, QuestionOptions, QuestionType, Spread, Usage},
     read::{read_datamap, read_from_reader, read_from_string},
     record::{DataSource, Record},
     response::{Code, DataRange, Response, Value},
     survey_info::{SurveyInfo, Version},
     text::{Mode, Text, Variant},
-    entry::{Entry},
 };
-use error::EventLog;
 pub use prelude::DeepCopy;
-
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
 // -------------------------------------------------------------------------------------------------
 
 /// Read triple_s file.
-/// 
+///
 /// Arguments:
 /// `path_sss`: path to the triple-s datamap file.
-/// `path_data`: path to the `.asc` or `.csv` data file that pairs with the datamap.
+/// `path_data`: path to the `.asc` or `.csv` data file that pairs with the
+/// datamap.
 pub fn read_triple_s(
-    path_sss: impl AsRef<Path>, 
-    path_data: Option<impl AsRef<Path>>
+    path_sss: impl AsRef<Path>,
+    path_data: Option<impl AsRef<Path>>,
 ) -> Result<Survey> {
     let mut survey = read_datamap(path_sss)?;
     if let Some(path_data) = path_data {
@@ -184,7 +185,7 @@ pub fn read_triple_s(
     };
 
     Ok(survey)
-} 
+}
 
 /// A Python module implemented in Rust.
 #[cfg(feature = "pyo3")]
@@ -193,11 +194,8 @@ mod triple_s {
     use anyhow::Context;
     use pyo3::prelude::*;
 
-    use crate::{member::read::read_from_reader, read_triple_s};
-
     #[pymodule_export]
     pub use crate::error::MissingKeyError;
-
     #[pymodule_export]
     pub use crate::member::{
         Survey,
@@ -207,11 +205,13 @@ mod triple_s {
         survey_info::{SurveyInfo, Version},
         text::{Mode, Text, Variant},
     };
+    use crate::{member::read::read_from_reader, read_triple_s};
 
     /// Read triple-s datamap
-    /// 
+    ///
     /// Args:
-    ///     path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
+    ///     path_datamap (str): path to the triple-s datamap file, supports both
+    /// classic and xml format.
     #[pyfunction(name="read_datamap", signature=(path_datamap: "str"))]
     pub fn py_read_datamap(py: Python<'_>, path_datamap: &str) -> PyResult<Survey> {
         let input = std::fs::File::open(path_datamap)?;
@@ -223,21 +223,18 @@ mod triple_s {
         };
         Ok(survey)
     }
- 
+
     /// Read triple-s datamap, and load data afterwards.
-    /// 
+    ///
     /// Args:
-    ///     path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
-    ///     path_data (str, *optional*): path to the `.asc` or `.csv` data file.
-    /// 
+    ///     path_datamap (str): path to the triple-s datamap file, supports both
+    /// classic and xml format.     path_data (str, *optional*): path to the
+    /// `.asc` or `.csv` data file.
+    ///
     /// Returns:
     ///     [`Survey`] object
     #[pyfunction(name="read_triple_s", signature=(path_datamap: "str", path_data:"str"=None))]
-    pub fn py_read_triple_s(
-        path_datamap: &str,
-        path_data: Option<&str>
-    ) -> PyResult<Survey> {
-        read_triple_s(path_datamap, path_data)
-            .map_err(|err| err.into())
+    pub fn py_read_triple_s(path_datamap: &str, path_data: Option<&str>) -> PyResult<Survey> {
+        read_triple_s(path_datamap, path_data).map_err(|err| err.into())
     }
 }

@@ -25,5 +25,6 @@ Methods
 .. automethod:: triple_s.Question.to_pandas
 .. automethod:: triple_s.Question.set_location
 .. automethod:: triple_s.Question.from_string
+.. automethod:: triple_s.Question.from_dict
 .. automethod:: triple_s.Question.to_classic
 .. automethod:: triple_s.Question.to_xml

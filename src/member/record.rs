@@ -1,5 +1,7 @@
 //! Corresponds to the `<record>` node and its contents.
 //! Uused for string questions inside the survey.
+#[cfg(feature = "pyo3")]
+use std::str::FromStr;
 use std::{
     fs::File,
     io::{BufRead, BufReader},
@@ -411,6 +413,22 @@ impl Record {
         Ok(())
     }
 
+    /// (Optional) corresponds to the 'skip' attribute of the `<record>` xml element.
+    /// 
+    /// Used to ignore one or more initial records in the Data File. 
+    /// This will be most useful for csv Data Files where the first line is often used as documentation 
+    /// (e.g. names for the columns/fields) for the succeeding values. 
+    #[getter(skip)]
+    fn py_get_skip(&self) -> PyResult<Option<String>> {
+        Ok(self.skip.clone())
+    }
+
+    #[setter(skip)]
+    fn py_set_skip(&mut self, skip: Option<String>) -> PyResult<()> {
+        self.skip = skip;
+        Ok(())
+    }
+
     /// Collections of `Question` instances of a survey, this corresponds to the
     /// lists of `<variable>` child nodes
     #[getter(content)]
@@ -500,5 +518,91 @@ impl Record {
                 type_name
             )))
         }
+    }
+
+    /// Create new instance from dictionary with the following keys:
+    ///
+    /// 'ident' (str|None, *optional):
+    ///     id of the `Record` instance, default 'A'.
+    ///
+    /// 'href' (str|None, *optional*):
+    ///     href,
+    ///     Default to be 'None'
+    /// 
+    /// 'data_source' (str|DataSource|None, *optional*):
+    ///     data source, default 'None'
+    ///
+    /// 'content' (List[Question|dict], *optional*):
+    ///     list of [`Question`] instance or dictionaries to pass to
+    ///     Question.from_dict,     
+    ///     Default to be an empty list (`[]`)
+    #[pyo3(name = "from_dict")]
+    #[staticmethod]
+    #[allow(unused_variables)]
+    pub(crate) fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
+        let ident = content
+            .get_item("ident")?
+            .map(|item| item.extract::<Option<char>>())
+            .transpose()?
+            .flatten()
+            .unwrap_or('A');
+
+        let href = content
+            .get_item("href")?
+            .map(|item| item.extract::<Option<String>>())
+            .transpose()?
+            .flatten();
+
+        let skip = content
+            .get_item("skip")?
+            .map(|item| item.extract::<Option<String>>())
+            .transpose()?
+            .flatten();
+
+        let questions = content
+            .get_item("content")?
+            .map(|item| item.extract::<Vec<Bound<'_, PyAny>>>())
+            .transpose()?
+            .unwrap_or_default()
+            .into_iter()
+            .map(|item| {
+                let question = Question::from_py_any(item)?;
+                Ok(lock_it_up(question))
+            })
+            .collect::<PyResult<Vec<ArcLock<Question>>>>()?;
+
+        let data_source = content.get_item("data_source")?
+            .map(|item| {
+                if let Ok(item) = item.extract::<Option<String>>() {
+                    item
+                    .map(|val| 
+                        DataSource::from_str(&val)
+                            .with_context(|| format!("Expect to be one of: {:?}", DataSource::available_options()))
+                            .map_err(|err| exceptions::PyValueError::new_err(format!("{:?}", err))
+                        )
+                    )
+                    .transpose()
+                } else if let Ok(val) = item.extract::<DataSource>() {
+                    Ok(Some(val))
+                } else {
+                    let type_name = get_type_name(&item)?;
+                    Err(exceptions::PyTypeError::new_err(format!(
+                        "Expect value of 'data_source' key to be one of {:?}, NoneType or `DataSource` instance, got '{}'",
+                        DataSource::available_options(),
+                        type_name
+                    )))
+                }
+            })
+            .transpose()?
+            .flatten();
+
+        
+        Ok(Self {
+            id: ident,
+            href: href,
+            skip: skip,
+            data_source: data_source,
+            content: lock_it_up(questions)
+        })
     }
 }

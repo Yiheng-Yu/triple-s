@@ -17,7 +17,18 @@ use quick_xml::{encoding::DecodingReader, reader::Reader as XmlReader};
 use rayon::prelude::*;
 
 use crate::{
-    DataRange, member::{
+    DataRange,
+    error::{
+        self,
+        BadLine,
+        DuplicatedKey,
+        EventLog,
+        MissingAttributeError,
+        MissingValueError,
+        UnknownAttribute,
+        Warning,
+    },
+    member::{
         Code,
         CodeFormat,
         DataSource,
@@ -32,16 +43,9 @@ use crate::{
         Value,
         Variant,
         Version,
-    }, error::{
-        self,
-        BadLine,
-        DuplicatedKey,
-        EventLog,
-        MissingAttributeError,
-        MissingValueError,
-        UnknownAttribute,
-        Warning,
-    }, prelude::*, utils::{lock_it_up, validate_date, validate_time},
+    },
+    prelude::*,
+    utils::{lock_it_up, validate_date, validate_time},
 };
 
 #[derive(Debug, PartialEq)]
@@ -62,20 +66,20 @@ impl FileType {
     }
 }
 
-/// Read triple-s datamap. 
-/// 
-/// This functions auto detects triple-s version (classic/ xml), and currently supports
-/// up till triple-s version 2.0 with non-hierarchial data. Triple-s 3.0 stuff
-/// _should_be_ mostly okay, but fully tested (yet).
-/// 
+/// Read triple-s datamap.
+///
+/// This functions auto detects triple-s version (classic/ xml), and currently
+/// supports up till triple-s version 2.0 with non-hierarchial data. Triple-s
+/// 3.0 stuff _should_be_ mostly okay, but fully tested (yet).
+///
 /// ## Example usage:
-/// 
+///
 /// ```no_run
 /// use triple_s::read_datamap;
-/// 
+///
 /// let survey = read_datamap("../path/to/survey.sss").unwrap();
 /// println!("{:?}", survey.title());
-/// 
+///
 /// Ok::<(), Box<dyn std::error::Error>>(());
 /// ```
 pub fn read_datamap(sss_path: impl AsRef<Path>) -> Result<Survey> {
@@ -603,7 +607,7 @@ impl QuestionBuilder {
 fn unquote(text: Arc<str>) -> String {
     let to_unquote = text.trim();
     if to_unquote.starts_with('"') || to_unquote.ends_with('"') {
-        to_unquote[1..to_unquote.len()-1].to_string()
+        to_unquote[1..to_unquote.len() - 1].to_string()
     } else {
         to_unquote.to_string()
     }

@@ -17,9 +17,8 @@ pub(crate) fn missing_key_err(key: &str) -> pyo3::PyErr {
     MissingKeyError::new_err(format!("Missing required key: {}", key))
 }
 
-
-/// Error when some part of the code themselves were wrong, usually means there's something wrong
-/// with the code itself.
+/// Error when some part of the code themselves were wrong, usually means
+/// there's something wrong with the code itself.
 #[derive(Debug)]
 pub struct InternalError {
     message: String,
@@ -41,8 +40,8 @@ impl fmt::Display for InternalError {
     }
 }
 
-/// Wrong inputs, this gets converts into `pyo3::exceptions::PyValueError` for python-facing API.
-/// with the `pyo3` feature on.
+/// Wrong inputs, this gets converts into `pyo3::exceptions::PyValueError` for
+/// python-facing API. with the `pyo3` feature on.
 #[derive(Debug)]
 pub struct InvalidArg {
     /// the error message
@@ -51,10 +50,10 @@ pub struct InvalidArg {
 
 impl InvalidArg {
     /// creates new instance.
-    /// 
+    ///
     /// ```rust
     /// use triple_s::error::InvalidArg;
-    /// 
+    ///
     /// let error = InvalidArg::new("some error");
     /// assert_eq!(&error.message, "some error")
     /// ```
@@ -112,7 +111,7 @@ impl fmt::Display for DataReadError {
     }
 }
 
-#[cfg(feature="pyo3")]
+#[cfg(feature = "pyo3")]
 impl From<DataReadError> for pyo3::PyErr {
     fn from(value: DataReadError) -> Self {
         exceptions::PyValueError::new_err(value.0)
@@ -398,6 +397,44 @@ impl Error for RangeError {}
 impl fmt::Display for RangeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "RangeError: {}", self.0)
+    }
+}
+
+/// Error raised when trying to convert one enum variant to another
+///
+/// Used mostly in Value.cast()
+#[derive(Debug)]
+pub enum TypeConvertionError {
+    /// (source, target, value)
+    TypeMismatch(String, String, String),
+
+    /// (target, value)
+    OutOfRange(String, String),
+}
+
+impl fmt::Display for TypeConvertionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::TypeMismatch(source_type, target_type, value) => {
+                write!(
+                    f,
+                    "Cannot convert value [{}] from {} to {}",
+                    value, source_type, target_type
+                )
+            }
+            Self::OutOfRange(target_type, value) => {
+                write!(f, "Value [{}] is out of range for {}", value, target_type)
+            }
+        }
+    }
+}
+
+impl Error for TypeConvertionError {}
+
+#[cfg(feature = "pyo3")]
+impl From<TypeConvertionError> for pyo3::PyErr {
+    fn from(value: TypeConvertionError) -> Self {
+        pyo3::exceptions::PyValueError::new_err(value.to_string())
     }
 }
 

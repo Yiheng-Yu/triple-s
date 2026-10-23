@@ -15,6 +15,10 @@ use strum::{EnumIter, EnumString};
 use super::text::Mode;
 use crate::prelude::Flag;
 #[cfg(feature = "pyo3")]
+use crate::prelude::PyEnum;
+#[cfg(feature = "pyo3")]
+use crate::error::missing_key_err;
+#[cfg(feature = "pyo3")]
 use crate::utils;
 
 #[allow(missing_docs)]
@@ -42,6 +46,19 @@ impl Flag for Version {
             Self::V2_0 => "2.0".into(),
             Self::V3_0 => "3.0".into(),
         }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+impl PyEnum for Version {}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Version {
+    #[pyo3(name = "available_options")]
+    #[staticmethod]
+    fn py_available_options() -> Vec<String> {
+        Self::available_options()
     }
 }
 
@@ -76,8 +93,8 @@ pub struct SurveyInfo {
     /// time of the creation
     pub time: Option<String>,
 
-    /// the originating system (program and operating system), for example: 
-    /// `<origin>MyProg v3, Windows 7</origin>` 
+    /// the originating system (program and operating system), for example:
+    /// `<origin>MyProg v3, Windows 7</origin>`
     pub origin: Option<String>,
 
     /// user who created it
@@ -236,6 +253,102 @@ impl SurveyInfo {
         })
     }
 
+    /// Create survey metadata from a dictionary. `version` is required;
+    /// other metadata fields are optional and default to `None` or an empty
+    /// options list.
+    #[staticmethod]
+    #[pyo3(name = "from_dict")]
+    pub(crate) fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
+        let version = content
+            .get_item("version")?
+            .ok_or(missing_key_err("version"))?;
+        let version = if let Ok(version) = version.extract::<Version>() {
+            version
+        } else if let Ok(version) = version.extract::<String>() {
+            Version::from_str(&version)
+                .map_err(|err| exceptions::PyValueError::new_err(format!("{err:#}")))?
+        } else if let Ok(version) = version.extract::<f64>() {
+            Version::from_str(&format!("{version:.1}"))
+                .map_err(|err| exceptions::PyValueError::new_err(format!("{err:#}")))?
+        } else {
+            return Err(exceptions::PyTypeError::new_err(
+                "version must be a Version, str, or float",
+            ));
+        };
+
+        let name = content
+            .get_item("name")?
+            .map(|item| item.extract::<Option<String>>())
+            .transpose()?
+            .flatten();
+        let title = content
+            .get_item("title")?
+            .map(|item| item.extract::<Option<String>>())
+            .transpose()?
+            .flatten();
+        let date = content
+            .get_item("date")?
+            .map(|item| item.extract::<Option<String>>())
+            .transpose()?
+            .flatten();
+        let time = content
+            .get_item("time")?
+            .map(|item| item.extract::<Option<String>>())
+            .transpose()?
+            .flatten();
+        let origin = content
+            .get_item("origin")?
+            .map(|item| item.extract::<Option<String>>())
+            .transpose()?
+            .flatten();
+        let user = content
+            .get_item("user")?
+            .map(|item| item.extract::<Option<String>>())
+            .transpose()?
+            .flatten();
+        let style = content
+            .get_item("style")?
+            .map(|item| item.extract::<Option<String>>())
+            .transpose()?
+            .flatten();
+        let standard = content
+            .get_item("standard")?
+            .map(|item| item.extract::<Option<String>>())
+            .transpose()?
+            .flatten();
+
+        let language_options = content
+            .get_item("language_options")?
+            .or(content.get_item("language")?)
+            .map(|item| item.extract::<Option<Vec<String>>>())
+            .transpose()?
+            .flatten()
+            .unwrap_or_default();
+        let language_options = validate_language_options(language_options)?;
+
+        let mode_options = content
+            .get_item("mode_options")?
+            .map(|item| item.extract::<Option<Vec<Bound<'_, PyAny>>>>())
+            .transpose()?
+            .flatten()
+            .unwrap_or_default();
+        let mode_options = parse_mode_options(mode_options)?;
+
+        Ok(Self {
+            version,
+            name,
+            title,
+            date,
+            time,
+            origin,
+            user,
+            style,
+            language_options,
+            mode_options,
+            standard,
+        })
+    }
+
     #[pyo3(signature = () -> "dict[str, str]")]
     fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
         let dict = PyDict::new(py);
@@ -282,6 +395,7 @@ impl SurveyInfo {
 }
 
 #[cfg(feature = "pyo3")]
+#[inline]
 fn validate_language_options(values: Vec<String>) -> PyResult<Vec<String>> {
     for value in &values {
         utils::validate_language_tag(value)
@@ -291,25 +405,7 @@ fn validate_language_options(values: Vec<String>) -> PyResult<Vec<String>> {
 }
 
 #[cfg(feature = "pyo3")]
+#[inline]
 fn parse_mode_options(values: Vec<Bound<'_, PyAny>>) -> PyResult<Vec<Mode>> {
-    values
-        .into_iter()
-        .map(|value| {
-            if let Ok(mode) = value.extract::<Mode>() {
-                Ok(mode)
-            } else if let Ok(mode) = value.extract::<String>() {
-                Mode::from_str(&mode).map_err(|err| {
-                    exceptions::PyValueError::new_err(format!(
-                        "{err}. Mode options should be one of: {:?}",
-                        Mode::available_options()
-                    ))
-                })
-            } else {
-                Err(exceptions::PyTypeError::new_err(format!(
-                    "mode options must contain Mode flag or one of the following strings: {:?}",
-                    Mode::available_options()
-                )))
-            }
-        })
-        .collect()
+    values.into_iter().map(Mode::from_py_any).collect()
 }
