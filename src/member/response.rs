@@ -9,7 +9,7 @@ use pyo3::{
     IntoPyObjectExt,
     exceptions,
     prelude::*,
-    types::{PyFloat, PyInt, PySlice, PyString, PyTuple},
+    types::{PyDict, PyFloat, PyInt, PySlice, PyString, PyTuple},
 };
 use quick_xml::{events::BytesText, writer::Writer};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -17,7 +17,13 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 #[cfg(feature = "pyo3")]
 use crate::utils::{extract_indicies, get_type_name, normalize_py_index};
 use crate::{
-    error::{self, InvalidArg, MissingAttributeError, UnsupportedFeature},
+    error::{
+        self,
+        InvalidArg,
+        MissingAttributeError,
+        TypeConvertionError,
+        UnsupportedFeature,
+    },
     member::{QuestionType, Text},
     prelude::DeepCopy,
     utils::{ArcLock, lock_it_up},
@@ -604,7 +610,13 @@ impl Response {
     #[pyo3(name = "set_value")]
     fn py_set_value(&mut self, value: Code) -> PyResult<()> {
         self.set_value(value)
-            .map_err(|err| exceptions::PyValueError::new_err(format!("{err:?}")))
+        .map_err(|err| exceptions::PyValueError::new_err(format!("{err:?}")))
+    }
+
+    #[staticmethod]
+    #[pyo3(name = "from_dict")]
+    pub(crate) fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
+        todo!()
     }
 }
 
@@ -1378,6 +1390,39 @@ impl Value {
         }
     }
 
+    /// Convert one variant of `Value` to another.
+    /// 
+    /// Currently support these `<T>` types:
+    /// |`<T>`|Output
+    /// |--|--
+    /// `u32`|Value::UnSigned
+    /// `i32`|Value::Signed
+    /// `f64`|Value::Float
+    /// `String`|Value::String
+    /// 
+    /// Example usage:
+    ///
+    /// ```rust
+    /// use triple_s::Value;
+    ///
+    /// // Value::Signed -> Value::UnSigned
+    /// let value = Value::Signed(3);
+    /// let unsigned = value.cast::<u32>()?;
+    /// assert_eq!(unsigned, Value::UnSigned(3));
+    /// 
+    /// // Value::Signed -> Value::String
+    /// let value = Value::Signed(3);
+    /// let string = value.cast::<String>()?;
+    /// assert_eq!(unsigned, Value::String("3".to_string()));
+    ///
+    /// # Ok::<(), triple_s::error::TypeConvertionError>(())
+    /// ```
+    pub fn cast<T>(&self) -> Result<Self, TypeConvertionError>
+    where T: TryFrom<Self, Error = TypeConvertionError> + Into<Self> {
+        let val = T::try_from(self.clone())?;
+        Ok(val.into())
+    }
+
     /// maps current instance into corresponding python objects
     #[cfg(feature = "pyo3")]
     pub(crate) fn to_py_any<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
@@ -1464,6 +1509,111 @@ impl From<&str> for Value {
         Self::String(value.to_owned())
     }
 }
+
+impl TryFrom<Value> for u32 {
+    type Error = TypeConvertionError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::UnSigned(item) => Ok(item.clone()),
+            Value::Signed(item) => u32::try_from(item).map_err(|_| {
+                TypeConvertionError::OutOfRange("unsigned integer".into(), item.to_string())
+            }),
+            Value::Float(item) => {
+                if !item.is_finite()
+                    || item.fract() != 0.0
+                    || item < 0.0
+                    || item > u32::MAX as f64
+                {
+                    return Err(TypeConvertionError::OutOfRange(
+                        "float".into(),
+                        item.to_string(),
+                    ));
+                }
+
+                Ok(item as u32)
+            }
+            Value::String(item) => item.parse::<u32>().map_err(|_| {
+                TypeConvertionError::TypeMismatch(
+                    "string".into(),
+                    "unsigned integer".into(),
+                    format!("{:?}", item),
+                )
+            }),
+        }
+    }
+}
+
+impl TryFrom<Value> for i32 {
+    type Error = TypeConvertionError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::UnSigned(item) => i32::try_from(item).map_err(|_| {
+                TypeConvertionError::OutOfRange("signed integer".into(), item.to_string())
+            }),
+            Value::Signed(item) => Ok(item.clone()),
+            Value::Float(item) => {
+                if !item.is_finite()
+                    || item.fract() != 0.0
+                    || item < 0.0
+                    || item > u32::MAX as f64
+                {
+                    return Err(TypeConvertionError::OutOfRange(
+                        "float".into(),
+                        item.to_string(),
+                    ));
+                }
+
+                Ok(item as i32)
+            }
+            Value::String(item) => item.parse::<i32>().map_err(|_| {
+                TypeConvertionError::TypeMismatch(
+                    "string".into(),
+                    "signed integer".into(),
+                    format!("{:?}", item),
+                )
+            }),
+        }
+    }
+}
+
+impl TryFrom<Value> for f64 {
+    type Error = TypeConvertionError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::UnSigned(item) => f64::try_from(item).map_err(|_| {
+                TypeConvertionError::OutOfRange("float".into(), item.to_string())
+            }),
+            Value::Signed(item) => f64::try_from(item).map_err(|_| {
+                TypeConvertionError::OutOfRange("float".into(), item.to_string())
+            }),
+            Value::Float(item) => Ok(item.clone()),
+            Value::String(item) => item.parse::<f64>().map_err(|_| {
+                TypeConvertionError::TypeMismatch(
+                    "string".into(),
+                    "float".into(),
+                    format!("{:?}", item),
+                )
+            }),
+        }
+    }
+}
+
+impl TryFrom<Value> for String {
+    type Error = TypeConvertionError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Signed(item) => Ok(item.to_string()),
+            Value::UnSigned(item) => Ok(item.to_string()),
+            Value::Float(item) => Ok(item.to_string()),
+            Value::String(item) => Ok(item.clone()),
+        }
+    }
+}
+
 
 /// Minimum and maximum values allowed for a quantity response, or an
 /// implicit range of codes for a numeric categorical response.
@@ -1748,6 +1898,15 @@ impl DataRange {
             )))
         }
     }
+
+    // /// creates new instance from dictionary with the following keys:
+    // ///
+    // /// - start (float|int|str): start of a data range
+    // #[staticmethod]
+    // #[pyo3(name = "from_dict")]
+    // fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
+    //     todo!()
+    // }
 }
 
 impl Clone for DataRange {
@@ -2018,5 +2177,89 @@ mod test {
             let content = String::from_utf8(writer.into_inner()).unwrap();
             assert_eq!(normalize_xml(&content), normalize_xml(&correct));
         }
+    }
+
+    #[test]
+    fn test_value_cast_u32() {
+        assert_eq!(Value::Signed(3).cast::<u32>().unwrap(), Value::UnSigned(3));
+        assert_eq!(
+            Value::UnSigned(3).cast::<u32>().unwrap(),
+            Value::UnSigned(3)
+        );
+        assert_eq!(
+            Value::String("3".into()).cast::<u32>().unwrap(),
+            Value::UnSigned(3)
+        );
+        assert_eq!(
+            Value::Float(3.000).cast::<u32>().unwrap(),
+            Value::UnSigned(3)
+        );
+
+        assert!(Value::Signed(-1).cast::<u32>().is_err());
+        assert!(Value::Float(3.0001).cast::<u32>().is_err());
+        assert!(Value::String("".into()).cast::<u32>().is_err());
+        assert!(Value::String("3.00".into()).cast::<u32>().is_err());
+        assert!(Value::String("what".into()).cast::<u32>().is_err());
+        assert!(Value::String("hi".into()).cast::<u32>().is_err());
+    }
+
+    #[test]
+    fn test_value_cast_i32() {
+        assert_eq!(Value::Signed(-3).cast::<i32>().unwrap(), Value::Signed(-3));
+        assert_eq!(Value::Signed(3).cast::<i32>().unwrap(), Value::Signed(3));
+        assert_eq!(Value::UnSigned(3).cast::<i32>().unwrap(), Value::Signed(3));
+        assert_eq!(Value::Float(3.00).cast::<i32>().unwrap(), Value::Signed(3));
+        assert_eq!(
+            Value::String("3".into()).cast::<i32>().unwrap(),
+            Value::Signed(3)
+        );
+        assert_eq!(
+            Value::String("-3".into()).cast::<i32>().unwrap(),
+            Value::Signed(-3)
+        );
+
+        assert!(Value::Float(-3.01).cast::<i32>().is_err());
+        assert!(Value::Float(3.01).cast::<i32>().is_err());
+        assert!(Value::Float(3.01).cast::<i32>().is_err());
+        assert!(Value::String("".into()).cast::<i32>().is_err());
+        assert!(Value::String("3.00".into()).cast::<i32>().is_err());
+        assert!(Value::String("what".into()).cast::<i32>().is_err());
+        assert!(Value::String("hi".into()).cast::<i32>().is_err());
+    }
+
+    #[test]
+    fn test_value_cast_float() {
+        assert_eq!(Value::Signed(-3).cast::<f64>().unwrap(), Value::Float(-3.00));
+        assert_eq!(Value::Signed(3).cast::<f64>().unwrap(), Value::Float(3.00));
+        assert_eq!(Value::UnSigned(3).cast::<f64>().unwrap(), Value::Float(3.00));
+        assert_eq!(Value::String("3.0".into()).cast::<f64>().unwrap(), Value::Float(3.00));
+        assert_eq!(Value::String("3".into()).cast::<f64>().unwrap(), Value::Float(3.00));
+        assert_eq!(Value::String("-3.0".into()).cast::<f64>().unwrap(), Value::Float(-3.00));
+        assert_eq!(Value::Float(3.1415926).cast::<f64>().unwrap(), Value::Float(3.1415926));
+        assert_eq!(Value::Float(-3.1415926).cast::<f64>().unwrap(), Value::Float(-3.1415926));
+
+        assert!(Value::String("".into()).cast::<f64>().is_err());
+        assert!(Value::String("what".into()).cast::<f64>().is_err());
+        assert!(Value::String("hi".into()).cast::<f64>().is_err());
+    }
+
+    #[test]
+    fn test_value_cast_string() {
+        assert_eq!(
+            Value::Signed(-3).cast::<String>().unwrap(),
+            Value::String("-3".into())
+        );
+        assert_eq!(
+            Value::UnSigned(3).cast::<String>().unwrap(),
+            Value::String("3".into())
+        );
+        assert_eq!(
+            Value::Float(3.5).cast::<String>().unwrap(),
+            Value::String("3.5".into())
+        );
+        assert_eq!(
+            Value::String("hello".into()).cast::<String>().unwrap(),
+            Value::String("hello".into())
+        );
     }
 }

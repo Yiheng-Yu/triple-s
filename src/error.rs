@@ -400,6 +400,40 @@ impl fmt::Display for RangeError {
     }
 }
 
+/// Error raised when trying to convert one enum variant to another
+///
+/// Used mostly in Value.cast()
+#[derive(Debug)]
+pub enum TypeConvertionError {
+    /// (source, target, value)
+    TypeMismatch(String, String, String),
+    
+    /// (target, value)
+    OutOfRange(String, String),
+}
+
+impl fmt::Display for TypeConvertionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::TypeMismatch(source_type, target_type, value) => {
+                write!(f, "Cannot convert value [{}] from {} to {}", value, source_type, target_type)
+            }
+            Self::OutOfRange(target_type, value) => {
+                write!(f, "Value [{}] is out of range for {}", value, target_type)
+            }
+        }
+    }
+}
+
+impl Error for TypeConvertionError {}
+
+#[cfg(feature = "pyo3")]
+impl From<TypeConvertionError> for pyo3::PyErr {
+    fn from(value: TypeConvertionError) -> Self {
+        pyo3::exceptions::PyValueError::new_err(value.to_string())
+    }
+}
+
 // ======================= warnings =======================
 #[derive(Debug)]
 pub struct EventLog {

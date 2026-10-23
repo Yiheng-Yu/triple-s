@@ -1722,6 +1722,8 @@ impl Question {
     /// Create new `Question` instance from dictionary with following keys and
     /// values:
     ///
+    /// 'index' (int|None, *optional*): index of a question, default 1,
+    ///
     /// 'name' (str):
     ///     name of the question
     ///
@@ -1729,6 +1731,11 @@ impl Question {
     ///     type of the question.
     ///     See QuestionType.available_options() for list of allowed string
     /// values.
+    ///
+    /// 'location' (dict|Location|None, *optional*):
+    ///     data location.
+    ///     See help(Location.from_dict) for allowed keys in the dictionary.
+    ///     If unset, would defult to Location(start=1, finish=1)
     ///
     /// 'label' (str|Text|dict):
     ///     question title.
@@ -1740,10 +1747,14 @@ impl Question {
     ///     See CodeFormat.available_options() for list of allowed string
     /// values.
     ///
-    /// 'location' (dict|Location|None, *optional*):
-    ///     data location.
-    ///     See help(Location.from_dict) for allowed keys in the dictionary.
-    ///     If unset, would defult to Location(start=1, finish=1)
+    /// 'filter' (str|None, *optional*):
+    ///     Question filter.
+    ///
+    /// 'response' (Response|dict|None, *optional*):
+    ///     `Response` instance or dictionary to pass to Response.from_dict(),
+    ///     Would default to the default response values according to each
+    /// question type if left unset
+
     #[pyo3(name = "from_dict")]
     #[staticmethod]
     fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
@@ -1761,6 +1772,24 @@ impl Question {
             .filter(|value| !value.is_none())
             .map(CodeFormat::from_py_any)
             .transpose()?;
+
+        let usage = content
+            .get_item("usage")?
+            .filter(|value| !value.is_none())
+            .map(Usage::from_py_any)
+            .transpose()?;
+
+        let filter = content
+            .get_item("filter")?
+            .map(|item| item.extract::<Option<String>>())
+            .transpose()?
+            .flatten();
+
+        let index = content
+            .get_item("index")?
+            .map(|item| item.extract::<u32>())
+            .transpose()?
+            .unwrap_or(1);
 
         let label = content.get_item("label")?.map_or_else(
             || Ok(Text::new("")),
@@ -1787,6 +1816,9 @@ impl Question {
             .with_label(label)
             .with_question_type(qtype)
             .with_format(format)
+            .with_filter(filter)
+            .with_usage(usage)
+            .with_index(index)
             .finish()
             .map_err(|err| exceptions::PyValueError::new_err(format!("{:?}", err)))?;
 
@@ -1831,7 +1863,34 @@ impl Question {
             .transpose()?;
         *instance.spread_mut() = spread;
 
-        Ok(instance)
+        match content.get_item("response")? {
+            // key doesn't exist
+            None => Ok(instance),
+
+            // key exists and value is python's NoneType
+            Some(value) if value.is_none() => Ok(instance),
+
+            // key exists and value isn't python's NoneType
+            Some(value) => {
+                if let Ok(response) = value.extract::<Response>() {
+                    *instance.response_mut() = response;
+                    Ok(instance)
+                } else if let Ok(response) = value.extract::<Bound<'_, PyDict>>() {
+                    let response = Response::py_from_dict(response)?;
+                    *instance.response_mut() = response;
+                    Ok(instance)
+                } else {
+                    let type_name = get_type_name(&value)?;
+                    let error_message = format!(
+                        "Invalida input type when trying to parse 'response' for question '{}': Expect value of 'response' key to be NoneType, dictionary or `Response` instance, got: '{}'",
+                        instance.name(),
+                        type_name
+                    );
+
+                    Err(exceptions::PyTypeError::new_err(error_message))
+                }
+            }
+        }
     }
 }
 
