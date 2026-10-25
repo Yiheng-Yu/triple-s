@@ -6,7 +6,7 @@ Record
 Attributes
 ----------------
 
-.. autoattribute:: triple_s.Record.data_source
+.. autoattribute:: triple_s.Record.data_format
 .. autoattribute:: triple_s.Record.content
 .. autoattribute:: triple_s.Record.href
 .. autoattribute:: triple_s.Record.ident

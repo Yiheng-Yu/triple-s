@@ -158,7 +158,7 @@ pub use member::{
     entry::Entry,
     question::{self, CodeFormat, Location, Question, QuestionOptions, QuestionType, Spread, Usage},
     read::{read_datamap, read_from_reader, read_from_string},
-    record::{self, DataSource, Record},
+    record::{self, DataFormat, Record},
     response::{self, Code, DataRange, Response, Value},
     survey_info::{self, SurveyInfo, Version},
     text::{self, Mode, Text, Variant},
@@ -200,7 +200,7 @@ mod triple_s {
     pub use crate::member::{
         Survey,
         question::{CodeFormat, Location, Question, QuestionType, Spread, Usage},
-        record::{DataSource, Record},
+        record::{DataFormat, Record},
         response::{Code, DataRange, Response, Value},
         survey_info::{SurveyInfo, Version},
         text::{Mode, Text, Variant},

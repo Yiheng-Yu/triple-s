@@ -46,7 +46,7 @@ html_static_path = ['_static']
 html_css_files = ['style.css']
 
 PYTHON_API_CLASSES = {
-    "Code", "CodeFormat", "DataRange", "DataSource", "Location", "Mode",
+    "Code", "CodeFormat", "DataRange", "DataFormat", "Location", "Mode",
     "Question", "QuestionType", "Record", "Response", "Spread", "Survey",
     "SurveyInfo", "Text", "Usage", "Value", "Variant", "Version",
 }

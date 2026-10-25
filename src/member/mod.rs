@@ -16,7 +16,7 @@ use pyo3::{exceptions, prelude::*, types::PyDict};
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 pub use question::{CodeFormat, Location, Question, QuestionType, Spread, Usage};
 use quick_xml::{Writer, events::BytesText};
-pub use record::{DataSource, Record};
+pub use record::{DataFormat, Record};
 pub use response::{Code, Response, Value};
 pub use survey_info::{SurveyInfo, Version};
 pub use text::{Text, Variant};
@@ -344,7 +344,7 @@ mod test {
         *survey.record.ident_mut() = 'V';
         *survey.record.skip_mut() = Some("1".into());
         *survey.record.href_mut() = Some("a&\"b.csv".into());
-        *survey.record.data_source_mut() = Some(DataSource::Csv);
+        *survey.record.data_format_mut() = Some(DataFormat::Csv);
         let xml = survey.to_xml().unwrap();
         for expected in [
             "version=\"2.0\"",

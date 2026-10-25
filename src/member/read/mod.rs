@@ -31,7 +31,7 @@ use crate::{
     member::{
         Code,
         CodeFormat,
-        DataSource,
+        DataFormat,
         Location,
         Question,
         QuestionType,
@@ -284,10 +284,10 @@ impl SurveyBuilder {
                 *output.record.href_mut() =
                     record.attributes.get("href").map(ToString::to_string);
 
-                *output.record.data_source_mut() = record
+                *output.record.data_format_mut() = record
                     .attributes
                     .get("format")
-                    .map(|value| DataSource::from_str(value))
+                    .map(|value| DataFormat::from_str(value))
                     .transpose()
                     .context("When parsing record attribute 'format'")?;
             }

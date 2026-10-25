@@ -40,7 +40,7 @@ use crate::{
 /// Introduced in triple-s 2.0
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Debug, EnumString, PartialEq, Default, Clone, Eq, EnumIter)]
-pub enum DataSource {
+pub enum DataFormat {
     /// Supported from sss 2.0 onwards.
     /// the data representation is comma separated values, using one field
     /// for each variable, with data values similar to the fixed format. Note
@@ -57,7 +57,7 @@ pub enum DataSource {
     Fixed,
 }
 
-impl Flag for DataSource {
+impl Flag for DataFormat {
     /// format flag into string,,,
     fn to_string(&self) -> String {
         match self {
@@ -67,7 +67,7 @@ impl Flag for DataSource {
     }
 }
 
-impl DeepCopy for DataSource {
+impl DeepCopy for DataFormat {
     #[doc = include_str!("../doc/rs_deep_copy_impl.md")]
     fn deepcopy(&self) -> Self {
         self.clone()
@@ -84,7 +84,7 @@ pub struct Record {
     id: char,
     skip: Option<String>,
     href: Option<String>,
-    data_source: Option<DataSource>,
+    data_format: Option<DataFormat>,
     content: ArcLock<Vec<ArcLock<Question>>>,
 }
 
@@ -140,13 +140,13 @@ impl Record {
     /// This corresponds to the `format` attribute of a `<record>` element.
     ///
     /// Introduced in triple-s 2.0
-    pub fn data_source(&self) -> Option<&DataSource> {
-        self.data_source.as_ref()
+    pub fn data_format(&self) -> Option<&DataFormat> {
+        self.data_format.as_ref()
     }
 
-    /// A read-write borrow of the current `data_source` field
-    pub fn data_source_mut(&mut self) -> &mut Option<DataSource> {
-        &mut self.data_source
+    /// A read-write borrow of the current `data_format` field
+    pub fn data_format_mut(&mut self) -> &mut Option<DataFormat> {
+        &mut self.data_format
     }
 
     /// Collections of `Question` instances of a survey, this corresponds to the
@@ -217,7 +217,7 @@ impl Record {
                 element = element.with_attribute((name, value.as_str()));
             }
         }
-        if let Some(value) = &self.data_source {
+        if let Some(value) = &self.data_format {
             element = element.with_attribute(("format", value.to_string().as_str()));
         }
         element.write_inner_content(|children| {
@@ -254,7 +254,7 @@ impl Record {
             .parse::<usize>()
             .context("Record skip must be a non-negative integer")?;
 
-        if self.data_source() == Some(&DataSource::Csv) {
+        if self.data_format() == Some(&DataFormat::Csv) {
             self.load_csv_data(file, skip)
                 .with_context(|| format!("When reading CSV data from '{}'", path.display()))
         } else {
@@ -266,7 +266,7 @@ impl Record {
     /// Update data source after validation.
     ///
     /// This method will:
-    ///     - check the file extension type and update the corresponding `data_source` field
+    ///     - check the file extension type and update the corresponding `data_format` field
     ///       accordingly.
     ///     - Scan the data row by row to check if there were any errors, and raises error
     ///       should there were any.
@@ -289,9 +289,9 @@ impl Record {
             )))?
             .to_string_lossy()
             .into_owned();
-        let new_data_source = match extension.as_str() {
-            "asc" => DataSource::Fixed,
-            "csv" => DataSource::Csv,
+        let new_data_format = match extension.as_str() {
+            "asc" => DataFormat::Fixed,
+            "csv" => DataFormat::Csv,
             _ => {
                 return Err(InvalidArg::new(format!(
                     "Invalid file type: Expect '.csv' or '.asc' file, got: {}",
@@ -300,7 +300,7 @@ impl Record {
                 .into());
             }
         };
-        *self.data_source_mut() = Some(new_data_source);
+        *self.data_format_mut() = Some(new_data_format);
 
         // read & validate file
         let file = File::open(path_ref)
@@ -313,7 +313,7 @@ impl Record {
             .parse::<usize>()
             .context("Record skip must be a non-negative integer")?;
 
-        self.validate_data_source(file, skip)
+        self.validate_data_format(file, skip)
             .with_context(|| format!("When opening '{}'", path_string))?;
 
         *self.href_mut() = Some(path_string);
@@ -323,12 +323,12 @@ impl Record {
     /// Scan data source as (provided in `path`) to validate data from each respondent,
     /// raises error if there were anything wrong
     /// This method would not load any data into the memory.
-    fn validate_data_source(&self, file: File, skip: usize) -> Result<()> {
-        let data_source = self.data_source().unwrap_or(&DataSource::Fixed);
+    fn validate_data_format(&self, file: File, skip: usize) -> Result<()> {
+        let data_format = self.data_format().unwrap_or(&DataFormat::Fixed);
         let content = self.content();
 
-        match data_source {
-            DataSource::Csv => {
+        match data_format {
+            DataFormat::Csv => {
                 let mut reader = csv::ReaderBuilder::new()
                     .has_headers(false)
                     .flexible(true)
@@ -347,7 +347,7 @@ impl Record {
                 }
                 Ok(())
             }
-            DataSource::Fixed => {
+            DataFormat::Fixed => {
                 let lines = BufReader::new(file).lines(); // each line is treated as data from one respondent
 
                 for (index, line) in lines.enumerate().skip(skip) {
@@ -462,28 +462,28 @@ impl Record {
     /// This corresponds to the `format` attribute of a `<record>` element.
     ///
     /// Introduced in triple-s 2.0
-    #[getter(data_source)]
-    fn py_get_data_source(&self) -> PyResult<Option<DataSource>> {
-        Ok(self.data_source.clone())
+    #[getter(data_format)]
+    fn py_get_data_format(&self) -> PyResult<Option<DataFormat>> {
+        Ok(self.data_format.clone())
     }
 
-    #[setter(data_source)]
-    fn py_set_data_source<'py>(
+    #[setter(data_format)]
+    fn py_set_data_format<'py>(
         &mut self,
-        data_source: Option<&Bound<'py, PyAny>>,
+        data_format: Option<&Bound<'py, PyAny>>,
     ) -> PyResult<()> {
-        self.data_source = match data_source {
+        self.data_format = match data_format {
             None => None,
             Some(bound) => {
-                let value = if let Ok(value) = bound.extract::<DataSource>() {
+                let value = if let Ok(value) = bound.extract::<DataFormat>() {
                     value
                 } else if let Ok(value) = bound.extract::<&str>() {
                     value
-                        .parse::<DataSource>()
+                        .parse::<DataFormat>()
                         .with_context(||
                             format!(
-                                "Expect to triple_s.DataSource instance or one of {:?}, got: '{}'.",
-                                DataSource::available_options(),
+                                "Expect to triple_s.DataFormat instance or one of {:?}, got: '{}'.",
+                                DataFormat::available_options(),
                                 value
                             )
                         )
@@ -491,8 +491,8 @@ impl Record {
                 } else {
                     let type_name = get_type_name(bound)?;
                     return Err(exceptions::PyTypeError::new_err(format!(
-                        "Expect to triple_s.DataSource instance or one of {:?}, got: '{}'.",
-                        DataSource::available_options(),
+                        "Expect to triple_s.DataFormat instance or one of {:?}, got: '{}'.",
+                        DataFormat::available_options(),
                         type_name
                     )));
                 };
@@ -633,7 +633,7 @@ impl Record {
     ///     href,
     ///     Default to be 'None'
     ///
-    /// 'data_source' (str|DataSource|None, *optional*):
+    /// 'data_format' (str|DataFormat|None, *optional*):
     ///     data source, default 'None'
     ///
     /// 'content' (List[Question|dict], *optional*):
@@ -675,29 +675,29 @@ impl Record {
             })
             .collect::<PyResult<Vec<ArcLock<Question>>>>()?;
 
-        let data_source = content
-            .get_item("data_source")?
+        let data_format = content
+            .get_item("data_format")?
             .map(|item| {
                 if let Ok(item) = item.extract::<Option<String>>() {
                     item.map(|val|
-                        DataSource::from_str(&val)
+                        DataFormat::from_str(&val)
                             .with_context(||
                                 format!(
                                     "Expect to be one of: {:?}",
-                                    DataSource::available_options()
+                                    DataFormat::available_options()
                                 )
                             )
                             .map_err(|err| exceptions::PyValueError::new_err(format!("{:?}", err)))
                     ).transpose()
-                } else if let Ok(val) = item.extract::<DataSource>() {
+                } else if let Ok(val) = item.extract::<DataFormat>() {
                     Ok(Some(val))
                 } else {
                     let type_name = get_type_name(&item)?;
                     Err(
                         exceptions::PyTypeError::new_err(
                             format!(
-                                "Expect value of 'data_source' key to be one of {:?}, NoneType or `DataSource` instance, got '{}'",
-                                DataSource::available_options(),
+                                "Expect value of 'data_format' key to be one of {:?}, NoneType or `DataFormat` instance, got '{}'",
+                                DataFormat::available_options(),
                                 type_name
                             )
                         )
@@ -711,7 +711,7 @@ impl Record {
             id: ident,
             href: href,
             skip: skip,
-            data_source: data_source,
+            data_format: data_format,
             content: lock_it_up(questions),
         })
     }
@@ -719,7 +719,7 @@ impl Record {
     /// Update path to the data file ('href' attribute) after validation.
     ///
     /// This method will:
-    ///     - check the file extension type and update the corresponding `data_source` field
+    ///     - check the file extension type and update the corresponding `data_format` field
     ///       accordingly.
     ///     - Scan the data row by row to check if there were any errors, and raises error
     ///       should there were any.
