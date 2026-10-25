@@ -145,7 +145,6 @@
 
 pub mod error;
 mod member;
-pub use member::{question, record, response, survey_info, text};
 mod prelude;
 mod utils;
 
@@ -153,15 +152,16 @@ use std::path::Path;
 
 use anyhow::Result;
 use error::EventLog;
+
 pub use member::{
     Survey,
     entry::Entry,
-    question::{CodeFormat, Location, Question, QuestionOptions, QuestionType, Spread, Usage},
+    question::{self, CodeFormat, Location, Question, QuestionOptions, QuestionType, Spread, Usage},
     read::{read_datamap, read_from_reader, read_from_string},
-    record::{DataSource, Record},
-    response::{Code, DataRange, Response, Value},
-    survey_info::{SurveyInfo, Version},
-    text::{Mode, Text, Variant},
+    record::{self, DataSource, Record},
+    response::{self, Code, DataRange, Response, Value},
+    survey_info::{self, SurveyInfo, Version},
+    text::{self, Mode, Text, Variant},
 };
 pub use prelude::DeepCopy;
 #[cfg(feature = "pyo3")]
