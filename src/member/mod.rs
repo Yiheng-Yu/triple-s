@@ -279,7 +279,7 @@ impl Survey {
     pub fn py_load_data(&mut self, path: &str) -> PyResult<()> {
         self.record_mut()
             .load_data(path)
-            .map_err(|err| exceptions::PyValueError::new_err(format!("{:?}", err)))
+            .map_err(py_value_error)
     }
 
     /// Export loaded data into polars dataframe

@@ -18,12 +18,7 @@ use quick_xml::{events::BytesText, writer::Writer};
 use strum::{AsRefStr, EnumIter, EnumString};
 
 use crate::{
-    Entry,
-    EventLog,
-    error::{self, DataReadError, InvalidArg, RangeError},
-    member::{Code, Response, Text, Value},
-    prelude::{DeepCopy, *},
-    utils::{ArcLock, lock_it_up},
+    Entry, EventLog, error::{self, DataReadError, InternalError, InvalidArg, RangeError}, member::{Code, Response, Text, Value}, prelude::{DeepCopy, *}, utils::{ArcLock, lock_it_up},
 };
 #[cfg(feature = "pyo3")]
 use crate::{
@@ -718,8 +713,30 @@ impl Question {
         Range { start, end }
     }
 
-    /// extract raw data from one row of raw data (i.e., one respondent)
-    fn extract_row(&self, row: &str) -> Result<String> {
+    /// Extracts this question's field from a fixed-width respondent row and
+    /// parses it into an [`Entry`].
+    pub(crate) fn parse_row(&self, row: &str) -> Result<Entry> {
+        let data = self.locate_data_asc(row)?;
+        self.parse_field(&data)
+    }
+
+    /// Locate data from one entire row based on current data range for csv width (.asc) data
+    pub(crate) fn locate_data_csv<'a>(&self, row: &'a csv::StringRecord) -> Result<&'a str> {
+        let position: usize = self.location().start().clone() as usize;
+        let col_location = position.checked_sub(1)
+            .ok_or(InternalError::new(format!("Integer underflow for position: {}", position)))?;
+        
+        row.get(col_location)
+            .ok_or(InvalidArg::new(
+                format!(
+                "Has total of {} fields; question '{}' requires field {}",
+                row.len(), self.name(), position,
+            )).into()
+        )
+    }
+
+    /// Locate data from one entire row based on current data range for fixed width (.asc) data
+    pub(crate) fn locate_data_asc<'a>(&self, row: &'a str) -> Result<&'a str> {
         let data_location = self.get_data_range();
         let data = row
             .get(data_location)
@@ -731,17 +748,24 @@ impl Question {
             )))
             .with_context(|| {
                 format!("When trying to parse data for question '{}'", self.name())
-            })?
-            .to_string();
-
+            })?;
         Ok(data)
     }
 
-    /// Extracts this question's field from a fixed-width respondent row and
-    /// parses it into an [`Entry`].
-    pub(crate) fn parse_row(&self, row: &str) -> Result<Entry> {
-        let data = self.extract_row(row)?;
-        self.parse_field(&data)
+    /// validate one line of respondant data from a '.asc' file
+    pub(crate) fn validate_asc_entry(&self, row: &str) -> Result<()> {
+        let data = self.locate_data_asc(row)?;
+        let _ = self.parse_field(&data)
+            .with_context(|| format!("When trying to validate data for question '{}'", self.name()))?;
+        Ok(())
+    }
+
+    /// validate one line of respondant data from a '.csv' file
+    pub(crate) fn validate_csv_entry(&self, row: &csv::StringRecord) -> Result<()> {
+        let data = self.locate_data_csv(row)?;
+        let _ = self.parse_field(&data)
+            .with_context(|| format!("When trying to validate data for question '{}'", self.name()))?;
+        Ok(())
     }
 
     /// Parse an extracted fixed-width field or decoded CSV field.
@@ -2879,7 +2903,7 @@ mod test {
     }
 
     #[test]
-    fn test_extract_row() {
+    fn test_locate_data_asc() {
         let row = "0123456789101112";
         let locations = [
             ((1, 1), "0"),
@@ -2893,8 +2917,8 @@ mod test {
                 .with_location(loc.0, Some(loc.1))
                 .finish()
                 .unwrap();
-            let sliced = question.extract_row(row).unwrap();
-            assert_eq!(&sliced, correct)
+            let sliced = question.locate_data_asc(row).unwrap();
+            assert_eq!(sliced, correct)
         }
     }
 

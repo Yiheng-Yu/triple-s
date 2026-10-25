@@ -21,13 +21,14 @@ use pyo3::{
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use quick_xml::Writer;
+use rayon::prelude::*;
 use strum::{EnumIter, EnumString};
 
 use super::{ArcLock, Question};
 #[cfg(feature = "pyo3")]
 use crate::utils::{extract_indicies, get_type_name, normalize_py_index, py_value_error};
 use crate::{
-    error,
+    error::{self, InvalidArg},
     prelude::{DeepCopy, Flag},
     utils::lock_it_up,
 };
@@ -262,6 +263,108 @@ impl Record {
         }
     }
 
+    /// Update data source after validation.
+    ///
+    /// This method will:
+    ///     - check the file extension type and update the corresponding `data_source` field
+    ///       accordingly.
+    ///     - Scan the data row by row to check if there were any errors, and raises error
+    ///       should there were any.
+    ///     - If no error was raised during the scan, this method will *overwrite* the 'href'
+    ///       field with the provided 'path' attribute.
+    ///
+    /// CSV positions are one-based field numbers.
+    /// The record's `skip` attribute controls how many initial records to ignore in either
+    /// format.
+    pub fn set_data_source(&mut self, path: impl AsRef<Path>) -> Result<()> {
+        let path_ref = path.as_ref();
+        let path_string = path_ref.to_string_lossy().into_owned();
+
+        // parse and update data source
+        let extension = path_ref
+            .extension()
+            .ok_or(InvalidArg::new(format!(
+                "Invalid file type: Expect '.csv' or '.asc' file, got: {}",
+                path_string
+            )))?
+            .to_string_lossy()
+            .into_owned();
+        let new_data_source = match extension.as_str() {
+            "asc" => DataSource::Fixed,
+            "csv" => DataSource::Csv,
+            _ => {
+                return Err(InvalidArg::new(format!(
+                    "Invalid file type: Expect '.csv' or '.asc' file, got: {}",
+                    path_string
+                ))
+                .into());
+            }
+        };
+        *self.data_source_mut() = Some(new_data_source);
+
+        // read & validate file
+        let file = File::open(path_ref)
+            .map_err(error::FileReadError::from)
+            .with_context(|| format!("When opening '{}'", path_string))?;
+        let skip = self
+            .skip
+            .as_deref()
+            .unwrap_or("0")
+            .parse::<usize>()
+            .context("Record skip must be a non-negative integer")?;
+
+        self.validate_data_source(file, skip)
+            .with_context(|| format!("When opening '{}'", path_string))?;
+
+        *self.href_mut() = Some(path_string);
+        Ok(())
+    }
+
+    /// Scan data source as (provided in `path`) to validate data from each respondent,
+    /// raises error if there were anything wrong
+    /// This method would not load any data into the memory.
+    fn validate_data_source(&self, file: File, skip: usize) -> Result<()> {
+        let data_source = self.data_source().unwrap_or(&DataSource::Fixed);
+        let content = self.content();
+
+        match data_source {
+            DataSource::Csv => {
+                let mut reader = csv::ReaderBuilder::new()
+                    .has_headers(false)
+                    .flexible(true)
+                    .from_reader(file);
+
+                for (index, row) in reader.records().enumerate().skip(skip) {
+                    let row =
+                        row.with_context(|| format!("When reading CSV record {}", index + 1))?;
+
+                    content
+                        .par_iter()
+                        .try_for_each(|item| item.read().validate_csv_entry(&row))
+                        .with_context(|| {
+                            format!("When trying to extract data from line {}", index)
+                        })?;
+                }
+                Ok(())
+            }
+            DataSource::Fixed => {
+                let lines = BufReader::new(file).lines(); // each line is treated as data from one respondent
+
+                for (index, line) in lines.enumerate().skip(skip) {
+                    let line = line?;
+                    content
+                        .par_iter()
+                        .try_for_each(|item| item.read().validate_asc_entry(&line))
+                        .with_context(|| {
+                            format!("When trying to extract data from line {}", index)
+                        })?;
+                }
+
+                Ok(())
+            }
+        }
+    }
+
     fn load_asc_data(&mut self, file: File, skip: usize) -> Result<()> {
         let lines = BufReader::new(file).lines(); // each line is treated as data from one respondent
 
@@ -288,34 +391,31 @@ impl Record {
     fn load_csv_data(&mut self, file: File, skip: usize) -> Result<()> {
         let mut reader =
             csv::ReaderBuilder::new().has_headers(false).flexible(true).from_reader(file);
+
         for (index, row) in reader.records().enumerate() {
             let row = row.with_context(|| format!("When reading CSV record {}", index + 1))?;
             if index < skip {
                 continue;
             }
             let questions = self.content();
-            let entries =
-                questions
-                    .iter()
-                    .map(|question| {
-                        let question = question.read();
-                        let position = *question.location().start() as usize;
-                        let field = position.checked_sub(1)
-                        .and_then(|column| row.get(column))
-                        .with_context(|| format!(
-                            "CSV record {} has {} fields; question '{}' requires field {}",
-                            index + 1, row.len(), question.name(), position,
-                        ))?;
-                        question.parse_field(field).with_context(|| {
-                            format!(
-                                "When parsing CSV record {}, field {} for question '{}'",
-                                index + 1,
-                                position,
-                                question.name(),
-                            )
-                        })
-                    })
-                    .collect::<Result<Vec<_>>>()?;
+            let entries = questions
+                .iter()
+                .map(|question| {
+                    let question = question.read();
+                    let field = question.locate_data_csv(&row).with_context(|| {
+                        format!(
+                            "When trying to extract data from line {} for question `{}`",
+                            index,
+                            question.name()
+                        )
+                    })?;
+
+                    question
+                        .parse_field(field)
+                        .with_context(|| format!("When parsing CSV record {}", index + 1,))
+                })
+                .collect::<Result<Vec<_>>>()?;
+
             for (question, entry) in questions.iter().zip(entries) {
                 question.write().data_mut().push(lock_it_up(entry));
             }
@@ -378,12 +478,16 @@ impl Record {
                 let value = if let Ok(value) = bound.extract::<DataSource>() {
                     value
                 } else if let Ok(value) = bound.extract::<&str>() {
-                    value.parse::<DataSource>()
-                    .with_context(|| format!(
-                        "Expect to triple_s.DataSource instance or one of {:?}, got: '{}'.",
-                        DataSource::available_options(), value
-                    ))
-                    .map_err(|err| exceptions::PyValueError::new_err(format!("{err:#}")))?
+                    value
+                        .parse::<DataSource>()
+                        .with_context(||
+                            format!(
+                                "Expect to triple_s.DataSource instance or one of {:?}, got: '{}'.",
+                                DataSource::available_options(),
+                                value
+                            )
+                        )
+                        .map_err(|err| exceptions::PyValueError::new_err(format!("{err:#}")))?
                 } else {
                     let type_name = get_type_name(bound)?;
                     return Err(exceptions::PyTypeError::new_err(format!(
@@ -414,10 +518,10 @@ impl Record {
     }
 
     /// (Optional) corresponds to the 'skip' attribute of the `<record>` xml element.
-    /// 
-    /// Used to ignore one or more initial records in the Data File. 
-    /// This will be most useful for csv Data Files where the first line is often used as documentation 
-    /// (e.g. names for the columns/fields) for the succeeding values. 
+    ///
+    /// Used to ignore one or more initial records in the Data File.
+    /// This will be most useful for csv Data Files where the first line is often used as
+    /// documentation (e.g. names for the columns/fields) for the succeeding values.
     #[getter(skip)]
     fn py_get_skip(&self) -> PyResult<Option<String>> {
         Ok(self.skip.clone())
@@ -528,13 +632,13 @@ impl Record {
     /// 'href' (str|None, *optional*):
     ///     href,
     ///     Default to be 'None'
-    /// 
+    ///
     /// 'data_source' (str|DataSource|None, *optional*):
     ///     data source, default 'None'
     ///
     /// 'content' (List[Question|dict], *optional*):
     ///     list of [`Question`] instance or dictionaries to pass to
-    ///     Question.from_dict,     
+    ///     Question.from_dict,
     ///     Default to be an empty list (`[]`)
     #[pyo3(name = "from_dict")]
     #[staticmethod]
@@ -571,38 +675,70 @@ impl Record {
             })
             .collect::<PyResult<Vec<ArcLock<Question>>>>()?;
 
-        let data_source = content.get_item("data_source")?
+        let data_source = content
+            .get_item("data_source")?
             .map(|item| {
                 if let Ok(item) = item.extract::<Option<String>>() {
-                    item
-                    .map(|val| 
+                    item.map(|val|
                         DataSource::from_str(&val)
-                            .with_context(|| format!("Expect to be one of: {:?}", DataSource::available_options()))
-                            .map_err(|err| exceptions::PyValueError::new_err(format!("{:?}", err))
-                        )
-                    )
-                    .transpose()
+                            .with_context(||
+                                format!(
+                                    "Expect to be one of: {:?}",
+                                    DataSource::available_options()
+                                )
+                            )
+                            .map_err(|err| exceptions::PyValueError::new_err(format!("{:?}", err)))
+                    ).transpose()
                 } else if let Ok(val) = item.extract::<DataSource>() {
                     Ok(Some(val))
                 } else {
                     let type_name = get_type_name(&item)?;
-                    Err(exceptions::PyTypeError::new_err(format!(
-                        "Expect value of 'data_source' key to be one of {:?}, NoneType or `DataSource` instance, got '{}'",
-                        DataSource::available_options(),
-                        type_name
-                    )))
+                    Err(
+                        exceptions::PyTypeError::new_err(
+                            format!(
+                                "Expect value of 'data_source' key to be one of {:?}, NoneType or `DataSource` instance, got '{}'",
+                                DataSource::available_options(),
+                                type_name
+                            )
+                        )
+                    )
                 }
             })
             .transpose()?
             .flatten();
 
-        
         Ok(Self {
             id: ident,
             href: href,
             skip: skip,
             data_source: data_source,
-            content: lock_it_up(questions)
+            content: lock_it_up(questions),
         })
+    }
+
+    /// Update path to the data file ('href' attribute) after validation.
+    ///
+    /// This method will:
+    ///     - check the file extension type and update the corresponding `data_source` field
+    ///       accordingly.
+    ///     - Scan the data row by row to check if there were any errors, and raises error
+    ///       should there were any.
+    ///     - If no error was raised during the scan, this method will *overwrite* the 'href'
+    ///       field with the provided 'path' attribute.
+    ///
+    /// CSV positions are one-based field numbers.
+    /// The record's `skip` attribute controls how many initial records to ignore in either
+    /// format.
+    #[pyo3(name="update_data_source")]
+    fn py_update_data_source(&mut self, path: Option<&str>) -> PyResult<()> {
+        match path {
+            None => {
+                *self.href_mut() = None;
+                Ok(())
+            }
+            Some(path) => {
+                self.set_data_source(path).map_err(py_value_error)
+            }
+        }
     }
 }
