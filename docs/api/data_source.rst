@@ -1,10 +1,10 @@
-DataSource
+DataFormat
 ==========
 
-.. autoclass:: triple_s.DataSource
+.. autoclass:: triple_s.DataFormat
 
 Attributes
 ----------------
 
-.. autoattribute:: triple_s.DataSource.Csv
-.. autoattribute:: triple_s.DataSource.Fixed
+.. autoattribute:: triple_s.DataFormat.Csv
+.. autoattribute:: triple_s.DataFormat.Fixed
