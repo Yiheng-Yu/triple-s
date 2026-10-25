@@ -255,7 +255,7 @@ def test_record_getitem_slice_has_independent_container(xml1):
 def test_record_to_xml(xml1):
     record = xml1.record
     record.href = 'data & "answers".csv'
-    record.data_source = "csv"
+    record.data_format = "csv"
     root = etree.fromstring(record.to_xml())
     assert root.tag == "record"
     assert root.attrib == {
