@@ -16,6 +16,7 @@ Methods
 
 .. automethod:: triple_s.Record.from_dict
 .. automethod:: triple_s.Record.get_question
+.. automethod:: triple_s.Record.update_data_source
 .. automethod:: triple_s.Record.load_data
 .. automethod:: triple_s.Record.to_polars
 .. automethod:: triple_s.Record.to_pandas
