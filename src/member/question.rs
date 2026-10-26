@@ -2146,7 +2146,23 @@ impl Location {
         }
     }
 
-    /// (finish - start) + 1
+    /// Returns total number of characters a [`Location`] instance covers.
+    /// 
+    /// Essentially: `(finish - start) + 1`
+    /// 
+    /// Example:
+    /// ```
+    /// use triple_s::Location;
+    /// 
+    /// let location = Location::new(3, Some(10))?;
+    /// let width = location.width()?;
+    /// assert_eq!(
+    ///     width,
+    ///     (10 - 3) + 1
+    /// );
+    /// 
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
     pub fn width(&self) -> Result<u32> {
         self.validate()?;
         let difference = self.finish.read().saturating_sub(*self.start.read());

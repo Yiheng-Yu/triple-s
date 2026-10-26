@@ -3,8 +3,8 @@
 #[cfg(feature = "pyo3")]
 use std::str::FromStr;
 use std::{
-    fs::File,
-    io::{BufRead, BufReader},
+    fs::File, 
+    io::{self, BufRead, BufReader, Read}, 
     path::Path,
 };
 
@@ -366,24 +366,80 @@ impl Record {
         }
     }
 
-    fn load_asc_data(&mut self, file: File, skip: usize) -> Result<()> {
-        let lines = BufReader::new(file).lines(); // each line is treated as data from one respondent
+    fn read_record<R:Read>(reader: &mut R, record_width: usize) -> Result<String> {
+        let mut result = String::new();
 
-        for (index, line) in lines.enumerate() {
-            if index < skip {
-                continue;
+        for _ in 0..record_width {
+            let mut first = [0u8; 1];
+
+            // EOF
+            if reader.read(&mut first)? == 0 {
+                break;
             }
-            let data = line?;
+            let len = match first[0] {
+                0x00..=0x7F => 1,
+                0xC2..=0xDF => 2,
+                0xE0..=0xEF => 3,
+                0xF0..=0xF4 => 4,
+                _ => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Invalid UTF-8",
+                    ).into());
+                }
+            };
+            let mut bytes = [0u8; 4];
+            bytes[0] = first[0];
+            reader.read_exact(&mut bytes[1..len])?;
+
+            let character = std::str::from_utf8(&bytes[..len])
+                .map_err(|e| std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    e,
+                ))?;
+
+            result.push_str(character);
+        }
+
+        Ok(result)
+    }
+
+    fn load_asc_data(&mut self, file: File, skip: usize) -> Result<()> {
+        // total amount of characters per respondent
+        let record_width = self
+            .content()
+            .iter()
+            .map(|question| {
+                let question = question.read();
+                *question.location().finish() as usize
+            })
+            .max()
+            .context("Cannot determine record width: no questions")?;
+
+        let mut reader = BufReader::new(file);
+        let mut index = 0;
+        loop {
+            let line = Self::read_record(&mut reader, record_width)?;
+            if line.is_empty() {
+                break
+            };
+
+            if index < skip {
+                index += 1;
+                continue;
+            };
+
             for question in self.content_mut().iter_mut() {
-                let entry = question.read().parse_row(&data).with_context(|| {
+                let entry = question.read().parse_row(&line).with_context(||
                     format!(
                         "When trying to extract data from line {} for question `{}`",
                         index,
                         question.read().name()
-                    )
-                })?;
+                ))?;
                 question.write().data_mut().push(lock_it_up(entry));
             }
+
+            index += 1;
         }
 
         Ok(())
