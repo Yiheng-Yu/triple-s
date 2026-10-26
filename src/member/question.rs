@@ -16,6 +16,7 @@ use pyo3::{
 use pyo3_polars::{PySeries, error::PyPolarsErr};
 use quick_xml::{events::BytesText, writer::Writer};
 use strum::{AsRefStr, EnumIter, EnumString};
+use polars::prelude::*;
 
 use crate::{
     Entry, EventLog, error::{self, DataReadError, InternalError, InvalidArg, RangeError}, member::{Code, Response, Text, Value}, prelude::{DeepCopy, *}, utils::{ArcLock, lock_it_up},
@@ -1290,6 +1291,32 @@ impl Question {
     }
 }
 
+/// Polars scanning
+impl Question {
+    pub(crate) fn polars_dtype(&self) -> DataType {
+        match self.question_type.read().clone() {
+            QuestionType::None => DataType::Null,
+            QuestionType::Single => {
+                if self.format().as_ref()
+                    .is_some_and(|item| item == &CodeFormat::Literal) {
+                    DataType::String
+                } else {
+                    DataType::UInt32
+                }
+            }
+            QuestionType::Multiple => {
+                DataType::List(Box::new(DataType::UInt32))
+            }
+            QuestionType::Character => DataType::String,
+            QuestionType::Logical => DataType::UInt32,
+            QuestionType::Quantity => DataType::Float64,
+            QuestionType::Date => DataType::Date,
+            QuestionType::Time => DataType::Time,
+        }
+    }
+}
+
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
 /// A question in a survey
@@ -2170,6 +2197,7 @@ impl Location {
         Ok(width)
     }
 }
+
 
 #[cfg(feature = "pyo3")]
 #[pymethods]

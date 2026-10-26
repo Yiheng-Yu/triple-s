@@ -23,6 +23,7 @@ use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use quick_xml::Writer;
 use rayon::prelude::*;
 use strum::{EnumIter, EnumString};
+use tempfile::TempPath;
 
 use super::{ArcLock, Question};
 #[cfg(feature = "pyo3")]
@@ -86,6 +87,7 @@ pub struct Record {
     href: Option<String>,
     data_format: Option<DataFormat>,
     content: ArcLock<Vec<ArcLock<Question>>>,
+    cache: Option<Arc<TempPath>>
 }
 
 /// # Fields
@@ -232,6 +234,10 @@ impl Record {
         })?;
         Ok(())
     }
+}
+
+impl Record {
+
 }
 
 /// Read data file
@@ -770,6 +776,7 @@ impl Record {
             skip: skip,
             data_format: data_format,
             content: lock_it_up(questions),
+            cache: None,
         })
     }
 
