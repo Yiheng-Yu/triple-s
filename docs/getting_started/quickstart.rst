@@ -66,7 +66,7 @@ Alternatively, :func:`triple_s.read_triple_s` loads both files in one call:
 
    from triple_s import read_triple_s
 
-   survey = read_triple_s("survey.sss", "survey.asc")
+   survey = read_triple_s("survey.sss", "survey.asc", read_triple_s=True)
 
 Export a datamap
 -------------------

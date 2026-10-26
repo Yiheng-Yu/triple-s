@@ -313,6 +313,7 @@ impl Record {
             .parse::<usize>()
             .context("Record skip must be a non-negative integer")?;
 
+        // do an initial scan of the data source, checking if there were any errors for the data file
         self.validate_data_format(file, skip)
             .with_context(|| format!("When opening '{}'", path_string))?;
 
