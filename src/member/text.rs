@@ -233,7 +233,8 @@ impl Text {
         if variants.iter().any(|item| item.has_same_attribute(&copied)) {
             return Err(crate::error::InvalidArg::new(
                 "A variant with this mode and language already exists",
-            ).into());
+            )
+            .into());
         }
         variants.push(copied);
         Ok(())

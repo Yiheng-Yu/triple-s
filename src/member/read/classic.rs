@@ -172,9 +172,7 @@ where
                             });
                         }
                     }
-                    // "position" => {
-                    //     println!("{:#?}", node);
-                    // }
+
                     "range" => {
                         // in sss classics, question response values ALWAYS
                         // starts with number, hence this 'range' tag
@@ -294,9 +292,6 @@ where
                         });
                     }
                 }
-                // "position" => {
-                //     println!("{:#?}", node);
-                // }
                 "range" => {
                     // <range> can only be the first element,
                     // and everything else should be tagged as <value>

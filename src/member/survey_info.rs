@@ -13,11 +13,11 @@ use pyo3::{
 use strum::{EnumIter, EnumString};
 
 use super::text::Mode;
+#[cfg(feature = "pyo3")]
+use crate::error::missing_key_err;
 use crate::prelude::Flag;
 #[cfg(feature = "pyo3")]
 use crate::prelude::PyEnum;
-#[cfg(feature = "pyo3")]
-use crate::error::missing_key_err;
 #[cfg(feature = "pyo3")]
 use crate::utils;
 
@@ -268,9 +268,7 @@ impl SurveyInfo {
     #[staticmethod]
     #[pyo3(name = "from_dict")]
     pub(crate) fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
-        let version = content
-            .get_item("version")?
-            .ok_or(missing_key_err("version"))?;
+        let version = content.get_item("version")?.ok_or(missing_key_err("version"))?;
         let version = if let Ok(version) = version.extract::<Version>() {
             version
         } else if let Ok(version) = version.extract::<String>() {

@@ -194,9 +194,7 @@ impl Survey {
     #[staticmethod]
     #[pyo3(name = "from_dict")]
     fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
-        let info = content
-            .get_item("survey_info")?
-            .or(content.get_item("info")?);
+        let info = content.get_item("survey_info")?.or(content.get_item("info")?);
         let info = match info {
             None => SurveyInfo::new(Version::V1_2),
             Some(value) if value.is_none() => SurveyInfo::new(Version::V1_2),
@@ -277,9 +275,7 @@ impl Survey {
     /// metadata.
     #[pyo3(name="load_data", signature=(path:"str"))]
     pub fn py_load_data(&mut self, path: &str) -> PyResult<()> {
-        self.record_mut()
-            .load_data(path)
-            .map_err(py_value_error)
+        self.record_mut().load_data(path).map_err(py_value_error)
     }
 
     /// Export loaded data into polars dataframe

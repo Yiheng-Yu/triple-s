@@ -1,9 +1,10 @@
-use std::sync::Arc;
-use std::io::{self, BufRead, Read};
-
-use encoding_rs::{Decoder, DecoderResult, UTF_8};
+use std::{
+    io::{self, BufRead, Read},
+    sync::Arc,
+};
 
 use anyhow::{Context, Result};
+use encoding_rs::{Decoder, DecoderResult, UTF_8};
 use parking_lot::RwLock;
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*, types::PySlice};
@@ -167,8 +168,9 @@ impl<R: BufRead> Read for TextReader<R> {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_language_tag, TextReader};
     use std::io::{BufReader, Read};
+
+    use super::{TextReader, validate_language_tag};
 
     #[test]
     fn test_validate_language_tag() {

@@ -25,12 +25,12 @@ and record.
 
 # Read a survey
 
-```rust,no_run
+```no_run
 use triple_s::read_triple_s;
 
-let survey = read_triple_s("survey.sss", None::<&str>)?;
+let survey = read_triple_s("survey.sss", None::<&str>, false)?;
 if let Some(question) = survey.get_question("Q1") {
-    println!("{question:?}");
+    println!("Title of question 'Q1': '{:?}'", question.label());
 }
 # Ok::<(), anyhow::Error>(())
 ```

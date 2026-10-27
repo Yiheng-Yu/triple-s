@@ -10,7 +10,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
-use polars::prelude::*;
+use polars::{frame::row::Row, prelude::*};
 #[cfg(feature = "pyo3")]
 use pyo3::{
     IntoPyObjectExt,
@@ -23,7 +23,7 @@ use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use quick_xml::Writer;
 use rayon::prelude::*;
 use strum::{EnumIter, EnumString};
-use tempfile::{NamedTempFile, TempPath};
+use tempfile::TempPath;
 
 use super::{ArcLock, Question};
 #[cfg(feature = "pyo3")]
@@ -100,75 +100,140 @@ impl Record {
         let parquet_path = self
             .cache
             .clone()
-            .ok_or(error::InternalError::new(format!(
-                "No cache file created, this shouldn't happen."
-            )))?
+            .ok_or(error::InternalError::new(
+                "No cache file created, this shouldn't happen.".to_string(),
+            ))?
             .to_path_buf();
         let parquet_file = File::create(&parquet_path)?;
-        
+
         // update data source & file extension
         let path_data = path_data.as_ref();
         let path_string = path_data.to_string_lossy().to_string();
         self.set_data_source(path_data, false)
             .with_context(|| format!("When trying to load data from '{}'", path_string))?;
-        
 
         // init parquet cache file
         let schema =
             Schema::from_iter(self.content().iter().map(|item| item.read().polars_field()));
         let mut writer = ParquetWriter::new(parquet_file).batched(&schema)?;
-        
-        let mut index: usize = 0;
-        for line in self.read_href()? {
-            let line = line?;
-            for question in self.content().iter() {
-                let mut question = question.write();
-                let data = question.parse_question_value(&line).with_context(|| {
-                    format!(
-                        "When trying to extract data from line {} for question `{}`",
-                        index,
-                        question.name()
-                    )
-                })?;
+        let mut batch_buffer = Vec::new();
+        for row in self.scan_data_file()? {
+            let row = row
+                .with_context(|| format!("When trying to load data from '{}'", path_string))?;
+            batch_buffer.push(row);
+            if batch_buffer.len() == BATCH_SIZE {
+                Self::write_batch(&mut writer, &schema, &mut batch_buffer)?;
             }
-            index += 1;
         }
-
-        todo!()
-
-        // // read file and save to parquet cache
-        // println!("{:?}", parquet_path);
-        // println!("{:#?}", schema);
-        // Ok(())
+        Self::write_batch(&mut writer, &schema, &mut batch_buffer)?;
+        let _ = writer.finish()?;
+        Ok(())
     }
 
-    fn read_href(&self) -> Result<impl Iterator<Item=Result<&str>>> {
-        let path_data = self.href()
+    /// Convert question data to polars dataframe
+    pub fn to_polars_v2(&self) -> Result<DataFrame> {
+        let path = self.cache.as_ref()
+            .ok_or_else(|| error::InvalidArg::new("Data not loaded yet, please call `load_data_v2` to load data fist."))?;
+        let file = File::open(path.as_ref())?;
+        Ok(ParquetReader::new(file).finish()?)
+    }
+
+    fn write_batch(
+        writer: &mut polars::io::parquet::write::BatchedWriter<File>,
+        schema: &Schema,
+        batch_buffer: &mut Vec<Row<'static>>,
+    ) -> Result<()> {
+        let df = DataFrame::from_rows_and_schema(batch_buffer, schema)?;
+        writer.write_batch(&df)?;
+        batch_buffer.clear();
+        Ok(())
+    }
+
+    fn scan_data_file(&self) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>> + '_>> {
+        let path_data = self
+            .href()
             .as_ref()
             .ok_or(error::InternalError::new("field `href` not defined"))?;
+
+        let file = File::open(path_data)
+            .map_err(error::FileReadError::from)
+            .with_context(|| format!("When opening '{}'", path_data))?;
+        let reader = TextReader::new(BufReader::new(file));
+        let mut reader = BufReader::new(reader);
+
+        // first apply skip...
         let skip = self
             .skip
             .as_deref()
             .unwrap_or("0")
             .parse::<usize>()
             .context("Record skip must be a non-negative integer")?;
-        let data_format = self.data_format()
-            .cloned()
-            .unwrap_or(DataFormat::Fixed);  // default DataFormat
+        let mut discarded = Vec::new();
+        for _ in 0..skip {
+            discarded.clear();
+            if reader.read_until(b'\n', &mut discarded)? == 0 {
+                break;
+            }
+        }
 
-        let file = File::open(path_data)
-            .map_err(error::FileReadError::from)
-            .with_context(|| format!("When opening '{}'", path_data))?;
-        let reader = TextReader::new(BufReader::new(file));
-
-        let line_read = match data_format {
+        // then do iteration
+        let data_format = self.data_format().cloned().unwrap_or(DataFormat::Fixed); // default DataFormat
+        match data_format {
             DataFormat::Fixed => {
-                
+                let width = self
+                    .content()
+                    .iter()
+                    .map(|question| *question.read().location().finish() as usize)
+                    .max()
+                    .context("Cannot determine record width: no questions")?;
+                Ok(Box::new(std::iter::from_fn(
+                    move || match Self::read_one_record(&mut reader, width) {
+                        Ok(row) if row.is_empty() => None,
+                        Ok(row) => Some(
+                            self.content()
+                                .iter()
+                                .map(|question| {
+                                    let question = question.read();
+                                    let field = question.locate_data_asc(&row)?;
+                                    Ok(question.parse_question_value(field)?.into_static())
+                                })
+                                .collect::<Result<Vec<_>>>()
+                                .map(Row),
+                        ),
+                        Err(error) => Some(Err(error)),
+                    },
+                )))
             }
             DataFormat::Csv => {
-                todo!()
+                let rows = csv::ReaderBuilder::new()
+                    .has_headers(false)
+                    .flexible(true)
+                    .from_reader(reader)
+                    .into_records()
+                    .enumerate()
+                    .map(move |(index, row)| {
+                        let row = row.with_context(|| {
+                            format!("When reading CSV record {}", index + 1)
+                        })?;
+                        self.content()
+                            .iter()
+                            .map(|question| {
+                                let question = question.read();
+                                let field =
+                                    question.locate_data_csv(&row).with_context(|| {
+                                        format!(
+                                            "When trying to extract data for question `{}`",
+                                            question.name()
+                                        )
+                                    })?;
+                                Ok(question.parse_question_value(field)?.into_static())
+                            })
+                            .collect::<Result<Vec<_>>>()
+                            .map(Row)
+                    });
+                Ok(Box::new(rows))
             }
-        };
+        }
     }
 
     /// create a new temp file and delete the original cache
@@ -179,44 +244,7 @@ impl Record {
         ));
         Ok(())
     }
-
-    fn read_fixed_width_record(
-        &self,
-        reader: TextReader<BufReader<File>>,
-    ) -> Result<impl Iterator<Item = Result<String>>> {
-        let record_width = self.content()
-            .iter()
-            .map(|question| *question.read().location().finish() as usize)
-            .max()
-            .context("Cannot determine record width: no questions")?;
-
-        let mut reader = BufReader::new(reader);
-        Ok(std::iter::from_fn(move || {
-            match Self::read_one_record(&mut reader, record_width) {
-                Ok(row) if row.is_empty() => None,
-                Ok(row) => Some(Ok(row)),
-                Err(error) => Some(Err(error.into())),
-            }
-        }))
-    }
-
-    fn read_csv_record(
-        &self,
-        reader: TextReader<BufReader<File>>,
-    ) -> Result<impl Iterator<Item = Result<String>>> {
-        let reader = csv::ReaderBuilder::new()
-            .has_headers(false)
-            .flexible(true)
-            .from_reader(reader);
-        let iterator = reader.into_records()
-            .map(|entry| {
-                entry.map(|item| item.)
-            })
-        Ok(iterator)
-
-    }
 }
-
 
 /// # Fields
 ///
@@ -398,11 +426,11 @@ impl Record {
     ///
     /// This method will:
     ///     - check the file extension type and if the `path` actually exists.
-    /// 
+    ///
     /// if input argument `validate` was `true`:
     ///     - Scan the data row by row to check if there were any errors, and raises error
     ///       should there were any.
-    /// 
+    ///
     /// And finally, this method will *overwrite* these fields:
     /// 1) the 'href' field with the provided 'path' attribute
     /// 2) `data_format` field according to the file extension of the `path` provided ([`CodeFormat::Fixed`] or [`CodeFormat::Csv`])
@@ -503,7 +531,6 @@ impl Record {
         }
     }
 
-    
     fn read_one_record<R: BufRead>(reader: &mut R, record_width: usize) -> Result<String> {
         let mut result = String::with_capacity(record_width);
 

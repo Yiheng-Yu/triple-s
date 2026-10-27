@@ -202,14 +202,14 @@ impl Response {
     /// let mut response = Response::new(None, Vec::new());
     /// // adding a value
     /// response.set_value(Code::new_unsigned(1, "Label A", None, Some(0.5)))?;
-    /// println!("{:?}", response.values());
+    /// println!("Total amount of values: {}", response.values().len());
     ///
     /// // cannot add new code with different variant:
     /// assert!(response.set_value(Code::new_signed(2, "Label A", None, Some(0.5))).is_err());
     ///
     /// // overwrites existing item in `Response::values`,
     /// response.set_value(Code::new_unsigned(1, "Label B", None, Some(0.5)))?;
-    /// println!("{:?}", response.values());
+    /// println!("Total amount of values: {}", response.values().len());
     ///
     /// Ok::<(), triple_s::error::InvalidArg>(())
     /// ```

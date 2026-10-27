@@ -18,7 +18,12 @@ use quick_xml::{events::BytesText, writer::Writer};
 use strum::{AsRefStr, EnumIter, EnumString};
 
 use crate::{
-    Entry, EventLog, error::{self, DataReadError, InternalError, InvalidArg, RangeError}, member::{Code, Response, Text, Value}, prelude::{DeepCopy, *}, utils::{ArcLock, lock_it_up},
+    Entry,
+    EventLog,
+    error::{self, DataReadError, InternalError, InvalidArg, RangeError},
+    member::{Code, Response, Text, Value},
+    prelude::{DeepCopy, *},
+    utils::{ArcLock, lock_it_up},
 };
 #[cfg(feature = "pyo3")]
 use crate::{
@@ -720,7 +725,7 @@ impl Question {
 /// reading data
 impl Question {
     /// Get [`polars::Field`] for the current question, it looks like this:
-    /// 
+    ///
     /// ```text
     /// {
     ///     name: self.name(),
@@ -729,10 +734,7 @@ impl Question {
     /// ```
     #[inline]
     pub fn polars_field(&self) -> Field {
-        Field::new(
-            self.name().into(),
-            self.polars_dtype(),
-        )
+        Field::new(self.name().into(), self.polars_dtype())
     }
 
     /// Returns the Polars [`DataType`] for this question's type and code format as follows:
@@ -752,16 +754,13 @@ impl Question {
         match self.question_type.read().clone() {
             QuestionType::None => DataType::Null,
             QuestionType::Single => {
-                if self.format().as_ref()
-                    .is_some_and(|item| item == &CodeFormat::Literal) {
+                if self.format().as_ref().is_some_and(|item| item == &CodeFormat::Literal) {
                     DataType::String
                 } else {
                     DataType::UInt32
                 }
             }
-            QuestionType::Multiple => {
-                DataType::List(Box::new(DataType::UInt32))
-            }
+            QuestionType::Multiple => DataType::List(Box::new(DataType::UInt32)),
             QuestionType::Character => DataType::String,
             QuestionType::Logical => DataType::UInt32,
             QuestionType::Quantity => DataType::Float64,
@@ -780,25 +779,27 @@ impl Question {
     /// Locate data from one entire row based on current data range for csv width (.asc) data
     pub(crate) fn locate_data_csv<'a>(&self, row: &'a csv::StringRecord) -> Result<&'a str> {
         let position: usize = *self.location().start() as usize;
-        let col_location = position.checked_sub(1)
-            .ok_or_else(|| InternalError::new(format!("Integer underflow for position: {}", position)))?;
-        
-        row.get(col_location)
-            .ok_or_else(|| InvalidArg::new(
-                format!(
+        let col_location = position.checked_sub(1).ok_or_else(|| {
+            InternalError::new(format!("Integer underflow for position: {}", position))
+        })?;
+
+        row.get(col_location).ok_or_else(|| {
+            InvalidArg::new(format!(
                 "Has total of {} fields; question '{}' requires field {}",
-                row.len(), self.name(), position,
-            )).into()
-        )
+                row.len(),
+                self.name(),
+                position,
+            ))
+            .into()
+        })
     }
 
     /// Locate fixed-width data using Unicode scalar positions, not byte offsets.
     /// Chinese characters and supplementary characters each occupy one position.
     pub(crate) fn locate_data_asc<'a>(&self, row: &'a str) -> Result<&'a str> {
         let data_location = self.get_data_range();
-        let mut boundaries = row.char_indices()
-            .map(|(offset, _)| offset)
-            .chain(std::iter::once(row.len()));
+        let mut boundaries =
+            row.char_indices().map(|(offset, _)| offset).chain(std::iter::once(row.len()));
         let data = boundaries
             .nth(data_location.start)
             .and_then(|start| {
@@ -809,12 +810,14 @@ impl Question {
                 };
                 Some(&row[start..end])
             })
-            .ok_or_else(|| error::RangeError(format!(
-                "Invalid data range (start: {}, end: {}) for row of character length {}.",
-                data_location.start,
-                data_location.end,
-                row.chars().count()
-            )))
+            .ok_or_else(|| {
+                error::RangeError(format!(
+                    "Invalid data range (start: {}, end: {}) for row of character length {}.",
+                    data_location.start,
+                    data_location.end,
+                    row.chars().count()
+                ))
+            })
             .with_context(|| {
                 format!("When trying to parse data for question '{}'", self.name())
             })?;
@@ -824,36 +827,54 @@ impl Question {
     /// validate one line of respondant data from a '.asc' file
     pub(crate) fn validate_asc_entry(&self, row: &str) -> Result<()> {
         let data = self.locate_data_asc(row)?;
-        let _ = self.parse_field(data)
-            .with_context(|| format!("When trying to validate data for question '{}'", self.name()))?;
+        let _ = self.parse_field(data).with_context(|| {
+            format!(
+                "When trying to validate data for question '{}'",
+                self.name()
+            )
+        })?;
         Ok(())
     }
 
     /// validate one line of respondant data from a '.csv' file
     pub(crate) fn validate_csv_entry(&self, row: &csv::StringRecord) -> Result<()> {
         let data = self.locate_data_csv(row)?;
-        let _ = self.parse_field(data)
-            .with_context(|| format!("When trying to validate data for question '{}'", self.name()))?;
+        let _ = self.parse_field(data).with_context(|| {
+            format!(
+                "When trying to validate data for question '{}'",
+                self.name()
+            )
+        })?;
         Ok(())
     }
 
     /// Parse an extracted fixed-width field or decoded CSV field.
     pub(crate) fn parse_question_value<'a>(&self, data: &'a str) -> Result<AnyValue<'a>> {
         let question_type = self.question_type();
-        let data = if *question_type == QuestionType::Character { data } else { data.trim() };
+        let data = if *question_type == QuestionType::Character {
+            data
+        } else {
+            data.trim()
+        };
         Ok(match *question_type {
             QuestionType::Character => AnyValue::String(data),
-            QuestionType::None => return Err(DataReadError(
-                "Unable to parse data with question type `None`".into(),
-            ).into()),
+            QuestionType::None => {
+                return Err(DataReadError(
+                    "Unable to parse data with question type `None`".into(),
+                )
+                .into());
+            }
             _ if data.is_empty() => AnyValue::Null,
             QuestionType::Quantity => AnyValue::Float64(data.parse()?),
             QuestionType::Logical => AnyValue::Boolean(match data.parse::<usize>()? {
                 0 => false,
                 1 => true,
-                _ => return Err(DataReadError(format!(
-                    "Unable to parse boolean data from input: `{data}`",
-                )).into()),
+                _ => {
+                    return Err(DataReadError(format!(
+                        "Unable to parse boolean data from input: `{data}`",
+                    ))
+                    .into());
+                }
             }),
             QuestionType::Date => AnyValue::Date(
                 NaiveDate::parse_from_str(data, "%Y%m%d")?
@@ -862,11 +883,14 @@ impl Question {
             ),
             QuestionType::Time => {
                 let time = NaiveTime::parse_from_str(data, "%H%M%S")?;
-                AnyValue::Time(time.num_seconds_from_midnight() as i64 * 1_000_000_000
-                    + time.nanosecond() as i64)
+                AnyValue::Time(
+                    time.num_seconds_from_midnight() as i64 * 1_000_000_000
+                        + time.nanosecond() as i64,
+                )
             }
             QuestionType::Single => {
-                if self.format().as_ref().is_some_and(|format| *format == CodeFormat::Literal) {
+                if self.format().as_ref().is_some_and(|format| *format == CodeFormat::Literal)
+                {
                     AnyValue::String(data)
                 } else {
                     AnyValue::UInt32(data.parse()?)
@@ -1403,7 +1427,6 @@ impl Question {
         Ok(())
     }
 }
-
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
@@ -2262,20 +2285,17 @@ impl Location {
     }
 
     /// Returns total number of characters a [`Location`] instance covers.
-    /// 
+    ///
     /// Essentially: `(finish - start) + 1`
-    /// 
+    ///
     /// Example:
     /// ```
     /// use triple_s::Location;
-    /// 
+    ///
     /// let location = Location::new(3, Some(10))?;
     /// let width = location.width()?;
-    /// assert_eq!(
-    ///     width,
-    ///     (10 - 3) + 1
-    /// );
-    /// 
+    /// assert_eq!(width, (10 - 3) + 1);
+    ///
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn width(&self) -> Result<u32> {
@@ -2285,7 +2305,6 @@ impl Location {
         Ok(width)
     }
 }
-
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
@@ -2758,7 +2777,10 @@ mod test {
             .with_question_type(QuestionType::Quantity)
             .finish()
             .unwrap();
-        assert_eq!(question.polars_field(), Field::new("AGE".into(), DataType::Float64));
+        assert_eq!(
+            question.polars_field(),
+            Field::new("AGE".into(), DataType::Float64)
+        );
     }
 
     #[test]
@@ -2766,9 +2788,21 @@ mod test {
         for (question_type, format, expected) in [
             (QuestionType::None, None, DataType::Null),
             (QuestionType::Single, None, DataType::UInt32),
-            (QuestionType::Single, Some(CodeFormat::UnSigned), DataType::UInt32),
-            (QuestionType::Single, Some(CodeFormat::Literal), DataType::String),
-            (QuestionType::Multiple, None, DataType::List(Box::new(DataType::UInt32))),
+            (
+                QuestionType::Single,
+                Some(CodeFormat::UnSigned),
+                DataType::UInt32,
+            ),
+            (
+                QuestionType::Single,
+                Some(CodeFormat::Literal),
+                DataType::String,
+            ),
+            (
+                QuestionType::Multiple,
+                None,
+                DataType::List(Box::new(DataType::UInt32)),
+            ),
             (QuestionType::Character, None, DataType::String),
             (QuestionType::Logical, None, DataType::UInt32),
             (QuestionType::Quantity, None, DataType::Float64),
@@ -2780,8 +2814,13 @@ mod test {
                 .with_format(format)
                 .finish()
                 .unwrap();
-            assert_eq!(question.polars_dtype(), expected,
-                "type: {:?}, format: {:?}", question.question_type(), question.format());
+            assert_eq!(
+                question.polars_dtype(),
+                expected,
+                "type: {:?}, format: {:?}",
+                question.question_type(),
+                question.format()
+            );
         }
     }
 
@@ -3091,15 +3130,20 @@ mod test {
     fn fixed_width_locations_count_unicode_characters() {
         let row = "中é😀文 42";
         for ((start, end), expected) in [
-            ((1, 1), "中"), ((2, 4), "é😀文"),
-            ((5, 5), " "), ((6, 7), "42"), ((1, 7), row),
+            ((1, 1), "中"),
+            ((2, 4), "é😀文"),
+            ((5, 5), " "),
+            ((6, 7), "42"),
+            ((1, 7), row),
         ] {
             let question = QuestionOptions::new("unicode")
-                .with_location(start, Some(end)).finish().unwrap();
+                .with_location(start, Some(end))
+                .finish()
+                .unwrap();
             assert_eq!(question.locate_data_asc(row).unwrap(), expected);
         }
-        let question = QuestionOptions::new("past_end")
-            .with_location(8, Some(8)).finish().unwrap();
+        let question =
+            QuestionOptions::new("past_end").with_location(8, Some(8)).finish().unwrap();
         assert!(question.locate_data_asc(row).is_err());
         assert!(question.locate_data_asc("").is_err());
     }
