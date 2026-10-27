@@ -157,7 +157,6 @@ use anyhow::Result;
 use error::EventLog;
 pub use member::{
     Survey,
-    entry::Entry,
     question::{
         self,
         CodeFormat,

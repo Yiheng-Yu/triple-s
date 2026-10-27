@@ -7,18 +7,11 @@ use chrono::{NaiveDate, NaiveTime, Timelike};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::{
-    exceptions,
-    prelude::*,
-    types::{PyDict, PyList, PyTuple},
-};
-#[cfg(feature = "pyo3")]
-use pyo3_polars::{PySeries, error::PyPolarsErr};
+use pyo3::{exceptions, prelude::*, types::PyDict};
 use quick_xml::{events::BytesText, writer::Writer};
 use strum::{AsRefStr, EnumIter, EnumString};
 
 use crate::{
-    Entry,
     EventLog,
     error::{self, DataReadError, InternalError, InvalidArg, RangeError},
     member::{Code, Response, Text, Value},
@@ -185,7 +178,6 @@ impl QuestionOptions {
             location: Location::new(self.location.0, self.location.1)?,
             spread: self.spread.map(|(sub, width)| Spread::new(sub, width)).transpose()?,
             response,
-            data: lock_it_up(Vec::new()),
         })
     }
 }
@@ -212,7 +204,6 @@ pub struct Question {
     location: Location,
     spread: Option<Spread>,
     response: Response,
-    data: ArcLock<Vec<ArcLock<Entry>>>,
 }
 
 impl Clone for Question {
@@ -230,7 +221,6 @@ impl Clone for Question {
             location: self.location.clone(),
             spread: self.spread.clone(),
             response: self.response.clone(),
-            data: self.data.clone(),
         }
     }
 }
@@ -244,13 +234,6 @@ impl Default for Question {
 impl DeepCopy for Question {
     #[doc = include_str!("../doc/rs_deep_copy_impl.md")]
     fn deepcopy(&self) -> Self {
-        let data = self
-            .data
-            .read()
-            .iter()
-            .map(|item| lock_it_up(item.read().deepcopy()))
-            .collect::<Vec<_>>();
-
         Self {
             index: self.index,
             name: self.name.deepcopy(),
@@ -262,7 +245,6 @@ impl DeepCopy for Question {
             location: self.location.deepcopy(),
             spread: self.spread.as_ref().map(|item| item.deepcopy()),
             response: self.response.deepcopy(),
-            data: lock_it_up(data),
         }
     }
 }
@@ -509,16 +491,6 @@ impl Question {
     /// ```
     pub fn response_mut(&mut self) -> &mut Response {
         &mut self.response
-    }
-
-    /// Response data of the question
-    pub fn data(&self) -> RwLockReadGuard<'_, Vec<ArcLock<Entry>>> {
-        self.data.read()
-    }
-
-    /// Read-write access of the `data` field
-    pub fn data_mut(&mut self) -> RwLockWriteGuard<'_, Vec<ArcLock<Entry>>> {
-        self.data.write()
     }
 }
 
@@ -769,13 +741,6 @@ impl Question {
         }
     }
 
-    /// Extracts this question's field from a fixed-width respondent row and
-    /// parses it into an [`Entry`].
-    pub(crate) fn parse_row(&self, row: &str) -> Result<Entry> {
-        let data = self.locate_data_asc(row)?;
-        self.parse_field(data)
-    }
-
     /// Locate data from one entire row based on current data range for csv width (.asc) data
     pub(crate) fn locate_data_csv<'a>(&self, row: &'a csv::StringRecord) -> Result<&'a str> {
         let position: usize = *self.location().start() as usize;
@@ -827,7 +792,7 @@ impl Question {
     /// validate one line of respondant data from a '.asc' file
     pub(crate) fn validate_asc_entry(&self, row: &str) -> Result<()> {
         let data = self.locate_data_asc(row)?;
-        let _ = self.parse_field(data).with_context(|| {
+        let _ = self.parse_question_value(data).with_context(|| {
             format!(
                 "When trying to validate data for question '{}'",
                 self.name()
@@ -839,7 +804,7 @@ impl Question {
     /// validate one line of respondant data from a '.csv' file
     pub(crate) fn validate_csv_entry(&self, row: &csv::StringRecord) -> Result<()> {
         let data = self.locate_data_csv(row)?;
-        let _ = self.parse_field(data).with_context(|| {
+        let _ = self.parse_question_value(data).with_context(|| {
             format!(
                 "When trying to validate data for question '{}'",
                 self.name()
@@ -903,101 +868,6 @@ impl Question {
                 values.sort_unstable();
                 AnyValue::List(Series::new("".into(), values))
             }
-        })
-    }
-
-    /// Parse an extracted fixed-width field or decoded CSV field.
-    pub(crate) fn parse_field(&self, data: &str) -> Result<Entry> {
-        let question_type = self.question_type().clone();
-
-        // `match` switch returns a Result<> because I want to add some extra
-        // context later on
-        let entry = match question_type {
-            QuestionType::Character => Ok(Entry::String(data.to_string())),
-            QuestionType::None => Err(DataReadError(
-                "Unable to parse data with question type `None`".to_string(),
-            )),
-            QuestionType::Quantity => {
-                let data = data.trim();
-                if data.is_empty() {
-                    return Ok(Entry::None());
-                };
-
-                let raw = data.parse::<f64>()?;
-                Ok(Entry::Quantity(raw))
-            }
-
-            QuestionType::Logical => {
-                let data = data.trim();
-                if data.is_empty() {
-                    return Ok(Entry::None());
-                };
-
-                let raw = data.parse::<usize>()?;
-                match raw {
-                    0 => Ok(Entry::Boolean(false)),
-                    1 => Ok(Entry::Boolean(true)),
-                    _ => Err(DataReadError(format!(
-                        "Unable to parse boolean data from input: `{}`",
-                        data
-                    ))),
-                }
-            }
-
-            QuestionType::Date => {
-                let data = data.trim();
-                if data.is_empty() {
-                    return Ok(Entry::None());
-                };
-
-                let raw = NaiveDate::parse_from_str(data, "%Y%m%d")?;
-                Ok(Entry::Date(raw))
-            }
-
-            QuestionType::Time => {
-                let data = data.trim();
-                if data.is_empty() {
-                    return Ok(Entry::None());
-                };
-
-                let raw = NaiveTime::parse_from_str(data, "%H%M%S")?;
-                Ok(Entry::Time(raw))
-            }
-
-            QuestionType::Single => {
-                let data = data.trim();
-                if data.is_empty() {
-                    return Ok(Entry::None());
-                };
-
-                let raw =
-                    if self.format().as_ref().is_some_and(|item| item == &CodeFormat::Literal)
-                    {
-                        Entry::String(data.into())
-                    } else {
-                        let raw = data.parse::<u32>()?;
-                        Entry::Single(raw)
-                    };
-
-                Ok(raw)
-            }
-
-            QuestionType::Multiple => {
-                let data = data.trim();
-                if data.is_empty() {
-                    return Ok(Entry::None());
-                };
-
-                let raw_data = self.parse_multiple_data(data)?;
-                self.validate_multiple_read(&raw_data).with_context(|| {
-                    format!("When trying to extract data for question `{}`", self.name())
-                })?;
-                Ok(Entry::Multiple(raw_data))
-            }
-        };
-
-        entry.with_context(|| {
-            format!("When trying to extract data for question `{}`", self.name())
         })
     }
 
@@ -1091,18 +961,6 @@ impl Question {
             Ok(())
         }
     }
-
-    /// Export content of the `data` field to polars series
-    pub fn to_polars(&self) -> Result<Series, PolarsError> {
-        let colname = self.name();
-        let data = self
-            .data()
-            .iter()
-            .map(|item| item.read().clone().into())
-            .collect::<Vec<AnyValue>>();
-
-        Series::from_any_values(colname.into(), &data, true)
-    }
 }
 
 /// <hr />
@@ -1169,7 +1027,6 @@ impl Question {
             location,
             spread,
             response: Response::default(),
-            data: lock_it_up(Vec::new()),
         };
 
         Ok(instance)
@@ -1629,48 +1486,6 @@ impl Question {
     #[getter(label)]
     fn py_get_label(&self) -> PyResult<Text> {
         Ok(self.label.clone())
-    }
-
-    /// Raw data for the question
-    /// Data is retrieved via `load_data()` method of `Survey` or `Record`
-    /// object.
-    #[getter(data)]
-    fn py_get_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
-        let items = self.data.read().clone().into_iter().map(|item| item.read().clone());
-
-        PyTuple::new(py, items)
-    }
-
-    /// Export data as polars.Series
-    #[pyo3(name = "to_polars")]
-    fn py_to_polars(&self) -> PyResult<pyo3_polars::PySeries> {
-        self.to_polars().map(PySeries).map_err(|err| PyPolarsErr::from(err).into())
-    }
-
-    /// Export loaded data as a pandas Series named after this question.
-    /// Multiple-choice responses are sorted lists; missing responses are None.
-    #[pyo3(name = "to_pandas")]
-    pub(crate) fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let values = PyList::empty(py);
-        for entry in self.data().iter() {
-            match &*entry.read() {
-                Entry::None() => values.append(py.None())?,
-                Entry::Single(value) => values.append(*value)?,
-                Entry::Multiple(items) => {
-                    let mut items: Vec<u32> = items.iter().copied().collect();
-                    items.sort_unstable();
-                    values.append(items)?;
-                }
-                Entry::Boolean(value) => values.append(*value)?,
-                Entry::Quantity(value) => values.append(*value)?,
-                Entry::Date(value) => values.append(*value)?,
-                Entry::Time(value) => values.append(*value)?,
-                Entry::String(value) => values.append(value.as_str())?,
-            }
-        }
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("name", self.name())?;
-        py.import("pandas")?.getattr("Series")?.call((values,), Some(&kwargs))
     }
 
     /// Sets the label from a string or `Text`, or resets it to empty with
@@ -3146,21 +2961,6 @@ mod test {
             QuestionOptions::new("past_end").with_location(8, Some(8)).finish().unwrap();
         assert!(question.locate_data_asc(row).is_err());
         assert!(question.locate_data_asc("").is_err());
-    }
-
-    #[test]
-    fn test_question_data_mut() {
-        let mut question = new_filled_question();
-        let entry = Entry::Single(3);
-        question.data_mut().push(lock_it_up(entry));
-        assert_eq!(question.data().len(), 1);
-
-        let check = question.data().get(0).unwrap().read().clone();
-        assert_eq!(check, Entry::Single(3));
-
-        *question.data_mut().get_mut(0).unwrap() = lock_it_up(Entry::None());
-        let check = question.data().get(0).unwrap().read().clone();
-        assert_eq!(check, Entry::None());
     }
 
     #[cfg(feature = "pyo3")]

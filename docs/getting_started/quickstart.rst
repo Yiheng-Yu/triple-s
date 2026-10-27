@@ -46,15 +46,6 @@ data into a `polars.DataFrame`, or a `pandas.DataFrame`:
    # to pandas dataframe
    pandas_df = survey.to_pandas()
 
-Or, selection question you'd like to export, and export the data to pandas/ polars `Series`:
-
-.. code-block:: python
-   # Or, export to polars series
-   polars_series = survey["Q1"].to_polars()
-
-   # export to pandas series
-   pandas_series = survey["Q1"].to_pandas()
-
 For CSV data, the datamap's record must specify ``format="csv"``;
 pass the matching ``.csv`` path to ``load_data()``. Positions then refer
 to one-based CSV field numbers. The record's ``skip`` setting controls

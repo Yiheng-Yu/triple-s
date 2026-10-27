@@ -57,8 +57,8 @@ Access question metadata through methods such as [`Question::name()`],
 accessors, such as [`Question::name_mut()`] and [`Question::label_mut`],
 update these values.
 
-Cloning a question shares its lock-backed data, including the name, label,
-location, and response contents. Changes to that shared data are visible
+Cloning a question shares its lock-backed metadata, including the name, label,
+location, and response contents. Changes to that shared metadata are visible
 through other clones; the question index is copied independently.
 
 # Exporting
@@ -81,3 +81,5 @@ let text = question.to_classic()?;
 
 Note that this would ignore attributes that exists in certain version but
 not in other versions (i.e., `usage` field exists in xml but not in classic).
+
+Respondent data is stored by [`Record`]; use [`Record::to_polars`] to export it.

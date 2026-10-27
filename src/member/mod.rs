@@ -1,4 +1,3 @@
-pub mod entry;
 pub mod question;
 pub mod read;
 pub mod record;
@@ -13,7 +12,7 @@ use parking_lot::{ArcRwLockReadGuard, RawRwLock};
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*, types::PyDict};
 #[cfg(feature = "pyo3")]
-use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
+use pyo3_polars::PyDataFrame;
 pub use question::{CodeFormat, Location, Question, QuestionType, Spread, Usage};
 use quick_xml::{Writer, events::BytesText};
 pub use record::{DataFormat, Record};
@@ -274,17 +273,14 @@ impl Survey {
     /// Load fixed-width or CSV data using the record's format and skip
     /// metadata.
     #[pyo3(name="load_data", signature=(path:"str"))]
-    pub fn py_load_data(&mut self, path: &str) -> PyResult<()> {
+    fn py_load_data(&mut self, path: &str) -> PyResult<()> {
         self.record_mut().load_data(path).map_err(py_value_error)
     }
 
     /// Export loaded data into polars dataframe
     #[pyo3(name = "to_polars")]
-    pub fn py_to_polars(&self) -> PyResult<PyDataFrame> {
-        self.record()
-            .to_polars()
-            .map(PyDataFrame)
-            .map_err(|err| PyPolarsErr::from(err).into())
+    fn py_to_polars(&self) -> PyResult<PyDataFrame> {
+        self.record().py_to_polars()
     }
 
     /// Export the record's loaded data as a pandas DataFrame.
@@ -403,6 +399,5 @@ mod test {
         let record = survey.record_mut();
 
         record.load_data(PATH_ASC).unwrap();
-        println!("{:#?}", record.content());
     }
 }

@@ -1,4 +1,5 @@
-use triple_s::{Entry, read_datamap};
+use polars::prelude::AnyValue;
+use triple_s::read_datamap;
 
 const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
 const PATH_DATAFILE_V2_0: &str = "tests/sss-examples/sss-2.0/example1.asc";
@@ -7,8 +8,8 @@ const PATH_DATAFILE_V2_0: &str = "tests/sss-examples/sss-2.0/example1.asc";
 fn test_create_parquet() {
     let survey = read_datamap(PATH_DATAMAP_V2_0).unwrap();
     let mut record = survey.record().clone();
-    record.load_data_v2(PATH_DATAFILE_V2_0).unwrap();
-    let df = record.to_polars_v2().unwrap();
+    record.load_data(PATH_DATAFILE_V2_0).unwrap();
+    let df = record.to_polars().unwrap();
     println!("{:?}", df)
 }
 
@@ -19,21 +20,21 @@ fn csv_and_fixed_examples_load_equivalent_responses() {
     let mut fixed = read_datamap("tests/sss-examples/sss-2.0/example1.sss").unwrap();
     fixed.record_mut().load_data("tests/sss-examples/sss-2.0/example1.asc").unwrap();
 
-    for (csv_question, fixed_question) in
-        csv.record().content().iter().zip(fixed.record().content().iter())
-    {
-        let csv_question = csv_question.read();
-        let fixed_question = fixed_question.read();
-        assert_eq!(csv_question.name(), fixed_question.name());
-        assert_eq!(csv_question.data().len(), 3);
-        for (csv_entry, fixed_entry) in
-            csv_question.data().iter().zip(fixed_question.data().iter())
-        {
-            match (&*csv_entry.read(), &*fixed_entry.read()) {
-                (Entry::String(csv_value), Entry::String(fixed_value)) => {
-                    assert_eq!(csv_value, fixed_value.trim_end());
+    let csv = csv.record().to_polars().unwrap();
+    let fixed = fixed.record().to_polars().unwrap();
+    assert_eq!(csv.shape(), (3, 12));
+    assert_eq!(fixed.shape(), csv.shape());
+    for (csv_column, fixed_column) in csv.columns().iter().zip(fixed.columns()) {
+        assert_eq!(csv_column.name(), fixed_column.name());
+        for index in 0..csv.height() {
+            match (
+                csv_column.get(index).unwrap(),
+                fixed_column.get(index).unwrap(),
+            ) {
+                (AnyValue::String(csv), AnyValue::String(fixed)) => {
+                    assert_eq!(csv, fixed.trim_end())
                 }
-                (csv_value, fixed_value) => assert_eq!(csv_value, fixed_value),
+                (csv, fixed) => assert_eq!(csv, fixed),
             }
         }
     }

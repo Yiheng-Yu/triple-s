@@ -4,7 +4,7 @@
 use std::str::FromStr;
 use std::{
     fs::File,
-    io::{BufRead, BufReader, Read},
+    io::{BufRead, BufReader},
     path::Path,
 };
 
@@ -19,7 +19,7 @@ use pyo3::{
     types::{PyDict, PySlice, PyTuple},
 };
 #[cfg(feature = "pyo3")]
-use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
+use pyo3_polars::PyDataFrame;
 use quick_xml::Writer;
 use rayon::prelude::*;
 use strum::{EnumIter, EnumString};
@@ -27,11 +27,17 @@ use tempfile::TempPath;
 
 use super::{ArcLock, Question};
 #[cfg(feature = "pyo3")]
-use crate::utils::{extract_indicies, get_type_name, normalize_py_index, py_value_error};
+use crate::utils::{
+    extract_indicies,
+    get_type_name,
+    lock_it_up,
+    normalize_py_index,
+    py_value_error,
+};
 use crate::{
     error::{self, InvalidArg},
     prelude::{DeepCopy, Flag},
-    utils::{TextReader, lock_it_up},
+    utils::TextReader,
 };
 
 const BATCH_SIZE: usize = 500; // no. rows when writing to paquet cache
@@ -89,161 +95,7 @@ pub struct Record {
     href: Option<String>,
     data_format: Option<DataFormat>,
     content: ArcLock<Vec<ArcLock<Question>>>,
-    cache: Option<Arc<TempPath>>,
-}
-
-impl Record {
-    /// Load data
-    pub fn load_data_v2(&mut self, path_data: impl AsRef<Path>) -> Result<()> {
-        // prepare cache file
-        self.create_new_cache()?;
-        let parquet_path = self
-            .cache
-            .clone()
-            .ok_or(error::InternalError::new(
-                "No cache file created, this shouldn't happen.".to_string(),
-            ))?
-            .to_path_buf();
-        let parquet_file = File::create(&parquet_path)?;
-
-        // update data source & file extension
-        let path_data = path_data.as_ref();
-        let path_string = path_data.to_string_lossy().to_string();
-        self.set_data_source(path_data, false)
-            .with_context(|| format!("When trying to load data from '{}'", path_string))?;
-
-        // init parquet cache file
-        let schema =
-            Schema::from_iter(self.content().iter().map(|item| item.read().polars_field()));
-        let mut writer = ParquetWriter::new(parquet_file).batched(&schema)?;
-        let mut batch_buffer = Vec::new();
-        for row in self.scan_data_file()? {
-            let row = row
-                .with_context(|| format!("When trying to load data from '{}'", path_string))?;
-            batch_buffer.push(row);
-            if batch_buffer.len() == BATCH_SIZE {
-                Self::write_batch(&mut writer, &schema, &mut batch_buffer)?;
-            }
-        }
-        Self::write_batch(&mut writer, &schema, &mut batch_buffer)?;
-        let _ = writer.finish()?;
-        Ok(())
-    }
-
-    /// Convert question data to polars dataframe
-    pub fn to_polars_v2(&self) -> Result<DataFrame> {
-        let path = self.cache.as_ref()
-            .ok_or_else(|| error::InvalidArg::new("Data not loaded yet, please call `load_data_v2` to load data fist."))?;
-        let file = File::open(path.as_ref())?;
-        Ok(ParquetReader::new(file).finish()?)
-    }
-
-    fn write_batch(
-        writer: &mut polars::io::parquet::write::BatchedWriter<File>,
-        schema: &Schema,
-        batch_buffer: &mut Vec<Row<'static>>,
-    ) -> Result<()> {
-        let df = DataFrame::from_rows_and_schema(batch_buffer, schema)?;
-        writer.write_batch(&df)?;
-        batch_buffer.clear();
-        Ok(())
-    }
-
-    fn scan_data_file(&self) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>> + '_>> {
-        let path_data = self
-            .href()
-            .as_ref()
-            .ok_or(error::InternalError::new("field `href` not defined"))?;
-
-        let file = File::open(path_data)
-            .map_err(error::FileReadError::from)
-            .with_context(|| format!("When opening '{}'", path_data))?;
-        let reader = TextReader::new(BufReader::new(file));
-        let mut reader = BufReader::new(reader);
-
-        // first apply skip...
-        let skip = self
-            .skip
-            .as_deref()
-            .unwrap_or("0")
-            .parse::<usize>()
-            .context("Record skip must be a non-negative integer")?;
-        let mut discarded = Vec::new();
-        for _ in 0..skip {
-            discarded.clear();
-            if reader.read_until(b'\n', &mut discarded)? == 0 {
-                break;
-            }
-        }
-
-        // then do iteration
-        let data_format = self.data_format().cloned().unwrap_or(DataFormat::Fixed); // default DataFormat
-        match data_format {
-            DataFormat::Fixed => {
-                let width = self
-                    .content()
-                    .iter()
-                    .map(|question| *question.read().location().finish() as usize)
-                    .max()
-                    .context("Cannot determine record width: no questions")?;
-                Ok(Box::new(std::iter::from_fn(
-                    move || match Self::read_one_record(&mut reader, width) {
-                        Ok(row) if row.is_empty() => None,
-                        Ok(row) => Some(
-                            self.content()
-                                .iter()
-                                .map(|question| {
-                                    let question = question.read();
-                                    let field = question.locate_data_asc(&row)?;
-                                    Ok(question.parse_question_value(field)?.into_static())
-                                })
-                                .collect::<Result<Vec<_>>>()
-                                .map(Row),
-                        ),
-                        Err(error) => Some(Err(error)),
-                    },
-                )))
-            }
-            DataFormat::Csv => {
-                let rows = csv::ReaderBuilder::new()
-                    .has_headers(false)
-                    .flexible(true)
-                    .from_reader(reader)
-                    .into_records()
-                    .enumerate()
-                    .map(move |(index, row)| {
-                        let row = row.with_context(|| {
-                            format!("When reading CSV record {}", index + 1)
-                        })?;
-                        self.content()
-                            .iter()
-                            .map(|question| {
-                                let question = question.read();
-                                let field =
-                                    question.locate_data_csv(&row).with_context(|| {
-                                        format!(
-                                            "When trying to extract data for question `{}`",
-                                            question.name()
-                                        )
-                                    })?;
-                                Ok(question.parse_question_value(field)?.into_static())
-                            })
-                            .collect::<Result<Vec<_>>>()
-                            .map(Row)
-                    });
-                Ok(Box::new(rows))
-            }
-        }
-    }
-
-    /// create a new temp file and delete the original cache
-    #[inline]
-    fn create_new_cache(&mut self) -> Result<()> {
-        self.cache = Some(Arc::new(
-            tempfile::NamedTempFile::with_suffix(".parquet")?.into_temp_path(),
-        ));
-        Ok(())
-    }
+    cache: ArcLock<Option<Arc<TempPath>>>,
 }
 
 /// # Fields
@@ -399,26 +251,140 @@ impl Record {
     /// CSV positions are one-based field numbers. The record's `skip`
     /// attribute controls how many initial records to ignore in either format.
     /// UTF-8 and BOM-marked UTF-16LE/BE are decoded incrementally and strictly.
-    pub fn load_data(&mut self, path: impl AsRef<Path>) -> Result<()> {
-        // reader for the data file provided
-        let path = path.as_ref();
-        let file = File::open(path)
+    pub fn load_data(&mut self, path_data: impl AsRef<Path>) -> Result<()> {
+        let cache = tempfile::NamedTempFile::with_suffix(".parquet")?.into_temp_path();
+        let parquet_file = File::create(&cache)?;
+
+        // update data source & file extension
+        let path_data = path_data.as_ref();
+        let path_string = path_data.to_string_lossy().to_string();
+        self.set_data_source(path_data, false)
+            .with_context(|| format!("When trying to load data from '{}'", path_string))?;
+
+        // init parquet cache file
+        let schema =
+            Schema::from_iter(self.content().iter().map(|item| item.read().polars_field()));
+        let mut writer = ParquetWriter::new(parquet_file).batched(&schema)?;
+        let mut batch_buffer = Vec::new();
+        for row in self.scan_data_file()? {
+            let row = row
+                .with_context(|| format!("When trying to load data from '{}'", path_string))?;
+            batch_buffer.push(row);
+            if batch_buffer.len() == BATCH_SIZE {
+                Self::write_batch(&mut writer, &schema, &mut batch_buffer)?;
+            }
+        }
+        Self::write_batch(&mut writer, &schema, &mut batch_buffer)?;
+        writer.finish()?;
+        *self.cache.write() = Some(Arc::new(cache));
+        Ok(())
+    }
+
+    /// Convert question data to polars dataframe
+    pub fn to_polars(&self) -> Result<DataFrame> {
+        let cache = self.cache.read();
+        let path = cache.as_ref().ok_or_else(|| {
+            error::InvalidArg::new("Data not loaded yet, please call `load_data` first.")
+        })?;
+        let file = File::open(path.as_ref())?;
+        Ok(ParquetReader::new(file).finish()?)
+    }
+
+    fn write_batch(
+        writer: &mut polars::io::parquet::write::BatchedWriter<File>,
+        schema: &Schema,
+        batch_buffer: &mut Vec<Row<'static>>,
+    ) -> Result<()> {
+        let df = DataFrame::from_rows_and_schema(batch_buffer, schema)?;
+        writer.write_batch(&df)?;
+        batch_buffer.clear();
+        Ok(())
+    }
+
+    fn scan_data_file(&self) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>> + '_>> {
+        let path_data = self
+            .href()
+            .as_ref()
+            .ok_or(error::InternalError::new("field `href` not defined"))?;
+
+        let file = File::open(path_data)
             .map_err(error::FileReadError::from)
-            .with_context(|| format!("When opening '{}'", path.display()))?;
+            .with_context(|| format!("When opening '{}'", path_data))?;
+        let reader = TextReader::new(BufReader::new(file));
+        let mut reader = BufReader::new(reader);
+
+        // first apply skip...
         let skip = self
             .skip
             .as_deref()
             .unwrap_or("0")
             .parse::<usize>()
             .context("Record skip must be a non-negative integer")?;
+        let mut discarded = Vec::new();
+        for _ in 0..skip {
+            discarded.clear();
+            if reader.read_until(b'\n', &mut discarded)? == 0 {
+                break;
+            }
+        }
 
-        let reader = TextReader::new(BufReader::new(file));
-        if self.data_format() == Some(&DataFormat::Csv) {
-            self.load_csv_data(reader, skip)
-                .with_context(|| format!("When reading CSV data from '{}'", path.display()))
-        } else {
-            self.load_asc_data(reader, skip)
-                .with_context(|| format!("When reading .asc data from '{}'", path.display()))
+        // then do iteration
+        let data_format = self.data_format().cloned().unwrap_or(DataFormat::Fixed); // default DataFormat
+        match data_format {
+            DataFormat::Fixed => {
+                let width = self
+                    .content()
+                    .iter()
+                    .map(|question| *question.read().location().finish() as usize)
+                    .max()
+                    .context("Cannot determine record width: no questions")?;
+                Ok(Box::new(std::iter::from_fn(
+                    move || match Self::read_one_record(&mut reader, width) {
+                        Ok(row) if row.is_empty() => None,
+                        Ok(row) => Some(
+                            self.content()
+                                .iter()
+                                .map(|question| {
+                                    let question = question.read();
+                                    let field = question.locate_data_asc(&row)?;
+                                    Ok(question.parse_question_value(field)?.into_static())
+                                })
+                                .collect::<Result<Vec<_>>>()
+                                .map(Row),
+                        ),
+                        Err(error) => Some(Err(error)),
+                    },
+                )))
+            }
+            DataFormat::Csv => {
+                let rows = csv::ReaderBuilder::new()
+                    .has_headers(false)
+                    .flexible(true)
+                    .from_reader(reader)
+                    .into_records()
+                    .enumerate()
+                    .map(move |(index, row)| {
+                        let row = row.with_context(|| {
+                            format!("When reading CSV record {}", index + 1)
+                        })?;
+                        self.content()
+                            .iter()
+                            .map(|question| {
+                                let question = question.read();
+                                let field =
+                                    question.locate_data_csv(&row).with_context(|| {
+                                        format!(
+                                            "When trying to extract data for question `{}`",
+                                            question.name()
+                                        )
+                                    })?;
+                                Ok(question.parse_question_value(field)?.into_static())
+                            })
+                            .collect::<Result<Vec<_>>>()
+                            .map(Row)
+                    });
+                Ok(Box::new(rows))
+            }
         }
     }
 
@@ -575,95 +541,6 @@ impl Record {
 
         Ok(result)
     }
-
-    fn load_asc_data(&mut self, file: impl Read, skip: usize) -> Result<()> {
-        // total amount of characters per respondent
-        let record_width = self
-            .content()
-            .iter()
-            .map(|question| {
-                let question = question.read();
-                *question.location().finish() as usize
-            })
-            .max()
-            .context("Cannot determine record width: no questions")?;
-
-        let mut reader = BufReader::new(file);
-        let mut index = 0;
-        loop {
-            let line = Self::read_one_record(&mut reader, record_width)?;
-            if line.is_empty() {
-                break;
-            };
-
-            if index < skip {
-                index += 1;
-                continue;
-            };
-
-            for question in self.content().iter() {
-                let mut question = question.write();
-                let entry = question.parse_row(&line).with_context(|| {
-                    format!(
-                        "When trying to extract data from line {} for question `{}`",
-                        index,
-                        question.name()
-                    )
-                })?;
-                question.data_mut().push(lock_it_up(entry));
-            }
-
-            index += 1;
-        }
-
-        Ok(())
-    }
-
-    fn load_csv_data(&mut self, file: impl Read, skip: usize) -> Result<()> {
-        let mut reader =
-            csv::ReaderBuilder::new().has_headers(false).flexible(true).from_reader(file);
-
-        for (index, row) in reader.records().enumerate() {
-            let row = row.with_context(|| format!("When reading CSV record {}", index + 1))?;
-            if index < skip {
-                continue;
-            }
-            let questions = self.content();
-            let entries = questions
-                .iter()
-                .map(|question| {
-                    let question = question.read();
-                    let field = question.locate_data_csv(&row).with_context(|| {
-                        format!(
-                            "When trying to extract data from line {} for question `{}`",
-                            index,
-                            question.name()
-                        )
-                    })?;
-
-                    question
-                        .parse_field(field)
-                        .with_context(|| format!("When parsing CSV record {}", index + 1,))
-                })
-                .collect::<Result<Vec<_>>>()?;
-
-            for (question, entry) in questions.iter().zip(entries) {
-                question.write().data_mut().push(lock_it_up(entry));
-            }
-        }
-        Ok(())
-    }
-
-    /// convert data into polars dataframe
-    pub fn to_polars(&self) -> Result<DataFrame, PolarsError> {
-        let columns = self
-            .content()
-            .iter()
-            .map(|item| item.read().to_polars().map(Column::from))
-            .collect::<Result<Vec<Column>, PolarsError>>()?;
-
-        DataFrame::new_infer_height(columns)
-    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -791,17 +668,18 @@ impl Record {
     /// Export loaded data into polars dataframe
     #[pyo3(name = "to_polars")]
     pub fn py_to_polars(&self) -> PyResult<PyDataFrame> {
-        self.to_polars().map(PyDataFrame).map_err(|err| PyPolarsErr::from(err).into())
+        self.to_polars()
+            .map(PyDataFrame)
+            .map_err(|err| exceptions::PyRuntimeError::new_err(format!("{:#?}", err)))
     }
 
     /// Export loaded data as a pandas DataFrame in question order.
     #[pyo3(name = "to_pandas")]
     pub fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let columns = PyDict::new(py);
-        for question in self.content().iter() {
-            let question = question.read();
-            columns.set_item(question.name(), question.py_to_pandas(py)?)?;
-        }
+        let frame = self.py_to_polars()?.into_pyobject(py)?;
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("as_series", false)?;
+        let columns = frame.call_method("to_dict", (), Some(&kwargs))?;
         py.import("pandas")?.getattr("DataFrame")?.call1((columns,))
     }
 
@@ -944,7 +822,7 @@ impl Record {
             skip: skip,
             data_format: data_format,
             content: lock_it_up(questions),
-            cache: None,
+            cache: lock_it_up(None),
         })
     }
 
@@ -1001,7 +879,6 @@ mod tests {
     use std::io::Write;
 
     use super::*;
-    use crate::member::entry::Entry;
 
     fn unicode_survey(csv: bool) -> super::super::Survey {
         let positions = if csv {
@@ -1040,16 +917,24 @@ mod tests {
                 let mut survey = unicode_survey(csv);
                 survey.record_mut().set_data_source(file.path(), true).unwrap();
                 survey.load_data(file.path()).unwrap();
-                let texts = survey.get_question("TEXT").unwrap();
-                let numbers = survey.get_question("NUMBER").unwrap();
-                assert_eq!(texts.data().len(), 2);
-                assert_eq!(numbers.data().len(), 2);
-                for (index, (text, number)) in
-                    [("中文😀", 17.), ("北京é", 23.)].into_iter().enumerate()
-                {
-                    assert_eq!(*texts.data()[index].read(), Entry::String(text.into()));
-                    assert_eq!(*numbers.data()[index].read(), Entry::Quantity(number));
-                }
+                let frame = survey.record().to_polars().unwrap();
+                assert_eq!(frame.shape(), (2, 2));
+                assert_eq!(
+                    frame.column("TEXT").unwrap().str().unwrap().get(0),
+                    Some("中文😀")
+                );
+                assert_eq!(
+                    frame.column("TEXT").unwrap().str().unwrap().get(1),
+                    Some("北京é")
+                );
+                assert_eq!(
+                    frame.column("NUMBER").unwrap().f64().unwrap().get(0),
+                    Some(17.)
+                );
+                assert_eq!(
+                    frame.column("NUMBER").unwrap().f64().unwrap().get(1),
+                    Some(23.)
+                );
             }
         }
     }

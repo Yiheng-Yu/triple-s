@@ -68,8 +68,8 @@ def test_csv_missing_field_reports_question(tmp_path, survey):
     path.write_text("header\n520001,20050504\n")
     with pytest.raises(ValueError, match="Q1.b.*field 3"):
         survey.load_data(str(path))
-    # A rejected row must not leave columns with different lengths.
-    assert survey.to_pandas().shape == (0, 12)
+    with pytest.raises(RuntimeError, match="Data not loaded"):
+        survey.to_pandas()
 
 
 def test_csv_invalid_value_reports_record_and_question(tmp_path, survey):
