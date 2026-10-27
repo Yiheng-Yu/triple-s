@@ -247,10 +247,30 @@ impl Record {
 ///
 /// ---
 impl Record {
-    /// Load fixed-width or CSV data according to the record's `format`.
-    /// CSV positions are one-based field numbers. The record's `skip`
-    /// attribute controls how many initial records to ignore in either format.
-    /// UTF-8 and BOM-marked UTF-16LE/BE are decoded incrementally and strictly.
+    /// Load fixed-width or CSV data according to the record's `format`. 
+    /// Supports both UTF-8 and BOM-marked UTF-16LE/BE encodings.
+    /// 
+    /// This `load_data` function will stream data into a temporary parquet cache file (`.parquet`) to be 
+    /// used later. To get the cache, call [`Record::to_parquet()`] method afterwards:
+    /// 
+    /// ```no_run
+    /// use triple_s::read_triple_s;
+    /// 
+    /// let mut survey = read_triple_s(
+    ///     "path/to/datamap.sss",
+    ///     "path/to/database.asc",
+    ///     false
+    /// )?;
+    /// 
+    /// let mut record = survey.record_mut();
+    /// record.load_data("new/data/path.asc")?; // loads data
+    /// 
+    /// let df = record.to_polars()?; // get data as polars dataframe
+    /// println!("{:?}", df);
+    /// 
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    /// 
     pub fn load_data(&mut self, path_data: impl AsRef<Path>) -> Result<()> {
         let cache = tempfile::NamedTempFile::with_suffix(".parquet")?.into_temp_path();
         let parquet_file = File::create(&cache)?;
@@ -278,16 +298,6 @@ impl Record {
         writer.finish()?;
         *self.cache.write() = Some(Arc::new(cache));
         Ok(())
-    }
-
-    /// Convert question data to polars dataframe
-    pub fn to_polars(&self) -> Result<DataFrame> {
-        let cache = self.cache.read();
-        let path = cache.as_ref().ok_or_else(|| {
-            error::InvalidArg::new("Data not loaded yet, please call `load_data` first.")
-        })?;
-        let file = File::open(path.as_ref())?;
-        Ok(ParquetReader::new(file).finish()?)
     }
 
     fn write_batch(
@@ -543,6 +553,31 @@ impl Record {
     }
 }
 
+/// Export data
+/// 
+/// ---
+impl Record {
+    /// Convert question data to polars dataframe
+    pub fn to_polars(&self) -> Result<DataFrame> {
+        let cache = self.cache.read();
+        let path = cache.as_ref().ok_or_else(|| {
+            error::InvalidArg::new("Data not loaded yet, please call `load_data` first.")
+        })?;
+        let file = File::open(path.as_ref())?;
+        Ok(ParquetReader::new(file).finish()?)
+    }
+
+    /// Dump cached data to parquet
+    pub fn to_parquet(&self, parquet_path: impl AsRef<Path>) -> Result<()> {
+        let cache = self.cache.read();
+        let temp_path = cache
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Data not loaded yet. Call `load_data` first!"))?;
+        std::fs::copy(temp_path.as_ref(), parquet_path)?;
+        Ok(())
+    }
+}
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Record {
@@ -681,6 +716,17 @@ impl Record {
         kwargs.set_item("as_series", false)?;
         let columns = frame.call_method("to_dict", (), Some(&kwargs))?;
         py.import("pandas")?.getattr("DataFrame")?.call1((columns,))
+    }
+
+    /// Dump loaded data to parquet file
+    #[pyo3(name = "to_parquet")]
+    pub fn py_to_parquet(&self, parquet_path: &str) -> PyResult<()> {
+        let cache = self.cache.read();
+        let temp_path = cache
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Data not loaded yet. Call `load_data` first!"))?;
+        std::fs::copy(temp_path.as_ref(), parquet_path)?;
+        Ok(())
     }
 
     fn __len__(&self) -> usize {
@@ -850,29 +896,6 @@ impl Record {
         }
     }
 }
-
-// struct RecordReader<'a> {
-//     record: &'a Record,
-//     path_data: &'a Path,
-//     current: usize
-// }
-
-// impl<'a> RecordReader<'a> {
-//     pub fn new(
-//         record: &'a Record,
-//         path_data: &'a Path,
-//     ) -> Self {
-//         Self {
-//             record, path_data, current: 0
-//         }
-//     }
-// }
-
-// impl<'a> Iterator for RecordReader {
-//     fn next(&mut self) -> Option<Self::Item> {
-//         todo!()
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
