@@ -43,3 +43,5 @@ Question names are case insensitive. [`Survey::get_question`] returns
 Use [`Survey::load_data`] to load fixed-width or CSV respondent data,
 then [`Record::to_polars`] on [`Survey::record`] to create a DataFrame.
 [`Survey::to_classic`] and [`Survey::to_xml`] return the datamap as a string.
+
+Data loading supports UTF-8 and BOM-marked UTF-16. 

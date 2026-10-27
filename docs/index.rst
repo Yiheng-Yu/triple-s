@@ -34,9 +34,27 @@ up to Triple-S 2.0.
 Installation
 ---------------
 
-Install with ``pip``::
+1) Install with ``pip``::
 
-   pip install triple-s
+   pip install triple-s -U
+
+2) install with ``uv``::
+
+   uv pip install triple-s -U
+
+Note: 
+
+Installing it for the first time may be a bit slow, this is because one of `triple_s`'s dependency, `polars`,
+takes a while to compile. You might want to add `-v` to see a bit more information, like::
+
+   pip install triple-s -U -v
+
+Or if you were using `uv`::
+
+   uv pip install triple-s -U -v
+
+
+
 
 See :doc:`getting_started/quickstart` for a working Python workflow and
 :doc:`api/index` documents the public Python API.

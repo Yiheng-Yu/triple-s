@@ -229,11 +229,13 @@ impl Text {
     /// ```
     pub fn add_variant(&mut self, variant: Variant) -> Result<()> {
         let copied = variant.deepcopy();
-        anyhow::ensure!(
-            !self.variants.read().iter().any(|item| item.has_same_attribute(&copied)),
-            "A variant with this mode and language already exists"
-        );
-        self.variants.write().push(copied);
+        let mut variants = self.variants.write();
+        if variants.iter().any(|item| item.has_same_attribute(&copied)) {
+            return Err(crate::error::InvalidArg::new(
+                "A variant with this mode and language already exists",
+            ).into());
+        }
+        variants.push(copied);
         Ok(())
     }
 

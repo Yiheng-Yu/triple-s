@@ -1,4 +1,14 @@
-use triple_s::{Entry, read_datamap};
+use triple_s::{Entry, Record, read_datamap};
+
+const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
+const PATH_DATAFILE_V2_0: &str = "tests/sss-examples/sss-2.0/example1.asc";
+
+#[test]
+fn test_create_parquet() {
+    let mut survey = read_datamap(PATH_DATAMAP_V2_0).unwrap();
+    let mut record = survey.record().clone();
+    record.load_data_v2(PATH_DATAFILE_V2_0).unwrap();
+}
 
 #[test]
 fn csv_and_fixed_examples_load_equivalent_responses() {

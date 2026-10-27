@@ -1,4 +1,7 @@
 use std::sync::Arc;
+use std::io::{self, BufRead, Read};
+
+use encoding_rs::{Decoder, DecoderResult, UTF_8};
 
 use anyhow::{Context, Result};
 use parking_lot::RwLock;
@@ -98,9 +101,74 @@ pub(crate) fn extract_indicies<'py>(
     .collect())
 }
 
+/// Used to read various raw files with various file encodings, mostly to accomdate Microsoft.
+/// oh god please save me
+pub(crate) struct TextReader<R> {
+    source: R,
+    decoder: Decoder,
+    output: [u8; 8192],
+    position: usize,
+    length: usize,
+    finished: bool,
+}
+
+impl<R: BufRead> TextReader<R> {
+    pub(crate) fn new(source: R) -> Self {
+        Self {
+            source,
+            decoder: UTF_8.new_decoder(),
+            output: [0; 8192],
+            position: 0,
+            length: 0,
+            finished: false,
+        }
+    }
+}
+
+impl<R: BufRead> Read for TextReader<R> {
+    fn read(&mut self, destination: &mut [u8]) -> io::Result<usize> {
+        if destination.is_empty() {
+            return Ok(0);
+        }
+        loop {
+            if self.position < self.length {
+                let count = destination.len().min(self.length - self.position);
+                destination[..count]
+                    .copy_from_slice(&self.output[self.position..self.position + count]);
+                self.position += count;
+                return Ok(count);
+            }
+            if self.finished {
+                return Ok(0);
+            }
+
+            let input = self.source.fill_buf()?;
+            let last = input.is_empty();
+            let (status, consumed, written) =
+                self.decoder.decode_to_utf8_without_replacement(input, &mut self.output, last);
+            self.source.consume(consumed);
+            self.position = 0;
+            self.length = written;
+            match status {
+                DecoderResult::Malformed(..) => {
+                    self.finished = true;
+                    self.length = 0;
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Malformed Unicode data",
+                    ));
+                }
+                DecoderResult::InputEmpty if last => self.finished = true,
+                _ => {}
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::utils::validate_language_tag;
+    use super::{validate_language_tag, TextReader};
+    use std::io::{BufReader, Read};
 
     #[test]
     fn test_validate_language_tag() {
@@ -111,5 +179,28 @@ mod tests {
         assert_eq!(validate_language_tag("en-GB").unwrap(), "en-GB");
         assert_eq!(validate_language_tag("fr").unwrap(), "fr");
         assert_eq!(validate_language_tag("en-US").unwrap(), "en-US");
+    }
+
+    #[test]
+    fn utf16_streaming_handles_split_code_units() {
+        let text = "中文😀\r\n".repeat(3000);
+        for little_endian in [true, false] {
+            let bytes: Vec<u8> = std::iter::once(0xfeff)
+                .chain(text.encode_utf16())
+                .flat_map(|unit| {
+                    if little_endian {
+                        unit.to_le_bytes()
+                    } else {
+                        unit.to_be_bytes()
+                    }
+                })
+                .collect();
+            let mut reader = TextReader::new(BufReader::with_capacity(1, bytes.as_slice()));
+            let mut decoded = String::new();
+            reader.read_to_string(&mut decoded).unwrap();
+            assert_eq!(decoded, text);
+        }
+        let mut truncated = TextReader::new(&[0xff, 0xfe, 0x41][..]);
+        assert!(truncated.read_to_string(&mut String::new()).is_err());
     }
 }

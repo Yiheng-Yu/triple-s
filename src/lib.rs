@@ -65,7 +65,7 @@
 //!
 //! let path_datamap: &str = "path/to/the/datamap.sss";
 //! let path_data: &str = "path/to/the/data.asc";
-//! 
+//!
 //! // toggle on to validate `path_data`, note that this might take some time.
 //! let validate_data_file = true;
 //! let survey = read_triple_s(path_datamap, Some(path_data), validate_data_file)?;
@@ -146,7 +146,6 @@
 //! assert_eq!(original.value(), "A".to_string());
 //! ```
 
-mod data;
 pub mod error;
 mod member;
 mod prelude;
@@ -192,10 +191,9 @@ use pyo3::prelude::*;
 /// `validate`:
 ///     toggle on/ off to check if there were any errors in the datafile.
 ///     Only used when `path_data` is not `None`
-/// 
+///
 /// Returns:
 /// [`Survey`] instance.
-/// 
 pub fn read_triple_s(
     path_sss: impl AsRef<Path>,
     path_data: Option<impl AsRef<Path>>,
@@ -205,14 +203,8 @@ pub fn read_triple_s(
     match path_data {
         None => Ok(survey),
         Some(path_data) => {
-            if validate_data_file {
-                survey.record_mut().set_data_source(path_data)?;
-                Ok(survey)
-            } else {
-                let path_string = path_data.as_ref().to_string_lossy().to_string();
-                *survey.record_mut().href_mut() = Some(path_string);
-                Ok(survey)
-            }
+            survey.record_mut().set_data_source(path_data, validate_data_file)?;
+            Ok(survey)
         }
     }
 }

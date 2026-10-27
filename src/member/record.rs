@@ -3,8 +3,8 @@
 #[cfg(feature = "pyo3")]
 use std::str::FromStr;
 use std::{
-    fs::File, 
-    io::{self, BufRead, BufReader, Read}, 
+    fs::File,
+    io::{BufRead, BufReader, Read},
     path::Path,
 };
 
@@ -23,7 +23,7 @@ use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use quick_xml::Writer;
 use rayon::prelude::*;
 use strum::{EnumIter, EnumString};
-use tempfile::TempPath;
+use tempfile::{NamedTempFile, TempPath};
 
 use super::{ArcLock, Question};
 #[cfg(feature = "pyo3")]
@@ -31,8 +31,10 @@ use crate::utils::{extract_indicies, get_type_name, normalize_py_index, py_value
 use crate::{
     error::{self, InvalidArg},
     prelude::{DeepCopy, Flag},
-    utils::lock_it_up,
+    utils::{TextReader, lock_it_up},
 };
+
+const BATCH_SIZE: usize = 500; // no. rows when writing to paquet cache
 
 /// Flags that collects all allowed values of `format` attribute of a `<record>`
 /// element. This is used to indicate types of the data the current datamap file
@@ -87,8 +89,134 @@ pub struct Record {
     href: Option<String>,
     data_format: Option<DataFormat>,
     content: ArcLock<Vec<ArcLock<Question>>>,
-    cache: Option<Arc<TempPath>>
+    cache: Option<Arc<TempPath>>,
 }
+
+impl Record {
+    /// Load data
+    pub fn load_data_v2(&mut self, path_data: impl AsRef<Path>) -> Result<()> {
+        // prepare cache file
+        self.create_new_cache()?;
+        let parquet_path = self
+            .cache
+            .clone()
+            .ok_or(error::InternalError::new(format!(
+                "No cache file created, this shouldn't happen."
+            )))?
+            .to_path_buf();
+        let parquet_file = File::create(&parquet_path)?;
+        
+        // update data source & file extension
+        let path_data = path_data.as_ref();
+        let path_string = path_data.to_string_lossy().to_string();
+        self.set_data_source(path_data, false)
+            .with_context(|| format!("When trying to load data from '{}'", path_string))?;
+        
+
+        // init parquet cache file
+        let schema =
+            Schema::from_iter(self.content().iter().map(|item| item.read().polars_field()));
+        let mut writer = ParquetWriter::new(parquet_file).batched(&schema)?;
+        
+        let mut index: usize = 0;
+        for line in self.read_href()? {
+            let line = line?;
+            for question in self.content().iter() {
+                let mut question = question.write();
+                let data = question.parse_question_value(&line).with_context(|| {
+                    format!(
+                        "When trying to extract data from line {} for question `{}`",
+                        index,
+                        question.name()
+                    )
+                })?;
+            }
+            index += 1;
+        }
+
+        todo!()
+
+        // // read file and save to parquet cache
+        // println!("{:?}", parquet_path);
+        // println!("{:#?}", schema);
+        // Ok(())
+    }
+
+    fn read_href(&self) -> Result<impl Iterator<Item=Result<&str>>> {
+        let path_data = self.href()
+            .as_ref()
+            .ok_or(error::InternalError::new("field `href` not defined"))?;
+        let skip = self
+            .skip
+            .as_deref()
+            .unwrap_or("0")
+            .parse::<usize>()
+            .context("Record skip must be a non-negative integer")?;
+        let data_format = self.data_format()
+            .cloned()
+            .unwrap_or(DataFormat::Fixed);  // default DataFormat
+
+        let file = File::open(path_data)
+            .map_err(error::FileReadError::from)
+            .with_context(|| format!("When opening '{}'", path_data))?;
+        let reader = TextReader::new(BufReader::new(file));
+
+        let line_read = match data_format {
+            DataFormat::Fixed => {
+                
+            }
+            DataFormat::Csv => {
+                todo!()
+            }
+        };
+    }
+
+    /// create a new temp file and delete the original cache
+    #[inline]
+    fn create_new_cache(&mut self) -> Result<()> {
+        self.cache = Some(Arc::new(
+            tempfile::NamedTempFile::with_suffix(".parquet")?.into_temp_path(),
+        ));
+        Ok(())
+    }
+
+    fn read_fixed_width_record(
+        &self,
+        reader: TextReader<BufReader<File>>,
+    ) -> Result<impl Iterator<Item = Result<String>>> {
+        let record_width = self.content()
+            .iter()
+            .map(|question| *question.read().location().finish() as usize)
+            .max()
+            .context("Cannot determine record width: no questions")?;
+
+        let mut reader = BufReader::new(reader);
+        Ok(std::iter::from_fn(move || {
+            match Self::read_one_record(&mut reader, record_width) {
+                Ok(row) if row.is_empty() => None,
+                Ok(row) => Some(Ok(row)),
+                Err(error) => Some(Err(error.into())),
+            }
+        }))
+    }
+
+    fn read_csv_record(
+        &self,
+        reader: TextReader<BufReader<File>>,
+    ) -> Result<impl Iterator<Item = Result<String>>> {
+        let reader = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .flexible(true)
+            .from_reader(reader);
+        let iterator = reader.into_records()
+            .map(|entry| {
+                entry.map(|item| item.)
+            })
+        Ok(iterator)
+
+    }
+}
+
 
 /// # Fields
 ///
@@ -207,10 +335,9 @@ impl Record {
     /// Writes the record to the supplied writer, propagating question and I/O
     /// errors.
     pub fn write_xml<W: std::io::Write>(&self, writer: &mut Writer<W>) -> Result<()> {
-        anyhow::ensure!(
-            self.id != '\0',
-            "Record ident must be set before XML export"
-        );
+        if self.id == '\0' {
+            return Err(InvalidArg::new("Record ident must be set before XML export").into());
+        }
         let ident = self.id.to_string();
         let mut element =
             writer.create_element("record").with_attribute(("ident", ident.as_str()));
@@ -236,10 +363,6 @@ impl Record {
     }
 }
 
-impl Record {
-
-}
-
 /// Read data file
 ///
 /// ---
@@ -247,6 +370,7 @@ impl Record {
     /// Load fixed-width or CSV data according to the record's `format`.
     /// CSV positions are one-based field numbers. The record's `skip`
     /// attribute controls how many initial records to ignore in either format.
+    /// UTF-8 and BOM-marked UTF-16LE/BE are decoded incrementally and strictly.
     pub fn load_data(&mut self, path: impl AsRef<Path>) -> Result<()> {
         // reader for the data file provided
         let path = path.as_ref();
@@ -260,11 +384,12 @@ impl Record {
             .parse::<usize>()
             .context("Record skip must be a non-negative integer")?;
 
+        let reader = TextReader::new(BufReader::new(file));
         if self.data_format() == Some(&DataFormat::Csv) {
-            self.load_csv_data(file, skip)
+            self.load_csv_data(reader, skip)
                 .with_context(|| format!("When reading CSV data from '{}'", path.display()))
         } else {
-            self.load_asc_data(file, skip)
+            self.load_asc_data(reader, skip)
                 .with_context(|| format!("When reading .asc data from '{}'", path.display()))
         }
     }
@@ -272,17 +397,20 @@ impl Record {
     /// Update data source after validation.
     ///
     /// This method will:
-    ///     - check the file extension type and update the corresponding `data_format` field
-    ///       accordingly.
+    ///     - check the file extension type and if the `path` actually exists.
+    /// 
+    /// if input argument `validate` was `true`:
     ///     - Scan the data row by row to check if there were any errors, and raises error
     ///       should there were any.
-    ///     - If no error was raised during the scan, this method will *overwrite* the 'href'
-    ///       field with the provided 'path' attribute.
+    /// 
+    /// And finally, this method will *overwrite* these fields:
+    /// 1) the 'href' field with the provided 'path' attribute
+    /// 2) `data_format` field according to the file extension of the `path` provided ([`CodeFormat::Fixed`] or [`CodeFormat::Csv`])
     ///
     /// CSV positions are one-based field numbers.
     /// The record's `skip` attribute controls how many initial records to ignore in either
     /// format.
-    pub fn set_data_source(&mut self, path: impl AsRef<Path>) -> Result<()> {
+    pub fn set_data_source(&mut self, path: impl AsRef<Path>, validate: bool) -> Result<()> {
         let path_ref = path.as_ref();
         let path_string = path_ref.to_string_lossy().into_owned();
 
@@ -320,8 +448,10 @@ impl Record {
             .context("Record skip must be a non-negative integer")?;
 
         // do an initial scan of the data source, checking if there were any errors for the data file
-        self.validate_data_format(file, skip)
-            .with_context(|| format!("When opening '{}'", path_string))?;
+        if validate {
+            self.validate_data_format(file, skip)
+                .with_context(|| format!("When opening '{}'", path_string))?;
+        };
 
         *self.href_mut() = Some(path_string);
         Ok(())
@@ -331,6 +461,7 @@ impl Record {
     /// raises error if there were anything wrong
     /// This method would not load any data into the memory.
     fn validate_data_format(&self, file: File, skip: usize) -> Result<()> {
+        let file = TextReader::new(BufReader::new(file));
         let data_format = self.data_format().unwrap_or(&DataFormat::Fixed);
         let content = self.content();
 
@@ -372,8 +503,9 @@ impl Record {
         }
     }
 
-    fn read_record<R:Read>(reader: &mut R, record_width: usize) -> Result<String> {
-        let mut result = String::new();
+    
+    fn read_one_record<R: BufRead>(reader: &mut R, record_width: usize) -> Result<String> {
+        let mut result = String::with_capacity(record_width);
 
         for _ in 0..record_width {
             let mut first = [0u8; 1];
@@ -391,7 +523,8 @@ impl Record {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         "Invalid UTF-8",
-                    ).into());
+                    )
+                    .into());
                 }
             };
             let mut bytes = [0u8; 4];
@@ -399,18 +532,24 @@ impl Record {
             reader.read_exact(&mut bytes[1..len])?;
 
             let character = std::str::from_utf8(&bytes[..len])
-                .map_err(|e| std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    e,
-                ))?;
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
             result.push_str(character);
+        }
+
+        // Record separators are not part of the fixed-width data. Peek so
+        // separator-free records and significant field spaces stay intact.
+        if reader.fill_buf()?.first() == Some(&b'\r') {
+            reader.consume(1);
+        }
+        if reader.fill_buf()?.first() == Some(&b'\n') {
+            reader.consume(1);
         }
 
         Ok(result)
     }
 
-    fn load_asc_data(&mut self, file: File, skip: usize) -> Result<()> {
+    fn load_asc_data(&mut self, file: impl Read, skip: usize) -> Result<()> {
         // total amount of characters per respondent
         let record_width = self
             .content()
@@ -425,9 +564,9 @@ impl Record {
         let mut reader = BufReader::new(file);
         let mut index = 0;
         loop {
-            let line = Self::read_record(&mut reader, record_width)?;
+            let line = Self::read_one_record(&mut reader, record_width)?;
             if line.is_empty() {
-                break
+                break;
             };
 
             if index < skip {
@@ -435,14 +574,16 @@ impl Record {
                 continue;
             };
 
-            for question in self.content_mut().iter_mut() {
-                let entry = question.read().parse_row(&line).with_context(||
+            for question in self.content().iter() {
+                let mut question = question.write();
+                let entry = question.parse_row(&line).with_context(|| {
                     format!(
                         "When trying to extract data from line {} for question `{}`",
                         index,
-                        question.read().name()
-                ))?;
-                question.write().data_mut().push(lock_it_up(entry));
+                        question.name()
+                    )
+                })?;
+                question.data_mut().push(lock_it_up(entry));
             }
 
             index += 1;
@@ -451,7 +592,7 @@ impl Record {
         Ok(())
     }
 
-    fn load_csv_data(&mut self, file: File, skip: usize) -> Result<()> {
+    fn load_csv_data(&mut self, file: impl Read, skip: usize) -> Result<()> {
         let mut reader =
             csv::ReaderBuilder::new().has_headers(false).flexible(true).from_reader(file);
 
@@ -793,15 +934,112 @@ impl Record {
     /// CSV positions are one-based field numbers.
     /// The record's `skip` attribute controls how many initial records to ignore in either
     /// format.
-    #[pyo3(name="update_data_source")]
+    #[pyo3(name = "update_data_source")]
     fn py_update_data_source(&mut self, path: Option<&str>) -> PyResult<()> {
         match path {
             None => {
                 *self.href_mut() = None;
                 Ok(())
             }
-            Some(path) => {
-                self.set_data_source(path).map_err(py_value_error)
+            Some(path) => self.set_data_source(path, true).map_err(py_value_error),
+        }
+    }
+}
+
+// struct RecordReader<'a> {
+//     record: &'a Record,
+//     path_data: &'a Path,
+//     current: usize
+// }
+
+// impl<'a> RecordReader<'a> {
+//     pub fn new(
+//         record: &'a Record,
+//         path_data: &'a Path,
+//     ) -> Self {
+//         Self {
+//             record, path_data, current: 0
+//         }
+//     }
+// }
+
+// impl<'a> Iterator for RecordReader {
+//     fn next(&mut self) -> Option<Self::Item> {
+//         todo!()
+//     }
+// }
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+
+    use super::*;
+    use crate::member::entry::Entry;
+
+    fn unicode_survey(csv: bool) -> super::super::Survey {
+        let positions = if csv {
+            ("1", "1", "2", "2")
+        } else {
+            ("1", "3", "4", "5")
+        };
+        crate::read_from_string(&format!(r#"<sss version="2.0"><survey><record ident="V" format="{}">
+            <variable ident="1" type="character"><name>TEXT</name>
+                <position start="{}" finish="{}"/><size>3</size></variable>
+            <variable ident="2" type="quantity"><name>NUMBER</name>
+                <position start="{}" finish="{}"/><values><range from="0" to="99"/></values></variable>
+            </record></survey></sss>"#,
+            if csv { "csv" } else { "fixed" }, positions.0, positions.1, positions.2, positions.3,
+        )).unwrap()
+    }
+
+    #[test]
+    fn unicode_data_loads_and_validates_in_both_formats() {
+        for csv in [false, true] {
+            let text = if csv {
+                "中文😀,17\r\n北京é,23"
+            } else {
+                "中文😀17\r\n北京é23"
+            };
+            let utf16: Vec<u8> = std::iter::once(0xfeff)
+                .chain(text.encode_utf16())
+                .flat_map(u16::to_le_bytes)
+                .collect();
+            for bytes in [text.as_bytes(), utf16.as_slice()] {
+                let mut file = tempfile::Builder::new()
+                    .suffix(if csv { ".csv" } else { ".asc" })
+                    .tempfile()
+                    .unwrap();
+                file.write_all(bytes).unwrap();
+                let mut survey = unicode_survey(csv);
+                survey.record_mut().set_data_source(file.path(), true).unwrap();
+                survey.load_data(file.path()).unwrap();
+                let texts = survey.get_question("TEXT").unwrap();
+                let numbers = survey.get_question("NUMBER").unwrap();
+                assert_eq!(texts.data().len(), 2);
+                assert_eq!(numbers.data().len(), 2);
+                for (index, (text, number)) in
+                    [("中文😀", 17.), ("北京é", 23.)].into_iter().enumerate()
+                {
+                    assert_eq!(*texts.data()[index].read(), Entry::String(text.into()));
+                    assert_eq!(*numbers.data()[index].read(), Entry::Quantity(number));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fixed_width_record_separators_preserve_fields() {
+        for separator in ["\n", "\r\n", ""] {
+            for trailing_separator in [false, true] {
+                let mut input = ["a   ", "  b ", "    "].join(separator);
+                if trailing_separator {
+                    input.push_str(separator);
+                }
+                // A tiny buffer also exercises CRLF across buffer boundaries.
+                let mut reader = BufReader::with_capacity(1, input.as_bytes());
+                for expected in ["a   ", "  b ", "    ", ""] {
+                    assert_eq!(Record::read_one_record(&mut reader, 4).unwrap(), expected);
+                }
             }
         }
     }

@@ -179,7 +179,7 @@ impl Survey {
 }
 
 impl Survey {
-    /// load .asc or .csv data that corresponds to the datamap
+    /// Load .asc or .csv data as UTF-8, or UTF-16LE/BE when a BOM is present.
     pub fn load_data(&mut self, path_data: impl AsRef<Path>) -> Result<()> {
         self.record_mut().load_data(path_data)
     }

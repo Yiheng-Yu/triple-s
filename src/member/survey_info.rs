@@ -21,18 +21,27 @@ use crate::error::missing_key_err;
 #[cfg(feature = "pyo3")]
 use crate::utils;
 
-#[allow(missing_docs)]
+/// All available Triple-S file versions
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, EnumString, EnumIter)]
 pub enum Version {
+    /// 1.0 (triple-s classic)
     #[strum(serialize = "1.0")]
     V1_0,
+
+    /// 1.1
     #[strum(serialize = "1.1")]
     V1_1,
+
+    /// 1.2, this could either be classic or xml
     #[strum(serialize = "1.2")]
     V1_2,
+
+    /// 2.0
     #[strum(serialize = "2.0")]
     V2_0,
+
+    /// 3.0
     #[strum(serialize = "3.0")]
     V3_0,
 }
