@@ -285,8 +285,14 @@ impl Survey {
 
     /// Export the record's loaded data as a pandas DataFrame.
     #[pyo3(name = "to_pandas")]
-    pub fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         self.record().py_to_pandas(py)
+    }
+
+    /// Export the record's loaded data to parquet file.
+    #[pyo3(name = "to_parquet")]
+    fn py_to_parquet<'py>(&self, parquet_path: &str) -> PyResult<()> {
+        self.record().py_to_parquet(parquet_path)
     }
 }
 
