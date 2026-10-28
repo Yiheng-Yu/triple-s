@@ -173,6 +173,17 @@ impl SurveyData {
             .clone()
             .collect()
     }
+
+    /// Total number of rows
+    pub fn num_rows(&self) -> PolarsResult<usize> {
+        let num_rows = self.lazy()
+            .map_err(|err| PolarsError::NoData(err.to_string().into()))?
+            .clone()
+            .select([len()])
+            .collect()?
+            .height();
+        Ok(num_rows)
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -181,7 +192,7 @@ impl SurveyData {
     fn __repr__(&self) -> String {
         let name = "SurveyData";
         let content = "";
-        format!("{} {{{}}}", name, content)
+        format!("{} ({{{}}})", name, content)
     }
 
     /// Create new empty [`SurveyData`] instance

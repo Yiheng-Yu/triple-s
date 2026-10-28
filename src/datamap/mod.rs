@@ -11,8 +11,6 @@ use anyhow::Result;
 use parking_lot::{ArcRwLockReadGuard, RawRwLock};
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*, types::PyDict};
-#[cfg(feature = "pyo3")]
-use pyo3_polars::PyDataFrame;
 pub use question::{CodeFormat, Location, Question, QuestionType, Spread, Usage};
 use quick_xml::{Writer, events::BytesText};
 pub use record::{DataFormat, Record};
