@@ -275,24 +275,21 @@ impl Record {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn load_data(&mut self, path_data: impl AsRef<Path>) -> Result<()> {
-        let cache = tempfile::NamedTempFile::with_suffix(".parquet")?.into_temp_path();
-        let parquet_file = File::create(&cache)?;
+        let (parquet_file, cache) =
+            tempfile::NamedTempFile::with_suffix(".parquet")?.into_parts();
 
-        // update data source & file extension
         let path_data = path_data.as_ref();
-        let path_string = path_data.to_string_lossy().to_string();
         self.set_data_source(path_data, false)
-            .with_context(|| format!("When trying to load data from '{}'", path_string))?;
+            .with_context(|| format!("When trying to load data from '{}'", path_data.display()))?;
 
-        // init parquet cache file
         let schema =
             Schema::from_iter(self.content().iter().map(|item| item.read().polars_field()));
         let mut writer = ParquetWriter::new(parquet_file).batched(&schema)?;
         let mut batch_buffer = Vec::new();
         for row in self.scan_data_file()? {
-            let row = row
-                .with_context(|| format!("When trying to load data from '{}'", path_string))?;
-            batch_buffer.push(row);
+            batch_buffer.push(row.with_context(|| {
+                format!("When trying to load data from '{}'", path_data.display())
+            })?);
             if batch_buffer.len() == BATCH_SIZE {
                 Self::write_batch(&mut writer, &schema, &mut batch_buffer)?;
             }
