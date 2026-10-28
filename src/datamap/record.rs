@@ -35,9 +35,7 @@ use crate::utils::{
     py_value_error,
 };
 use crate::{
-    error::{self, InvalidArg},
-    prelude::{DeepCopy, Flag},
-    utils::TextReader,
+    SurveyData, error::{self, InvalidArg}, prelude::{DeepCopy, Flag}, utils::TextReader,
 };
 
 const BATCH_SIZE: usize = 500; // no. rows when writing to paquet cache
@@ -95,6 +93,7 @@ pub struct Record {
     href: Option<String>,
     data_format: Option<DataFormat>,
     content: ArcLock<Vec<ArcLock<Question>>>,
+    // data: ArcLock<SurveyData>,
     cache: ArcLock<Option<Arc<TempPath>>>,
 }
 
@@ -258,7 +257,7 @@ impl Record {
     /// 
     /// let mut survey = read_triple_s(
     ///     "path/to/datamap.sss",
-    ///     "path/to/database.asc",
+    ///     Some("path/to/database.asc"),
     ///     false
     /// )?;
     /// 
@@ -577,10 +576,6 @@ impl Record {
         std::fs::copy(temp_path.as_ref(), parquet_path)?;
         Ok(())
     }
-
-    pub fn get_data(&self, question_name: &str) -> Result<DataFrame> {
-        todo!()
-    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -718,9 +713,8 @@ impl Record {
     pub fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let frame = self.py_to_polars()?.into_pyobject(py)?;
         let kwargs = PyDict::new(py);
-        kwargs.set_item("as_series", false)?;
-        let columns = frame.call_method("to_dict", (), Some(&kwargs))?;
-        py.import("pandas")?.getattr("DataFrame")?.call1((columns,))
+        kwargs.set_item("use_pyarrow_extension_array", true)?;
+        frame.call_method("to_pandas", (), Some(&kwargs))
     }
 
     /// Dump loaded data to parquet file

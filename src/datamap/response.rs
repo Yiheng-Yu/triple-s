@@ -27,7 +27,7 @@ use crate::{
         TypeConvertionError,
         UnsupportedFeature,
     },
-    member::{QuestionType, Text},
+    datamap::{QuestionType, Text},
     prelude::DeepCopy,
     utils::{ArcLock, lock_it_up},
 };
@@ -2150,7 +2150,7 @@ impl Eq for DataRange {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::member::test::normalize_xml;
+    use crate::datamap::test::normalize_xml;
 
     #[test]
     fn test_value_float_parse_like() {
@@ -2198,7 +2198,7 @@ mod test {
             .label
             .write()
             .add_variant(
-                crate::member::Variant::new("Oui", Some("interview"), Some("fr")).unwrap(),
+                crate::datamap::Variant::new("Oui", Some("interview"), Some("fr")).unwrap(),
             )
             .unwrap();
 
@@ -2207,7 +2207,7 @@ mod test {
             .label
             .write()
             .add_variant(
-                crate::member::Variant::new("Agreed", Some("analysis"), None).unwrap(),
+                crate::datamap::Variant::new("Agreed", Some("analysis"), None).unwrap(),
             )
             .unwrap();
 

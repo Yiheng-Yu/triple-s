@@ -14,7 +14,7 @@ use strum::{AsRefStr, EnumIter, EnumString};
 use crate::{
     EventLog,
     error::{self, DataReadError, InternalError, InvalidArg, RangeError},
-    member::{Code, Response, Text, Value},
+    datamap::{Code, Response, Text, Value},
     prelude::{DeepCopy, *},
     utils::{ArcLock, lock_it_up},
 };
@@ -2563,7 +2563,7 @@ mod test {
     }
 
     use super::*;
-    use crate::member::{Variant, test::normalize_xml};
+    use crate::datamap::{Variant, test::normalize_xml};
 
     fn new_empty_question() -> Question {
         Question::new(

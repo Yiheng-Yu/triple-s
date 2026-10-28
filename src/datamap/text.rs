@@ -981,7 +981,7 @@ impl Variant {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::member::test::normalize_xml;
+    use crate::datamap::test::normalize_xml;
 
     #[test]
     fn test_variant_equal() {

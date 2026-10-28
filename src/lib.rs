@@ -146,16 +146,17 @@
 //! assert_eq!(original.value(), "A".to_string());
 //! ```
 
+mod data;
+mod datamap;
 pub mod error;
-mod member;
 mod prelude;
 mod utils;
 
 use std::path::Path;
 
 use anyhow::Result;
-use error::EventLog;
-pub use member::{
+pub use data::SurveyData;
+pub use datamap::{
     Survey,
     question::{
         self,
@@ -173,6 +174,7 @@ pub use member::{
     survey_info::{self, SurveyInfo, Version},
     text::{self, Mode, Text, Variant},
 };
+use error::EventLog;
 pub use prelude::DeepCopy;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -216,9 +218,9 @@ mod triple_s {
     use pyo3::prelude::*;
 
     #[pymodule_export]
-    pub use crate::error::MissingKeyError;
+    pub use crate::data::SurveyData;
     #[pymodule_export]
-    pub use crate::member::{
+    pub use crate::datamap::{
         Survey,
         question::{CodeFormat, Location, Question, QuestionType, Spread, Usage},
         record::{DataFormat, Record},
@@ -226,7 +228,9 @@ mod triple_s {
         survey_info::{SurveyInfo, Version},
         text::{Mode, Text, Variant},
     };
-    use crate::{member::read::read_from_reader, read_triple_s};
+    #[pymodule_export]
+    pub use crate::error::MissingKeyError;
+    use crate::{datamap::read::read_from_reader, read_triple_s};
 
     /// Read triple-s datamap
     ///

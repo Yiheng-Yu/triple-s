@@ -28,7 +28,7 @@ use crate::{
         UnknownAttribute,
         Warning,
     },
-    member::{
+    datamap::{
         Code,
         CodeFormat,
         DataFormat,
