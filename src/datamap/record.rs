@@ -10,7 +10,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
-use polars::prelude::*;
+use polars::{frame::row::Row, prelude::*};
 #[cfg(feature = "pyo3")]
 use pyo3::{
     IntoPyObjectExt,
@@ -26,12 +26,18 @@ use strum::{EnumIter, EnumString};
 
 use super::{ArcLock, Question};
 #[cfg(feature = "pyo3")]
-use crate::utils::{extract_indicies, get_type_name, normalize_py_index, py_value_error};
 use crate::{
+    Survey,
+    utils::{extract_indicies, get_type_name, normalize_py_index, py_value_error},
+};
+use crate::{
+    SurveyData,
     error::{self, InvalidArg},
     prelude::{DeepCopy, Flag},
-    utils::lock_it_up,
+    utils::TextReader,
 };
+
+const BATCH_SIZE: usize = 500; // no. rows when writing to paquet cache
 
 /// Flags that collects all allowed values of `format` attribute of a `<record>`
 /// element. This is used to indicate types of the data the current datamap file
@@ -86,6 +92,7 @@ pub struct Record {
     href: Option<String>,
     data_format: Option<DataFormat>,
     content: ArcLock<Vec<ArcLock<Question>>>,
+    data: ArcLock<SurveyData>,
 }
 
 /// # Fields
@@ -159,6 +166,16 @@ impl Record {
     pub fn content_mut(&mut self) -> RwLockWriteGuard<'_, Vec<ArcLock<Question>>> {
         self.content.write()
     }
+
+    /// A read only copy of the survey data.
+    pub fn data(&self) -> RwLockReadGuard<'_, SurveyData> {
+        self.data.read()
+    }
+
+    /// A read-write borrow of the survey data.
+    pub fn data_mut(&self) -> RwLockWriteGuard<'_, SurveyData> {
+        self.data.write()
+    }
 }
 
 impl Record {
@@ -205,10 +222,9 @@ impl Record {
     /// Writes the record to the supplied writer, propagating question and I/O
     /// errors.
     pub fn write_xml<W: std::io::Write>(&self, writer: &mut Writer<W>) -> Result<()> {
-        anyhow::ensure!(
-            self.id != '\0',
-            "Record ident must be set before XML export"
-        );
+        if self.id == '\0' {
+            return Err(InvalidArg::new("Record ident must be set before XML export").into());
+        }
         let ident = self.id.to_string();
         let mut element =
             writer.create_element("record").with_attribute(("ident", ident.as_str()));
@@ -239,44 +255,168 @@ impl Record {
 /// ---
 impl Record {
     /// Load fixed-width or CSV data according to the record's `format`.
-    /// CSV positions are one-based field numbers. The record's `skip`
-    /// attribute controls how many initial records to ignore in either format.
-    pub fn load_data(&mut self, path: impl AsRef<Path>) -> Result<()> {
-        // reader for the data file provided
-        let path = path.as_ref();
-        let file = File::open(path)
+    /// Supports both UTF-8 and BOM-marked UTF-16LE/BE encodings.
+    ///
+    /// This `load_data` function will stream data into a temporary parquet cache file (`.parquet`) to be
+    /// used later. To get the cache, call [`Record::to_parquet()`] method afterwards:
+    ///
+    /// ```no_run
+    /// use triple_s::read_triple_s;
+    ///
+    /// let mut survey =
+    ///     read_triple_s("path/to/datamap.sss", Some("path/to/database.asc"), false)?;
+    ///
+    /// let mut record = survey.record_mut();
+    /// record.load_data("new/data/path.asc")?; // loads data
+    ///
+    /// let df = record.to_polars()?; // get data as polars dataframe
+    /// println!("{:?}", df);
+    ///
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn load_data(&mut self, path_data: impl AsRef<Path>) -> Result<()> {
+        let (parquet_file, cache) =
+            tempfile::NamedTempFile::with_suffix(".parquet")?.into_parts();
+
+        let path_data = path_data.as_ref();
+        self.set_data_source(path_data, false)
+            .with_context(|| format!("When trying to load data from '{}'", path_data.display()))?;
+
+        let schema =
+            Schema::from_iter(self.content().iter().map(|item| item.read().polars_field()));
+        let mut writer = ParquetWriter::new(parquet_file).batched(&schema)?;
+        let mut batch_buffer = Vec::new();
+        for row in self.scan_data_file()? {
+            batch_buffer.push(row.with_context(|| {
+                format!("When trying to load data from '{}'", path_data.display())
+            })?);
+            if batch_buffer.len() == BATCH_SIZE {
+                Self::write_batch(&mut writer, &schema, &mut batch_buffer)?;
+            }
+        }
+        Self::write_batch(&mut writer, &schema, &mut batch_buffer)?;
+        writer.finish()?;
+
+        let data = SurveyData::from_cache(cache, Some(Arc::new(schema)))?;
+        *self.data.write() = data;
+        Ok(())
+    }
+
+    fn write_batch(
+        writer: &mut polars::io::parquet::write::BatchedWriter<File>,
+        schema: &Schema,
+        batch_buffer: &mut Vec<Row<'static>>,
+    ) -> Result<()> {
+        let df = DataFrame::from_rows_and_schema(batch_buffer, schema)?;
+        writer.write_batch(&df)?;
+        batch_buffer.clear();
+        Ok(())
+    }
+
+    fn scan_data_file(&self) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>> + '_>> {
+        let path_data = self
+            .href()
+            .as_ref()
+            .ok_or(error::InternalError::new("field `href` not defined"))?;
+
+        let file = File::open(path_data)
             .map_err(error::FileReadError::from)
-            .with_context(|| format!("When opening '{}'", path.display()))?;
+            .with_context(|| format!("When opening '{}'", path_data))?;
+        let reader = TextReader::new(BufReader::new(file));
+        let mut reader = BufReader::new(reader);
+
+        // first apply skip...
         let skip = self
             .skip
             .as_deref()
             .unwrap_or("0")
             .parse::<usize>()
             .context("Record skip must be a non-negative integer")?;
+        let mut discarded = Vec::new();
+        for _ in 0..skip {
+            discarded.clear();
+            if reader.read_until(b'\n', &mut discarded)? == 0 {
+                break;
+            }
+        }
 
-        if self.data_format() == Some(&DataFormat::Csv) {
-            self.load_csv_data(file, skip)
-                .with_context(|| format!("When reading CSV data from '{}'", path.display()))
-        } else {
-            self.load_asc_data(file, skip)
-                .with_context(|| format!("When reading .asc data from '{}'", path.display()))
+        // then do iteration
+        let data_format = self.data_format().cloned().unwrap_or(DataFormat::Fixed); // default DataFormat
+        match data_format {
+            DataFormat::Fixed => {
+                let width = self
+                    .content()
+                    .iter()
+                    .map(|question| *question.read().location().finish() as usize)
+                    .max()
+                    .context("Cannot determine record width: no questions")?;
+                Ok(Box::new(std::iter::from_fn(
+                    move || match Self::read_one_record(&mut reader, width) {
+                        Ok(row) if row.is_empty() => None,
+                        Ok(row) => Some(
+                            self.content()
+                                .iter()
+                                .map(|question| {
+                                    let question = question.read();
+                                    let field = question.locate_data_asc(&row)?;
+                                    Ok(question.parse_question_value(field)?.into_static())
+                                })
+                                .collect::<Result<Vec<_>>>()
+                                .map(Row),
+                        ),
+                        Err(error) => Some(Err(error)),
+                    },
+                )))
+            }
+            DataFormat::Csv => {
+                let rows = csv::ReaderBuilder::new()
+                    .has_headers(false)
+                    .flexible(true)
+                    .from_reader(reader)
+                    .into_records()
+                    .enumerate()
+                    .map(move |(index, row)| {
+                        let row = row.with_context(|| {
+                            format!("When reading CSV record {}", index + 1)
+                        })?;
+                        self.content()
+                            .iter()
+                            .map(|question| {
+                                let question = question.read();
+                                let field =
+                                    question.locate_data_csv(&row).with_context(|| {
+                                        format!(
+                                            "When trying to extract data for question `{}`",
+                                            question.name()
+                                        )
+                                    })?;
+                                Ok(question.parse_question_value(field)?.into_static())
+                            })
+                            .collect::<Result<Vec<_>>>()
+                            .map(Row)
+                    });
+                Ok(Box::new(rows))
+            }
         }
     }
 
     /// Update data source after validation.
     ///
     /// This method will:
-    ///     - check the file extension type and update the corresponding `data_format` field
-    ///       accordingly.
+    ///     - check the file extension type and if the `path` actually exists.
+    ///
+    /// if input argument `validate` was `true`:
     ///     - Scan the data row by row to check if there were any errors, and raises error
     ///       should there were any.
-    ///     - If no error was raised during the scan, this method will *overwrite* the 'href'
-    ///       field with the provided 'path' attribute.
+    ///
+    /// And finally, this method will *overwrite* these fields:
+    /// 1) the 'href' field with the provided 'path' attribute
+    /// 2) `data_format` field according to the file extension of the `path` provided ([`CodeFormat::Fixed`] or [`CodeFormat::Csv`])
     ///
     /// CSV positions are one-based field numbers.
     /// The record's `skip` attribute controls how many initial records to ignore in either
     /// format.
-    pub fn set_data_source(&mut self, path: impl AsRef<Path>) -> Result<()> {
+    pub fn set_data_source(&mut self, path: impl AsRef<Path>, validate: bool) -> Result<()> {
         let path_ref = path.as_ref();
         let path_string = path_ref.to_string_lossy().into_owned();
 
@@ -313,8 +453,11 @@ impl Record {
             .parse::<usize>()
             .context("Record skip must be a non-negative integer")?;
 
-        self.validate_data_format(file, skip)
-            .with_context(|| format!("When opening '{}'", path_string))?;
+        // do an initial scan of the data source, checking if there were any errors for the data file
+        if validate {
+            self.validate_data_format(file, skip)
+                .with_context(|| format!("When opening '{}'", path_string))?;
+        }
 
         *self.href_mut() = Some(path_string);
         Ok(())
@@ -324,6 +467,7 @@ impl Record {
     /// raises error if there were anything wrong
     /// This method would not load any data into the memory.
     fn validate_data_format(&self, file: File, skip: usize) -> Result<()> {
+        let file = TextReader::new(BufReader::new(file));
         let data_format = self.data_format().unwrap_or(&DataFormat::Fixed);
         let content = self.content();
 
@@ -365,73 +509,79 @@ impl Record {
         }
     }
 
-    fn load_asc_data(&mut self, file: File, skip: usize) -> Result<()> {
-        let lines = BufReader::new(file).lines(); // each line is treated as data from one respondent
+    /// extract one row of data from a fixed width data read
+    fn read_one_record<R: BufRead>(reader: &mut R, record_width: usize) -> Result<String> {
+        let mut result = String::with_capacity(record_width);
 
-        for (index, line) in lines.enumerate() {
-            if index < skip {
-                continue;
+        for _ in 0..record_width {
+            let mut first = [0u8; 1];
+
+            // EOF
+            if reader.read(&mut first)? == 0 {
+                break;
             }
-            let data = line?;
-            for question in self.content_mut().iter_mut() {
-                let entry = question.read().parse_row(&data).with_context(|| {
-                    format!(
-                        "When trying to extract data from line {} for question `{}`",
-                        index,
-                        question.read().name()
+            let len = match first[0] {
+                0x00..=0x7f => 1,
+                0xc2..=0xdf => 2,
+                0xe0..=0xef => 3,
+                0xf0..=0xf4 => 4,
+                _ => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Invalid UTF-8",
                     )
-                })?;
-                question.write().data_mut().push(lock_it_up(entry));
-            }
+                    .into());
+                }
+            };
+            let mut bytes = [0u8; 4];
+            bytes[0] = first[0];
+            reader.read_exact(&mut bytes[1..len])?;
+
+            let character = std::str::from_utf8(&bytes[..len])
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+            result.push_str(character);
         }
 
-        Ok(())
-    }
-
-    fn load_csv_data(&mut self, file: File, skip: usize) -> Result<()> {
-        let mut reader =
-            csv::ReaderBuilder::new().has_headers(false).flexible(true).from_reader(file);
-
-        for (index, row) in reader.records().enumerate() {
-            let row = row.with_context(|| format!("When reading CSV record {}", index + 1))?;
-            if index < skip {
-                continue;
-            }
-            let questions = self.content();
-            let entries = questions
-                .iter()
-                .map(|question| {
-                    let question = question.read();
-                    let field = question.locate_data_csv(&row).with_context(|| {
-                        format!(
-                            "When trying to extract data from line {} for question `{}`",
-                            index,
-                            question.name()
-                        )
-                    })?;
-
-                    question
-                        .parse_field(field)
-                        .with_context(|| format!("When parsing CSV record {}", index + 1,))
-                })
-                .collect::<Result<Vec<_>>>()?;
-
-            for (question, entry) in questions.iter().zip(entries) {
-                question.write().data_mut().push(lock_it_up(entry));
-            }
+        // Record separators are not part of the fixed-width data. Peek so
+        // separator-free records and significant field spaces stay intact.
+        if reader.fill_buf()?.first() == Some(&b'\r') {
+            reader.consume(1);
         }
-        Ok(())
+        if reader.fill_buf()?.first() == Some(&b'\n') {
+            reader.consume(1);
+        }
+
+        Ok(result)
+    }
+}
+
+/// Export data
+///
+/// ---
+impl Record {
+    /// Convert question data to polars dataframe
+    pub fn to_polars(&self) -> PolarsResult<DataFrame> {
+        self.data().to_polars()
     }
 
-    /// convert data into polars dataframe
-    pub fn to_polars(&self) -> Result<DataFrame, PolarsError> {
-        let columns = self
-            .content()
-            .iter()
-            .map(|item| item.read().to_polars().map(Column::from))
-            .collect::<Result<Vec<Column>, PolarsError>>()?;
+    /// Dump cached data to parquet datafile
+    pub fn to_parquet(&self, parquet_path: impl AsRef<Path>) -> PolarsResult<()> {
+        let path_sink = PlRefPath::try_from_path(parquet_path.as_ref())?;
+        let path_sink = SinkDestination::File {
+            target: SinkTarget::Path(path_sink),
+        };
 
-        DataFrame::new_infer_height(columns)
+        let write_option = ParquetWriteOptions::default();
+        let write_formt = FileWriteFormat::Parquet(Arc::new(write_option));
+
+        self.data()
+            .lazy()?
+            .clone()
+            .sink(path_sink, write_formt, UnifiedSinkArgs::default())?
+            .collect()?;
+
+        Ok(())
     }
 }
 
@@ -559,19 +709,24 @@ impl Record {
 
     /// Export loaded data into polars dataframe
     #[pyo3(name = "to_polars")]
-    pub fn py_to_polars(&self) -> PyResult<PyDataFrame> {
-        self.to_polars().map(PyDataFrame).map_err(|err| PyPolarsErr::from(err).into())
+    pub fn py_to_polars<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.data().py_to_polars(py)
     }
 
     /// Export loaded data as a pandas DataFrame in question order.
     #[pyo3(name = "to_pandas")]
     pub fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let columns = PyDict::new(py);
-        for question in self.content().iter() {
-            let question = question.read();
-            columns.set_item(question.name(), question.py_to_pandas(py)?)?;
-        }
-        py.import("pandas")?.getattr("DataFrame")?.call1((columns,))
+        let frame = self.py_to_polars(py)?;
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("use_pyarrow_extension_array", true)?;
+        frame.call_method("to_pandas", (), Some(&kwargs))
+    }
+
+    /// Dump loaded data to parquet file
+    #[pyo3(name = "to_parquet")]
+    pub fn py_to_parquet(&self, parquet_path: &str) -> PyResult<()> {
+        self.to_parquet(parquet_path).map_err(PyPolarsErr::Polars)?;
+        Ok(())
     }
 
     fn __len__(&self) -> usize {
@@ -640,6 +795,10 @@ impl Record {
     ///     list of [`Question`] instance or dictionaries to pass to
     ///     Question.from_dict,
     ///     Default to be an empty list (`[]`)
+    ///
+    /// 'data' (SurveyData|None, *optional*):
+    ///     data of the corresponding survey.
+    ///     Default SurveyData.empty()
     #[pyo3(name = "from_dict")]
     #[staticmethod]
     #[allow(unused_variables)]
@@ -707,12 +866,26 @@ impl Record {
             .transpose()?
             .flatten();
 
+        let data = content
+            .get_item("data")?
+            .map(|item| {
+                if let Ok(value) = item.extract::<SurveyData>() {
+                    Ok(value)
+                } else {
+                    let type_name = get_type_name(&item)?;
+                    Err(exceptions::PyTypeError::new_err(type_name))
+                }
+            })
+            .transpose()?
+            .unwrap_or(SurveyData::default());
+
         Ok(Self {
             id: ident,
             href: href,
             skip: skip,
             data_format: data_format,
             content: lock_it_up(questions),
+            data: lock_it_up(data),
         })
     }
 
@@ -729,15 +902,109 @@ impl Record {
     /// CSV positions are one-based field numbers.
     /// The record's `skip` attribute controls how many initial records to ignore in either
     /// format.
-    #[pyo3(name="update_data_source")]
+    #[pyo3(name = "update_data_source")]
     fn py_update_data_source(&mut self, path: Option<&str>) -> PyResult<()> {
         match path {
             None => {
                 *self.href_mut() = None;
                 Ok(())
             }
-            Some(path) => {
-                self.set_data_source(path).map_err(py_value_error)
+            Some(path) => self.set_data_source(path, true).map_err(py_value_error),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+
+    use super::*;
+
+    fn unicode_survey(csv: bool) -> super::super::Survey {
+        let positions = if csv {
+            ("1", "1", "2", "2")
+        } else {
+            ("1", "3", "4", "5")
+        };
+        crate
+            ::read_from_string(
+                &format!(
+                    r#"<sss version="2.0"><survey><record ident="V" format="{}">
+            <variable ident="1" type="character"><name>TEXT</name>
+                <position start="{}" finish="{}"/><size>3</size></variable>
+            <variable ident="2" type="quantity"><name>NUMBER</name>
+                <position start="{}" finish="{}"/><values><range from="0" to="99"/></values></variable>
+            </record></survey></sss>"#,
+                    if csv {
+                        "csv"
+                    } else {
+                        "fixed"
+                    },
+                    positions.0,
+                    positions.1,
+                    positions.2,
+                    positions.3
+                )
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn unicode_data_loads_and_validates_in_both_formats() {
+        for csv in [false, true] {
+            let text = if csv {
+                "中文😀,17\r\n北京é,23"
+            } else {
+                "中文😀17\r\n北京é23"
+            };
+            let utf16: Vec<u8> = std::iter::once(0xfeff)
+                .chain(text.encode_utf16())
+                .flat_map(u16::to_le_bytes)
+                .collect();
+            for bytes in [text.as_bytes(), utf16.as_slice()] {
+                let mut file = tempfile::Builder::new()
+                    .suffix(if csv { ".csv" } else { ".asc" })
+                    .tempfile()
+                    .unwrap();
+                file.write_all(bytes).unwrap();
+                let mut survey = unicode_survey(csv);
+                survey.record_mut().set_data_source(file.path(), true).unwrap();
+                survey.load_data(file.path()).unwrap();
+                let frame = survey.record().to_polars().unwrap();
+                assert_eq!(frame.shape(), (2, 2));
+                assert_eq!(
+                    frame.column("TEXT").unwrap().str().unwrap().get(0),
+                    Some("中文😀")
+                );
+                assert_eq!(
+                    frame.column("TEXT").unwrap().str().unwrap().get(1),
+                    Some("北京é")
+                );
+                assert_eq!(
+                    frame.column("NUMBER").unwrap().f64().unwrap().get(0),
+                    Some(17.0)
+                );
+                assert_eq!(
+                    frame.column("NUMBER").unwrap().f64().unwrap().get(1),
+                    Some(23.0)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn fixed_width_record_separators_preserve_fields() {
+        for separator in ["\n", "\r\n", ""] {
+            for trailing_separator in [false, true] {
+                let mut input = ["a   ", "  b ", "    "].join(separator);
+                if trailing_separator {
+                    input.push_str(separator);
+                }
+                // A tiny buffer also exercises CRLF across buffer boundaries.
+                let mut reader = BufReader::with_capacity(1, input.as_bytes());
+                for expected in ["a   ", "  b ", "    ", ""] {
+                    assert_eq!(Record::read_one_record(&mut reader, 4).unwrap(), expected);
+                }
             }
         }
     }

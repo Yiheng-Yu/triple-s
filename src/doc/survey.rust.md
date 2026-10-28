@@ -25,12 +25,12 @@ and record.
 
 # Read a survey
 
-```rust,no_run
+```no_run
 use triple_s::read_triple_s;
 
-let survey = read_triple_s("survey.sss", None::<&str>)?;
+let survey = read_triple_s("survey.sss", None::<&str>, false)?;
 if let Some(question) = survey.get_question("Q1") {
-    println!("{question:?}");
+    println!("Title of question 'Q1': '{:?}'", question.label());
 }
 # Ok::<(), anyhow::Error>(())
 ```
@@ -43,3 +43,5 @@ Question names are case insensitive. [`Survey::get_question`] returns
 Use [`Survey::load_data`] to load fixed-width or CSV respondent data,
 then [`Record::to_polars`] on [`Survey::record`] to create a DataFrame.
 [`Survey::to_classic`] and [`Survey::to_xml`] return the datamap as a string.
+
+Data loading supports UTF-8 and BOM-marked UTF-16. 

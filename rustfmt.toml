@@ -11,7 +11,7 @@ reorder_modules = true
 reorder_imports = true
 short_array_element_width_threshold = 8
 imports_layout="HorizontalVertical"
-wrap_comments = true
+wrap_comments = false
 
 where_single_line = true
 unstable_features = true

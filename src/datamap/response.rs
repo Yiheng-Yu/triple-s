@@ -14,12 +14,8 @@ use pyo3::{
 use quick_xml::{events::BytesText, writer::Writer};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-#[cfg(feature = "pyo3")]
 use crate::{
-    error::missing_key_err,
-    utils::{extract_indicies, get_type_name, normalize_py_index},
-};
-use crate::{
+    datamap::{QuestionType, Text},
     error::{
         self,
         InvalidArg,
@@ -27,9 +23,13 @@ use crate::{
         TypeConvertionError,
         UnsupportedFeature,
     },
-    member::{QuestionType, Text},
     prelude::DeepCopy,
     utils::{ArcLock, lock_it_up},
+};
+#[cfg(feature = "pyo3")]
+use crate::{
+    error::missing_key_err,
+    utils::{extract_indicies, get_type_name, normalize_py_index},
 };
 
 #[doc = include_str!("../doc/rs_response.md")]
@@ -202,14 +202,14 @@ impl Response {
     /// let mut response = Response::new(None, Vec::new());
     /// // adding a value
     /// response.set_value(Code::new_unsigned(1, "Label A", None, Some(0.5)))?;
-    /// println!("{:?}", response.values());
+    /// println!("Total amount of values: {}", response.values().len());
     ///
     /// // cannot add new code with different variant:
     /// assert!(response.set_value(Code::new_signed(2, "Label A", None, Some(0.5))).is_err());
     ///
     /// // overwrites existing item in `Response::values`,
     /// response.set_value(Code::new_unsigned(1, "Label B", None, Some(0.5)))?;
-    /// println!("{:?}", response.values());
+    /// println!("Total amount of values: {}", response.values().len());
     ///
     /// Ok::<(), triple_s::error::InvalidArg>(())
     /// ```
@@ -2150,7 +2150,7 @@ impl Eq for DataRange {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::member::test::normalize_xml;
+    use crate::datamap::test::normalize_xml;
 
     #[test]
     fn test_value_float_parse_like() {
@@ -2198,7 +2198,7 @@ mod test {
             .label
             .write()
             .add_variant(
-                crate::member::Variant::new("Oui", Some("interview"), Some("fr")).unwrap(),
+                crate::datamap::Variant::new("Oui", Some("interview"), Some("fr")).unwrap(),
             )
             .unwrap();
 
@@ -2207,7 +2207,7 @@ mod test {
             .label
             .write()
             .add_variant(
-                crate::member::Variant::new("Agreed", Some("analysis"), None).unwrap(),
+                crate::datamap::Variant::new("Agreed", Some("analysis"), None).unwrap(),
             )
             .unwrap();
 

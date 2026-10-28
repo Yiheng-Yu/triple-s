@@ -3,22 +3,20 @@
 use std::{collections::HashSet, range::Range, str::FromStr};
 
 use anyhow::{Context, Result};
-use chrono::{NaiveDate, NaiveTime};
+use chrono::{NaiveDate, NaiveTime, Timelike};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::{
-    exceptions,
-    prelude::*,
-    types::{PyDict, PyList, PyTuple},
-};
-#[cfg(feature = "pyo3")]
-use pyo3_polars::{PySeries, error::PyPolarsErr};
+use pyo3::{exceptions, prelude::*, types::PyDict};
 use quick_xml::{events::BytesText, writer::Writer};
 use strum::{AsRefStr, EnumIter, EnumString};
 
 use crate::{
-    Entry, EventLog, error::{self, DataReadError, InternalError, InvalidArg, RangeError}, member::{Code, Response, Text, Value}, prelude::{DeepCopy, *}, utils::{ArcLock, lock_it_up},
+    EventLog,
+    datamap::{Code, Response, Text, Value},
+    error::{self, DataReadError, InternalError, InvalidArg, RangeError},
+    prelude::{DeepCopy, *},
+    utils::{ArcLock, lock_it_up},
 };
 #[cfg(feature = "pyo3")]
 use crate::{
@@ -180,7 +178,6 @@ impl QuestionOptions {
             location: Location::new(self.location.0, self.location.1)?,
             spread: self.spread.map(|(sub, width)| Spread::new(sub, width)).transpose()?,
             response,
-            data: lock_it_up(Vec::new()),
         })
     }
 }
@@ -207,7 +204,6 @@ pub struct Question {
     location: Location,
     spread: Option<Spread>,
     response: Response,
-    data: ArcLock<Vec<ArcLock<Entry>>>,
 }
 
 impl Clone for Question {
@@ -225,7 +221,6 @@ impl Clone for Question {
             location: self.location.clone(),
             spread: self.spread.clone(),
             response: self.response.clone(),
-            data: self.data.clone(),
         }
     }
 }
@@ -239,13 +234,6 @@ impl Default for Question {
 impl DeepCopy for Question {
     #[doc = include_str!("../doc/rs_deep_copy_impl.md")]
     fn deepcopy(&self) -> Self {
-        let data = self
-            .data
-            .read()
-            .iter()
-            .map(|item| lock_it_up(item.read().deepcopy()))
-            .collect::<Vec<_>>();
-
         Self {
             index: self.index,
             name: self.name.deepcopy(),
@@ -257,7 +245,6 @@ impl DeepCopy for Question {
             location: self.location.deepcopy(),
             spread: self.spread.as_ref().map(|item| item.deepcopy()),
             response: self.response.deepcopy(),
-            data: lock_it_up(data),
         }
     }
 }
@@ -505,16 +492,6 @@ impl Question {
     pub fn response_mut(&mut self) -> &mut Response {
         &mut self.response
     }
-
-    /// Response data of the question
-    pub fn data(&self) -> RwLockReadGuard<'_, Vec<ArcLock<Entry>>> {
-        self.data.read()
-    }
-
-    /// Read-write access of the `data` field
-    pub fn data_mut(&mut self) -> RwLockWriteGuard<'_, Vec<ArcLock<Entry>>> {
-        self.data.write()
-    }
 }
 
 /// <hr />
@@ -689,9 +666,12 @@ impl Question {
     }
 
     /// Get range of data locations from the `location` field,
-    /// as `std::range::Range<u32>` object.
+    /// as a `Range<usize>` object.
     ///
     /// Note that triple-s is 1 indexed and output is 0-indexed.
+    /// Fixed-width positions count Unicode scalar values, not UTF-8 bytes
+    /// or UTF-16 code units. Chinese characters and emoji each count as one;
+    /// combining marks occupy their own positions.
     ///
     /// # Example
     ///
@@ -712,40 +692,97 @@ impl Question {
         let end = *self.location().finish() as usize;
         Range { start, end }
     }
+}
 
-    /// Extracts this question's field from a fixed-width respondent row and
-    /// parses it into an [`Entry`].
-    pub(crate) fn parse_row(&self, row: &str) -> Result<Entry> {
-        let data = self.locate_data_asc(row)?;
-        self.parse_field(&data)
+/// reading data
+impl Question {
+    /// Get [`polars::Field`] for the current question, it looks like this:
+    ///
+    /// ```text
+    /// {
+    ///     name: self.name(),
+    ///     dtype: self.polars_dtype()
+    /// }
+    /// ```
+    #[inline]
+    pub fn polars_field(&self) -> Field {
+        Field::new(self.name().into(), self.polars_dtype())
+    }
+
+    /// Returns the Polars [`DataType`] for this question's type and code format as follows:
+    ///
+    /// | Question type | Code format | Polars data type |
+    /// | --- | --- | --- |
+    /// | `None` | Any | `Null` |
+    /// | `Single` | `Literal` | `String` |
+    /// | `Single` | `Numeric` or unspecified | `UInt32` |
+    /// | `Multiple` | Any | `List(UInt32)` |
+    /// | `Character` | Any | `String` |
+    /// | `Logical` | Any | `UInt32` |
+    /// | `Quantity` | Any | `Float64` |
+    /// | `Date` | Any | `Date` |
+    /// | `Time` | Any | `Time` |
+    pub fn polars_dtype(&self) -> DataType {
+        match self.question_type.read().clone() {
+            QuestionType::None => DataType::Null,
+            QuestionType::Single => {
+                if self.format().as_ref().is_some_and(|item| item == &CodeFormat::Literal) {
+                    DataType::String
+                } else {
+                    DataType::UInt32
+                }
+            }
+            QuestionType::Multiple => DataType::List(Box::new(DataType::UInt32)),
+            QuestionType::Character => DataType::String,
+            QuestionType::Logical => DataType::UInt32,
+            QuestionType::Quantity => DataType::Float64,
+            QuestionType::Date => DataType::Date,
+            QuestionType::Time => DataType::Time,
+        }
     }
 
     /// Locate data from one entire row based on current data range for csv width (.asc) data
     pub(crate) fn locate_data_csv<'a>(&self, row: &'a csv::StringRecord) -> Result<&'a str> {
-        let position: usize = self.location().start().clone() as usize;
-        let col_location = position.checked_sub(1)
-            .ok_or(InternalError::new(format!("Integer underflow for position: {}", position)))?;
-        
-        row.get(col_location)
-            .ok_or(InvalidArg::new(
-                format!(
+        let position: usize = *self.location().start() as usize;
+        let col_location = position.checked_sub(1).ok_or_else(|| {
+            InternalError::new(format!("Integer underflow for position: {}", position))
+        })?;
+
+        row.get(col_location).ok_or_else(|| {
+            InvalidArg::new(format!(
                 "Has total of {} fields; question '{}' requires field {}",
-                row.len(), self.name(), position,
-            )).into()
-        )
+                row.len(),
+                self.name(),
+                position,
+            ))
+            .into()
+        })
     }
 
-    /// Locate data from one entire row based on current data range for fixed width (.asc) data
+    /// Locate fixed-width data using Unicode scalar positions, not byte offsets.
+    /// Chinese characters and supplementary characters each occupy one position.
     pub(crate) fn locate_data_asc<'a>(&self, row: &'a str) -> Result<&'a str> {
         let data_location = self.get_data_range();
-        let data = row
-            .get(data_location)
-            .ok_or(error::RangeError(format!(
-                "Invalid data range (start: {}, end: {}) for row of length {}.",
-                data_location.start,
-                data_location.end,
-                row.len()
-            )))
+        let mut boundaries =
+            row.char_indices().map(|(offset, _)| offset).chain(std::iter::once(row.len()));
+        let data = boundaries
+            .nth(data_location.start)
+            .and_then(|start| {
+                let width = data_location.end.checked_sub(data_location.start)?;
+                let end = match width {
+                    0 => start,
+                    _ => boundaries.nth(width - 1)?,
+                };
+                Some(&row[start..end])
+            })
+            .ok_or_else(|| {
+                error::RangeError(format!(
+                    "Invalid data range (start: {}, end: {}) for row of character length {}.",
+                    data_location.start,
+                    data_location.end,
+                    row.chars().count()
+                ))
+            })
             .with_context(|| {
                 format!("When trying to parse data for question '{}'", self.name())
             })?;
@@ -755,111 +792,82 @@ impl Question {
     /// validate one line of respondant data from a '.asc' file
     pub(crate) fn validate_asc_entry(&self, row: &str) -> Result<()> {
         let data = self.locate_data_asc(row)?;
-        let _ = self.parse_field(&data)
-            .with_context(|| format!("When trying to validate data for question '{}'", self.name()))?;
+        let _ = self.parse_question_value(data).with_context(|| {
+            format!(
+                "When trying to validate data for question '{}'",
+                self.name()
+            )
+        })?;
         Ok(())
     }
 
     /// validate one line of respondant data from a '.csv' file
     pub(crate) fn validate_csv_entry(&self, row: &csv::StringRecord) -> Result<()> {
         let data = self.locate_data_csv(row)?;
-        let _ = self.parse_field(&data)
-            .with_context(|| format!("When trying to validate data for question '{}'", self.name()))?;
+        let _ = self.parse_question_value(data).with_context(|| {
+            format!(
+                "When trying to validate data for question '{}'",
+                self.name()
+            )
+        })?;
         Ok(())
     }
 
     /// Parse an extracted fixed-width field or decoded CSV field.
-    pub(crate) fn parse_field(&self, data: &str) -> Result<Entry> {
-        let question_type = self.question_type().clone();
-
-        // `match` switch returns a Result<> because I want to add some extra
-        // context later on
-        let entry = match question_type {
-            QuestionType::Character => Ok(Entry::String(data.to_string())),
-            QuestionType::None => Err(DataReadError(
-                "Unable to parse data with question type `None`".to_string(),
-            )),
-            QuestionType::Quantity => {
-                let data = data.trim();
-                if data.is_empty() {
-                    return Ok(Entry::None());
-                };
-
-                let raw = data.parse::<f64>()?;
-                Ok(Entry::Quantity(raw))
+    pub(crate) fn parse_question_value<'a>(&self, data: &'a str) -> Result<AnyValue<'a>> {
+        let question_type = self.question_type();
+        let data = if *question_type == QuestionType::Character {
+            data
+        } else {
+            data.trim()
+        };
+        Ok(match *question_type {
+            QuestionType::Character => AnyValue::String(data),
+            QuestionType::None => {
+                return Err(DataReadError(
+                    "Unable to parse data with question type `None`".into(),
+                )
+                .into());
             }
-
-            QuestionType::Logical => {
-                let data = data.trim();
-                if data.is_empty() {
-                    return Ok(Entry::None());
-                };
-
-                let raw = data.parse::<usize>()?;
-                match raw {
-                    0 => Ok(Entry::Boolean(false)),
-                    1 => Ok(Entry::Boolean(true)),
-                    _ => Err(DataReadError(format!(
-                        "Unable to parse boolean data from input: `{}`",
-                        data
-                    ))),
+            _ if data.is_empty() => AnyValue::Null,
+            QuestionType::Quantity => AnyValue::Float64(data.parse()?),
+            QuestionType::Logical => AnyValue::Boolean(match data.parse::<usize>()? {
+                0 => false,
+                1 => true,
+                _ => {
+                    return Err(DataReadError(format!(
+                        "Unable to parse boolean data from input: `{data}`",
+                    ))
+                    .into());
+                }
+            }),
+            QuestionType::Date => AnyValue::Date(
+                NaiveDate::parse_from_str(data, "%Y%m%d")?
+                    .signed_duration_since(NaiveDate::from_ymd_opt(1970, 1, 1).unwrap())
+                    .num_days() as i32,
+            ),
+            QuestionType::Time => {
+                let time = NaiveTime::parse_from_str(data, "%H%M%S")?;
+                AnyValue::Time(
+                    time.num_seconds_from_midnight() as i64 * 1_000_000_000
+                        + time.nanosecond() as i64,
+                )
+            }
+            QuestionType::Single => {
+                if self.format().as_ref().is_some_and(|format| *format == CodeFormat::Literal)
+                {
+                    AnyValue::String(data)
+                } else {
+                    AnyValue::UInt32(data.parse()?)
                 }
             }
-
-            QuestionType::Date => {
-                let data = data.trim();
-                if data.is_empty() {
-                    return Ok(Entry::None());
-                };
-
-                let raw = NaiveDate::parse_from_str(data, "%Y%m%d")?;
-                Ok(Entry::Date(raw))
-            }
-
-            QuestionType::Time => {
-                let data = data.trim();
-                if data.is_empty() {
-                    return Ok(Entry::None());
-                };
-
-                let raw = NaiveTime::parse_from_str(data, "%H%M%S")?;
-                Ok(Entry::Time(raw))
-            }
-
-            QuestionType::Single => {
-                let data = data.trim();
-                if data.is_empty() {
-                    return Ok(Entry::None());
-                };
-
-                let raw =
-                    if self.format().as_ref().is_some_and(|item| item == &CodeFormat::Literal)
-                    {
-                        Entry::String(data.into())
-                    } else {
-                        let raw = data.parse::<u32>()?;
-                        Entry::Single(raw)
-                    };
-
-                Ok(raw)
-            }
-
             QuestionType::Multiple => {
-                let data = data.trim();
-                if data.is_empty() {
-                    return Ok(Entry::None());
-                };
-
-                let raw_data = self.parse_multiple_data(data)?;
-                self.validate_multiple_read(&raw_data).with_context(|| {
-                    format!("When trying to extract data for question `{}`", self.name())
-                })?;
-                Ok(Entry::Multiple(raw_data))
+                let values = self.parse_multiple_data(data)?;
+                self.validate_multiple_read(&values)?;
+                let mut values: Vec<u32> = values.into_iter().collect();
+                values.sort_unstable();
+                AnyValue::List(Series::new("".into(), values))
             }
-        };
-
-        entry.with_context(|| {
-            format!("When trying to extract data for question `{}`", self.name())
         })
     }
 
@@ -953,18 +961,6 @@ impl Question {
             Ok(())
         }
     }
-
-    /// Export content of the `data` field to polars series
-    pub fn to_polars(&self) -> Result<Series, PolarsError> {
-        let colname = self.name();
-        let data = self
-            .data()
-            .iter()
-            .map(|item| item.read().clone().into())
-            .collect::<Vec<AnyValue>>();
-
-        Series::from_any_values(colname.into(), &data, true)
-    }
 }
 
 /// <hr />
@@ -1031,7 +1027,6 @@ impl Question {
             location,
             spread,
             response: Response::default(),
-            data: lock_it_up(Vec::new()),
         };
 
         Ok(instance)
@@ -1491,48 +1486,6 @@ impl Question {
     #[getter(label)]
     fn py_get_label(&self) -> PyResult<Text> {
         Ok(self.label.clone())
-    }
-
-    /// Raw data for the question
-    /// Data is retrieved via `load_data()` method of `Survey` or `Record`
-    /// object.
-    #[getter(data)]
-    fn py_get_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
-        let items = self.data.read().clone().into_iter().map(|item| item.read().clone());
-
-        PyTuple::new(py, items)
-    }
-
-    /// Export data as polars.Series
-    #[pyo3(name = "to_polars")]
-    fn py_to_polars(&self) -> PyResult<pyo3_polars::PySeries> {
-        self.to_polars().map(PySeries).map_err(|err| PyPolarsErr::from(err).into())
-    }
-
-    /// Export loaded data as a pandas Series named after this question.
-    /// Multiple-choice responses are sorted lists; missing responses are None.
-    #[pyo3(name = "to_pandas")]
-    pub(crate) fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let values = PyList::empty(py);
-        for entry in self.data().iter() {
-            match &*entry.read() {
-                Entry::None() => values.append(py.None())?,
-                Entry::Single(value) => values.append(*value)?,
-                Entry::Multiple(items) => {
-                    let mut items: Vec<u32> = items.iter().copied().collect();
-                    items.sort_unstable();
-                    values.append(items)?;
-                }
-                Entry::Boolean(value) => values.append(*value)?,
-                Entry::Quantity(value) => values.append(*value)?,
-                Entry::Date(value) => values.append(*value)?,
-                Entry::Time(value) => values.append(*value)?,
-                Entry::String(value) => values.append(value.as_str())?,
-            }
-        }
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("name", self.name())?;
-        py.import("pandas")?.getattr("Series")?.call((values,), Some(&kwargs))
     }
 
     /// Sets the label from a string or `Text`, or resets it to empty with
@@ -2146,7 +2099,20 @@ impl Location {
         }
     }
 
-    /// (finish - start) + 1
+    /// Returns total number of characters a [`Location`] instance covers.
+    ///
+    /// Essentially: `(finish - start) + 1`
+    ///
+    /// Example:
+    /// ```
+    /// use triple_s::Location;
+    ///
+    /// let location = Location::new(3, Some(10))?;
+    /// let width = location.width()?;
+    /// assert_eq!(width, (10 - 3) + 1);
+    ///
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
     pub fn width(&self) -> Result<u32> {
         self.validate()?;
         let difference = self.finish.read().saturating_sub(*self.start.read());
@@ -2597,7 +2563,7 @@ mod test {
     }
 
     use super::*;
-    use crate::member::{Variant, test::normalize_xml};
+    use crate::datamap::{Variant, test::normalize_xml};
 
     fn new_empty_question() -> Question {
         Question::new(
@@ -2618,6 +2584,59 @@ mod test {
         question.location.set_range(23, 55).unwrap();
         question.label = Text::new("some label");
         question
+    }
+
+    #[test]
+    fn test_polars_field() {
+        let question = QuestionOptions::new("AGE")
+            .with_question_type(QuestionType::Quantity)
+            .finish()
+            .unwrap();
+        assert_eq!(
+            question.polars_field(),
+            Field::new("AGE".into(), DataType::Float64)
+        );
+    }
+
+    #[test]
+    fn test_polars_dtype() {
+        for (question_type, format, expected) in [
+            (QuestionType::None, None, DataType::Null),
+            (QuestionType::Single, None, DataType::UInt32),
+            (
+                QuestionType::Single,
+                Some(CodeFormat::UnSigned),
+                DataType::UInt32,
+            ),
+            (
+                QuestionType::Single,
+                Some(CodeFormat::Literal),
+                DataType::String,
+            ),
+            (
+                QuestionType::Multiple,
+                None,
+                DataType::List(Box::new(DataType::UInt32)),
+            ),
+            (QuestionType::Character, None, DataType::String),
+            (QuestionType::Logical, None, DataType::UInt32),
+            (QuestionType::Quantity, None, DataType::Float64),
+            (QuestionType::Date, None, DataType::Date),
+            (QuestionType::Time, None, DataType::Time),
+        ] {
+            let question = QuestionOptions::new("Q1")
+                .with_question_type(question_type)
+                .with_format(format)
+                .finish()
+                .unwrap();
+            assert_eq!(
+                question.polars_dtype(),
+                expected,
+                "type: {:?}, format: {:?}",
+                question.question_type(),
+                question.format()
+            );
+        }
     }
 
     #[test]
@@ -2923,18 +2942,25 @@ mod test {
     }
 
     #[test]
-    fn test_question_data_mut() {
-        let mut question = new_filled_question();
-        let entry = Entry::Single(3);
-        question.data_mut().push(lock_it_up(entry));
-        assert_eq!(question.data().len(), 1);
-
-        let check = question.data().get(0).unwrap().read().clone();
-        assert_eq!(check, Entry::Single(3));
-
-        *question.data_mut().get_mut(0).unwrap() = lock_it_up(Entry::None());
-        let check = question.data().get(0).unwrap().read().clone();
-        assert_eq!(check, Entry::None());
+    fn fixed_width_locations_count_unicode_characters() {
+        let row = "中é😀文 42";
+        for ((start, end), expected) in [
+            ((1, 1), "中"),
+            ((2, 4), "é😀文"),
+            ((5, 5), " "),
+            ((6, 7), "42"),
+            ((1, 7), row),
+        ] {
+            let question = QuestionOptions::new("unicode")
+                .with_location(start, Some(end))
+                .finish()
+                .unwrap();
+            assert_eq!(question.locate_data_asc(row).unwrap(), expected);
+        }
+        let question =
+            QuestionOptions::new("past_end").with_location(8, Some(8)).finish().unwrap();
+        assert!(question.locate_data_asc(row).is_err());
+        assert!(question.locate_data_asc("").is_err());
     }
 
     #[cfg(feature = "pyo3")]

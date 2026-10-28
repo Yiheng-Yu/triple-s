@@ -13,26 +13,35 @@ use pyo3::{
 use strum::{EnumIter, EnumString};
 
 use super::text::Mode;
+#[cfg(feature = "pyo3")]
+use crate::error::missing_key_err;
 use crate::prelude::Flag;
 #[cfg(feature = "pyo3")]
 use crate::prelude::PyEnum;
 #[cfg(feature = "pyo3")]
-use crate::error::missing_key_err;
-#[cfg(feature = "pyo3")]
 use crate::utils;
 
-#[allow(missing_docs)]
+/// All available Triple-S file versions
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, EnumString, EnumIter)]
 pub enum Version {
+    /// 1.0 (triple-s classic)
     #[strum(serialize = "1.0")]
     V1_0,
+
+    /// 1.1
     #[strum(serialize = "1.1")]
     V1_1,
+
+    /// 1.2, this could either be classic or xml
     #[strum(serialize = "1.2")]
     V1_2,
+
+    /// 2.0
     #[strum(serialize = "2.0")]
     V2_0,
+
+    /// 3.0
     #[strum(serialize = "3.0")]
     V3_0,
 }
@@ -259,9 +268,7 @@ impl SurveyInfo {
     #[staticmethod]
     #[pyo3(name = "from_dict")]
     pub(crate) fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
-        let version = content
-            .get_item("version")?
-            .ok_or(missing_key_err("version"))?;
+        let version = content.get_item("version")?.ok_or(missing_key_err("version"))?;
         let version = if let Ok(version) = version.extract::<Version>() {
             version
         } else if let Ok(version) = version.extract::<String>() {
