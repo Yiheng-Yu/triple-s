@@ -18,17 +18,7 @@ use rayon::prelude::*;
 
 use crate::{
     DataRange,
-    error::{
-        self,
-        BadLine,
-        DuplicatedKey,
-        EventLog,
-        MissingAttributeError,
-        MissingValueError,
-        UnknownAttribute,
-        Warning,
-    },
-    member::{
+    datamap::{
         Code,
         CodeFormat,
         DataFormat,
@@ -43,6 +33,16 @@ use crate::{
         Value,
         Variant,
         Version,
+    },
+    error::{
+        self,
+        BadLine,
+        DuplicatedKey,
+        EventLog,
+        MissingAttributeError,
+        MissingValueError,
+        UnknownAttribute,
+        Warning,
     },
     prelude::*,
     utils::{lock_it_up, validate_date, validate_time},

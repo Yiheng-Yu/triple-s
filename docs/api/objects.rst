@@ -8,6 +8,7 @@ Reference documentation for the public classes and enums exported by
 
    survey
    survey_info
+   survey_data
    record
    question
    data_range

@@ -438,6 +438,30 @@ impl From<TypeConvertionError> for pyo3::PyErr {
     }
 }
 
+#[derive(Debug)]
+pub struct NoDataError {}
+
+impl Error for NoDataError {}
+
+impl fmt::Display for NoDataError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Data not loaded yet.")
+    }
+}
+
+impl From<NoDataError> for polars::error::PolarsError {
+    fn from(value: NoDataError) -> Self {
+        polars::error::PolarsError::NoData(value.to_string().into())
+    }
+}
+
+#[cfg(feature = "pyo3")]
+impl From<NoDataError> for pyo3::PyErr {
+    fn from(value: NoDataError) -> Self {
+        pyo3_polars::error::NoDataError::new_err(value.to_string())
+    }
+}
+
 // ======================= warnings =======================
 #[derive(Debug)]
 pub struct EventLog {

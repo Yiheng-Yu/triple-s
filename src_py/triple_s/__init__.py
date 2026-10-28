@@ -17,7 +17,9 @@ from .triple_s import (
     Spread,
     DataRange,
     Value,
+    SurveyData,
     MissingKeyError,
+    NoDataError,
     read_datamap,
     read_triple_s,
 )
@@ -42,6 +44,8 @@ __all__ = [
     "Spread",
     "Value",
     "MissingKeyError",
+    "NoDataError",
+    "SurveyData",
     "read_datamap",
     "read_triple_s"
 ]

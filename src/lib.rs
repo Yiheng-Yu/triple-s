@@ -65,7 +65,10 @@
 //!
 //! let path_datamap: &str = "path/to/the/datamap.sss";
 //! let path_data: &str = "path/to/the/data.asc";
-//! let survey = read_triple_s(path_datamap, Some(path_data))?;
+//!
+//! // toggle on to validate `path_data`, note that this might take some time.
+//! let validate_data_file = true;
+//! let survey = read_triple_s(path_datamap, Some(path_data), validate_data_file)?;
 //!
 //! # Ok::<(), anyhow::Error>(())
 //! ```
@@ -74,8 +77,8 @@
 //!
 //! [`Survey`] represents a survey definition, it's the root of a triple-s
 //! datamap file. It mainly consists of two parts:
-//! - [`SurveyInfo`](survey_info): Metadata about a survey. i.e., name, title,
-//!   datetime of the creation, file format etc.,
+//! - [`SurveyInfo`](survey_info): Metadata about a survey. i.e., name, title, datetime of the
+//!   creation, file format etc.,
 //! - [`Record`](record): collection of [`Question`](question)s in a survey.
 //!
 //! Creating a new [`Survey`]:
@@ -143,26 +146,35 @@
 //! assert_eq!(original.value(), "A".to_string());
 //! ```
 
+mod data;
+mod datamap;
 pub mod error;
-mod member;
 mod prelude;
 mod utils;
 
 use std::path::Path;
 
 use anyhow::Result;
-use error::EventLog;
-
-pub use member::{
+pub use data::SurveyData;
+pub use datamap::{
     Survey,
-    entry::Entry,
-    question::{self, CodeFormat, Location, Question, QuestionOptions, QuestionType, Spread, Usage},
+    question::{
+        self,
+        CodeFormat,
+        Location,
+        Question,
+        QuestionOptions,
+        QuestionType,
+        Spread,
+        Usage,
+    },
     read::{read_datamap, read_from_reader, read_from_string},
     record::{self, DataFormat, Record},
     response::{self, Code, DataRange, Response, Value},
     survey_info::{self, SurveyInfo, Version},
     text::{self, Mode, Text, Variant},
 };
+use error::EventLog;
 pub use prelude::DeepCopy;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -172,19 +184,30 @@ use pyo3::prelude::*;
 /// Read triple_s file.
 ///
 /// Arguments:
-/// `path_sss`: path to the triple-s datamap file.
-/// `path_data`: path to the `.asc` or `.csv` data file that pairs with the
-/// datamap.
+/// `path_sss`:
+///     path to the triple-s datamap file.
+/// `path_data`:
+///     path to the `.asc` or `.csv` data file that pairs with.
+///     if provided, will set the `href` field of the `record` to `path_data`.
+/// `validate`:
+///     toggle on/ off to check if there were any errors in the datafile.
+///     Only used when `path_data` is not `None`
+///
+/// Returns:
+/// [`Survey`] instance.
 pub fn read_triple_s(
     path_sss: impl AsRef<Path>,
     path_data: Option<impl AsRef<Path>>,
+    validate_data_file: bool,
 ) -> Result<Survey> {
     let mut survey = read_datamap(path_sss)?;
-    if let Some(path_data) = path_data {
-        survey.load_data(path_data)?;
-    };
-
-    Ok(survey)
+    match path_data {
+        None => Ok(survey),
+        Some(path_data) => {
+            survey.record_mut().set_data_source(path_data, validate_data_file)?;
+            Ok(survey)
+        }
+    }
 }
 
 /// A Python module implemented in Rust.
@@ -193,11 +216,13 @@ pub fn read_triple_s(
 mod triple_s {
     use anyhow::Context;
     use pyo3::prelude::*;
+    #[pymodule_export]
+    pub use pyo3_polars::error::NoDataError;
 
     #[pymodule_export]
-    pub use crate::error::MissingKeyError;
+    pub use crate::data::SurveyData;
     #[pymodule_export]
-    pub use crate::member::{
+    pub use crate::datamap::{
         Survey,
         question::{CodeFormat, Location, Question, QuestionType, Spread, Usage},
         record::{DataFormat, Record},
@@ -205,7 +230,9 @@ mod triple_s {
         survey_info::{SurveyInfo, Version},
         text::{Mode, Text, Variant},
     };
-    use crate::{member::read::read_from_reader, read_triple_s};
+    #[pymodule_export]
+    pub use crate::error::MissingKeyError;
+    use crate::{datamap::read::read_from_reader, read_triple_s};
 
     /// Read triple-s datamap
     ///
@@ -227,14 +254,31 @@ mod triple_s {
     /// Read triple-s datamap, and load data afterwards.
     ///
     /// Args:
-    ///     path_datamap (str): path to the triple-s datamap file, supports both
-    /// classic and xml format.     path_data (str, *optional*): path to the
-    /// `.asc` or `.csv` data file.
+    ///     path_datamap (str):
+    ///         path to the triple-s datamap file, supports both classic and xml format.     
+    ///     path_data (str, *optional*):
+    ///         path to the `.asc` or `.csv` data file.
+    ///     validate_data_file (bool, *optional*):
+    ///         toggle on/ off to check if there were any errors in the datafile.
+    ///         Only used when `path_data` is not None.
+    ///         Default True
     ///
     /// Returns:
     ///     [`Survey`] object
-    #[pyfunction(name="read_triple_s", signature=(path_datamap: "str", path_data:"str"=None))]
-    pub fn py_read_triple_s(path_datamap: &str, path_data: Option<&str>) -> PyResult<Survey> {
-        read_triple_s(path_datamap, path_data).map_err(|err| err.into())
+    #[pyfunction(
+        name="read_triple_s", 
+        signature=(
+            path_datamap: "str", 
+            path_data:"str"=None,
+            validate_data_file: "bool"=true
+        )
+    )]
+    pub fn py_read_triple_s(
+        path_datamap: &str,
+        path_data: Option<&str>,
+        validate_data_file: Option<bool>,
+    ) -> PyResult<Survey> {
+        let validate_data_file = validate_data_file.unwrap_or(true);
+        read_triple_s(path_datamap, path_data, validate_data_file).map_err(|err| err.into())
     }
 }
