@@ -19,7 +19,7 @@ use pyo3::{
     types::{PyDict, PySlice, PyTuple},
 };
 #[cfg(feature = "pyo3")]
-use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
+use pyo3_polars::error::PyPolarsErr;
 use quick_xml::Writer;
 use rayon::prelude::*;
 use strum::{EnumIter, EnumString};
@@ -27,8 +27,7 @@ use strum::{EnumIter, EnumString};
 use super::{ArcLock, Question};
 #[cfg(feature = "pyo3")]
 use crate::{
-    Survey,
-    utils::{extract_indicies, get_type_name, normalize_py_index, py_value_error},
+    utils::{extract_indicies, lock_it_up, get_type_name, normalize_py_index, py_value_error},
 };
 use crate::{
     SurveyData,
