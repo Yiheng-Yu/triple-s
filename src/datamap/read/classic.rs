@@ -7,8 +7,8 @@ pub const SPECIAL: &str = "SPECIAL";
 pub const WITH: &str = "WITH";
 
 use crate::{
-    error::{BadLine, InternalError},
     datamap::read::{Node, QuestionBuilder, SurveyBuilder},
+    error::{BadLine, InternalError},
 };
 
 static PATTERN: LazyLock<Regex> = LazyLock::new(|| {

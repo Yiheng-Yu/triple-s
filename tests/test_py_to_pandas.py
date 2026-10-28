@@ -4,7 +4,7 @@ import warnings
 import pandas as pd
 import pytest
 
-from triple_s import read_datamap
+from triple_s import read_datamap, NoDataError
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def survey():
 
 
 def test_to_pandas_without_loaded_data(survey):
-    with pytest.raises(RuntimeError, match="Data not loaded"):
+    with pytest.raises(NoDataError, match="Data not loaded"):
         survey.to_pandas()
 
 

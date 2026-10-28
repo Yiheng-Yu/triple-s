@@ -48,7 +48,7 @@ html_css_files = ['style.css']
 PYTHON_API_CLASSES = {
     "Code", "CodeFormat", "DataRange", "DataFormat", "Location", "Mode",
     "Question", "QuestionType", "Record", "Response", "Spread", "Survey",
-    "SurveyInfo", "Text", "Usage", "Value", "Variant", "Version",
+    "SurveyInfo", "SurveyData", "Text", "Usage", "Value", "Variant", "Version",
 }
 PYTHON_API_FUNCTIONS = {"read_datamap", "read_triple_s"}
 

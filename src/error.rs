@@ -449,12 +449,16 @@ impl fmt::Display for NoDataError {
     }
 }
 
+impl From<NoDataError> for polars::error::PolarsError {
+    fn from(value: NoDataError) -> Self {
+        polars::error::PolarsError::NoData(value.to_string().into())
+    }
+}
+
 #[cfg(feature = "pyo3")]
 impl From<NoDataError> for pyo3::PyErr {
     fn from(value: NoDataError) -> Self {
-        pyo3_polars::error::NoDataError::new_err(
-            value.to_string()
-        )
+        pyo3_polars::error::NoDataError::new_err(value.to_string())
     }
 }
 

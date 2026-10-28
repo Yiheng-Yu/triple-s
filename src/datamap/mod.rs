@@ -279,8 +279,8 @@ impl Survey {
 
     /// Export loaded data into polars dataframe
     #[pyo3(name = "to_polars")]
-    fn py_to_polars(&self) -> PyResult<PyDataFrame> {
-        self.record().py_to_polars()
+    fn py_to_polars<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.record().py_to_polars(py)
     }
 
     /// Export the record's loaded data as a pandas DataFrame.

@@ -19,23 +19,22 @@ use pyo3::{
     types::{PyDict, PySlice, PyTuple},
 };
 #[cfg(feature = "pyo3")]
-use pyo3_polars::PyDataFrame;
+use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use quick_xml::Writer;
 use rayon::prelude::*;
 use strum::{EnumIter, EnumString};
-use tempfile::TempPath;
 
 use super::{ArcLock, Question};
 #[cfg(feature = "pyo3")]
-use crate::utils::{
-    extract_indicies,
-    get_type_name,
-    lock_it_up,
-    normalize_py_index,
-    py_value_error,
+use crate::{
+    Survey,
+    utils::{extract_indicies, get_type_name, normalize_py_index, py_value_error},
 };
 use crate::{
-    SurveyData, error::{self, InvalidArg}, prelude::{DeepCopy, Flag}, utils::TextReader,
+    SurveyData,
+    error::{self, InvalidArg},
+    prelude::{DeepCopy, Flag},
+    utils::TextReader,
 };
 
 const BATCH_SIZE: usize = 500; // no. rows when writing to paquet cache
@@ -93,8 +92,7 @@ pub struct Record {
     href: Option<String>,
     data_format: Option<DataFormat>,
     content: ArcLock<Vec<ArcLock<Question>>>,
-    // data: ArcLock<SurveyData>,
-    cache: ArcLock<Option<Arc<TempPath>>>,
+    data: ArcLock<SurveyData>,
 }
 
 /// # Fields
@@ -167,6 +165,16 @@ impl Record {
     /// A read-write borrow of contents in a survey
     pub fn content_mut(&mut self) -> RwLockWriteGuard<'_, Vec<ArcLock<Question>>> {
         self.content.write()
+    }
+
+    /// A read only copy of the survey data.
+    pub fn data(&self) -> RwLockReadGuard<'_, SurveyData> {
+        self.data.read()
+    }
+
+    /// A read-write borrow of the survey data.
+    pub fn data_mut(&self) -> RwLockWriteGuard<'_, SurveyData> {
+        self.data.write()
     }
 }
 
@@ -246,30 +254,26 @@ impl Record {
 ///
 /// ---
 impl Record {
-    /// Load fixed-width or CSV data according to the record's `format`. 
+    /// Load fixed-width or CSV data according to the record's `format`.
     /// Supports both UTF-8 and BOM-marked UTF-16LE/BE encodings.
-    /// 
-    /// This `load_data` function will stream data into a temporary parquet cache file (`.parquet`) to be 
+    ///
+    /// This `load_data` function will stream data into a temporary parquet cache file (`.parquet`) to be
     /// used later. To get the cache, call [`Record::to_parquet()`] method afterwards:
-    /// 
+    ///
     /// ```no_run
     /// use triple_s::read_triple_s;
-    /// 
-    /// let mut survey = read_triple_s(
-    ///     "path/to/datamap.sss",
-    ///     Some("path/to/database.asc"),
-    ///     false
-    /// )?;
-    /// 
+    ///
+    /// let mut survey =
+    ///     read_triple_s("path/to/datamap.sss", Some("path/to/database.asc"), false)?;
+    ///
     /// let mut record = survey.record_mut();
     /// record.load_data("new/data/path.asc")?; // loads data
-    /// 
+    ///
     /// let df = record.to_polars()?; // get data as polars dataframe
     /// println!("{:?}", df);
-    /// 
+    ///
     /// # Ok::<(), anyhow::Error>(())
     /// ```
-    /// 
     pub fn load_data(&mut self, path_data: impl AsRef<Path>) -> Result<()> {
         let cache = tempfile::NamedTempFile::with_suffix(".parquet")?.into_temp_path();
         let parquet_file = File::create(&cache)?;
@@ -295,7 +299,9 @@ impl Record {
         }
         Self::write_batch(&mut writer, &schema, &mut batch_buffer)?;
         writer.finish()?;
-        *self.cache.write() = Some(Arc::new(cache));
+
+        let data = SurveyData::from_cache(cache, Some(Arc::new(schema)))?;
+        *self.data.write() = data;
         Ok(())
     }
 
@@ -454,7 +460,7 @@ impl Record {
         if validate {
             self.validate_data_format(file, skip)
                 .with_context(|| format!("When opening '{}'", path_string))?;
-        };
+        }
 
         *self.href_mut() = Some(path_string);
         Ok(())
@@ -518,10 +524,10 @@ impl Record {
                 break;
             }
             let len = match first[0] {
-                0x00..=0x7F => 1,
-                0xC2..=0xDF => 2,
-                0xE0..=0xEF => 3,
-                0xF0..=0xF4 => 4,
+                0x00..=0x7f => 1,
+                0xc2..=0xdf => 2,
+                0xe0..=0xef => 3,
+                0xf0..=0xf4 => 4,
                 _ => {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
@@ -554,26 +560,30 @@ impl Record {
 }
 
 /// Export data
-/// 
+///
 /// ---
 impl Record {
     /// Convert question data to polars dataframe
-    pub fn to_polars(&self) -> Result<DataFrame> {
-        let cache = self.cache.read();
-        let path = cache.as_ref().ok_or_else(|| {
-            error::InvalidArg::new("Data not loaded yet, please call `load_data` first.")
-        })?;
-        let file = File::open(path.as_ref())?;
-        Ok(ParquetReader::new(file).finish()?)
+    pub fn to_polars(&self) -> PolarsResult<DataFrame> {
+        self.data().to_polars()
     }
 
-    /// Dump cached data to parquet
-    pub fn to_parquet(&self, parquet_path: impl AsRef<Path>) -> Result<()> {
-        let cache = self.cache.read();
-        let temp_path = cache
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Data not loaded yet. Call `load_data` first!"))?;
-        std::fs::copy(temp_path.as_ref(), parquet_path)?;
+    /// Dump cached data to parquet datafile
+    pub fn to_parquet(&self, parquet_path: impl AsRef<Path>) -> PolarsResult<()> {
+        let path_sink = PlRefPath::try_from_path(parquet_path.as_ref())?;
+        let path_sink = SinkDestination::File {
+            target: SinkTarget::Path(path_sink),
+        };
+
+        let write_option = ParquetWriteOptions::default();
+        let write_formt = FileWriteFormat::Parquet(Arc::new(write_option));
+
+        self.data()
+            .lazy()?
+            .clone()
+            .sink(path_sink, write_formt, UnifiedSinkArgs::default())?
+            .collect()?;
+
         Ok(())
     }
 }
@@ -702,16 +712,14 @@ impl Record {
 
     /// Export loaded data into polars dataframe
     #[pyo3(name = "to_polars")]
-    pub fn py_to_polars(&self) -> PyResult<PyDataFrame> {
-        self.to_polars()
-            .map(PyDataFrame)
-            .map_err(|err| exceptions::PyRuntimeError::new_err(format!("{:#?}", err)))
+    pub fn py_to_polars<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.data().py_to_polars(py)
     }
 
     /// Export loaded data as a pandas DataFrame in question order.
     #[pyo3(name = "to_pandas")]
     pub fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let frame = self.py_to_polars()?.into_pyobject(py)?;
+        let frame = self.py_to_polars(py)?;
         let kwargs = PyDict::new(py);
         kwargs.set_item("use_pyarrow_extension_array", true)?;
         frame.call_method("to_pandas", (), Some(&kwargs))
@@ -720,11 +728,7 @@ impl Record {
     /// Dump loaded data to parquet file
     #[pyo3(name = "to_parquet")]
     pub fn py_to_parquet(&self, parquet_path: &str) -> PyResult<()> {
-        let cache = self.cache.read();
-        let temp_path = cache
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Data not loaded yet. Call `load_data` first!"))?;
-        std::fs::copy(temp_path.as_ref(), parquet_path)?;
+        self.to_parquet(parquet_path).map_err(PyPolarsErr::Polars)?;
         Ok(())
     }
 
@@ -794,6 +798,10 @@ impl Record {
     ///     list of [`Question`] instance or dictionaries to pass to
     ///     Question.from_dict,
     ///     Default to be an empty list (`[]`)
+    ///
+    /// 'data' (SurveyData|None, *optional*):
+    ///     data of the corresponding survey.
+    ///     Default SurveyData.empty()
     #[pyo3(name = "from_dict")]
     #[staticmethod]
     #[allow(unused_variables)]
@@ -861,13 +869,26 @@ impl Record {
             .transpose()?
             .flatten();
 
+        let data = content
+            .get_item("data")?
+            .map(|item| {
+                if let Ok(value) = item.extract::<SurveyData>() {
+                    Ok(value)
+                } else {
+                    let type_name = get_type_name(&item)?;
+                    Err(exceptions::PyTypeError::new_err(type_name))
+                }
+            })
+            .transpose()?
+            .unwrap_or(SurveyData::default());
+
         Ok(Self {
             id: ident,
             href: href,
             skip: skip,
             data_format: data_format,
             content: lock_it_up(questions),
-            cache: lock_it_up(None),
+            data: lock_it_up(data),
         })
     }
 
@@ -908,14 +929,27 @@ mod tests {
         } else {
             ("1", "3", "4", "5")
         };
-        crate::read_from_string(&format!(r#"<sss version="2.0"><survey><record ident="V" format="{}">
+        crate
+            ::read_from_string(
+                &format!(
+                    r#"<sss version="2.0"><survey><record ident="V" format="{}">
             <variable ident="1" type="character"><name>TEXT</name>
                 <position start="{}" finish="{}"/><size>3</size></variable>
             <variable ident="2" type="quantity"><name>NUMBER</name>
                 <position start="{}" finish="{}"/><values><range from="0" to="99"/></values></variable>
             </record></survey></sss>"#,
-            if csv { "csv" } else { "fixed" }, positions.0, positions.1, positions.2, positions.3,
-        )).unwrap()
+                    if csv {
+                        "csv"
+                    } else {
+                        "fixed"
+                    },
+                    positions.0,
+                    positions.1,
+                    positions.2,
+                    positions.3
+                )
+            )
+            .unwrap()
     }
 
     #[test]
@@ -951,11 +985,11 @@ mod tests {
                 );
                 assert_eq!(
                     frame.column("NUMBER").unwrap().f64().unwrap().get(0),
-                    Some(17.)
+                    Some(17.0)
                 );
                 assert_eq!(
                     frame.column("NUMBER").unwrap().f64().unwrap().get(1),
-                    Some(23.)
+                    Some(23.0)
                 );
             }
         }

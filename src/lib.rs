@@ -216,6 +216,8 @@ pub fn read_triple_s(
 mod triple_s {
     use anyhow::Context;
     use pyo3::prelude::*;
+    #[pymodule_export]
+    pub use pyo3_polars::error::NoDataError;
 
     #[pymodule_export]
     pub use crate::data::SurveyData;

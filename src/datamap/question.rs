@@ -13,8 +13,8 @@ use strum::{AsRefStr, EnumIter, EnumString};
 
 use crate::{
     EventLog,
-    error::{self, DataReadError, InternalError, InvalidArg, RangeError},
     datamap::{Code, Response, Text, Value},
+    error::{self, DataReadError, InternalError, InvalidArg, RangeError},
     prelude::{DeepCopy, *},
     utils::{ArcLock, lock_it_up},
 };

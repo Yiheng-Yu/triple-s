@@ -14,12 +14,8 @@ use pyo3::{
 use quick_xml::{events::BytesText, writer::Writer};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-#[cfg(feature = "pyo3")]
 use crate::{
-    error::missing_key_err,
-    utils::{extract_indicies, get_type_name, normalize_py_index},
-};
-use crate::{
+    datamap::{QuestionType, Text},
     error::{
         self,
         InvalidArg,
@@ -27,9 +23,13 @@ use crate::{
         TypeConvertionError,
         UnsupportedFeature,
     },
-    datamap::{QuestionType, Text},
     prelude::DeepCopy,
     utils::{ArcLock, lock_it_up},
+};
+#[cfg(feature = "pyo3")]
+use crate::{
+    error::missing_key_err,
+    utils::{extract_indicies, get_type_name, normalize_py_index},
 };
 
 #[doc = include_str!("../doc/rs_response.md")]
