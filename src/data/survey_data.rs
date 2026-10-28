@@ -231,3 +231,70 @@ impl std::fmt::Debug for SurveyData {
         f.debug_struct("SurveyData").field("frame", &"LazyFrame").finish()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn temporary_cache_is_replaced_and_deleted_on_drop() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let destination = dir.path().join("cache.parquet");
+        let expected = df!("value" => [1i64, 2])?;
+        let mut data = SurveyData::from_polars(expected.clone())?;
+        let original = PathBuf::from(data.cache().unwrap());
+        assert!(original.is_file());
+        assert!(data.to_polars()?.equals_missing(&expected));
+
+        data.set_cache(&destination)?;
+        assert_eq!(Path::new(data.cache().unwrap()), destination);
+        assert!(!original.exists());
+        assert!(destination.is_file());
+        assert!(data.to_polars()?.equals_missing(&expected));
+        drop(data);
+        assert!(!destination.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn persistent_source_survives_drop_and_cache_replacement() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let source = dir.path().join("source.parquet");
+        let destination = dir.path().join("cache.parquet");
+        let expected = df!("value" => [1i64, 2])?;
+        ParquetWriter::new(std::fs::File::create(&source)?)
+            .finish(&mut expected.clone())?;
+        let original = std::fs::read(&source)?;
+        drop(SurveyData::from_parquet(&source, None)?);
+        assert_eq!(std::fs::read(&source)?, original);
+
+        let mut data = SurveyData::from_parquet(&source, None)?;
+        data.set_cache(&destination)?;
+        assert!(data.to_polars()?.equals_missing(&expected));
+        drop(data);
+        assert_eq!(std::fs::read(&source)?, original);
+        assert!(!destination.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn failed_set_cache_preserves_files_and_removes_staging_file() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let destination = dir.path().join("existing.parquet");
+        std::fs::write(&destination, b"keep me")?;
+        let expected = df!("value" => [1i64, 2])?;
+        let mut data = SurveyData::from_polars(expected.clone())?;
+        let original = PathBuf::from(data.cache().unwrap());
+
+        assert!(data.set_cache(&destination).is_err());
+        assert!(data.set_cache(&original).is_err());
+        assert_eq!(std::fs::read(&destination)?, b"keep me");
+        assert_eq!(Path::new(data.cache().unwrap()), original);
+        assert!(data.to_polars()?.equals_missing(&expected));
+        let mut empty = SurveyData::default();
+        assert!(empty.set_cache(dir.path().join("empty.parquet")).is_err());
+        assert!(empty.cache().is_none());
+        assert_eq!(std::fs::read_dir(dir.path())?.count(), 1);
+        Ok(())
+    }
+}
