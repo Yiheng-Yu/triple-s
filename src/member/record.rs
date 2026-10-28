@@ -507,6 +507,7 @@ impl Record {
         }
     }
 
+    /// extract one row of data from a fixed width data read
     fn read_one_record<R: BufRead>(reader: &mut R, record_width: usize) -> Result<String> {
         let mut result = String::with_capacity(record_width);
 
@@ -575,6 +576,10 @@ impl Record {
             .ok_or_else(|| anyhow::anyhow!("Data not loaded yet. Call `load_data` first!"))?;
         std::fs::copy(temp_path.as_ref(), parquet_path)?;
         Ok(())
+    }
+
+    pub fn get_data(&self, question_name: &str) -> Result<DataFrame> {
+        todo!()
     }
 }
 
