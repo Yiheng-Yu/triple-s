@@ -17,6 +17,7 @@ pub use record::{DataFormat, Record};
 pub use response::{Code, Response, Value};
 pub use survey_info::{SurveyInfo, Version};
 pub use text::{Text, Variant};
+use crate::SurveyData;
 
 #[cfg(feature = "pyo3")]
 use crate::utils::{get_type_name, py_value_error};
