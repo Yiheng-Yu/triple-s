@@ -17,12 +17,12 @@ def survey():
 
 def test_to_pandas_without_loaded_data(survey):
     with pytest.raises(NoDataError, match="Data not loaded"):
-        survey.to_pandas()
+        survey.data.to_pandas()
 
 
 def test_loaded_data_to_pandas(survey):
     survey.load_data("tests/sss-examples/sss-2.0/example1.asc")
-    result = survey.to_pandas()
+    result = survey.data.to_pandas()
     print(result)
     
     assert isinstance(result, pd.DataFrame)
@@ -43,4 +43,4 @@ def test_loaded_data_to_pandas(survey):
     assert result["Q8"].iloc[2] == "C"
     assert result["WT"].iloc[0] == pytest.approx(1.1310)
 
-    pd.testing.assert_frame_equal(result, survey.record.to_pandas())
+    pd.testing.assert_frame_equal(result, survey.record.data.to_pandas())

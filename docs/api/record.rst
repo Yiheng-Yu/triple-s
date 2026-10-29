@@ -10,6 +10,8 @@ Attributes
 .. autoattribute:: triple_s.Record.content
 .. autoattribute:: triple_s.Record.href
 .. autoattribute:: triple_s.Record.ident
+.. autoattribute:: triple_s.Record.skip
+.. autoattribute:: triple_s.Record.data
 
 Methods
 -------------
@@ -18,6 +20,4 @@ Methods
 .. automethod:: triple_s.Record.get_question
 .. automethod:: triple_s.Record.update_data_source
 .. automethod:: triple_s.Record.load_data
-.. automethod:: triple_s.Record.to_polars
-.. automethod:: triple_s.Record.to_pandas
 .. automethod:: triple_s.Record.to_xml

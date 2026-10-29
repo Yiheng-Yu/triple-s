@@ -41,23 +41,25 @@ data into a `polars.DataFrame`, or a `pandas.DataFrame`:
 .. code-block:: python
 
    survey.load_data("survey.asc")
-   # to ploars dataframe
-   df = survey.to_polars()
+   # to polars dataframe
+   df = survey.data.to_polars()
    # to pandas dataframe
-   pandas_df = survey.to_pandas()
+   pandas_df = survey.data.to_pandas()
 
 For CSV data, the datamap's record must specify ``format="csv"``;
 pass the matching ``.csv`` path to ``load_data()``. Positions then refer
 to one-based CSV field numbers. The record's ``skip`` setting controls
 how many initial records are skipped, including a header if present.
 
-Alternatively, :func:`triple_s.read_triple_s` loads both files in one call:
+Alternatively, :func:`triple_s.read_triple_s` reads the datamap and validates
+the data source. Call ``load_data()`` to load respondent data:
 
 .. code-block:: python
 
    from triple_s import read_triple_s
 
-   survey = read_triple_s("survey.sss", "survey.asc", read_triple_s=True)
+   survey = read_triple_s("survey.sss", "survey.asc", validate_data_file=True)
+   survey.load_data("survey.asc")
 
 Export a datamap
 -------------------

@@ -3,6 +3,12 @@ SurveyData
 
 .. autoclass:: triple_s.SurveyData
 
+Attributes
+----------
+
+.. autoattribute:: triple_s.SurveyData.questions
+.. autoattribute:: triple_s.SurveyData.num_response
+
 Methods
 -------
 

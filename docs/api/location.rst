@@ -11,4 +11,4 @@ Attributes
 
 Methods
 ----------------
-.. autoattribute:: triple_s.Location.from_dict
+.. automethod:: triple_s.Location.from_dict

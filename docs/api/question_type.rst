@@ -17,4 +17,4 @@ Attributes
 
 Methods
 ----------------
-.. autoattribute:: triple_s.QuestionType.available_options
+.. automethod:: triple_s.QuestionType.available_options
