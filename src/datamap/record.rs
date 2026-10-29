@@ -81,6 +81,19 @@ impl DeepCopy for DataFormat {
     }
 }
 
+impl DataFormat {
+    fn from_path(path: &Path) -> Result<Self> {
+        match path.extension().and_then(|extension| extension.to_str()) {
+            Some("asc") => Ok(Self::Fixed),
+            Some("csv") => Ok(Self::Csv),
+            _ => Err(InvalidArg::new(format!(
+                "Invalid file type: Expect '.csv' or '.asc' file, got: {}",
+                path.display()
+            )).into()),
+        }
+    }
+}
+
 /// Content of a datamap
 #[cfg_attr(
     feature = "pyo3",
@@ -207,9 +220,10 @@ impl Record {
         Ok(output)
     }
 
-    /// Whether the current datamap has associated .asc/ .csv data file or not.
+    /// Whether respondent data has been loaded.
+    #[inline]
     pub fn has_data(&self) -> bool {
-        self.href().is_some()
+        self.data().lazy().is_ok()
     }
 
     /// Serialises the record and its questions as a Triple-S XML `<record>`
@@ -255,8 +269,9 @@ impl Record {
 ///
 /// ---
 impl Record {
-    /// Load fixed-width or CSV data according to the record's `format`.
+    /// Load respondent data from an `.asc` (fixed-width) or `.csv` file.
     /// Supports both UTF-8 and BOM-marked UTF-16LE/BE encodings.
+    /// On success, replace the loaded data and update `href` and `data_format`.
     ///
     /// This `load_data` function will stream data into a temporary parquet cache file (`.parquet`) to be
     /// used later. To get the cache, call [`Record::to_parquet()`] method afterwards:
@@ -264,31 +279,29 @@ impl Record {
     /// ```no_run
     /// use triple_s::read_triple_s;
     ///
-    /// let mut survey =
-    ///     read_triple_s("path/to/datamap.sss", Some("path/to/database.asc"), false)?;
+    /// // Load a survey with no data
+    /// let mut survey = read_triple_s("path/to/datamap.sss", None::<&str>)?;
     ///
+    /// // then load the data later
     /// let mut record = survey.record_mut();
     /// record.load_data("new/data/path.asc")?; // loads data
     ///
-    /// let df = record.to_polars()?; // get data as polars dataframe
+    /// let df = record.data().to_polars()?; // get data as polars dataframe
     /// println!("{:?}", df);
     ///
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn load_data(&mut self, path_data: impl AsRef<Path>) -> Result<()> {
+        let path_data = path_data.as_ref();
+        let data_format = DataFormat::from_path(path_data)?;
         let (parquet_file, cache) =
             tempfile::NamedTempFile::with_suffix(".parquet")?.into_parts();
-
-        let path_data = path_data.as_ref();
-        self.set_data_source(path_data, false).with_context(|| {
-            format!("When trying to load data from '{}'", path_data.display())
-        })?;
 
         let schema =
             Schema::from_iter(self.content().iter().map(|item| item.read().polars_field()));
         let mut writer = ParquetWriter::new(parquet_file).batched(&schema)?;
         let mut batch_buffer = Vec::new();
-        for row in self.scan_data_file()? {
+        for row in self.scan_data_file(path_data, &data_format)? {
             batch_buffer.push(row.with_context(|| {
                 format!("When trying to load data from '{}'", path_data.display())
             })?);
@@ -301,9 +314,12 @@ impl Record {
 
         let data = SurveyData::from_cache(cache, Some(Arc::new(schema)))?;
         *self.data.write() = data;
+        *self.href_mut() = Some(path_data.to_string_lossy().to_string());
+        *self.data_format_mut() = Some(data_format);
         Ok(())
     }
 
+    #[inline]
     fn write_batch(
         writer: &mut polars::io::parquet::write::BatchedWriter<File>,
         schema: &Schema,
@@ -315,15 +331,14 @@ impl Record {
         Ok(())
     }
 
-    fn scan_data_file(&self) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>> + '_>> {
-        let path_data = self
-            .href()
-            .as_ref()
-            .ok_or(error::InternalError::new("field `href` not defined"))?;
-
+    fn scan_data_file(
+        &self,
+        path_data: &Path,
+        data_format: &DataFormat,
+    ) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>> + '_>> {
         let file = File::open(path_data)
             .map_err(error::FileReadError::from)
-            .with_context(|| format!("When opening '{}'", path_data))?;
+            .with_context(|| format!("When opening '{}'", path_data.display()))?;
         let reader = TextReader::new(BufReader::new(file));
         let mut reader = BufReader::new(reader);
 
@@ -343,7 +358,6 @@ impl Record {
         }
 
         // then do iteration
-        let data_format = self.data_format().cloned().unwrap_or(DataFormat::Fixed); // default DataFormat
         match data_format {
             DataFormat::Fixed => {
                 let width = self
@@ -402,75 +416,24 @@ impl Record {
         }
     }
 
-    /// Update data source after validation.
-    ///
-    /// This method will:
-    ///     - check the file extension type and if the `path` actually exists.
-    ///
-    /// if input argument `validate` was `true`:
-    ///     - Scan the data row by row to check if there were any errors, and raises error
-    ///       should there were any.
-    ///
-    /// And finally, this method will *overwrite* these fields:
-    /// 1) the 'href' field with the provided 'path' attribute
-    /// 2) `data_format` field according to the file extension of the `path` provided ([`CodeFormat::Fixed`] or [`CodeFormat::Csv`])
-    ///
-    /// CSV positions are one-based field numbers.
-    /// The record's `skip` attribute controls how many initial records to ignore in either
-    /// format.
-    pub fn set_data_source(&mut self, path: impl AsRef<Path>, validate: bool) -> Result<()> {
-        let path_ref = path.as_ref();
-        let path_string = path_ref.to_string_lossy().into_owned();
-
-        // parse and update data source
-        let extension = path_ref
-            .extension()
-            .ok_or(InvalidArg::new(format!(
-                "Invalid file type: Expect '.csv' or '.asc' file, got: {}",
-                path_string
-            )))?
-            .to_string_lossy()
-            .into_owned();
-        let new_data_format = match extension.as_str() {
-            "asc" => DataFormat::Fixed,
-            "csv" => DataFormat::Csv,
-            _ => {
-                return Err(InvalidArg::new(format!(
-                    "Invalid file type: Expect '.csv' or '.asc' file, got: {}",
-                    path_string
-                ))
-                .into());
-            }
-        };
-        *self.data_format_mut() = Some(new_data_format);
-
-        // read & validate file
-        let file = File::open(path_ref)
+    /// Validate an `.asc` or `.csv` file against the record's questions and skip setting.
+    /// 
+    /// This method simply validates data file and would not alter any existing fields.
+    /// 
+    /// To modify current instance, use [`Record::load_data`] method instead.
+    pub fn validate_data(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path = path.as_ref();
+        let data_format = DataFormat::from_path(path)?;
+        let file = File::open(path)
             .map_err(error::FileReadError::from)
-            .with_context(|| format!("When opening '{}'", path_string))?;
+            .with_context(|| format!("When opening '{}'", path.display()))?;
         let skip = self
             .skip
             .as_deref()
             .unwrap_or("0")
             .parse::<usize>()
             .context("Record skip must be a non-negative integer")?;
-
-        // do an initial scan of the data source, checking if there were any errors for the data file
-        if validate {
-            self.validate_data_format(file, skip)
-                .with_context(|| format!("When opening '{}'", path_string))?;
-        }
-
-        *self.href_mut() = Some(path_string);
-        Ok(())
-    }
-
-    /// Scan data source as (provided in `path`) to validate data from each respondent,
-    /// raises error if there were anything wrong
-    /// This method would not load any data into the memory.
-    fn validate_data_format(&self, file: File, skip: usize) -> Result<()> {
         let file = TextReader::new(BufReader::new(file));
-        let data_format = self.data_format().unwrap_or(&DataFormat::Fixed);
         let content = self.content();
 
         match data_format {
@@ -658,6 +621,7 @@ impl Record {
     /// (Optional) path to the data file the current datamap ties to.
     ///
     /// This corresponds to the href attribute of a <record> element.
+    /// Setting it edits metadata only; use `load_data(path)` to load respondent data.
     #[getter(href)]
     fn py_get_href(&self) -> PyResult<Option<String>> {
         Ok(self.href().clone())
@@ -709,12 +673,18 @@ impl Record {
         self.get_question_(question_name).map(|item| item.read().clone())
     }
 
-    /// Load fixed-width or CSV data using the record's format and skip
-    /// metadata.
+    /// Load an `.asc` or `.csv` file using the record's skip setting.
+    /// Updates `href`, `data_format`, and loaded data on success.
     #[pyo3(name="load_data", signature=(path:"str"))]
     pub fn py_load_data(&mut self, path: &str) -> PyResult<()> {
         self.load_data(path)
             .map_err(|err| exceptions::PyValueError::new_err(format!("{:?}", err)))
+    }
+
+    /// Whether respondent data has been loaded.
+    #[pyo3(name="has_data")]
+    fn py_has_data(&self) -> bool {
+        self.has_data()
     }
 
     fn __len__(&self) -> usize {
@@ -877,29 +847,13 @@ impl Record {
         })
     }
 
-    /// Update path to the data file ('href' attribute) after validation.
-    ///
-    /// This method will:
-    ///     - check the file extension type and update the corresponding `data_format` field
-    ///       accordingly.
-    ///     - Scan the data row by row to check if there were any errors, and raises error
-    ///       should there were any.
-    ///     - If no error was raised during the scan, this method will *overwrite* the 'href'
-    ///       field with the provided 'path' attribute.
-    ///
-    /// CSV positions are one-based field numbers.
-    /// The record's `skip` attribute controls how many initial records to ignore in either
-    /// format.
-    #[pyo3(name = "update_data_source")]
-    fn py_update_data_source(&mut self, path: Option<&str>) -> PyResult<()> {
-        match path {
-            None => {
-                *self.href_mut() = None;
-                Ok(())
-            }
-            Some(path) => self.set_data_source(path, true).map_err(py_value_error),
-        }
+    /// Validate an `.asc` or `.csv` file without changing metadata or loading data.
+    /// Use `load_data(path)` to load respondent data.
+    #[pyo3(name = "validate_data")]
+    fn py_validate_data(&self, path: &str) -> PyResult<()> {
+        self.validate_data(path).map_err(py_value_error)
     }
+
 }
 
 #[cfg(test)]
@@ -938,6 +892,39 @@ mod tests {
     }
 
     #[test]
+    fn validation_does_not_change_source_and_failed_load_preserves_data() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let source = dir.path().join("source.asc");
+        let other = dir.path().join("other.asc");
+        let invalid = dir.path().join("invalid.csv");
+        std::fs::write(&source, "abc17\n")?;
+        std::fs::write(&other, "xyz23\n")?;
+        std::fs::write(&invalid, "bad\n")?;
+        let mut survey = unicode_survey(false);
+        let record = survey.record_mut();
+        *record.href_mut() = Some("metadata-only.asc".into());
+        let original_href = record.href().clone();
+
+        record.validate_data(&source)?;
+        assert_eq!(record.href(), &original_href);
+        assert!(!record.has_data());
+        record.load_data(&source)?;
+        assert!(record.has_data());
+        let expected = record.to_polars()?;
+        record.validate_data(&other)?;
+        assert!(record.validate_data(&invalid).is_err());
+        assert!(record.load_data(&invalid).is_err());
+        assert_eq!(record.href().as_deref(), source.to_str());
+        assert_eq!(record.data_format(), Some(&DataFormat::Fixed));
+        assert!(record.to_polars()?.equals_missing(&expected));
+
+        record.load_data(&other)?;
+        assert_eq!(record.href().as_deref(), other.to_str());
+        assert_eq!(record.to_polars()?.column("TEXT")?.str()?.get(0), Some("xyz"));
+        Ok(())
+    }
+
+    #[test]
     fn unicode_data_loads_and_validates_in_both_formats() {
         for csv in [false, true] {
             let text = if csv {
@@ -956,7 +943,7 @@ mod tests {
                     .unwrap();
                 file.write_all(bytes).unwrap();
                 let mut survey = unicode_survey(csv);
-                survey.record_mut().set_data_source(file.path(), true).unwrap();
+                survey.record().validate_data(file.path()).unwrap();
                 survey.load_data(file.path()).unwrap();
                 let frame = survey.record().to_polars().unwrap();
                 assert_eq!(frame.shape(), (2, 2));

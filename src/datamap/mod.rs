@@ -17,10 +17,12 @@ pub use record::{DataFormat, Record};
 pub use response::{Code, Response, Value};
 pub use survey_info::{SurveyInfo, Version};
 pub use text::{Text, Variant};
-use crate::SurveyData;
 
 #[cfg(feature = "pyo3")]
-use crate::utils::{get_type_name, py_value_error};
+use crate::{
+    data::SurveyData,
+    utils::{get_type_name, py_value_error},
+};
 use crate::{prelude::Flag, utils::ArcLock};
 
 // Rustdoc always uses the Rust guide, including builds with Python bindings.
@@ -275,8 +277,8 @@ impl Survey {
         self.to_xml().map_err(py_value_error)
     }
 
-    /// Load fixed-width or CSV data using the record's format and skip
-    /// metadata.
+    /// Load an `.asc` or `.csv` file using the record's skip setting.
+    /// Updates the record's `href`, `data_format`, and loaded data on success.
     #[pyo3(name="load_data", signature=(path:"str"))]
     fn py_load_data(&mut self, path: &str) -> PyResult<()> {
         self.record_mut().load_data(path).map_err(py_value_error)

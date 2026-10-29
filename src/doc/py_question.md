@@ -6,10 +6,11 @@ Attributes:
 name (str):
     name of the question
 
-question_type (triple_s.QuestionType | str):
+question_type (triple_s.QuestionType | str | None):
     type of the question, corresponds to the `<type>` child node of a `<variable>` node.
     one of the following:
     ["single", "multiple", "logical", "quantity", "character", "date", "time"]
+    Pass `None` for a question with no response values, for example `Question("n1", None)`.
 
 label (triple_s.Text, *Optional*):
     Question text label, corresponds to the `<label>` child node of a `<variable>` node.
