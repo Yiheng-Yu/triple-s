@@ -198,13 +198,12 @@ use pyo3::prelude::*;
 pub fn read_triple_s(
     path_sss: impl AsRef<Path>,
     path_data: Option<impl AsRef<Path>>,
-    validate_data_file: bool,
 ) -> Result<Survey> {
     let mut survey = read_datamap(path_sss)?;
     match path_data {
         None => Ok(survey),
         Some(path_data) => {
-            survey.record_mut().set_data_source(path_data, validate_data_file)?;
+            survey.record_mut().load_data(path_data)?;
             Ok(survey)
         }
     }
@@ -258,10 +257,6 @@ mod triple_s {
     ///         path to the triple-s datamap file, supports both classic and xml format.     
     ///     path_data (str, *optional*):
     ///         path to the `.asc` or `.csv` data file.
-    ///     validate_data_file (bool, *optional*):
-    ///         toggle on/ off to check if there were any errors in the datafile.
-    ///         Only used when `path_data` is not None.
-    ///         Default True
     ///
     /// Returns:
     ///     [`Survey`] object
@@ -269,16 +264,12 @@ mod triple_s {
         name="read_triple_s", 
         signature=(
             path_datamap: "str", 
-            path_data:"str"=None,
-            validate_data_file: "bool"=true
-        )
+            path_data:"str"=None        )
     )]
     pub fn py_read_triple_s(
         path_datamap: &str,
         path_data: Option<&str>,
-        validate_data_file: Option<bool>,
     ) -> PyResult<Survey> {
-        let validate_data_file = validate_data_file.unwrap_or(true);
-        read_triple_s(path_datamap, path_data, validate_data_file).map_err(|err| err.into())
+        read_triple_s(path_datamap, path_data).map_err(|err| err.into())
     }
 }

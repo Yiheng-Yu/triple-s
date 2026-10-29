@@ -301,6 +301,7 @@ impl Record {
 
         let data = SurveyData::from_cache(cache, Some(Arc::new(schema)))?;
         *self.data.write() = data;
+        *self.href_mut() = Some(path_data.to_string_lossy().to_string());
         Ok(())
     }
 
