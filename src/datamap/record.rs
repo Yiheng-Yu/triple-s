@@ -318,6 +318,7 @@ impl Record {
         Ok(())
     }
 
+    #[inline]
     fn write_batch(
         writer: &mut polars::io::parquet::write::BatchedWriter<File>,
         schema: &Schema,
@@ -415,7 +416,10 @@ impl Record {
     }
 
     /// Validate an `.asc` or `.csv` file against the record's questions and skip setting.
-    /// Does not change metadata or load respondent data; use `load_data` to load it.
+    /// 
+    /// This method simply validates data file and would not alter any existing fields.
+    /// 
+    /// To modify current instance, use [`Record::load_data`] method instead.
     pub fn validate_data(&self, path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
         let data_format = DataFormat::from_path(path)?;
