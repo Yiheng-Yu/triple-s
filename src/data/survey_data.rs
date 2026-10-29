@@ -76,7 +76,6 @@ impl SurveyData {
                 CacheDir::Persistent(path) => Some(path.to_str()).flatten(),
             },
         }
-        // self.cache.as_ref()
     }
 
     /// Write the current data to a new cache file, deleted on drop.
@@ -175,24 +174,75 @@ impl SurveyData {
     }
 
     /// Total number of rows
-    pub fn num_rows(&self) -> PolarsResult<usize> {
-        let num_rows = self.lazy()
+    pub fn num_response(&self) -> PolarsResult<usize> {
+        let num_response = self.lazy()
             .map_err(|err| PolarsError::NoData(err.to_string().into()))?
             .clone()
-            .select([len()])
             .collect()?
             .height();
-        Ok(num_rows)
+        Ok(num_response)
+    }
+
+    /// List of question names in the current instance
+    pub fn questions(&self) -> PolarsResult<Vec<String>> {
+        match self.frame.as_ref() {
+            None => Ok(Vec::new()),
+            Some(lf) => {
+                Ok(lf.clone()
+                    .collect_schema()?
+                    .iter_names()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>())
+            }
+        }
     }
 }
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl SurveyData {
-    fn __repr__(&self) -> String {
-        let name = "SurveyData";
-        let content = "";
-        format!("{} ({{{}}})", name, content)
+
+    /// List of question names in the current instance
+    #[getter(questions)]
+    fn py_get_questions(&self) -> Vec<String> {
+        self.questions().ok().unwrap_or_default()
+    }
+
+    #[getter(num_response)]
+    fn py_get_num_response(&self) -> usize {
+        self.num_response().ok().unwrap_or_default()
+    }
+
+    fn __repr__(&self) -> PyResult<String> {
+        let mut info = Vec::new();
+
+        const MAX_NUM_COLNAME_SHOW:usize = 3;
+        let colnames = self.questions()
+            .ok()
+            .unwrap_or_default();
+        let mut colname_repr = colnames[0..colnames.len().min(MAX_NUM_COLNAME_SHOW)]
+            .iter()
+            .map(|s| format!("{:?}", s))
+            .collect::<Vec<String>>()
+            .join(", ");
+        if colnames.len() > MAX_NUM_COLNAME_SHOW {
+            colname_repr.push_str(", ...")
+        };
+        let colname_repr = format!("[{}]", colname_repr);
+        info.push(("questions", colname_repr));
+
+        let num_response = self.num_response()
+            .ok()
+            .unwrap_or_default() // empty SurveyData -> num_response would be zero
+            .to_string();
+        info.push(("num_response", num_response));
+
+        let formatted = info
+            .into_iter()
+            .map(|(field, value)| format!("{}: {}", field, value))
+            .collect::<Vec<String>>()
+            .join(",\n  ");
+        Ok(format!("SurveyData({{\n  {}\n}})", formatted))
     }
 
     /// Create new empty [`SurveyData`] instance
@@ -242,6 +292,12 @@ impl std::fmt::Debug for SurveyData {
         f.debug_struct("SurveyData").field("frame", &"LazyFrame").finish()
     }
 }
+
+pub struct QuestionData {
+    qname: String,
+    backend: Arc<SurveyData>
+}
+
 
 #[cfg(test)]
 mod tests {

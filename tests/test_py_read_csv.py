@@ -18,7 +18,7 @@ def survey():
 
 def test_load_csv_example(survey):
     survey.load_data("tests/sss-examples/sss-2.0/example2.csv")
-    result = survey.to_pandas()
+    result = survey.data.to_pandas()
     assert result.shape == (3, 12)
     assert result["RESPONDENT_ID"].tolist() == [520001, 520002, 520003]
     assert result["Q1.a"].iloc[0] == date(2005, 5, 4)
@@ -34,7 +34,7 @@ def test_load_csv_example(survey):
     assert pd.isna(result["Q8"].iloc[1])
     assert result["Q8"].iloc[2] == "C"
     assert result["WT"].tolist() == pytest.approx([1.131, 0.9921, 1.0089])
-    assert survey.to_polars().shape == (3, 12)
+    assert survey.record.data.to_polars().shape == (3, 12)
 
 
 @pytest.mark.parametrize("skip", [0, 1, 2])
@@ -57,7 +57,7 @@ def test_csv_quoting_and_skip(tmp_path, survey, skip):
         warnings.simplefilter("ignore")
         survey = read_datamap(str(datamap_path))
     survey.record.load_data(str(path))
-    result = survey.to_pandas()
+    result = survey.data.to_pandas()
     assert result.shape == (1, 12)
     assert result["Q3.a"].iloc[0] == row[6]
     assert pd.isna(result["WT"].iloc[0])
@@ -69,7 +69,7 @@ def test_csv_missing_field_reports_question(tmp_path, survey):
     with pytest.raises(ValueError, match="Q1.b.*field 3"):
         survey.load_data(str(path))
     with pytest.raises(NoDataError, match="Data not loaded"):
-        survey.to_pandas()
+        survey.data.to_pandas()
 
 
 def test_csv_invalid_value_reports_record_and_question(tmp_path, survey):

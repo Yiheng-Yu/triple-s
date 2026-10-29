@@ -18,8 +18,6 @@ use pyo3::{
     prelude::*,
     types::{PyDict, PySlice, PyTuple},
 };
-#[cfg(feature = "pyo3")]
-use pyo3_polars::error::PyPolarsErr;
 use quick_xml::Writer;
 use rayon::prelude::*;
 use strum::{EnumIter, EnumString};
@@ -666,6 +664,14 @@ impl Record {
         Ok(())
     }
 
+    /// Survey data
+    /// 
+    /// Data is loaded via `load_data()` method
+    #[getter(data)]
+    fn py_get_data(&self) -> PyResult<SurveyData> {
+        Ok(self.data().clone())
+    }
+
     /// (Optional) corresponds to the 'skip' attribute of the `<record>` xml element.
     ///
     /// Used to ignore one or more initial records in the Data File.
@@ -704,28 +710,6 @@ impl Record {
     pub fn py_load_data(&mut self, path: &str) -> PyResult<()> {
         self.load_data(path)
             .map_err(|err| exceptions::PyValueError::new_err(format!("{:?}", err)))
-    }
-
-    /// Export loaded data into polars dataframe
-    #[pyo3(name = "to_polars")]
-    pub fn py_to_polars<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        self.data().py_to_polars(py)
-    }
-
-    /// Export loaded data as a pandas DataFrame in question order.
-    #[pyo3(name = "to_pandas")]
-    pub fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let frame = self.py_to_polars(py)?;
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("use_pyarrow_extension_array", true)?;
-        frame.call_method("to_pandas", (), Some(&kwargs))
-    }
-
-    /// Dump loaded data to parquet file
-    #[pyo3(name = "to_parquet")]
-    pub fn py_to_parquet(&self, parquet_path: &str) -> PyResult<()> {
-        self.to_parquet(parquet_path).map_err(PyPolarsErr::Polars)?;
-        Ok(())
     }
 
     fn __len__(&self) -> usize {

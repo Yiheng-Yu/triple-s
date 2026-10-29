@@ -18,6 +18,7 @@ pub use response::{Code, Response, Value};
 pub use survey_info::{SurveyInfo, Version};
 pub use text::{Text, Variant};
 
+use crate::SurveyData;
 #[cfg(feature = "pyo3")]
 use crate::utils::{get_type_name, py_value_error};
 use crate::{prelude::Flag, utils::ArcLock};
@@ -229,8 +230,7 @@ impl Survey {
         Ok(Self { info, record })
     }
 
-    /// get question by question name, returns `None` if question name not
-    /// exist.
+    /// get question by question name, returns `None` if question name not exist.
     #[pyo3(name="get_question", signature=(question_name:"str"))]
     fn py_get_question(&self, question_name: &str) -> Option<Question> {
         self.record.py_get_question(question_name)
@@ -242,18 +242,25 @@ impl Survey {
         self.info.title.clone()
     }
 
-    /// survey record. For more info please check docuentation of the `Record`
+    /// Survey record. For more info please check docuentation of the `Record`
     /// class.
     #[getter(record)]
     fn py_get_record(&self) -> Record {
         self.record.clone()
     }
 
-    /// Collects survey meta information, i.e., survey name & title, creation
-    /// date, etc.,
+    /// Collects survey meta information, i.e., survey name & title, creation date, etc.,
     #[getter(survey_info)]
     fn py_get_survey_info(&self) -> SurveyInfo {
         self.info.clone()
+    }
+
+    /// Survey data
+    /// 
+    /// Data is loaded via `load_data()` method
+    #[getter(data)]
+    fn py_get_data(&self) -> PyResult<SurveyData> {
+        Ok(self.record().data().clone())
     }
 
     /// export content of datamap to triple-s classic string.
@@ -275,23 +282,6 @@ impl Survey {
         self.record_mut().load_data(path).map_err(py_value_error)
     }
 
-    /// Export loaded data into polars dataframe
-    #[pyo3(name = "to_polars")]
-    fn py_to_polars<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        self.record().py_to_polars(py)
-    }
-
-    /// Export the record's loaded data as a pandas DataFrame.
-    #[pyo3(name = "to_pandas")]
-    fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        self.record().py_to_pandas(py)
-    }
-
-    /// Export the record's loaded data to parquet file.
-    #[pyo3(name = "to_parquet")]
-    fn py_to_parquet<'py>(&self, parquet_path: &str) -> PyResult<()> {
-        self.record().py_to_parquet(parquet_path)
-    }
 }
 
 #[cfg(test)]
