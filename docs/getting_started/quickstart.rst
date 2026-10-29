@@ -46,10 +46,17 @@ data into a `polars.DataFrame`, or a `pandas.DataFrame`:
    # to pandas dataframe
    pandas_df = survey.data.to_pandas()
 
-For CSV data, the datamap's record must specify ``format="csv"``;
-pass the matching ``.csv`` path to ``load_data()``. Positions then refer
+``load_data()`` selects fixed-width or CSV format from the ``.asc`` or ``.csv``
+extension and updates the record's ``href`` and ``data_format`` after loading.
+For CSV data, positions refer
 to one-based CSV field numbers. The record's ``skip`` setting controls
 how many initial records are skipped, including a header if present.
+
+To check a file without loading it or changing metadata, use
+``survey.record.validate_data("survey.asc")``. Assigning ``record.href``
+only edits metadata. ``validate_data()`` replaces the former
+``update_data_source()`` method; use ``load_data()`` when you want to switch
+the loaded data.
 
 Alternatively, :func:`triple_s.read_triple_s` reads the datamap as well as the data file:
 

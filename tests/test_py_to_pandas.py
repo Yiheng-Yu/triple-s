@@ -1,10 +1,9 @@
-from datetime import date, time
 import warnings
+from datetime import date, time
 
 import pandas as pd
 import pytest
-
-from triple_s import read_datamap, NoDataError
+from triple_s import NoDataError, read_datamap
 
 
 @pytest.fixture
@@ -24,12 +23,22 @@ def test_loaded_data_to_pandas(survey):
     survey.load_data("tests/sss-examples/sss-2.0/example1.asc")
     result = survey.data.to_pandas()
     print(result)
-    
+
     assert isinstance(result, pd.DataFrame)
     assert result.shape == (3, 12)
     assert result.columns.tolist() == [
-        "RESPONDENT_ID", "Q1.a", "Q1.b", "Q2", "Q3", "Q3.a",
-        "Q4", "Q5", "Q6", "Q7", "Q8", "WT",
+        "RESPONDENT_ID",
+        "Q1.a",
+        "Q1.b",
+        "Q2",
+        "Q3",
+        "Q3.a",
+        "Q4",
+        "Q5",
+        "Q6",
+        "Q7",
+        "Q8",
+        "WT",
     ]
     assert result["RESPONDENT_ID"].tolist() == [520001.0, 520002.0, 520003.0]
     assert result["Q1.a"].iloc[0] == date(2005, 5, 4)

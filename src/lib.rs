@@ -187,10 +187,8 @@ use pyo3::prelude::*;
 ///     path to the triple-s datamap file.
 /// `path_data`:
 ///     path to the `.asc` or `.csv` data file that pairs with.
-///     if provided, will set the `href` field of the `record` to `path_data`.
-/// `validate`:
-///     toggle on/ off to check if there were any errors in the datafile.
-///     Only used when `path_data` is not `None`
+///     if provided, loads respondent data and updates the record's source metadata.
+///     Otherwise, reads only the datamap.
 ///
 /// Returns:
 /// [`Survey`] instance.
@@ -199,13 +197,10 @@ pub fn read_triple_s(
     path_data: Option<impl AsRef<Path>>,
 ) -> Result<Survey> {
     let mut survey = read_datamap(path_sss)?;
-    match path_data {
-        None => Ok(survey),
-        Some(path_data) => {
-            survey.record_mut().load_data(path_data)?;
-            Ok(survey)
-        }
+    if let Some(path_data) = path_data {
+        survey.load_data(path_data)?;
     }
+    Ok(survey)
 }
 
 /// A Python module implemented in Rust.
