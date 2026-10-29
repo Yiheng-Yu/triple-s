@@ -28,7 +28,7 @@ and record.
 ```no_run
 use triple_s::read_triple_s;
 
-let survey = read_triple_s("survey.sss", None::<&str>, false)?;
+let survey = read_triple_s("survey.sss", None)?;
 if let Some(question) = survey.get_question("Q1") {
     println!("Title of question 'Q1': '{:?}'", question.label());
 }

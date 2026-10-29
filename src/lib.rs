@@ -67,8 +67,7 @@
 //! let path_data: &str = "path/to/the/data.asc";
 //!
 //! // toggle on to validate `path_data`, note that this might take some time.
-//! let validate_data_file = true;
-//! let survey = read_triple_s(path_datamap, Some(path_data), validate_data_file)?;
+//! let survey = read_triple_s(path_datamap, Some(path_data))?;
 //!
 //! # Ok::<(), anyhow::Error>(())
 //! ```
@@ -264,12 +263,10 @@ mod triple_s {
         name="read_triple_s", 
         signature=(
             path_datamap: "str", 
-            path_data:"str"=None        )
+            path_data:"str"=None
+        )
     )]
-    pub fn py_read_triple_s(
-        path_datamap: &str,
-        path_data: Option<&str>,
-    ) -> PyResult<Survey> {
+    pub fn py_read_triple_s(path_datamap: &str, path_data: Option<&str>) -> PyResult<Survey> {
         read_triple_s(path_datamap, path_data).map_err(|err| err.into())
     }
 }

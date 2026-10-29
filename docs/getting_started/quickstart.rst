@@ -51,15 +51,13 @@ pass the matching ``.csv`` path to ``load_data()``. Positions then refer
 to one-based CSV field numbers. The record's ``skip`` setting controls
 how many initial records are skipped, including a header if present.
 
-Alternatively, :func:`triple_s.read_triple_s` reads the datamap and validates
-the data source. Call ``load_data()`` to load respondent data:
+Alternatively, :func:`triple_s.read_triple_s` reads the datamap as well as the data file:
 
 .. code-block:: python
 
    from triple_s import read_triple_s
 
-   survey = read_triple_s("survey.sss", "survey.asc", validate_data_file=True)
-   survey.load_data("survey.asc")
+   survey = read_triple_s("survey.sss", "survey.asc")
 
 Export a datamap
 -------------------

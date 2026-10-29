@@ -264,13 +264,14 @@ impl Record {
     /// ```no_run
     /// use triple_s::read_triple_s;
     ///
-    /// let mut survey =
-    ///     read_triple_s("path/to/datamap.sss", Some("path/to/database.asc"), false)?;
+    /// // Load a survey with no data
+    /// let mut survey = read_triple_s("path/to/datamap.sss", None)?;
     ///
+    /// // then load the data later
     /// let mut record = survey.record_mut();
     /// record.load_data("new/data/path.asc")?; // loads data
     ///
-    /// let df = record.to_polars()?; // get data as polars dataframe
+    /// let df = record.data.to_polars()?; // get data as polars dataframe
     /// println!("{:?}", df);
     ///
     /// # Ok::<(), anyhow::Error>(())
