@@ -293,10 +293,10 @@ impl std::fmt::Debug for SurveyData {
     }
 }
 
-pub struct QuestionData {
-    qname: String,
-    backend: Arc<SurveyData>
-}
+// pub struct QuestionData {
+//     qname: String,
+//     backend: Arc<SurveyData>
+// }
 
 
 #[cfg(test)]
