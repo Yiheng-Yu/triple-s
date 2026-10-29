@@ -24,8 +24,12 @@ use strum::{EnumIter, EnumString};
 
 use super::{ArcLock, Question};
 #[cfg(feature = "pyo3")]
-use crate::{
-    utils::{extract_indicies, lock_it_up, get_type_name, normalize_py_index, py_value_error},
+use crate::utils::{
+    extract_indicies,
+    get_type_name,
+    lock_it_up,
+    normalize_py_index,
+    py_value_error,
 };
 use crate::{
     SurveyData,
@@ -276,8 +280,9 @@ impl Record {
             tempfile::NamedTempFile::with_suffix(".parquet")?.into_parts();
 
         let path_data = path_data.as_ref();
-        self.set_data_source(path_data, false)
-            .with_context(|| format!("When trying to load data from '{}'", path_data.display()))?;
+        self.set_data_source(path_data, false).with_context(|| {
+            format!("When trying to load data from '{}'", path_data.display())
+        })?;
 
         let schema =
             Schema::from_iter(self.content().iter().map(|item| item.read().polars_field()));
@@ -665,7 +670,7 @@ impl Record {
     }
 
     /// Survey data
-    /// 
+    ///
     /// Data is loaded via `load_data()` method
     #[getter(data)]
     fn py_get_data(&self) -> PyResult<SurveyData> {

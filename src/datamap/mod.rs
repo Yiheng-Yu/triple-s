@@ -18,7 +18,6 @@ pub use response::{Code, Response, Value};
 pub use survey_info::{SurveyInfo, Version};
 pub use text::{Text, Variant};
 
-use crate::SurveyData;
 #[cfg(feature = "pyo3")]
 use crate::utils::{get_type_name, py_value_error};
 use crate::{prelude::Flag, utils::ArcLock};
@@ -256,7 +255,7 @@ impl Survey {
     }
 
     /// Survey data
-    /// 
+    ///
     /// Data is loaded via `load_data()` method
     #[getter(data)]
     fn py_get_data(&self) -> PyResult<SurveyData> {
@@ -281,7 +280,6 @@ impl Survey {
     fn py_load_data(&mut self, path: &str) -> PyResult<()> {
         self.record_mut().load_data(path).map_err(py_value_error)
     }
-
 }
 
 #[cfg(test)]

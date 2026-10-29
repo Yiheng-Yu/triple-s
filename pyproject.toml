@@ -34,6 +34,7 @@ bindings = "pyo3"
 compatibility = "pypi"
 strip = true
 sdist-generator = "cargo"
+profile = "release"
 features = ["pyo3", "pyo3/extension-module"]
 
 [tool.pytest.ini_options]
