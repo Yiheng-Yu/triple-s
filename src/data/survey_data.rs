@@ -62,7 +62,6 @@ impl Clone for SurveyData {
     }
 }
 
-
 /// Fields
 ///
 /// ---
@@ -76,7 +75,6 @@ impl SurveyData {
                 CacheDir::Persistent(path) => Some(path.to_str()).flatten(),
             },
         }
-        // self.cache.as_ref()
     }
 
     /// Write the current data to a new cache file, deleted on drop.
@@ -111,7 +109,10 @@ impl SurveyData {
         schema: Option<Arc<Schema>>,
     ) -> Result<Self> {
         let cache = CacheDir::Persistent(std::path::absolute(path_parquet.as_ref())?);
-        let args = ScanArgsParquet { schema, ..Default::default() };
+        let args = ScanArgsParquet {
+            schema,
+            ..Default::default()
+        };
 
         let path_buf = cache.to_path_buf()?;
         let path = PlRefPath::try_from_path(path_buf.as_path())?;
@@ -151,11 +152,11 @@ impl SurveyData {
     }
 
     /// create new instance from cache
-    pub(crate) fn from_cache(
-        cache: TempPath,
-        schema: Option<Arc<Schema>>,
-    ) -> Result<Self> {
-        let args = ScanArgsParquet { schema, ..Default::default()};
+    pub(crate) fn from_cache(cache: TempPath, schema: Option<Arc<Schema>>) -> Result<Self> {
+        let args = ScanArgsParquet {
+            schema,
+            ..Default::default()
+        };
 
         let path = PlRefPath::try_from_path(cache.as_ref())?;
         let frame = LazyFrame::scan_parquet(path, args)?;
@@ -173,15 +174,75 @@ impl SurveyData {
             .clone()
             .collect()
     }
+
+    /// Total number of rows
+    pub fn num_response(&self) -> PolarsResult<usize> {
+        let num_response = self
+            .lazy()
+            .map_err(|err| PolarsError::NoData(err.to_string().into()))?
+            .clone()
+            .collect()?
+            .height();
+        Ok(num_response)
+    }
+
+    /// List of question names in the current instance
+    pub fn questions(&self) -> PolarsResult<Vec<String>> {
+        match self.frame.as_ref() {
+            None => Ok(Vec::new()),
+            Some(lf) => Ok(lf
+                .clone()
+                .collect_schema()?
+                .iter_names()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>()),
+        }
+    }
 }
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl SurveyData {
-    fn __repr__(&self) -> String {
-        let name = "SurveyData";
-        let content = "";
-        format!("{} {{{}}}", name, content)
+    /// List of question names in the current instance
+    #[getter(questions)]
+    fn py_get_questions(&self) -> Vec<String> {
+        self.questions().ok().unwrap_or_default()
+    }
+
+    #[getter(num_response)]
+    fn py_get_num_response(&self) -> usize {
+        self.num_response().ok().unwrap_or_default()
+    }
+
+    fn __repr__(&self) -> PyResult<String> {
+        let mut info = Vec::new();
+
+        const MAX_NUM_COLNAME_SHOW: usize = 3;
+        let colnames = self.questions().ok().unwrap_or_default();
+        let mut colname_repr = colnames[0..colnames.len().min(MAX_NUM_COLNAME_SHOW)]
+            .iter()
+            .map(|s| format!("{:?}", s))
+            .collect::<Vec<String>>()
+            .join(", ");
+        if colnames.len() > MAX_NUM_COLNAME_SHOW {
+            colname_repr.push_str(", ...")
+        };
+        let colname_repr = format!("[{}]", colname_repr);
+        info.push(("questions", colname_repr));
+
+        let num_response = self
+            .num_response()
+            .ok()
+            .unwrap_or_default() // empty SurveyData -> num_response would be zero
+            .to_string();
+        info.push(("num_response", num_response));
+
+        let formatted = info
+            .into_iter()
+            .map(|(field, value)| format!("{}: {}", field, value))
+            .collect::<Vec<String>>()
+            .join(",\n  ");
+        Ok(format!("SurveyData({{\n  {}\n}})", formatted))
     }
 
     /// Create new empty [`SurveyData`] instance
@@ -232,6 +293,11 @@ impl std::fmt::Debug for SurveyData {
     }
 }
 
+// pub struct QuestionData {
+//     qname: String,
+//     backend: Arc<SurveyData>
+// }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -262,8 +328,7 @@ mod tests {
         let source = dir.path().join("source.parquet");
         let destination = dir.path().join("cache.parquet");
         let expected = df!("value" => [1i64, 2])?;
-        ParquetWriter::new(std::fs::File::create(&source)?)
-            .finish(&mut expected.clone())?;
+        ParquetWriter::new(std::fs::File::create(&source)?).finish(&mut expected.clone())?;
         let original = std::fs::read(&source)?;
         drop(SurveyData::from_parquet(&source, None)?);
         assert_eq!(std::fs::read(&source)?, original);

@@ -11,15 +11,18 @@ def datamap():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return read_datamap(PATH_SSS_XML)
-    
+
+
 def test_load_asc_file(datamap):
     datamap.load_data(PATH_ASC)
-    df = datamap.to_polars()
+    df = datamap.record.data.to_polars()
+    print()
+    print(datamap.record.data)
 
     with pl.Config(
         tbl_rows=-1,          # Show ALL rows
         tbl_cols=-1,          # Show ALL columns
-        fmt_str_lengths=20, # Show long string values
+        fmt_str_lengths=20,   # Show long string values
         tbl_width_chars=-1,   # No table width limit
     ):
         print(df)
