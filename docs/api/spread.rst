@@ -11,4 +11,4 @@ Attributes
 
 Methods
 ----------------
-.. autoattribute:: triple_s.Spread.from_dict
+.. automethod:: triple_s.Spread.from_dict

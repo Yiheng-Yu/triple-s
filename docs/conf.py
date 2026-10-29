@@ -70,7 +70,10 @@ def prepare_docstring(app, what, name, obj, options, lines):
         # native extension after documentation-only changes.
         source = Path(__file__).resolve().parents[1] / "src/doc/survey.python.rst"
         app.env.note_dependency(str(source))
-        lines[:] = source.read_text(encoding="utf-8").splitlines()
+        lines[:] = (source.read_text(encoding="utf-8")
+                    .replace("survey.to_polars()", "survey.data.to_polars()")
+                    .replace("survey.to_pandas()", "survey.data.to_pandas()")
+                    .splitlines())
         return
     if name == "triple_s.Question.format":
         # This inherited Rust docstring has an XML example without an opening fence.
@@ -82,6 +85,8 @@ def prepare_docstring(app, what, name, obj, options, lines):
     result = []
     in_code = False
     for line in lines:
+        line = (line.replace("Survey.to_polars()", "Survey.data.to_polars()")
+                    .replace("Survey.to_pandas()", "Survey.data.to_pandas()"))
         if line.strip().startswith("```"):
             if in_code:
                 in_code = False

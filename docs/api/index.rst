@@ -10,3 +10,4 @@ Reference documentation for the public Python API exported by
 
    functions
    objects
+   exceptions
