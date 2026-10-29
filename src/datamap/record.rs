@@ -221,6 +221,7 @@ impl Record {
     }
 
     /// Whether respondent data has been loaded.
+    #[inline]
     pub fn has_data(&self) -> bool {
         self.data().lazy().is_ok()
     }
@@ -678,6 +679,12 @@ impl Record {
     pub fn py_load_data(&mut self, path: &str) -> PyResult<()> {
         self.load_data(path)
             .map_err(|err| exceptions::PyValueError::new_err(format!("{:?}", err)))
+    }
+
+    /// Whether respondent data has been loaded.
+    #[pyo3(name="has_data")]
+    fn py_has_data(&self) -> bool {
+        self.has_data()
     }
 
     fn __len__(&self) -> usize {

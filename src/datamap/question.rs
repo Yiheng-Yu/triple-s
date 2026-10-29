@@ -1305,7 +1305,7 @@ impl Question {
     #[new]
     #[pyo3(signature=(
         name:"str", 
-        question_type:"str|QuestionType",
+        question_type:"str|QuestionType|None",
         label:"str"=None, 
         filter:"str"=None, 
         format:"'numeric'|'literal'|None"=None,
@@ -1323,7 +1323,9 @@ impl Question {
         location: Option<Location>,
         spread: Option<Spread>,
     ) -> PyResult<Self> {
-        let question_type = if let Ok(value) = question_type.extract::<QuestionType>() {
+        let question_type = if question_type.is_none() {
+            QuestionType::None
+        } else if let Ok(value) = question_type.extract::<QuestionType>() {
             value
         } else if let Ok(value) = question_type.extract::<&str>() {
             QuestionType::from_str(value)

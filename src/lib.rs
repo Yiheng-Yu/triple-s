@@ -196,8 +196,10 @@ pub fn read_triple_s(
     path_sss: impl AsRef<Path>,
     path_data: Option<impl AsRef<Path>>,
 ) -> Result<Survey> {
+    log::info!("Reading datamap..");
     let mut survey = read_datamap(path_sss)?;
     if let Some(path_data) = path_data {
+        log::info!("Loading data..");
         survey.load_data(path_data)?;
     }
     Ok(survey)
@@ -263,5 +265,12 @@ mod triple_s {
     )]
     pub fn py_read_triple_s(path_datamap: &str, path_data: Option<&str>) -> PyResult<Survey> {
         read_triple_s(path_datamap, path_data).map_err(|err| err.into())
+    }
+
+    #[pymodule_init]
+    fn init(_m: &Bound<'_, PyModule>) -> PyResult<()> {
+        pyo3_log::init();
+
+        Ok(())
     }
 }
