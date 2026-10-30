@@ -19,13 +19,13 @@ def datamap():
 
 
 def test_read_reada_asc():
-    survey = read_triple_s(PATH_SSS_EXAMPLE_1, PATH_ASC)
-    assert survey.title == "Historic House Exit Survey<br/>First Wave"
+    datamap = read_triple_s(PATH_SSS_EXAMPLE_1, PATH_ASC)
+    assert datamap.title == "Historic House Exit Datamap<br/>First Wave"
 
 
 def test_read_data_csv():
-    survey = read_triple_s(PATH_SSS_EXAMPLE_2, PATH_CSV)
-    assert survey.title == "Historic House Exit Survey<br/>First Wave"
+    datamap = read_triple_s(PATH_SSS_EXAMPLE_2, PATH_CSV)
+    assert datamap.title == "Historic House Exit Datamap<br/>First Wave"
 
 
 def test_load_asc_file(datamap):

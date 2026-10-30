@@ -1,5 +1,6 @@
 from .triple_s import (
     SurveyInfo,
+    Datamap,
     Survey,
     Text,
     Usage,
@@ -29,6 +30,7 @@ __all__ = [
     "Survey",
     "Text",
     "Usage",
+    "Datamap",
     "Variant",
     "Location",
     "Question",

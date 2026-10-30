@@ -1,22 +1,22 @@
-use triple_s::{Survey, question::Question, response::Response};
+use triple_s::{Datamap, question::Question, response::Response};
 
 const PATH_SSS_CLASSIC: &str = "tests/sss-examples/sss_classic.sss";
 
-fn example_datamap_classic() -> Survey {
+fn example_datamap_classic() -> Datamap {
     triple_s::read_datamap(PATH_SSS_CLASSIC).unwrap()
 }
 
 #[test]
 fn test_read_classic() {
-    let survey = example_datamap_classic();
-    assert_eq!(survey.record().content().len(), 24);
+    let datamap = example_datamap_classic();
+    assert_eq!(datamap.record().content().len(), 24);
 }
 
 #[test]
 fn test_question_from_to_sss_classic() {
-    let survey = example_datamap_classic();
+    let datamap = example_datamap_classic();
 
-    for question in survey.record().content().iter() {
+    for question in datamap.record().content().iter() {
         let question = question.read();
         let text = question.to_classic().unwrap();
         let parsed = Question::from_string(&text).unwrap();

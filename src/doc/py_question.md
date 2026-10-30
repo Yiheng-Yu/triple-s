@@ -41,4 +41,4 @@ spread (triple_s.Spread, *Optional*):
     Corresponds to the `<spread>` child node in a `<variable>`.
     See `help(triple_s.Spread`) for more details.
 
-Respondent data is stored by `Record`. Use `Survey.to_polars()` or `Survey.to_pandas()` to export it.
+Respondent data is stored by `Record`. Use `Datamap.to_polars()` or `Datamap.to_pandas()` to export it.

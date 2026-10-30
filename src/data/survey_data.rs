@@ -33,7 +33,7 @@ impl CacheDir {
     }
 }
 
-/// Survey data
+/// Datamap data
 #[cfg_attr(
     feature = "pyo3",
     pyclass(module = "triple_s", name = "SurveyData", from_py_object)
@@ -103,6 +103,21 @@ impl SurveyData {
 }
 
 impl SurveyData {
+    /// check if data loaded or not
+    ///
+    /// Example:
+    ///
+    /// ```
+    /// use triple_s::SurveyData;
+    ///
+    /// let data = SurveyData::default();
+    /// assert_eq!(data.has_data(), false);
+    /// ```
+    #[inline]
+    pub fn has_data(&self) -> bool {
+        self.frame.is_some()
+    }
+
     /// Create new instance fro parquet file
     pub fn from_parquet(
         path_parquet: impl AsRef<Path>,
@@ -173,6 +188,24 @@ impl SurveyData {
             .map_err(|err| PolarsError::NoData(err.to_string().into()))?
             .clone()
             .collect()
+    }
+
+    /// Dump cached data to parquet datafile
+    pub fn to_parquet(&self, parquet_path: impl AsRef<Path>) -> PolarsResult<()> {
+        let path_sink = PlRefPath::try_from_path(parquet_path.as_ref())?;
+        let path_sink = SinkDestination::File {
+            target: SinkTarget::Path(path_sink),
+        };
+
+        let write_option = ParquetWriteOptions::default();
+        let write_formt = FileWriteFormat::Parquet(Arc::new(write_option));
+
+        self.lazy()?
+            .clone()
+            .sink(path_sink, write_formt, UnifiedSinkArgs::default())?
+            .collect()?;
+
+        Ok(())
     }
 
     /// Total number of rows
@@ -284,6 +317,12 @@ impl SurveyData {
     pub fn py_describe<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let frame = self.py_to_polars(py)?;
         frame.call_method("describe", (), None)
+    }
+
+    /// Check if data loaded or not
+    #[pyo3(name = "has_data")]
+    fn py_has_data(&self) -> bool {
+        self.has_data()
     }
 }
 

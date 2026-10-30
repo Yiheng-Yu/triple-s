@@ -7,20 +7,20 @@ for the format specifications.
 # Create a survey
 
 ```rust
-use triple_s::{Survey, SurveyInfo, Version};
+use triple_s::{Datamap, SurveyInfo, Version};
 
 let mut info = SurveyInfo::new(Version::V2_0);
-info.name = Some("example".into());
-info.title = Some("Example Survey".into());
+*info.name_mut() = Some("example".into());
+*info.title_mut() = Some("Example Datamap".into());
 
-let survey = Survey::new(info);
+let survey = Datamap::new(info);
 
-assert_eq!(survey.info().name.as_deref(), Some("example"));
-assert_eq!(survey.info().title.as_deref(), Some("Example Survey"));
+assert_eq!(survey.info().name().as_deref(), Some("example"));
+assert_eq!(survey.info().title().as_deref(), Some("Example Datamap"));
 ```
 
-Use [`Survey::empty`] for a default survey with Triple-S version 1.2.
-Use [`Survey::info_mut`] and [`Survey::record_mut`] to edit the metadata
+Use [`Datamap::empty`] for a default survey with Triple-S version 1.2.
+Use [`Datamap::info_mut`] and [`Datamap::record_mut`] to edit the metadata
 and record.
 
 # Read a survey
@@ -28,20 +28,20 @@ and record.
 ```no_run
 use triple_s::read_triple_s;
 
-let survey = read_triple_s("survey.sss", None)?;
-if let Some(question) = survey.get_question("Q1") {
+let survey = read_triple_s("survey.sss", Some("survey-data.asc"))?;
+if let Some(question) = survey.datamap().get_question("Q1") {
     println!("Title of question 'Q1': '{:?}'", question.label());
 }
 # Ok::<(), anyhow::Error>(())
 ```
 
-Question names are case insensitive. [`Survey::get_question`] returns
+Question names are case insensitive. [`Datamap::get_question`] returns
 `None` when the question does not exist.
 
 # Load and export
 
-Use [`Survey::load_data`] to load fixed-width or CSV respondent data,
-then [`Record::to_polars`] on [`Survey::record`] to create a DataFrame.
-[`Survey::to_classic`] and [`Survey::to_xml`] return the datamap as a string.
+Use [`Datamap::load_data`] to load fixed-width or CSV respondent data,
+then [`Record::to_polars`] on [`Datamap::record`] to create a DataFrame.
+[`Datamap::to_classic`] and [`Datamap::to_xml`] return the datamap as a string.
 
 Data loading supports UTF-8 and BOM-marked UTF-16. 

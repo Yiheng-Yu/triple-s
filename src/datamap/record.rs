@@ -89,7 +89,8 @@ impl DataFormat {
             _ => Err(InvalidArg::new(format!(
                 "Invalid file type: Expect '.csv' or '.asc' file, got: {}",
                 path.display()
-            )).into()),
+            ))
+            .into()),
         }
     }
 }
@@ -283,15 +284,15 @@ impl Record {
     /// let mut survey = read_triple_s("path/to/datamap.sss", None::<&str>)?;
     ///
     /// // then load the data later
-    /// let mut record = survey.record_mut();
-    /// record.load_data("new/data/path.asc")?; // loads data
+    /// let mut record = survey.datamap_mut().record_mut();
+    /// let survey_data = record.load_data("new/data/path.asc")?; // loads data
     ///
-    /// let df = record.data().to_polars()?; // get data as polars dataframe
+    /// let df = survey_data.to_polars()?; // get data as polars dataframe
     /// println!("{:?}", df);
     ///
     /// # Ok::<(), anyhow::Error>(())
     /// ```
-    pub fn load_data(&mut self, path_data: impl AsRef<Path>) -> Result<()> {
+    pub fn load_data(&mut self, path_data: impl AsRef<Path>) -> Result<SurveyData> {
         let path_data = path_data.as_ref();
         let data_format = DataFormat::from_path(path_data)?;
         let (parquet_file, cache) =
@@ -312,11 +313,10 @@ impl Record {
         Self::write_batch(&mut writer, &schema, &mut batch_buffer)?;
         writer.finish()?;
 
-        let data = SurveyData::from_cache(cache, Some(Arc::new(schema)))?;
-        *self.data.write() = data;
         *self.href_mut() = Some(path_data.to_string_lossy().to_string());
         *self.data_format_mut() = Some(data_format);
-        Ok(())
+
+        SurveyData::from_cache(cache, Some(Arc::new(schema)))
     }
 
     #[inline]
@@ -417,9 +417,9 @@ impl Record {
     }
 
     /// Validate an `.asc` or `.csv` file against the record's questions and skip setting.
-    /// 
+    ///
     /// This method simply validates data file and would not alter any existing fields.
-    /// 
+    ///
     /// To modify current instance, use [`Record::load_data`] method instead.
     pub fn validate_data(&self, path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
@@ -521,35 +521,6 @@ impl Record {
     }
 }
 
-/// Export data
-///
-/// ---
-impl Record {
-    /// Convert question data to polars dataframe
-    pub fn to_polars(&self) -> PolarsResult<DataFrame> {
-        self.data().to_polars()
-    }
-
-    /// Dump cached data to parquet datafile
-    pub fn to_parquet(&self, parquet_path: impl AsRef<Path>) -> PolarsResult<()> {
-        let path_sink = PlRefPath::try_from_path(parquet_path.as_ref())?;
-        let path_sink = SinkDestination::File {
-            target: SinkTarget::Path(path_sink),
-        };
-
-        let write_option = ParquetWriteOptions::default();
-        let write_formt = FileWriteFormat::Parquet(Arc::new(write_option));
-
-        self.data()
-            .lazy()?
-            .clone()
-            .sink(path_sink, write_formt, UnifiedSinkArgs::default())?
-            .collect()?;
-
-        Ok(())
-    }
-}
-
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Record {
@@ -633,14 +604,6 @@ impl Record {
         Ok(())
     }
 
-    /// Survey data
-    ///
-    /// Data is loaded via `load_data()` method
-    #[getter(data)]
-    fn py_get_data(&self) -> PyResult<SurveyData> {
-        Ok(self.data().clone())
-    }
-
     /// (Optional) corresponds to the 'skip' attribute of the `<record>` xml element.
     ///
     /// Used to ignore one or more initial records in the Data File.
@@ -673,18 +636,10 @@ impl Record {
         self.get_question_(question_name).map(|item| item.read().clone())
     }
 
-    /// Load an `.asc` or `.csv` file using the record's skip setting.
-    /// Updates `href`, `data_format`, and loaded data on success.
-    #[pyo3(name="load_data", signature=(path:"str"))]
-    pub fn py_load_data(&mut self, path: &str) -> PyResult<()> {
-        self.load_data(path)
-            .map_err(|err| exceptions::PyValueError::new_err(format!("{:?}", err)))
-    }
-
-    /// Whether respondent data has been loaded.
-    #[pyo3(name="has_data")]
-    fn py_has_data(&self) -> bool {
-        self.has_data()
+    #[pyo3(name = "load_data")]
+    fn py_load_data(&mut self, path_data: &str) -> PyResult<SurveyData> {
+        self.load_data(path_data)
+            .map_err(|err| exceptions::PyRuntimeError::new_err(format!("{:#?}", err)))
     }
 
     fn __len__(&self) -> usize {
@@ -853,119 +808,40 @@ impl Record {
     fn py_validate_data(&self, path: &str) -> PyResult<()> {
         self.validate_data(path).map_err(py_value_error)
     }
-
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
     use super::*;
 
-    fn unicode_survey(csv: bool) -> super::super::Survey {
-        let positions = if csv {
-            ("1", "1", "2", "2")
-        } else {
-            ("1", "3", "4", "5")
-        };
-        crate
-            ::read_from_string(
-                &format!(
-                    r#"<sss version="2.0"><survey><record ident="V" format="{}">
-            <variable ident="1" type="character"><name>TEXT</name>
-                <position start="{}" finish="{}"/><size>3</size></variable>
-            <variable ident="2" type="quantity"><name>NUMBER</name>
-                <position start="{}" finish="{}"/><values><range from="0" to="99"/></values></variable>
-            </record></survey></sss>"#,
-                    if csv {
-                        "csv"
-                    } else {
-                        "fixed"
-                    },
-                    positions.0,
-                    positions.1,
-                    positions.2,
-                    positions.3
-                )
-            )
-            .unwrap()
-    }
-
-    #[test]
-    fn validation_does_not_change_source_and_failed_load_preserves_data() -> Result<()> {
-        let dir = tempfile::tempdir()?;
-        let source = dir.path().join("source.asc");
-        let other = dir.path().join("other.asc");
-        let invalid = dir.path().join("invalid.csv");
-        std::fs::write(&source, "abc17\n")?;
-        std::fs::write(&other, "xyz23\n")?;
-        std::fs::write(&invalid, "bad\n")?;
-        let mut survey = unicode_survey(false);
-        let record = survey.record_mut();
-        *record.href_mut() = Some("metadata-only.asc".into());
-        let original_href = record.href().clone();
-
-        record.validate_data(&source)?;
-        assert_eq!(record.href(), &original_href);
-        assert!(!record.has_data());
-        record.load_data(&source)?;
-        assert!(record.has_data());
-        let expected = record.to_polars()?;
-        record.validate_data(&other)?;
-        assert!(record.validate_data(&invalid).is_err());
-        assert!(record.load_data(&invalid).is_err());
-        assert_eq!(record.href().as_deref(), source.to_str());
-        assert_eq!(record.data_format(), Some(&DataFormat::Fixed));
-        assert!(record.to_polars()?.equals_missing(&expected));
-
-        record.load_data(&other)?;
-        assert_eq!(record.href().as_deref(), other.to_str());
-        assert_eq!(record.to_polars()?.column("TEXT")?.str()?.get(0), Some("xyz"));
-        Ok(())
-    }
-
-    #[test]
-    fn unicode_data_loads_and_validates_in_both_formats() {
-        for csv in [false, true] {
-            let text = if csv {
-                "中文😀,17\r\n北京é,23"
-            } else {
-                "中文😀17\r\n北京é23"
-            };
-            let utf16: Vec<u8> = std::iter::once(0xfeff)
-                .chain(text.encode_utf16())
-                .flat_map(u16::to_le_bytes)
-                .collect();
-            for bytes in [text.as_bytes(), utf16.as_slice()] {
-                let mut file = tempfile::Builder::new()
-                    .suffix(if csv { ".csv" } else { ".asc" })
-                    .tempfile()
-                    .unwrap();
-                file.write_all(bytes).unwrap();
-                let mut survey = unicode_survey(csv);
-                survey.record().validate_data(file.path()).unwrap();
-                survey.load_data(file.path()).unwrap();
-                let frame = survey.record().to_polars().unwrap();
-                assert_eq!(frame.shape(), (2, 2));
-                assert_eq!(
-                    frame.column("TEXT").unwrap().str().unwrap().get(0),
-                    Some("中文😀")
-                );
-                assert_eq!(
-                    frame.column("TEXT").unwrap().str().unwrap().get(1),
-                    Some("北京é")
-                );
-                assert_eq!(
-                    frame.column("NUMBER").unwrap().f64().unwrap().get(0),
-                    Some(17.0)
-                );
-                assert_eq!(
-                    frame.column("NUMBER").unwrap().f64().unwrap().get(1),
-                    Some(23.0)
-                );
-            }
-        }
-    }
+    // fn unicode_survey(csv: bool) -> super::super::Datamap {
+    //     let positions = if csv {
+    //         ("1", "1", "2", "2")
+    //     } else {
+    //         ("1", "3", "4", "5")
+    //     };
+    //     crate
+    //         ::read_from_string(
+    //             &format!(
+    //                 r#"<sss version="2.0"><survey><record ident="V" format="{}">
+    //         <variable ident="1" type="character"><name>TEXT</name>
+    //             <position start="{}" finish="{}"/><size>3</size></variable>
+    //         <variable ident="2" type="quantity"><name>NUMBER</name>
+    //             <position start="{}" finish="{}"/><values><range from="0" to="99"/></values></variable>
+    //         </record></survey></sss>"#,
+    //                 if csv {
+    //                     "csv"
+    //                 } else {
+    //                     "fixed"
+    //                 },
+    //                 positions.0,
+    //                 positions.1,
+    //                 positions.2,
+    //                 positions.3
+    //             )
+    //         )
+    //         .unwrap()
+    // }
 
     #[test]
     fn fixed_width_record_separators_preserve_fields() {

@@ -1333,7 +1333,7 @@ impl Question {
                 .map_err(py_value_error)?
         } else {
             let type_name = get_type_name(&question_type)?;
-            return Err(exceptions::PyTypeError::new_err(type_name))
+            return Err(exceptions::PyTypeError::new_err(type_name));
         };
 
         Self::new(

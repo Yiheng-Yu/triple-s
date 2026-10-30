@@ -1,21 +1,21 @@
-Survey
+Datamap
 ======
 
-.. autoclass:: triple_s.Survey
+.. autoclass:: triple_s.Datamap
 
 Attributes
 ----------------
 
-.. autoattribute:: triple_s.Survey.record
-.. autoattribute:: triple_s.Survey.survey_info
-.. autoattribute:: triple_s.Survey.title
-.. autoattribute:: triple_s.Survey.data
+.. autoattribute:: triple_s.Datamap.record
+.. autoattribute:: triple_s.Datamap.survey_info
+.. autoattribute:: triple_s.Datamap.title
+.. autoattribute:: triple_s.Datamap.data
 
 Methods
 -------------
 
-.. automethod:: triple_s.Survey.get_question
-.. automethod:: triple_s.Survey.from_dict
-.. automethod:: triple_s.Survey.to_classic
-.. automethod:: triple_s.Survey.to_xml
-.. automethod:: triple_s.Survey.load_data
+.. automethod:: triple_s.Datamap.get_question
+.. automethod:: triple_s.Datamap.from_dict
+.. automethod:: triple_s.Datamap.to_classic
+.. automethod:: triple_s.Datamap.to_xml
+.. automethod:: triple_s.Datamap.load_data

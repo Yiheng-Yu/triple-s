@@ -43,7 +43,7 @@
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
-//! You can then load data with path provided
+//! You can also read survey data with path provided
 //!
 //! ```no_run
 //! use triple_s::read_datamap;
@@ -52,7 +52,10 @@
 //! let mut datamap = read_datamap(path)?;
 //!
 //! let path_data = "path/to/datafile.asc";
-//! datamap.load_data(path_data)?;
+//! let data = datamap
+//!     .record_mut()
+//!     // `load_data()` sets the `href` field of `record`
+//!     .load_data(path_data)?;
 //!
 //! # Ok::<(), anyhow::Error>(())
 //! ```
@@ -72,32 +75,32 @@
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!
-//! ## Survey object
+//! ## Datamap object
 //!
-//! [`Survey`] represents a survey definition, it's the root of a triple-s
+//! [`Datamap`] represents a survey definition, it's the root of a triple-s
 //! datamap file. It mainly consists of two parts:
 //! - [`SurveyInfo`](survey_info): Metadata about a survey. i.e., name, title, datetime of the
 //!   creation, file format etc.,
 //! - [`Record`](record): collection of [`Question`](question)s in a survey.
 //!
-//! Creating a new [`Survey`]:
+//! Creating a new [`Datamap`]:
 //!
 //! ```rust
-//! use triple_s::{Survey, SurveyInfo, Version};
+//! use triple_s::{Datamap, SurveyInfo, Version};
 //!
 //! let info = SurveyInfo::new(Version::V1_2).with_name(Some("Survey1"));
-//! let survey = Survey::new(info);
+//! let survey = Datamap::new(info);
 //! ```
 //!
 //! Load a datamap with [`read_datamap`] or [`read_from_string`], then access
 //! its metadata and record directly or find a question by name with
-//! [`Survey::get_question`]. You can also start with [`Survey::empty`] and
+//! [`Datamap::get_question`]. You can also start with [`Datamap::empty`] and
 //! build a survey definition programmatically.
 //!
 //! # IMPORTANT: Trait `DeepCopy`
 //!
 //! In order to accomdate python's (painful) dynamic typing & mutation, most of
-//! the fields for `Survey` and its members (`Question`, `Response` etc,) are
+//! the fields for `Datamap` and its members (`Question`, `Response` etc,) are
 //! wrapped inside `Arc<parking_lot::RwLock<T>>`. You should be able to access
 //! them via their respective method calls, please refer to the documentation
 //! for each item for the list of fields accessible.
@@ -147,6 +150,8 @@
 
 mod data;
 mod datamap;
+mod survey;
+
 pub mod error;
 mod prelude;
 mod utils;
@@ -156,7 +161,7 @@ use std::path::Path;
 use anyhow::Result;
 pub use data::SurveyData;
 pub use datamap::{
-    Survey,
+    Datamap,
     question::{
         self,
         CodeFormat,
@@ -177,6 +182,7 @@ use error::EventLog;
 pub use prelude::DeepCopy;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+pub use survey::Survey;
 
 // -------------------------------------------------------------------------------------------------
 
@@ -191,17 +197,21 @@ use pyo3::prelude::*;
 ///     Otherwise, reads only the datamap.
 ///
 /// Returns:
-/// [`Survey`] instance.
+/// [`Datamap`] instance.
 pub fn read_triple_s(
     path_sss: impl AsRef<Path>,
     path_data: Option<impl AsRef<Path>>,
 ) -> Result<Survey> {
     log::info!("Reading datamap..");
-    let mut survey = read_datamap(path_sss)?;
-    if let Some(path_data) = path_data {
-        log::info!("Loading data..");
-        survey.load_data(path_data)?;
-    }
+    let mut datamap = read_datamap(path_sss)?;
+    let data = match path_data {
+        None => SurveyData::default(), // an empty SurveyData instance
+        Some(path_data) => {
+            log::info!("Loading data..");
+            datamap.record_mut().load_data(path_data)?
+        }
+    };
+    let survey = Survey::new(datamap, data);
     Ok(survey)
 }
 
@@ -218,7 +228,7 @@ mod triple_s {
     pub use crate::data::SurveyData;
     #[pymodule_export]
     pub use crate::datamap::{
-        Survey,
+        Datamap,
         question::{CodeFormat, Location, Question, QuestionType, Spread, Usage},
         record::{DataFormat, Record},
         response::{Code, DataRange, Response, Value},
@@ -227,6 +237,8 @@ mod triple_s {
     };
     #[pymodule_export]
     pub use crate::error::MissingKeyError;
+    #[pymodule_export]
+    pub use crate::survey::Survey;
     use crate::{datamap::read::read_from_reader, read_triple_s};
 
     /// Read triple-s datamap
@@ -235,7 +247,7 @@ mod triple_s {
     ///     path_datamap (str): path to the triple-s datamap file, supports both
     /// classic and xml format.
     #[pyfunction(name="read_datamap", signature=(path_datamap: "str"))]
-    pub fn py_read_datamap(py: Python<'_>, path_datamap: &str) -> PyResult<Survey> {
+    pub fn py_read_datamap(py: Python<'_>, path_datamap: &str) -> PyResult<Datamap> {
         let input = std::fs::File::open(path_datamap)?;
 
         let (survey, read_log) = read_from_reader(std::io::BufReader::new(input))
@@ -255,7 +267,7 @@ mod triple_s {
     ///         path to the `.asc` or `.csv` data file.
     ///
     /// Returns:
-    ///     [`Survey`] object
+    ///     [`Datamap`] object
     #[pyfunction(
         name="read_triple_s", 
         signature=(

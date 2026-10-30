@@ -47,7 +47,7 @@ html_css_files = ['style.css']
 
 PYTHON_API_CLASSES = {
     "Code", "CodeFormat", "DataRange", "DataFormat", "Location", "Mode",
-    "Question", "QuestionType", "Record", "Response", "Spread", "Survey",
+    "Question", "QuestionType", "Record", "Response", "Spread", "Datamap",
     "SurveyInfo", "SurveyData", "Text", "Usage", "Value", "Variant", "Version",
 }
 PYTHON_API_FUNCTIONS = {"read_datamap", "read_triple_s"}
@@ -65,7 +65,7 @@ def rustdoc_link(match):
 
 def prepare_docstring(app, what, name, obj, options, lines):
     """Render the Rust bindings' Markdown examples as reStructuredText."""
-    if what == "class" and name.rsplit(".", 1)[-1] == "Survey":
+    if what == "class" and name.rsplit(".", 1)[-1] == "Datamap":
         # Read the Python guide directly so Sphinx does not need a rebuilt
         # native extension after documentation-only changes.
         source = Path(__file__).resolve().parents[1] / "src/doc/survey.python.rst"
@@ -85,8 +85,8 @@ def prepare_docstring(app, what, name, obj, options, lines):
     result = []
     in_code = False
     for line in lines:
-        line = (line.replace("Survey.to_polars()", "Survey.data.to_polars()")
-                    .replace("Survey.to_pandas()", "Survey.data.to_pandas()"))
+        line = (line.replace("Datamap.to_polars()", "Datamap.data.to_polars()")
+                    .replace("Datamap.to_pandas()", "Datamap.data.to_pandas()"))
         if line.strip().startswith("```"):
             if in_code:
                 in_code = False
