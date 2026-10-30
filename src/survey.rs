@@ -18,6 +18,18 @@ pub struct Survey {
 ///
 /// ---
 impl Survey {
+    /// Title of survey
+    pub fn title<'a>(&'a self) -> Option<String> {
+        self.datamap().title()
+    }
+
+    /// Sets survey title
+    #[inline]
+    pub fn set_title(&mut self, title: Option<String>) {
+        *self.datamap_mut().info_mut().title_mut() = title;
+    }
+
+
     /// triple-s datamap
     pub fn datamap(&self) -> &Datamap {
         &self.datamap
@@ -62,7 +74,7 @@ impl Survey {
 
     #[setter(title)]
     fn py_set_title(&mut self, title: Option<String>) -> PyResult<()> {
-        *self.datamap.info_mut().title_mut() = title;
+        self.set_title(title);
         Ok(())
     }
 
