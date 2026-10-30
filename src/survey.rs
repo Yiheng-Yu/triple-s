@@ -1,6 +1,8 @@
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
+#[cfg(feature = "pyo3")]
+use crate::SurveyInfo;
 use crate::{data::SurveyData, datamap::Datamap};
 
 /// Survey
@@ -78,6 +80,12 @@ impl Survey {
     #[getter(datamap)]
     fn py_get_datamap(&self) -> Datamap {
         self.datamap.clone()
+    }
+
+    /// Datamap
+    #[getter(info)]
+    fn py_get_info(&self) -> SurveyInfo {
+        self.datamap.info().clone()
     }
 
     /// Survey data
