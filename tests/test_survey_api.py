@@ -60,31 +60,41 @@ def test_survey_info_setter(survey, attribute):
     ],
 )
 def test_survey_info_mutation_sync(survey, attribute):
-    info = survey.datamap.info
+    info_direct = survey.datamap.info
     datamap = survey.datamap
 
     # mutate info -> check if survey.datamap updates
-    setattr(info, attribute, "test")
+    setattr(info_direct, attribute, "test")
     assert getattr(survey.datamap.info, attribute) == "test"
+    assert getattr(survey.info, attribute) == "test"
     assert getattr(datamap.info, attribute) == "test"
 
-    setattr(info, attribute, None)
+    setattr(info_direct, attribute, None)
     assert getattr(survey.datamap.info, attribute) is None
+    assert getattr(survey.info, attribute) is None
     assert getattr(datamap.info, attribute) is None
 
     # mutate survey.datamap -> check if `info` updates
     setattr(survey.datamap.info, attribute, "value 2")
-    assert getattr(info, attribute) == "value 2"
+    assert getattr(info_direct, attribute) == "value 2"
     assert getattr(datamap.info, attribute) == "value 2"
 
     setattr(survey.datamap.info, attribute, None)
-    assert getattr(info, attribute) is None
+    assert getattr(info_direct, attribute) is None
     assert getattr(datamap.info, attribute) is None
 
     # mutate datamap -> check if `info` and `survey.datamap.info` updates
     setattr(datamap.info, attribute, "value 3")
-    assert getattr(info, attribute) == "value 3"
+    assert getattr(info_direct, attribute) == "value 3"
     assert getattr(survey.datamap.info, attribute) == "value 3"
     setattr(datamap.info, attribute, None)
-    assert getattr(info, attribute) is None
+    assert getattr(info_direct, attribute) is None
+    assert getattr(survey.datamap.info, attribute) is None
+    
+    # mutate datamap -> check if `info` and `survey.datamap.info` updates
+    setattr(survey.info, attribute, "value 3")
+    assert getattr(info_direct, attribute) == "value 3"
+    assert getattr(survey.datamap.info, attribute) == "value 3"
+    setattr(survey.info, attribute, None)
+    assert getattr(info_direct, attribute) is None
     assert getattr(survey.datamap.info, attribute) is None
