@@ -1,10 +1,7 @@
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
-use crate::{
-    data::SurveyData,
-    datamap::Datamap,
-};
+use crate::{data::SurveyData, datamap::Datamap};
 
 /// Survey
 #[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "Survey"))]
@@ -28,7 +25,6 @@ impl Survey {
     pub fn set_title(&mut self, title: Option<String>) {
         *self.datamap_mut().info_mut().title_mut() = title;
     }
-
 
     /// triple-s datamap
     pub fn datamap(&self) -> &Datamap {

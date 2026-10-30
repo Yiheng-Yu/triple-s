@@ -266,8 +266,8 @@ impl Datamap {
     }
 
     /// Collects survey meta information, i.e., survey name & title, creation date, etc.,
-    #[getter(survey_info)]
-    fn py_get_survey_info(&self) -> SurveyInfo {
+    #[getter(info)]
+    fn py_get_info(&self) -> SurveyInfo {
         self.info().clone()
     }
 
