@@ -15,13 +15,15 @@
   src: url("atkinson-hyperlegible-next-italic.ttf") format("truetype");
 }
 
-/* Show the full toctree in Furo's sidebar without disclosure controls. */
-.sidebar-tree .toctree-checkbox ~ ul {
-  display: block;
+/* Keep nested navigation compact and section titles easy to scan. */
+.sidebar-tree {
+  --sidebar-caption-font-size: 1rem;
 }
 
-.sidebar-tree .toctree-checkbox ~ label {
-  display: none;
+.sidebar-tree li > ul .reference {
+  padding-top: 2px;
+  padding-bottom: 2px;
+  line-height: 1.35;
 }
 
 /* Typography and syntax colors from https://huggingface.co/docs/datasets/load_hub.
@@ -176,4 +178,40 @@ body article .highlight.highlight .gp { color: var(--code-meta); }
   padding: 10px 44px 0 16px;
   color: var(--code-muted);
   font: 400 12px/16px var(--font-stack, sans-serif);
+}
+
+/* Keep Next steps in the guide without adding it to the global navigation. */
+.sidebar-tree li:has(> a[href$="#next-steps"]) {
+  display: none;
+}
+
+/* Mark the navigation destination in both light and dark themes. */
+.sidebar-tree .reference[aria-current] {
+  color: var(--color-foreground-primary);
+  font-weight: 700;
+}
+
+/* Keep desktop navigation pinned while the article scrolls independently. */
+@media (min-width: 63.001em) {
+  .sidebar-drawer {
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .sidebar-container,
+  .sidebar-sticky {
+    height: 100%;
+    min-height: 0;
+  }
+}
+
+.sidebar-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  scroll-behavior: auto;
 }

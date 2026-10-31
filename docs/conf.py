@@ -2,7 +2,6 @@
 #
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
-import sys
 import re
 from pathlib import Path
 
@@ -19,14 +18,8 @@ author = 'Yiheng Yu'
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
-    "sphinx.ext.doctest",
-    "sphinx.ext.inheritance_diagram",
-    "sphinx.ext.intersphinx",
-    "sphinx.ext.todo",
-    "sphinx.ext.coverage",
-    "sphinx.ext.ifconfig",
     "sphinx.ext.viewcode",
-    ]
+]
 
 napoleon_use_ivar = False
 
@@ -36,15 +29,13 @@ master_doc = "index"
 
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
-
-
 # -- Options for HTML output -------------------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = 'furo'
 html_static_path = ['_static']
 html_css_files = ['style.css']
-html_js_files = ['code-blocks.js']
+html_js_files = ['code-blocks.js', 'sidebar.js']
 
 PYTHON_API_CLASSES = {
     "Code", "CodeFormat", "DataRange", "DataFormat", "Location", "Mode",

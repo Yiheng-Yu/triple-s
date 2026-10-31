@@ -1,34 +1,98 @@
-Quick Start
-===========
+Survey
+======
 
 A Triple-S survey usually consists of a datamap (``.sss``) describing the
 questions and a matching data file (``.asc`` or ``.csv``) containing responses.
 Import the installed package as ``triple_s``.
 
 
-Load a triple-s survey
+Read triple-s files
 ----------------------
 
-:func:`triple_s.read_triple_s` reads the datamap and its matching data file:
+Load triple-s survey via :func:`triple_s.read_triple_s`:
 
 .. code-block:: python
 
    from triple_s import read_triple_s
 
-   survey = read_triple_s("survey.sss", "survey.asc")
-   print(survey.info.name)
-   print(survey.has_data())
-   df = survey.data.to_polars()
-   datamap = survey.datamap
+   survey = read_triple_s(
+      "path/to/survey.sss",
+      path_data="path/to/data.asc"  # optional
+      )
+
+   print(survey)
 
 
-Features
-------------------------
+.. code-block:: python
+   :class: code-output
 
-Just like triple-s files, a :class:`Survey` instance consists of two parts: 
-a :class:`Datamap` that contains survey questions, 
-and a :class:`SurveyData` that collects survey data.
+   Survey({
+      name: "SP5201-1"
+      title: "Historic House Exit Survey<br/>First Wave"
+      questions: ["RESPONDENT_ID", "Q1.a", "Q1.b", ...]
+      num_response: 3
+   })
 
+
+View Data map
+---------------------
+
+See :doc:`Datamap <datamap>` for more details about `Datamap` class.
+
+View Survey Data
+---------------------
+
+Viewing data from a respondent via indexing:
+
+.. code-block:: python
+
+   respondent_1 = survey[0]
+
+This would give you:
+
+.. code-block:: python
+   :class: code-output
+
+   {'RESPONDENT_ID': 520001.0, 'Q1.a': datetime.date(2005, 5, 4), 'Q1.b': datetime.time(11, 20), 'Q2': 0, 'Q3': [1, 3, 5, 9], 'Q3.a': 'Nottingham Goose Fair         ', 'Q4': 2, 'Q5': [1, 5], 'Q6': 25.0, 'Q7': 1, 'Q8': 'A', 'WT': 1.131}
+
+Alternatively, you can iterate each individual response like this:
+
+.. code-block:: python
+
+   from triple_s import read_triple_s
+
+   survey = read_triple_s("path/to/survey.sss", "path/to/data.asc")
+   for response in survey:
+      print(response)
+   
+*Note: Responses returned by iteration or indexing are copies.
+Modifying them does not change the survey's underlying data.
+For example:*
+
+.. code-block:: python
+
+   from triple_s import read_triple_s
+
+   survey = read_triple_s("path/to/survey.sss", "path/to/data.asc")
+   resp_1 = survey[1]
+
+   print("Original value:", resp_1["Q2"])
+   resp_1["Q2"] = 2
+
+   print("Modified copy:", resp_1["Q2"])
+   print("Survey value:", survey[1]["Q2"])
+
+*You will notice the value of 'Q2' hasn't changed:*
+
+.. code-block:: text
+   :class: code-output
+
+   Original value: 1
+   Modified copy: 2
+   Survey value: 1
+
+
+See :doc:`SurveyData <survey_data>` for more details about `SurveyData` class.
 
 
 Next steps
@@ -36,10 +100,7 @@ Next steps
 
 Continue getting started with these guides:
 
-* :doc:`Survey <survey>`
-  Load a survey, access its metadata, and explore individual responses through indexing and iteration.
-
-* :doc:`Datamap <datamap>` 
+* :doc:`Datamap <datamap>`
   Inspect question definitions, edit survey metadata and labels, and export the updated datamap.
 
 * :doc:`SurveyData <survey_data>`

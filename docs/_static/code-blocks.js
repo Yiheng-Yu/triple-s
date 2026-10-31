@@ -2,7 +2,7 @@
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll("article .highlight").forEach((panel) => {
     const pre = panel.querySelector("pre");
-    if (!pre || panel.querySelector(".code-copy-button")) return;
+    if (!pre) return;
 
     if (panel.closest(".code-output")) {
       const label = document.createElement("div");
@@ -21,14 +21,20 @@ document.addEventListener("DOMContentLoaded", () => {
     status.className = "code-copy-status";
     status.setAttribute("role", "status");
     button.append(status);
-    panel.classList.add("has-copy-button");
     panel.append(button);
     let resetTimer;
+    let text;
 
     button.addEventListener("click", async () => {
-      const code = pre.cloneNode(true);
-      code.querySelectorAll(".linenos").forEach((line) => line.remove());
-      const text = code.textContent;
+      if (text === undefined) {
+        if (pre.querySelector(".linenos")) {
+          const code = pre.cloneNode(true);
+          code.querySelectorAll(".linenos").forEach((line) => line.remove());
+          text = code.textContent;
+        } else {
+          text = pre.textContent;
+        }
+      }
       let copied = false;
       try {
         await navigator.clipboard.writeText(text);

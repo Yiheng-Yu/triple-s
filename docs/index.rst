@@ -84,7 +84,7 @@ You will mainly work with three objects:
 * :class:`triple_s.SurveyData` holds the loaded responses. Use
   ``to_polars()`` or ``to_pandas()`` to turn them into a DataFrame.
 
-For a closer look, follow the :doc:`Quick Start <getting_started/overview>`
+For a closer look, follow the :doc:`Survey guide <getting_started/overview>`
 and the guides that follow it. The :doc:`API Reference <api/index>` has
 more detail on individual classes, methods, and functions.
 
@@ -103,17 +103,17 @@ directly from Rust.
 
 .. toctree::
    :hidden:
-   :maxdepth: 3
+   :maxdepth: 2
    :caption: Getting Started
 
    getting_started/overview
-   getting_started/survey
    getting_started/datamap
    getting_started/survey_data
 
 .. toctree::
    :hidden:
    :maxdepth: 3
+   :titlesonly:
    :caption: API Reference
 
    api/functions
