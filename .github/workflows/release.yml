@@ -83,4 +83,6 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
 # Read the Docs builds this branch when its GitHub webhook is enabled and the
-# corresponding version is active. docs.rs builds the crate after cargo publish.
+# corresponding version is active. It installs the matching PyPI wheel without
+# compiling. If the webhook starts before publish-pypi finishes, retry the docs
+# build after publication. docs.rs builds the crate after cargo publish.
