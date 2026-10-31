@@ -37,3 +37,13 @@ def test_load_asc_file(datamap):
     assert data.num_response == 3
     assert data.to_polars().shape == (3, 12)
     assert datamap.record.href == PATH_ASC
+
+
+def test_datamap_iter(datamap):
+    question_names = datamap.record.question_names
+    record = datamap.record
+    
+    for (index, question) in enumerate(datamap.record):
+        correct = question_names[index]
+        assert question.name == correct
+        assert record[index].name == correct  # check if indexing was correct for Record

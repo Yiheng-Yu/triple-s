@@ -1,3 +1,6 @@
+from re import L
+import pprint
+
 import pytest
 from triple_s import NoDataError, read_triple_s
 
@@ -10,11 +13,41 @@ def survey():
     return read_triple_s(PATH_SSS_EXAMPLE_1, PATH_ASC)
 
 
+def test_read_only_datamap():
+    survey = read_triple_s(PATH_SSS_EXAMPLE_1)
+    assert survey.has_data() == False
+    assert survey.num_response == 0
+
+
 def test_read_file_success(survey):
     assert survey.has_data()
+    assert survey.num_response == 3
+    assert survey.name == "SP5201-1"
+    assert survey.title == "Historic House Exit Survey<br/>First Wave"
+
     print()
-    print(survey)
+    print("Survey datamap repr:")
     print(survey.datamap)
+
+    print()
+    print("Survey data repr:")
+    print(survey.data)
+    
+    print()
+    print("Survey info:")
+    print(survey.info)
+
+
+@pytest.mark.parametrize("index", [0, 1, 2])
+def test_indexing_individual_responses(survey, index):
+    response = survey[index]
+    assert response == survey.data.to_polars().row(index, named=True)
+
+
+def test_survey_iter(survey):
+    df = survey.data.to_polars()
+    for index, entry in enumerate(survey):
+        assert entry == df.row(index, named=True)
 
 
 def test_survey_title_mutation(survey):

@@ -1,7 +1,6 @@
 Question
 ========
 
-.. autoclass:: triple_s.Question
 
 Attributes
 ----------------

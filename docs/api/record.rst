@@ -12,6 +12,12 @@ Attributes
 .. autoattribute:: triple_s.Record.ident
 .. autoattribute:: triple_s.Record.skip
 
+
+Properties
+---------------
+.. autoattribute:: triple_s.Record.question_names
+
+
 Methods
 -------------
 

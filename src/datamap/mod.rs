@@ -27,8 +27,8 @@ use crate::{
 };
 
 // Rustdoc always uses the Rust guide, including builds with Python bindings.
-#[cfg_attr(any(not(feature = "pyo3"), doc), doc = include_str!("../doc/survey.rust.md"))]
-#[cfg_attr(all(feature = "pyo3", not(doc)), doc = include_str!("../doc/survey.python.rst"))]
+#[cfg_attr(any(not(feature = "pyo3"), doc), doc = include_str!("../doc/datamap.rust.md"))]
+#[cfg_attr(all(feature = "pyo3", not(doc)), doc = include_str!("../doc/datamap.python.rst"))]
 #[cfg_attr(
     feature = "pyo3",
     pyclass(module = "triple_s", name = "Datamap", from_py_object)
@@ -189,6 +189,23 @@ impl Datamap {
     pub fn title(&self) -> Option<String> {
         self.info().title().clone()
     }
+
+    #[cfg(feature = "pyo3")]
+    pub(crate) fn py_question_repr(&self) -> Vec<(&str, String)> {
+        const MAX_NUM_COLNAME_SHOW: usize = 3;
+        let colnames = self.py_get_questions();
+        let mut colname_repr = colnames[0..colnames.len().min(MAX_NUM_COLNAME_SHOW)]
+            .iter()
+            .map(|s| format!("{:?}", s))
+            .collect::<Vec<String>>()
+            .join(", ");
+        if colnames.len() > MAX_NUM_COLNAME_SHOW {
+            colname_repr.push_str(", ...");
+        }
+        let colname_repr = format!("[{}]", colname_repr);
+        vec![("questions", colname_repr)]
+    }
+
 }
 
 #[cfg(feature = "pyo3")]
@@ -269,6 +286,46 @@ impl Datamap {
     #[getter(info)]
     fn py_get_info(&self) -> SurveyInfo {
         self.info().clone()
+    }
+
+    #[getter(questions)]
+    pub(crate) fn py_get_questions(&self) -> Vec<String> {
+        self.record()
+            .content()
+            .iter()
+            .map(|question| question.read().name())
+            .collect::<Vec<String>>()
+    }
+
+    fn __repr__(&self) -> PyResult<String> {
+        let mut content = Vec::new();
+
+        let name = self.info().name().clone().unwrap_or("None".to_string());
+        content.push(("name", format!("{:?}", name)));
+
+        let title = self.info().title().clone().unwrap_or("None".to_string());
+        content.push(("title", format!("{:?}", title)));
+
+        const MAX_NUM_COLNAME_SHOW: usize = 3;
+        let colnames = self.py_get_questions();
+        let mut colname_repr = colnames[0..colnames.len().min(MAX_NUM_COLNAME_SHOW)]
+            .iter()
+            .map(|s| format!("{:?}", s))
+            .collect::<Vec<String>>()
+            .join(", ");
+        if colnames.len() > MAX_NUM_COLNAME_SHOW {
+            colname_repr.push_str(", ...");
+        }
+        let colname_repr = format!("[{}]", colname_repr);
+        content.push(("questions", colname_repr));
+
+        let formatted = content
+            .into_iter()
+            .map(|(field, value)| format!("{}: {}", field, value))
+            .collect::<Vec<String>>()
+            .join(",\n  ");
+
+        Ok(format!("Datamap({{\n  {}\n}})", formatted))
     }
 
     /// export content of datamap to triple-s classic string.

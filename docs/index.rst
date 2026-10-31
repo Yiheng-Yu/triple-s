@@ -1,83 +1,107 @@
-.. triple-s documentation master file, created by
-   sphinx-quickstart on Sat Oct 17 07:38:51 2026.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
 triple-s documentation
 ======================
 
-A parser for reading/parsing `Triple-S <https://www.triple-s.org/>`_
-datamap files (.sss).
+Welcome to ``triple-s``! This library helps you read, explore, and edit
+`Triple-S <https://www.triple-s.org/>`_ survey files in Python, with Rust
+handling the work behind the scenes.
 
 `Triple-S <https://triple-s.org/documentation/faq/>`__ is a file format
-used for handling survey data.
+used for handling survey data. Triple-s standards consists two files:
 
-This format has been relatively popular and is used in many different
-places. Most major survey platforms use Triple-S to transfer survey data
-from one platform to another.
+* A **datamap** (``.sss``) describes the questions and explains how to read
+  each response from the data file.
+* An **optional data file** (``.asc`` or ``.csv``) contains the respondents' answers.
+  An ``.asc`` file stores values in fixed-width fields; a ``.csv`` file
+  separates them with commas.
 
-It typically consists of two independent files:
 
-A. A data file, which can either be a text (.asc) file containing the
-   raw data or a CSV (.csv) file with question names as column headers.
-   Most data files use the former format.
+The current ``triple-s`` library brings these files together so you can inspect a survey,
+work with its responses in Polars or pandas, and update its definitions.
 
-B. A datamap file that records how the data file should be read,
-   including where the data for each question and respondent is located.
+It supports Triple-S Classic and XML formats up to Triple-S 2.0. 
 
-The current library provides a (very!) fast and convenient way of
-reading, loading, and modifying Triple-S files.
-
-It supports all Triple-S file formats (Triple-S Classic and XML)
-up to Triple-S 2.0.
+3.0 support is incoming but should be mostly working okay.
 
 Installation
----------------
+------------
 
-1) Install with ``pip``::
+Install the package with ``pip``:
 
-      pip install triple-s-survey -U
+.. code-block:: shell
 
-2) install with ``uv``::
+   pip install triple-s-survey -U
 
-      uv pip install triple-s-survey -U
+Or, if you use ``uv``:
 
-Python API
-----------
+.. code-block:: shell
 
-Import the installed package as ``triple_s``. The API separates survey
-definitions from respondent data:
+   uv pip install triple-s-survey -U
 
-* :class:`triple_s.Survey` combines ``datamap`` and ``data``.
-  :func:`triple_s.read_triple_s` returns a survey, with ``info`` providing
-  direct access to the datamap's metadata, with two main components combined together:
 
-* :class:`triple_s.Datamap` contains metadata in ``info`` and question
-  definitions in ``record``. :func:`triple_s.read_datamap` returns a datamap.
-  
-* :class:`triple_s.SurveyData` contains respondent data. Both
-  ``datamap.load_data(path)`` and ``datamap.record.load_data(path)`` return
-  this object; use its ``to_polars()`` or ``to_pandas()`` methods to export it.
+The installation process may take a little while, as the source code needs to be compiled. 
+One dependency in particular, `polars <https://pola.rs/>`_, 
+can take quite some time to compile, so don't worry if things seem a little slow!
 
+If you'd like to see what's happening along the way, you can add the `-v` flag to enable more detailed installation progress:
+
+.. code-block:: shell
+
+   pip install triple-s-survey -v -U
+
+Or for ``uv``:
+
+.. code-block:: shell
+
+   uv pip install triple-s-survey -v -U
+
+Library Overview
+----------------
+
+Once installed, import the package as ``triple_s``. To get started, load
+a datamap and its matching data file:
 
 .. code-block:: python
 
    from triple_s import read_triple_s
 
    survey = read_triple_s("survey.sss", "survey.asc")
-   print(survey.info.name)
-   df = survey.data.to_polars()
-   xml = survey.datamap.to_xml()
+   print(survey)
 
-Omit the data path to read only the definition; ``survey.has_data()`` then
-returns ``False``.
 
-See :doc:`getting_started/quickstart` for a complete workflow and
-:doc:`api/index` for the public Python API reference.
+The main item this library provides is :doc:`Survey <getting_started/survey>`, which allows you 
+doing all sorts of things. See example usage can be found under :doc:`Task Receipts<getting_started/task_receipts>`.
+
+The :doc:`API Reference <api/index>` has more detail on individual classes, methods, and functions.
+
+Architecture and Implementation
+-------------------------------
+
+The library's core is written in Rust, with a Python interface built using
+PyO3 and maturin. This lets you work with familiar Python objects while
+Rust handles parsing and data processing.
+
+If you prefer working in Rust or want to explore how the library fits
+together, the `Rust API documentation on docs.rs
+<https://docs.rs/triple_s/latest/triple_s/index.html>`_ is a good place
+to start. Much of the functionality exposed in Python is also available
+directly from Rust.
+
+.. toctree::
+   :hidden:
+   :maxdepth: 2
+   :caption: Getting Started
+
+   getting_started/task_receipts
+   getting_started/survey
+   getting_started/datamap
+   getting_started/survey_data
 
 .. toctree::
    :hidden:
    :maxdepth: 3
+   :titlesonly:
+   :caption: API Reference
 
-   getting_started/quickstart
-   api/index
+   api/functions
+   api/objects
+   api/exceptions

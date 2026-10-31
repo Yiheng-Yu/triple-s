@@ -644,6 +644,11 @@ impl Record {
             .map_err(|err| exceptions::PyRuntimeError::new_err(format!("{:#?}", err)))
     }
 
+    #[getter(question_names)]
+    fn py_get_question_names(&self) -> Vec<String> {
+        self.content().iter().map(|item| item.read().name()).collect()
+    }
+
     fn __len__(&self) -> usize {
         self.content().len()
     }
@@ -692,6 +697,11 @@ impl Record {
                 type_name
             )))
         }
+    }
+
+    pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<Py<RecordIterator>> {
+        let content = self.content().clone();
+        Py::new(py, RecordIterator { content, index: 0 })
     }
 
     /// Create new instance from dictionary with the following keys:
@@ -809,6 +819,28 @@ impl Record {
     #[pyo3(name = "validate_data")]
     fn py_validate_data(&self, path: &str) -> PyResult<()> {
         self.validate_data(path).map_err(py_value_error)
+    }
+}
+
+// ---------- Helpers -----------
+#[cfg(feature = "pyo3")]
+#[pyclass]
+pub(crate) struct RecordIterator {
+    content: Vec<ArcLock<Question>>,
+    index: usize,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl RecordIterator {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__<'py>(&mut self) -> PyResult<Option<Question>> {
+        let question = self.content.get(self.index).map(|item| item.read().clone());
+        self.index += 1;
+        Ok(question)
     }
 }
 

@@ -2,7 +2,6 @@
 #
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
-import sys
 import re
 from pathlib import Path
 
@@ -19,14 +18,8 @@ author = 'Yiheng Yu'
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
-    "sphinx.ext.doctest",
-    "sphinx.ext.inheritance_diagram",
-    "sphinx.ext.intersphinx",
-    "sphinx.ext.todo",
-    "sphinx.ext.coverage",
-    "sphinx.ext.ifconfig",
     "sphinx.ext.viewcode",
-    ]
+]
 
 napoleon_use_ivar = False
 
@@ -36,14 +29,13 @@ master_doc = "index"
 
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
-
-
 # -- Options for HTML output -------------------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = 'furo'
 html_static_path = ['_static']
 html_css_files = ['style.css']
+html_js_files = ['code-blocks.js', 'sidebar.js']
 
 PYTHON_API_CLASSES = {
     "Code", "CodeFormat", "DataRange", "DataFormat", "Location", "Mode",
@@ -68,7 +60,7 @@ def prepare_docstring(app, what, name, obj, options, lines):
     if what == "class" and name.rsplit(".", 1)[-1] == "Datamap":
         # Read the Python guide directly so Sphinx does not need a rebuilt
         # native extension after documentation-only changes.
-        source = Path(__file__).resolve().parents[1] / "src/doc/survey.python.rst"
+        source = Path(__file__).resolve().parents[1] / "src/doc/datamap.python.rst"
         app.env.note_dependency(str(source))
         lines[:] = source.read_text(encoding="utf-8").splitlines()
         return
