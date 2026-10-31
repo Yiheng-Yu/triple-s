@@ -69,6 +69,8 @@ jobs:
     name: Build documentation after publishing to PyPI
     needs: publish-pypi
     uses: ./.github/workflows/docs.yml
+    secrets:
+      READTHEDOCS_TOKEN: ${{ secrets.READTHEDOCS_TOKEN }}
 
   publish-crate:
     name: Publish to crates.io
