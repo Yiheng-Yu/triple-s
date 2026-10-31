@@ -269,33 +269,75 @@ impl SurveyInfo {
 #[pymethods]
 impl SurveyInfo {
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        let optional_string = |value: &Option<String>| -> PyResult<String> {
-            match value {
-                Some(value) => Ok(PyString::new(py, value).repr()?.to_string()),
-                None => Ok("None".into()),
-            }
-        };
-        let tuple = |values: Vec<String>| match values.len() {
-            1 => format!("({},)", values[0]),
-            _ => format!("({})", values.join(", ")),
-        };
         let version = format!("Version.{:?}", *self.version());
-        let name = optional_string(&self.name())?;
-        let title = optional_string(&self.title())?;
-        let date = optional_string(&self.date())?;
-        let time = optional_string(&self.time())?;
-        let origin = optional_string(&self.origin())?;
-        let user = optional_string(&self.user())?;
-        let style = optional_string(&self.style())?;
-        let language_options = tuple(
-            self.language_options()
-                .iter()
-                .map(|value| Ok(PyString::new(py, value).repr()?.to_string()))
-                .collect::<PyResult<Vec<_>>>()?,
+        let name = self
+            .name()
+            .as_ref()
+            .map(|value| PyString::new(py, value).repr().map(|value| value.to_string()))
+            .transpose()?
+            .unwrap_or("None".into());
+        let title = self
+            .title()
+            .as_ref()
+            .map(|value| PyString::new(py, value).repr().map(|value| value.to_string()))
+            .transpose()?
+            .unwrap_or("None".into());
+        let date = self
+            .date()
+            .as_ref()
+            .map(|value| PyString::new(py, value).repr().map(|value| value.to_string()))
+            .transpose()?
+            .unwrap_or("None".into());
+        let time = self
+            .time()
+            .as_ref()
+            .map(|value| PyString::new(py, value).repr().map(|value| value.to_string()))
+            .transpose()?
+            .unwrap_or("None".into());
+        let origin = self
+            .origin()
+            .as_ref()
+            .map(|value| PyString::new(py, value).repr().map(|value| value.to_string()))
+            .transpose()?
+            .unwrap_or("None".into());
+        let user = self
+            .user()
+            .as_ref()
+            .map(|value| PyString::new(py, value).repr().map(|value| value.to_string()))
+            .transpose()?
+            .unwrap_or("None".into());
+        let style = self
+            .style()
+            .as_ref()
+            .map(|value| PyString::new(py, value).repr().map(|value| value.to_string()))
+            .transpose()?
+            .unwrap_or("None".into());
+        let language_options = self
+            .language_options()
+            .iter()
+            .map(|value| Ok(PyString::new(py, value).repr()?.to_string()))
+            .collect::<PyResult<Vec<_>>>()?;
+        let language_options = format!(
+            "({}{})",
+            language_options.join(", "),
+            if language_options.len() == 1 { "," } else { "" },
         );
-        let mode_options =
-            tuple(self.mode_options().iter().map(|mode| format!("Mode.{mode:?}")).collect());
-        let standard = optional_string(&self.standard())?;
+        let mode_options = self
+            .mode_options()
+            .iter()
+            .map(|mode| format!("Mode.{mode:?}"))
+            .collect::<Vec<_>>();
+        let mode_options = format!(
+            "({}{})",
+            mode_options.join(", "),
+            if mode_options.len() == 1 { "," } else { "" },
+        );
+        let standard = self
+            .standard()
+            .as_ref()
+            .map(|value| PyString::new(py, value).repr().map(|value| value.to_string()))
+            .transpose()?
+            .unwrap_or("None".into());
         Ok(format!(
             "SurveyInfo(\n    version={version},\n    name={name},\n    title={title},\n    date={date},\n    time={time},\n    origin={origin},\n    user={user},\n    style={style},\n    language_options={language_options},\n    mode_options={mode_options},\n    standard={standard},\n)"
         ))
