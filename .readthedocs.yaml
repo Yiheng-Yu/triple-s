@@ -9,11 +9,10 @@ build:
   os: ubuntu-24.04
   tools:
     python: "3.13"
-    rust: "latest"
   jobs:
     post_install:
-      # Build the checked-out extension cheaply and show compiler progress.
-      - python -m pip install --verbose --config-settings="build-args=--profile docs" .
+      # Import a published wheel for autodoc; never compile the Rust extension.
+      - python docs/install_package.py
 
 # Build documentation in the "docs/" directory with Sphinx
 sphinx:
