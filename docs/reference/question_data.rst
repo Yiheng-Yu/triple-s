@@ -7,7 +7,7 @@ Attributes
 ----------
 
 .. autoattribute:: triple_s.QuestionData.name
-.. autoattribute:: triple_s.QuestionData.question
+.. autoattribute:: triple_s.QuestionData.type
 
 Methods
 -------
