@@ -6,8 +6,8 @@ questions and a matching data file (``.asc`` or ``.csv``) containing responses.
 Import the installed package as ``triple_s``.
 
 
-Read a survey
--------------
+Load a triple-s survey
+----------------------
 
 :func:`triple_s.read_triple_s` reads the datamap and its matching data file:
 
@@ -20,6 +20,15 @@ Read a survey
    print(survey.has_data())
    df = survey.data.to_polars()
    datamap = survey.datamap
+
+
+Features
+------------------------
+
+Just like triple-s files, a :class:`Survey` instance consists of two parts: 
+a :class:`Datamap` that contains survey questions, 
+and a :class:`SurveyData` that collects survey data.
+
 
 
 Next steps
