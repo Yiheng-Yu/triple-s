@@ -68,7 +68,7 @@ def prepare_docstring(app, what, name, obj, options, lines):
     if what == "class" and name.rsplit(".", 1)[-1] == "Datamap":
         # Read the Python guide directly so Sphinx does not need a rebuilt
         # native extension after documentation-only changes.
-        source = Path(__file__).resolve().parents[1] / "src/doc/survey.python.rst"
+        source = Path(__file__).resolve().parents[1] / "src/doc/datamap.python.rst"
         app.env.note_dependency(str(source))
         lines[:] = source.read_text(encoding="utf-8").splitlines()
         return

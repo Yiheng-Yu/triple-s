@@ -1,5 +1,4 @@
 use polars::prelude::*;
-
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
@@ -40,7 +39,7 @@ impl Survey {
     pub fn name<'a>(&'a self) -> Option<String> {
         self.datamap().name()
     }
-    
+
     /// Sets name of a survey
     #[inline]
     pub fn set_name(&mut self, name: Option<String>) {
@@ -82,7 +81,7 @@ impl Survey {
     }
 
     /// List out number of responses loaded
-    /// 
+    ///
     /// This function may fail during polars' [`LazyFrame::collect()`] function call
     pub fn num_response(&self) -> PolarsResult<usize> {
         if self.has_data() {
@@ -96,13 +95,11 @@ impl Survey {
     pub fn has_data(&self) -> bool {
         self.data().has_data()
     }
-
 }
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Survey {
-
     /// Creates new `Survey` instance
     #[pyo3(signature=(datamap: "Datamap", data: "SurveyData"=None))]
     #[new]
@@ -114,20 +111,17 @@ impl Survey {
     fn __repr__(&self) -> PyResult<String> {
         let mut content = Vec::new();
 
-        let name = self.py_get_name()
-            .unwrap_or("None".to_string());
+        let name = self.py_get_name().unwrap_or("None".to_string());
         content.push(("name", format!("{:?}", name)));
 
-        let title = self.py_get_title()
-            .unwrap_or("None".to_string());
+        let title = self.py_get_title().unwrap_or("None".to_string());
         content.push(("title", format!("{:?}", title)));
 
         // TODO: alternate display via has_data()
-        let data_repr = self.data()
-            .py_repr_content()
-            .map_err(PyPolarsErr::Polars)?;
+        let data_repr = self.data().py_repr_content().map_err(PyPolarsErr::Polars)?;
 
-        let value = content.into_iter()
+        let value = content
+            .into_iter()
             .chain(data_repr.into_iter())
             .map(|(fieldname, value)| format!("{}: {}", fieldname, value))
             .collect::<Vec<String>>()

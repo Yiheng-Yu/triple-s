@@ -1,14 +1,17 @@
-use std::{ path::{ Path, PathBuf }, sync::Arc };
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::Result;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::{ prelude::*, types::PyDict };
+use pyo3::{prelude::*, types::PyDict};
 #[cfg(feature = "pyo3")]
-use pyo3_polars::{ PyDataFrame, error::PyPolarsErr };
+use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use tempfile::TempPath;
 
-use crate::error::{ InvalidArg, NoDataError };
+use crate::error::{InvalidArg, NoDataError};
 
 /// The backing file and its cleanup policy.
 #[derive(Debug)]
@@ -31,7 +34,10 @@ impl CacheDir {
 }
 
 /// Respondent data with a lazy query plan and an optional backing cache.
-#[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "SurveyData", from_py_object))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(module = "triple_s", name = "SurveyData", from_py_object)
+)]
 #[derive(Default)]
 pub struct SurveyData {
     /// The query plan for reading data
@@ -64,11 +70,10 @@ impl SurveyData {
     pub fn cache(&self) -> Option<&str> {
         match self.cache.as_ref() {
             None => None,
-            Some(cache) =>
-                match cache {
-                    CacheDir::Temporary(path) => Some(path.to_str()).flatten(),
-                    CacheDir::Persistent(path) => Some(path.to_str()).flatten(),
-                }
+            Some(cache) => match cache {
+                CacheDir::Temporary(path) => Some(path.to_str()).flatten(),
+                CacheDir::Persistent(path) => Some(path.to_str()).flatten(),
+            },
         }
     }
 
@@ -107,7 +112,6 @@ impl SurveyData {
     ///
     /// let data = SurveyData::empty();
     /// assert_eq!(data.has_data(), false);
-    ///
     /// ```
     pub fn empty() -> Self {
         Self::default()
@@ -131,7 +135,7 @@ impl SurveyData {
     /// Create new instance fro parquet file
     pub fn from_parquet(
         path_parquet: impl AsRef<Path>,
-        schema: Option<Arc<Schema>>
+        schema: Option<Arc<Schema>>,
     ) -> Result<Self> {
         let cache = CacheDir::Persistent(std::path::absolute(path_parquet.as_ref())?);
         let args = ScanArgsParquet {
@@ -210,7 +214,10 @@ impl SurveyData {
         let write_option = ParquetWriteOptions::default();
         let write_formt = FileWriteFormat::Parquet(Arc::new(write_option));
 
-        self.lazy()?.clone().sink(path_sink, write_formt, UnifiedSinkArgs::default())?.collect()?;
+        self.lazy()?
+            .clone()
+            .sink(path_sink, write_formt, UnifiedSinkArgs::default())?
+            .collect()?;
 
         Ok(())
     }
@@ -229,15 +236,12 @@ impl SurveyData {
     pub fn questions(&self) -> PolarsResult<Vec<String>> {
         match self.frame.as_ref() {
             None => Ok(Vec::new()),
-            Some(lf) =>
-                Ok(
-                    lf
-                        .clone()
-                        .collect_schema()?
-                        .iter_names()
-                        .map(|s| s.to_string())
-                        .collect::<Vec<String>>()
-                ),
+            Some(lf) => Ok(lf
+                .clone()
+                .collect_schema()?
+                .iter_names()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>()),
         }
     }
 
@@ -295,11 +299,7 @@ impl SurveyData {
         let colname_repr = format!("[{}]", colname_repr);
         info.push(("questions", colname_repr));
 
-        let num_response = self
-            .num_response()
-            .ok()
-            .unwrap_or_default() // empty SurveyData -> num_response would be zero
-            .to_string();
+        let num_response = self.num_response().map_err(PyPolarsErr::Polars)?.to_string();
         info.push(("num_response", num_response));
 
         let formatted = info
@@ -330,10 +330,8 @@ impl SurveyData {
     /// Export data as polars DataFrame
     #[pyo3(name = "to_polars")]
     pub fn py_to_polars<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let frame = self
-            .to_polars()
-            .map(PyDataFrame)
-            .map_err(|err| PyPolarsErr::Polars(err))?;
+        let frame =
+            self.to_polars().map(PyDataFrame).map_err(|err| PyPolarsErr::Polars(err))?;
         frame.into_pyobject(py)
     }
 

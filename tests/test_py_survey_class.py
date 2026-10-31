@@ -12,9 +12,21 @@ def survey():
 
 def test_read_file_success(survey):
     assert survey.has_data()
+    assert survey.num_response == 3
+    assert survey.name == "SP5201-1"
+    assert survey.title == "Historic House Exit Survey<br/>First Wave"
+    
     print()
     print(survey)
+    
+    print("Survey datamap repr:")
     print(survey.datamap)
+    
+    print("Survey data repr:")
+    print(survey.data)
+    
+    print("Survey info repr:")
+    print(survey.info)
 
 
 def test_survey_title_mutation(survey):
