@@ -3,7 +3,7 @@ from datetime import date, time
 
 import pandas as pd
 import pytest
-from triple_s import NoDataError, read_datamap
+from triple_s import NoDataError, SurveyData, read_datamap
 
 
 @pytest.fixture
@@ -14,15 +14,14 @@ def datamap():
     return datamap
 
 
-def test_to_pandas_without_loaded_data(datamap):
+def test_to_pandas_without_loaded_data():
     with pytest.raises(NoDataError, match="Data not loaded"):
-        datamap.data.to_pandas()
+        SurveyData.empty().to_pandas()
 
 
 def test_loaded_data_to_pandas(datamap):
-    datamap.load_data("tests/sss-examples/sss-2.0/example1.asc")
-    result = datamap.data.to_pandas()
-    print(result)
+    data = datamap.load_data("tests/sss-examples/sss-2.0/example1.asc")
+    result = data.to_pandas()
 
     assert isinstance(result, pd.DataFrame)
     assert result.shape == (3, 12)
@@ -52,4 +51,4 @@ def test_loaded_data_to_pandas(datamap):
     assert result["Q8"].iloc[2] == "C"
     assert result["WT"].iloc[0] == pytest.approx(1.1310)
 
-    pd.testing.assert_frame_equal(result, datamap.record.data.to_pandas())
+    pd.testing.assert_frame_equal(result, data.to_polars().to_pandas(use_pyarrow_extension_array=True))

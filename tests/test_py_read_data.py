@@ -1,8 +1,7 @@
 import warnings
 
-import polars as pl
 import pytest
-from triple_s import read_datamap, read_triple_s
+from triple_s import Datamap, Survey, SurveyData, read_datamap, read_triple_s
 
 PATH_SSS_EXAMPLE_1 = "tests/sss-examples/sss-2.0/example1.sss"
 PATH_ASC = "tests/sss-examples/sss-2.0/example1.asc"
@@ -18,26 +17,23 @@ def datamap():
         return read_datamap(PATH_SSS_EXAMPLE_1)
 
 
-def test_read_reada_asc():
-    datamap = read_triple_s(PATH_SSS_EXAMPLE_1, PATH_ASC)
-    assert datamap.title == "Historic House Exit Datamap<br/>First Wave"
-
-
-def test_read_data_csv():
-    datamap = read_triple_s(PATH_SSS_EXAMPLE_2, PATH_CSV)
-    assert datamap.title == "Historic House Exit Datamap<br/>First Wave"
+@pytest.mark.parametrize("path_sss, path_data", [
+    (PATH_SSS_EXAMPLE_1, PATH_ASC),
+    (PATH_SSS_EXAMPLE_2, PATH_CSV),
+])
+def test_read_data(path_sss, path_data):
+    survey = read_triple_s(path_sss, path_data)
+    assert isinstance(survey, Survey)
+    assert isinstance(survey.datamap, Datamap)
+    assert survey.title == "Historic House Exit Survey<br/>First Wave"
+    assert survey.has_data()
+    assert survey.data.to_polars().shape == (3, 12)
 
 
 def test_load_asc_file(datamap):
-    datamap.load_data(PATH_ASC)
-    df = datamap.record.data.to_polars()
-    print()
-    print(datamap.record.data)
-
-    with pl.Config(
-        tbl_rows=-1,  # Show ALL rows
-        tbl_cols=-1,  # Show ALL columns
-        fmt_str_lengths=20,  # Show long string values
-        tbl_width_chars=-1,  # No table width limit
-    ):
-        print(df)
+    data = datamap.load_data(PATH_ASC)
+    assert isinstance(data, SurveyData)
+    assert data.has_data()
+    assert data.num_response == 3
+    assert data.to_polars().shape == (3, 12)
+    assert datamap.record.href == PATH_ASC

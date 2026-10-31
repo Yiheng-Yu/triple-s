@@ -6,8 +6,3 @@
 .sidebar-tree .toctree-checkbox ~ label {
   display: none;
 }
-
-/* Keep h2 structure while rendering it at the theme's h3 text size. */
-article h2 {
-  font-size: var(--font-size--h4);
-}

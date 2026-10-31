@@ -696,7 +696,7 @@ impl Question {
 
 /// reading data
 impl Question {
-    /// Get [`polars::Field`] for the current question, it looks like this:
+    /// Get [`polars::prelude::Field`] for the current question, it looks like this:
     ///
     /// ```text
     /// {
@@ -1718,8 +1718,7 @@ impl Question {
     ///
     /// 'question_type' (str|QuestionType):
     ///     type of the question.
-    ///     See QuestionType.available_options() for list of allowed string
-    /// values.
+    ///     See QuestionType.available_options() for list of allowed string values.
     ///
     /// 'location' (dict|Location|None, *optional*):
     ///     data location.
@@ -1988,7 +1987,7 @@ impl PartialEq for Location {
 /// ---
 impl Location {
     /// Start of a data location, this corresponse to the `start` attribute of
-    /// the <position> element
+    /// the `<position>` element
     pub fn start(&self) -> RwLockReadGuard<'_, u32> {
         self.start.read()
     }
@@ -1999,7 +1998,7 @@ impl Location {
     }
 
     /// End of a data location, this corresponds to the `end` attribute of the
-    /// <position> element
+    /// `<position>` element
     pub fn finish(&self) -> RwLockReadGuard<'_, u32> {
         self.finish.read()
     }
@@ -2150,7 +2149,7 @@ impl Location {
     }
 
     /// Start of a data location, this corresponse to the `start` attribute of
-    /// the <position> element
+    /// the `<position>` element
     #[getter(start)]
     fn py_get_start(&self) -> u32 {
         self.start.read().clone()
@@ -2163,7 +2162,7 @@ impl Location {
     }
 
     /// End of a data location, this corresponds to the `end` attribute of the
-    /// <position> element
+    /// `<position>` element
     #[getter(finish)]
     fn py_get_finish(&self) -> u32 {
         self.finish.read().clone()

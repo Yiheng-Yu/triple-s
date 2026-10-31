@@ -1,10 +1,10 @@
 Represents the root of a Triple-S datamap. It contains survey metadata
-([`SurveyInfo`]) and the survey's questions and data ([`Record`]).
+([`SurveyInfo`]) and the survey's question definitions ([`Record`]).
 
 See the [Triple-S documentation](https://triple-s.org/documentation/manuals/)
 for the format specifications.
 
-# Create a survey
+# Create a datamap
 
 ```rust
 use triple_s::{Datamap, SurveyInfo, Version};
@@ -19,7 +19,7 @@ assert_eq!(survey.info().name().as_deref(), Some("example"));
 assert_eq!(survey.info().title().as_deref(), Some("Example Datamap"));
 ```
 
-Use [`Datamap::empty`] for a default survey with Triple-S version 1.2.
+Use [`Datamap::empty`] for a default datamap with Triple-S version 1.2.
 Use [`Datamap::info_mut`] and [`Datamap::record_mut`] to edit the metadata
 and record.
 
@@ -40,8 +40,20 @@ Question names are case insensitive. [`Datamap::get_question`] returns
 
 # Load and export
 
-Use [`Datamap::load_data`] to load fixed-width or CSV respondent data,
-then [`Record::to_polars`] on [`Datamap::record`] to create a DataFrame.
+Use [`Record::load_data`] through [`Datamap::record_mut`] to load respondent
+data. It returns a [`crate::SurveyData`] and updates the record's source metadata.
+
+```no_run
+use triple_s::read_datamap;
+
+let mut datamap = read_datamap("survey.sss")?;
+let data = datamap.record_mut().load_data("survey.asc")?;
+let frame = data.to_polars()?;
+# Ok::<(), anyhow::Error>(())
+```
+
+[`crate::read_triple_s`] returns a [`crate::Survey`] containing both the datamap
+and data. Access responses with `survey.data().to_polars()?`.
 [`Datamap::to_classic`] and [`Datamap::to_xml`] return the datamap as a string.
 
 Data loading supports UTF-8 and BOM-marked UTF-16. 

@@ -11,7 +11,6 @@ Attributes
 .. autoattribute:: triple_s.Record.href
 .. autoattribute:: triple_s.Record.ident
 .. autoattribute:: triple_s.Record.skip
-.. autoattribute:: triple_s.Record.data
 
 Methods
 -------------

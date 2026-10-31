@@ -39,7 +39,7 @@ lto = "fat"
 codegen-units = 1
 
 [profile.python-dev]
-debug = true
+debug = "full"
 opt-level = 0
 overflow-checks = true
 debug-assertions = true

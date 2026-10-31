@@ -6,7 +6,7 @@ import warnings
 import pandas as pd
 import pytest
 
-from triple_s import read_datamap, NoDataError
+from triple_s import read_datamap
 
 
 @pytest.fixture
@@ -17,8 +17,8 @@ def datamap():
 
 
 def test_load_csv_example(datamap):
-    datamap.load_data("tests/sss-examples/sss-2.0/example2.csv")
-    result = datamap.data.to_pandas()
+    data = datamap.load_data("tests/sss-examples/sss-2.0/example2.csv")
+    result = data.to_pandas()
     assert result.shape == (3, 12)
     assert result["RESPONDENT_ID"].tolist() == [520001, 520002, 520003]
     assert result["Q1.a"].iloc[0] == date(2005, 5, 4)
@@ -34,7 +34,7 @@ def test_load_csv_example(datamap):
     assert pd.isna(result["Q8"].iloc[1])
     assert result["Q8"].iloc[2] == "C"
     assert result["WT"].tolist() == pytest.approx([1.131, 0.9921, 1.0089])
-    assert datamap.record.data.to_polars().shape == (3, 12)
+    assert data.to_polars().shape == (3, 12)
 
 
 @pytest.mark.parametrize("skip", [0, 1, 2])
@@ -56,8 +56,8 @@ def test_csv_quoting_and_skip(tmp_path, datamap, skip):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         datamap = read_datamap(str(datamap_path))
-    datamap.record.load_data(str(path))
-    result = datamap.data.to_pandas()
+    data = datamap.record.load_data(str(path))
+    result = data.to_pandas()
     assert result.shape == (1, 12)
     assert result["Q3.a"].iloc[0] == row[6]
     assert pd.isna(result["WT"].iloc[0])
@@ -66,10 +66,10 @@ def test_csv_quoting_and_skip(tmp_path, datamap, skip):
 def test_csv_missing_field_reports_question(tmp_path, datamap):
     path = tmp_path / "short.csv"
     path.write_text("header\n520001,20050504\n")
+    href = datamap.record.href
     with pytest.raises(ValueError, match="Q1.b.*field 3"):
         datamap.load_data(str(path))
-    with pytest.raises(NoDataError, match="Data not loaded"):
-        datamap.data.to_pandas()
+    assert datamap.record.href == href
 
 
 def test_csv_invalid_value_reports_record_and_question(tmp_path, datamap):

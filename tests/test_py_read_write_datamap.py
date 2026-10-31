@@ -275,7 +275,7 @@ def test_datamap_to_xml1_from_to(source, request, tmp_path):
     root = etree.fromstring(output)
     assert root.tag == "sss"
     assert root.find("survey") is not None
-    assert root.findtext("survey/name") == datamap.survey_info.name
+    assert root.findtext("survey/name") == datamap.info.name
     assert root.findtext("survey/title") == datamap.title
     assert xml_content(root.find("survey/record")) == xml_content(etree.fromstring(datamap.record.to_xml()))
     path = tmp_path / "export.sss"

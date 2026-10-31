@@ -272,10 +272,11 @@ impl Record {
 impl Record {
     /// Load respondent data from an `.asc` (fixed-width) or `.csv` file.
     /// Supports both UTF-8 and BOM-marked UTF-16LE/BE encodings.
-    /// On success, replace the loaded data and update `href` and `data_format`.
+    /// Returns [`SurveyData`] and updates `href` and `data_format` on success.
+    /// The returned data is not stored in the record.
     ///
     /// This `load_data` function will stream data into a temporary parquet cache file (`.parquet`) to be
-    /// used later. To get the cache, call [`Record::to_parquet()`] method afterwards:
+    /// used later. Keep the returned [`SurveyData`] alive while using its cache.
     ///
     /// ```no_run
     /// use triple_s::read_triple_s;
@@ -636,6 +637,7 @@ impl Record {
         self.get_question_(question_name).map(|item| item.read().clone())
     }
 
+    /// Load respondent data and return `SurveyData`, updating `href` and `data_format`.
     #[pyo3(name = "load_data")]
     fn py_load_data(&mut self, path_data: &str) -> PyResult<SurveyData> {
         self.load_data(path_data)
@@ -694,7 +696,7 @@ impl Record {
 
     /// Create new instance from dictionary with the following keys:
     ///
-    /// 'ident' (str|None, *optional):
+    /// 'ident' (str|None, *optional*):
     ///     id of the `Record` instance, default 'A'.
     ///
     /// 'href' (str|None, *optional*):

@@ -137,7 +137,7 @@ impl Response {
         self.values().len()
     }
 
-    /// checks if instance contains any <Code> instance.
+    /// Returns whether the response contains no [`Code`] instances.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.values().is_empty()

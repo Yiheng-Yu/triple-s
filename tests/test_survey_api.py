@@ -1,5 +1,5 @@
 import pytest
-from triple_s import read_triple_s
+from triple_s import NoDataError, read_triple_s
 
 PATH_SSS_EXAMPLE_1 = "tests/sss-examples/sss-2.0/example1.sss"
 PATH_ASC = "tests/sss-examples/sss-2.0/example1.asc"
@@ -12,15 +12,20 @@ def survey():
 
 def test_read_file_success(survey):
     assert survey.has_data()
+    print()
+    print(survey)
+    print(survey.datamap)
 
 
 def test_survey_title_mutation(survey):
     datamap = survey.datamap
     datamap.title = "haha"
     assert survey.title == "haha"
+    assert survey.info.title == "haha"
 
     survey.title = "yes"
     assert datamap.title == "yes"
+    assert survey.info.title == "yes"
 
 
 @pytest.mark.parametrize(
@@ -30,7 +35,6 @@ def test_survey_title_mutation(survey):
         pytest.param("name", id="name"),
         pytest.param("user", id="user"),
         pytest.param("origin", id="origin"),
-        pytest.param("user", id="user"),
         pytest.param("date", id="date"),
         pytest.param("time", id="time"),
         pytest.param("style", id="style"),
@@ -38,8 +42,6 @@ def test_survey_title_mutation(survey):
     ],
 )
 def test_survey_info_setter(survey, attribute):
-    info = survey.datamap.info
-
     # basic mutation check
     setattr(survey.datamap.info, attribute, "test 1")
     assert getattr(survey.datamap.info, attribute) == "test 1"
@@ -52,7 +54,6 @@ def test_survey_info_setter(survey, attribute):
         pytest.param("name", id="name"),
         pytest.param("user", id="user"),
         pytest.param("origin", id="origin"),
-        pytest.param("user", id="user"),
         pytest.param("date", id="date"),
         pytest.param("time", id="time"),
         pytest.param("style", id="style"),
@@ -90,7 +91,7 @@ def test_survey_info_mutation_sync(survey, attribute):
     setattr(datamap.info, attribute, None)
     assert getattr(info_direct, attribute) is None
     assert getattr(survey.datamap.info, attribute) is None
-    
+
     # mutate datamap -> check if `info` and `survey.datamap.info` updates
     setattr(survey.info, attribute, "value 3")
     assert getattr(info_direct, attribute) == "value 3"
@@ -98,3 +99,15 @@ def test_survey_info_mutation_sync(survey, attribute):
     setattr(survey.info, attribute, None)
     assert getattr(info_direct, attribute) is None
     assert getattr(survey.datamap.info, attribute) is None
+
+
+def test_survey_without_data():
+    survey = read_triple_s(PATH_SSS_EXAMPLE_1)
+    assert not survey.has_data()
+    assert not survey.data.has_data()
+    with pytest.raises(NoDataError):
+        survey.data.to_polars()
+
+    data = survey.datamap.load_data(PATH_ASC)
+    assert data.has_data()
+    assert not survey.has_data()

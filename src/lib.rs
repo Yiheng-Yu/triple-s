@@ -69,7 +69,7 @@
 //! let path_datamap: &str = "path/to/the/datamap.sss";
 //! let path_data: &str = "path/to/the/data.asc";
 //!
-//! // toggle on to validate `path_data`, note that this might take some time.
+//! // Read both the datamap and respondent data.
 //! let survey = read_triple_s(path_datamap, Some(path_data))?;
 //!
 //! # Ok::<(), anyhow::Error>(())
@@ -123,7 +123,7 @@
 //! assert_eq!(original.value(), "B".to_string());
 //! ```
 //!
-//! All structs in this library comes with `DeepCopy` trait. This trait provides
+//! Types implementing [`DeepCopy`] provide independent copies of their fields. This trait provides
 //! `deepcopy()` method call that actually clones the data that the `Arc`
 //! pointers points to. This would crete a stand-alone clone of the object, and
 //! mutating the item returned by `deepcopy()` will not update the original
@@ -131,13 +131,10 @@
 //!
 //! ## Example: Use `deepcopy` to clone the value
 //!
-//! Import `DeepCopy` trait, or call `use triple_s::prelude::*` that does the
-//! same job:
+//! Import the `DeepCopy` trait:
 //!
 //! ```rust
 //! use triple_s::{DeepCopy, Text};
-//! // Or:
-//! // use triple_s::prelude::*
 //!
 //! let original = Text::new("A");
 //! let mut copy = original.deepcopy();
@@ -197,7 +194,8 @@ pub use survey::Survey;
 ///     Otherwise, reads only the datamap.
 ///
 /// Returns:
-/// [`Datamap`] instance.
+/// [`Survey`] containing the datamap and respondent data. Without `path_data`,
+/// its [`SurveyData`] is empty.
 pub fn read_triple_s(
     path_sss: impl AsRef<Path>,
     path_data: Option<impl AsRef<Path>>,
@@ -267,7 +265,8 @@ mod triple_s {
     ///         path to the `.asc` or `.csv` data file.
     ///
     /// Returns:
-    ///     [`Datamap`] object
+    ///     [`Survey`] containing `datamap` and `data`. If `path_data` is omitted,
+    ///     `has_data()` returns `False`.
     #[pyfunction(
         name="read_triple_s", 
         signature=(

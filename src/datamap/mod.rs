@@ -40,7 +40,7 @@ pub struct Datamap {
 }
 
 impl Datamap {
-    /// Creates an empty survey with some [`SurveyInfo`] provided
+    /// Creates an empty datamap with the provided [`SurveyInfo`].
     pub fn new(info: SurveyInfo) -> Self {
         Self {
             info: lock_it_up(info),
@@ -48,7 +48,7 @@ impl Datamap {
         }
     }
 
-    /// cretes a default survey with version set to be `1.2`
+    /// Creates an empty datamap with Triple-S version 1.2.
     pub fn empty() -> Self {
         Self {
             info: lock_it_up(SurveyInfo::new(Version::V1_2)),
@@ -194,7 +194,7 @@ impl Datamap {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Datamap {
-    /// Create a survey from a dictionary containing optional `survey_info`
+    /// Create a datamap from a dictionary containing optional `survey_info`
     /// (or `info`) and `record` values. Each value may be its corresponding
     /// object or a dictionary accepted by that object's `from_dict` method.
     #[staticmethod]
@@ -284,7 +284,8 @@ impl Datamap {
     }
 
     /// Load an `.asc` or `.csv` file using the record's skip setting.
-    /// Updates the record's `href`, `data_format`, and loaded data on success.
+    /// Returns `SurveyData` and updates the record's `href` and `data_format`.
+    /// The returned data is not stored on the datamap.
     #[pyo3(name="load_data", signature=(path:"str"))]
     fn py_load_data(&mut self, path: &str) -> PyResult<SurveyData> {
         self.record_mut().load_data(path).map_err(py_value_error)
