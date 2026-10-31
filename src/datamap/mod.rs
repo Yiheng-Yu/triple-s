@@ -189,6 +189,23 @@ impl Datamap {
     pub fn title(&self) -> Option<String> {
         self.info().title().clone()
     }
+
+    #[cfg(feature = "pyo3")]
+    pub(crate) fn py_question_repr(&self) -> Vec<(&str, String)> {
+        const MAX_NUM_COLNAME_SHOW: usize = 3;
+        let colnames = self.py_get_questions();
+        let mut colname_repr = colnames[0..colnames.len().min(MAX_NUM_COLNAME_SHOW)]
+            .iter()
+            .map(|s| format!("{:?}", s))
+            .collect::<Vec<String>>()
+            .join(", ");
+        if colnames.len() > MAX_NUM_COLNAME_SHOW {
+            colname_repr.push_str(", ...");
+        }
+        let colname_repr = format!("[{}]", colname_repr);
+        vec![("questions", colname_repr)]
+    }
+
 }
 
 #[cfg(feature = "pyo3")]
@@ -272,7 +289,7 @@ impl Datamap {
     }
 
     #[getter(questions)]
-    fn py_get_questions(&self) -> Vec<String> {
+    pub(crate) fn py_get_questions(&self) -> Vec<String> {
         self.record()
             .content()
             .iter()

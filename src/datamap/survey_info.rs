@@ -9,7 +9,7 @@ use pyo3::{
     PyResult,
     exceptions,
     prelude::*,
-    types::{PyDict, PyTuple},
+    types::{PyDict, PyString, PyTuple},
 };
 use strum::{EnumIter, EnumString};
 
@@ -268,6 +268,39 @@ impl SurveyInfo {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl SurveyInfo {
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let optional_string = |value: &Option<String>| -> PyResult<String> {
+            match value {
+                Some(value) => Ok(PyString::new(py, value).repr()?.to_string()),
+                None => Ok("None".into()),
+            }
+        };
+        let tuple = |values: Vec<String>| match values.len() {
+            1 => format!("({},)", values[0]),
+            _ => format!("({})", values.join(", ")),
+        };
+        let version = format!("Version.{:?}", *self.version());
+        let name = optional_string(&self.name())?;
+        let title = optional_string(&self.title())?;
+        let date = optional_string(&self.date())?;
+        let time = optional_string(&self.time())?;
+        let origin = optional_string(&self.origin())?;
+        let user = optional_string(&self.user())?;
+        let style = optional_string(&self.style())?;
+        let language_options = tuple(
+            self.language_options()
+                .iter()
+                .map(|value| Ok(PyString::new(py, value).repr()?.to_string()))
+                .collect::<PyResult<Vec<_>>>()?,
+        );
+        let mode_options =
+            tuple(self.mode_options().iter().map(|mode| format!("Mode.{mode:?}")).collect());
+        let standard = optional_string(&self.standard())?;
+        Ok(format!(
+            "SurveyInfo(\n    version={version},\n    name={name},\n    title={title},\n    date={date},\n    time={time},\n    origin={origin},\n    user={user},\n    style={style},\n    language_options={language_options},\n    mode_options={mode_options},\n    standard={standard},\n)"
+        ))
+    }
+
     /// The version attribute is used to indicate the version of the Triple-S
     /// standard that applies to this specification.
     #[getter(version)]

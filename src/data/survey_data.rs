@@ -225,6 +225,16 @@ impl SurveyData {
     /// Total number of rows
     ///
     /// Will default to `0` if data was not loaded
+    /// 
+    /// ```
+    /// use triple_s::SurveyData;
+    /// 
+    /// let empty = SurveyData::empty();
+    /// 
+    /// assert_eq!(empty.num_response()?, 0);
+    /// 
+    /// Ok::<(), anyhow::Error>(())
+    /// ```
     pub fn num_response(&self) -> PolarsResult<usize> {
         match self.frame.as_ref() {
             Some(lf) => Ok(lf.clone().collect()?.height()),
@@ -306,8 +316,20 @@ impl SurveyData {
             .into_iter()
             .map(|(field, value)| format!("{}: {}", field, value))
             .collect::<Vec<String>>()
-            .join(",\n  ");
+            .join("\n  ");
         Ok(format!("SurveyData({{\n  {}\n}})", formatted))
+    }
+
+    pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<Py<RowIterator>> {
+        let df = self.lazy()?
+            .clone()
+            .collect()
+            .map_err(PyPolarsErr::Polars)?;
+
+        Py::new(py, RowIterator {
+            df,
+            index: 0,
+        })
     }
 
     /// Create new empty [`SurveyData`] instance
@@ -330,8 +352,9 @@ impl SurveyData {
     /// Export data as polars DataFrame
     #[pyo3(name = "to_polars")]
     pub fn py_to_polars<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let frame =
-            self.to_polars().map(PyDataFrame).map_err(|err| PyPolarsErr::Polars(err))?;
+        let frame = self.to_polars()
+            .map(PyDataFrame)
+            .map_err(|err| PyPolarsErr::Polars(err))?;
         frame.into_pyobject(py)
     }
 
@@ -364,10 +387,49 @@ impl std::fmt::Debug for SurveyData {
     }
 }
 
-// pub struct QuestionData {
-//     qname: String,
-//     backend: Arc<SurveyData>
-// }
+// ---------- Helpers -----------
+#[cfg(feature="pyo3")]
+#[pyclass]
+pub(crate) struct RowIterator {
+    df: DataFrame,
+    index: usize,
+}
+
+#[cfg(feature="pyo3")]
+#[pymethods]
+impl RowIterator {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__<'py>(
+        &mut self,
+        py: Python<'py>,
+    ) -> PyResult<Option<Bound<'py, PyAny>>> {
+        if self.index >= self.df.height() {
+            return Ok(None);
+        }
+
+        let dict = PyDict::new(py);
+
+        for column in self.df.columns() {
+            use crate::utils::anyvalue_to_python;
+
+            let value = column
+                .get(self.index)
+                .map_err(PyPolarsErr::Polars)?;
+
+            dict.set_item(
+                column.name().as_str(),
+                anyvalue_to_python(py, value)?,
+            )?;
+        }
+
+        self.index += 1;
+
+        Ok(Some(dict.into_any()))
+    }
+}
 
 #[cfg(test)]
 mod tests {

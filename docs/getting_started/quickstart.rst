@@ -1,7 +1,7 @@
 Quickstart
 ==========
 
-Load Survey
+Loading a triple-s Survey
 ---------------------------
 
 Load triple-s survey via :func:`read_triple_s`:
@@ -17,10 +17,10 @@ Load triple-s survey via :func:`read_triple_s`:
 
    print(survey)
 
-
 Output:
 
-.. code-block:: bash
+.. code-block:: python
+   :class: code-output
 
    Survey({
       name: "SP5201-1"
@@ -29,26 +29,96 @@ Output:
       num_response: 3
    })
 
+Note that the path to the datafile is optiona, you can alternatively just
+read the datamap:
 
-Viewing response data
-******************
+.. code-block:: python
 
+   from triple_s import read_triple_s
+
+   survey = read_datamap("path/to/survey.sss", )
+   print(survey)
+
+Output:
+
+.. code-block:: python
+   :class: code-output
+
+   Survey({
+      name: "SP5201-1"
+      title: "Historic House Exit Survey<br/>First Wave"
+      questions: ["RESPONDENT_ID", "Q1.a", "Q1.b", ...]
+      num_response: 0
+   })
+
+
+Getting Survey Data
+***********************************
+
+Viewing data from a respondent via indexing:
+
+.. code-block:: python
+
+   from pprint import pprint
+   from triple_s import read_triple_s
+
+   survey = read_datamap("path/to/survey.sss", "path/to/data.asc")
+   respondent_1 = survey[0]
+   pprint(respondent_1)
+
+Alternatively, you can iterate each individual response like this:
+
+.. code-block:: python
+
+   from triple_s import read_triple_s
+
+   survey = read_datamap("path/to/survey.sss", "path/to/data.asc")
+   for response in survey:
+      print(response)
+   
+*Note: Responses returned by iteration or indexing are copies.
+Modifying them does not change the survey's underlying data.
+For example:*
+
+.. code-block:: python
+
+   from triple_s import read_triple_s
+
+   survey = read_triple_s("path/to/survey.sss", "path/to/data.asc")
+   resp_1 = survey[1]
+
+   print("Original value:", resp_1["Q2"])
+   resp_1["Q2"] = 2
+
+   print("Modified copy:", resp_1["Q2"])
+   print("Survey value:", survey[1]["Q2"])
+
+
+
+*You will notice the value of 'Q2' hasn't changed:*
+
+.. code-block:: text
+   :class: code-output
+
+   Original value: 1
+   Modified copy: 2
+   Survey value: 1
 
 Datamap
 ---------------------------
 
 Getting datamap of a survey
-******************
+***************************
 
-1) From :func::`Survey.datamap`:
-~~~~~~~~~~~~~~~~~~~~~~~~~
+1) From :attr:`triple_s.Survey.datamap`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Check survey datamap via attribute :func::`Survey.datamap`:
+Check survey datamap via attribute :attr:`triple_s.Survey.datamap`:
 
 .. code-block:: python
 
    from triple_s import read_triple_s
-   survey = read_datamap(
+   survey = read_triple_s(
       "path/to/survey.sss",
       path_data = None
       )
@@ -57,20 +127,19 @@ Check survey datamap via attribute :func::`Survey.datamap`:
 
 
 2) Use :func:`triple_s.read_datamap`
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Alternatively, to read just the datamap, use :func:`read_datamap` function:
 
 .. code-block:: python
 
    from triple_s import read_datamap
-
    datamap = read_datamap("survey.sss")
    print(datamap.title)
    print(datamap.info.version)
 
 Inspect and edit a question
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Look up a question by name with ``get_question()``. Names are case
 insensitive, and a missing question returns ``None``.
@@ -93,7 +162,6 @@ Serialise the current datamap to XML and save the returned string:
 .. code-block:: python
 
    from pathlib import Path
-
    xml = datamap.to_xml()
    Path("updated.sss").write_text(xml, encoding="utf-8")
 
