@@ -649,6 +649,29 @@ impl SurveyInfo {
         })
     }
 
+    /// Export contents to a dictionary.
+    ///
+    /// Example:
+    ///
+    /// ```python
+    /// from triple_s import SurveyInfo
+    ///
+    /// info = SurveyInfo(
+    ///     version=Version.V2_0,
+    ///     name='SP5201-1',
+    ///     title='Historic House Exit Survey<br/>First Wave',
+    ///     date='14 April 2005',
+    ///     time='16:00',
+    ///     origin='SurveyProg v1.3.05',
+    ///     user='User Site',
+    ///     style=None,
+    ///     language_options=(),
+    ///     mode_options=(),
+    ///     standard=None,
+    /// )
+    ///
+    /// print(info.to_dict())
+    /// ```
     #[pyo3(signature = () -> "dict[str, str]")]
     fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
         let dict = PyDict::new(py);

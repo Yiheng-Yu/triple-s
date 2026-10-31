@@ -653,7 +653,7 @@ impl Record {
         self.content().len()
     }
 
-    fn __getitem__<'py>(&self, index: &Bound<'py, PyAny>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn __getitem__<'py>(&self, index: &Bound<'py, PyAny>) -> PyResult<Py<PyAny>> {
         let py = index.py();
 
         if let Ok(number) = index.extract::<isize>() {
@@ -848,37 +848,8 @@ impl RecordIterator {
 mod tests {
     use super::*;
 
-    // fn unicode_survey(csv: bool) -> super::super::Datamap {
-    //     let positions = if csv {
-    //         ("1", "1", "2", "2")
-    //     } else {
-    //         ("1", "3", "4", "5")
-    //     };
-    //     crate
-    //         ::read_from_string(
-    //             &format!(
-    //                 r#"<sss version="2.0"><survey><record ident="V" format="{}">
-    //         <variable ident="1" type="character"><name>TEXT</name>
-    //             <position start="{}" finish="{}"/><size>3</size></variable>
-    //         <variable ident="2" type="quantity"><name>NUMBER</name>
-    //             <position start="{}" finish="{}"/><values><range from="0" to="99"/></values></variable>
-    //         </record></survey></sss>"#,
-    //                 if csv {
-    //                     "csv"
-    //                 } else {
-    //                     "fixed"
-    //                 },
-    //                 positions.0,
-    //                 positions.1,
-    //                 positions.2,
-    //                 positions.3
-    //             )
-    //         )
-    //         .unwrap()
-    // }
-
     #[test]
-    fn fixed_width_record_separators_preserve_fields() {
+    fn test_fixed_width_record_separators_preserve_fields() {
         for separator in ["\n", "\r\n", ""] {
             for trailing_separator in [false, true] {
                 let mut input = ["a   ", "  b ", "    "].join(separator);

@@ -1,46 +1,57 @@
-# Configuration file for the Sphinx documentation builder.
-#
-# For the full list of built-in configuration values, see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
+"""Sphinx configuration for the Python documentation."""
+
 import re
 from pathlib import Path
+from urllib.parse import urljoin, urlsplit
 
-# -- Project information --------------------------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+from docutils import nodes
+from sphinx.environment.adapters.toctree import TocTree
 
-project = 'triple-s'
-copyright = '2026, Yiheng Yu'
-author = 'Yiheng Yu'
-
-# -- General configuration ------------------------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
+project = "triple-s"
+copyright = "2026, Yiheng Yu"
+author = "Yiheng Yu"
 
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
-    "sphinx.ext.viewcode",
 ]
 
 napoleon_use_ivar = False
 
-templates_path = ['_templates']
-source_suffix = ".rst"
-master_doc = "index"
+templates_path = ["_templates"]
 
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
-# -- Options for HTML output -------------------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
-
-html_theme = 'furo'
-html_static_path = ['_static']
-html_css_files = ['style.css']
-html_js_files = ['code-blocks.js', 'sidebar.js']
+html_theme = "furo"
+html_static_path = ["_static"]
+html_css_files = ["style.css"]
+html_js_files = [
+    ("code-blocks.js", {"defer": "defer"}),
+    ("sidebar.js", {"defer": "defer"}),
+]
 
 PYTHON_API_CLASSES = {
-    "Code", "CodeFormat", "DataRange", "DataFormat", "Location", "Mode",
-    "Question", "QuestionType", "Record", "Response", "Spread", "Datamap", "Survey",
-    "SurveyInfo", "SurveyData", "Text", "Usage", "Value", "Variant", "Version",
+    "Code",
+    "CodeFormat",
+    "DataRange",
+    "DataFormat",
+    "Location",
+    "Mode",
+    "Question",
+    "QuestionData",
+    "QuestionType",
+    "Record",
+    "Response",
+    "Spread",
+    "Datamap",
+    "Survey",
+    "SurveyInfo",
+    "SurveyData",
+    "Text",
+    "Usage",
+    "Value",
+    "Variant",
+    "Version",
 }
 PYTHON_API_FUNCTIONS = {"read_datamap", "read_triple_s"}
 
@@ -100,6 +111,59 @@ def prepare_docstring(app, what, name, obj, options, lines):
     lines[:] = result
 
 
+def rebuild_navigation(app, env):
+    """Refresh every sidebar when titles, sections, or toctrees change."""
+    navigation = tuple((name, toc.pformat()) for name, toc in sorted(env.tocs.items()))
+    if navigation != getattr(env, "global_navigation", None):
+        env.global_navigation = navigation
+        return sorted(env.found_docs)
+    return []
+
+
+def prepare_sidebar(app, pagename, templatename, context, doctree):
+    """Keep API navigation at class/function level without changing the page TOC."""
+    def sidebar_toctree(**kwargs):
+        tree = TocTree(app.env).get_toctree_for(pagename, app.builder, **kwargs)
+        if tree is None:
+            return ""
+        page_uri = app.builder.get_target_uri(pagename)
+        # Work from the leaves upward so removed headings can promote their
+        # retained children (for example, the functions under descriptive titles).
+        for item in reversed(list(tree.findall(nodes.list_item))):
+            reference = next(item.findall(nodes.reference), None)
+            if reference is None:
+                continue
+            uri = urlsplit(urljoin(page_uri, reference.get("refuri", "")))
+            if not uri.path.startswith("reference/") or not uri.fragment:
+                continue
+            title = reference.astext()
+            symbol = uri.fragment.removeprefix("triple_s.")
+            keep = (
+                title in PYTHON_API_CLASSES
+                or symbol in PYTHON_API_FUNCTIONS
+                or symbol in {"MissingKeyError", "NoDataError"}
+            )
+            # A standalone class page already supplies its class-level link.
+            parent_item = item.parent.parent
+            parent_reference = next(parent_item.findall(nodes.reference), None)
+            if parent_reference is not None and parent_reference.astext() == title:
+                keep = False
+            if not keep:
+                children = [
+                    child
+                    for nested in item.children
+                    if isinstance(nested, nodes.bullet_list)
+                    for child in nested.children
+                ]
+                position = item.parent.index(item)
+                item.parent[position:position + 1] = children
+        return app.builder.render_partial(tree)["fragment"]
+
+    context["sidebar_toctree"] = sidebar_toctree
+
+
 def setup(app):
     # Run before Napoleon parses the Google-style argument/attribute sections.
     app.connect("autodoc-process-docstring", prepare_docstring, priority=100)
+    app.connect("env-updated", rebuild_navigation)
+    app.connect("html-page-context", prepare_sidebar)

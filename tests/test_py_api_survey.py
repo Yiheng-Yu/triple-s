@@ -34,8 +34,9 @@ def test_read_file_success(survey):
     print(survey.data)
     
     print()
-    print("Survey info:")
-    print(survey.info)
+    print("Survet data:")
+    print(survey["Q1.b"])
+    
 
 
 @pytest.mark.parametrize("index", [0, 1, 2])

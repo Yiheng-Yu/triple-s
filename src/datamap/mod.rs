@@ -19,6 +19,7 @@ pub use text::{Text, Variant};
 #[cfg(feature = "pyo3")]
 use crate::{
     data::SurveyData,
+    datamap::record::RecordIterator,
     utils::{get_type_name, py_value_error},
 };
 use crate::{
@@ -205,7 +206,6 @@ impl Datamap {
         let colname_repr = format!("[{}]", colname_repr);
         vec![("questions", colname_repr)]
     }
-
 }
 
 #[cfg(feature = "pyo3")]
@@ -326,6 +326,14 @@ impl Datamap {
             .join(",\n  ");
 
         Ok(format!("Datamap({{\n  {}\n}})", formatted))
+    }
+
+    fn __getitem__<'py>(&self, index: &Bound<'py, PyAny>) -> PyResult<Py<PyAny>> {
+        self.record().__getitem__(index)
+    }
+
+    fn __iter__(&self, py: Python<'_>) -> PyResult<Py<RecordIterator>> {
+        self.record().__iter__(py)
     }
 
     /// export content of datamap to triple-s classic string.

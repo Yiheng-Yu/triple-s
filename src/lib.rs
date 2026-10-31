@@ -179,7 +179,7 @@ use error::EventLog;
 pub use prelude::DeepCopy;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-pub use survey::Survey;
+pub use survey::{QuestionData, Survey};
 
 // -------------------------------------------------------------------------------------------------
 
@@ -236,7 +236,7 @@ mod triple_s {
     #[pymodule_export]
     pub use crate::error::MissingKeyError;
     #[pymodule_export]
-    pub use crate::survey::Survey;
+    pub use crate::survey::{QuestionData, Survey};
     use crate::{datamap::read::read_from_reader, read_triple_s};
 
     /// Read triple-s datamap

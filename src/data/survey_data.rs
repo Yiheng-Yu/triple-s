@@ -43,7 +43,7 @@ pub struct SurveyData {
     frame: Option<LazyFrame>,
 
     /// Cache that the `frame` sink into
-    cache: Option<CacheDir>,
+    cache: Option<Arc<CacheDir>>,
 }
 
 impl Clone for SurveyData {
@@ -53,7 +53,7 @@ impl Clone for SurveyData {
                 let new = lf.clone();
                 Self {
                     frame: Some(new),
-                    cache: None,
+                    cache: self.cache.clone(),
                 }
             }
             None => Self::default(),
@@ -69,7 +69,7 @@ impl SurveyData {
     pub fn cache(&self) -> Option<&str> {
         match self.cache.as_ref() {
             None => None,
-            Some(cache) => match cache {
+            Some(cache) => match cache.as_ref() {
                 CacheDir::Temporary(path) => Some(path.to_str()).flatten(),
                 CacheDir::Persistent(path) => Some(path.to_str()).flatten(),
             },
@@ -148,7 +148,7 @@ impl SurveyData {
 
         Ok(Self {
             frame: Some(lazyframe),
-            cache: Some(cache),
+            cache: Some(Arc::new(cache)),
         })
     }
 
@@ -170,7 +170,7 @@ impl SurveyData {
 
         Ok(Self {
             frame: Some(frame),
-            cache: Some(CacheDir::Temporary(cache)),
+            cache: Some(Arc::new(CacheDir::Temporary(cache))),
         })
     }
 
@@ -191,7 +191,7 @@ impl SurveyData {
 
         Ok(Self {
             frame: Some(frame),
-            cache: Some(CacheDir::Temporary(cache)),
+            cache: Some(Arc::new(CacheDir::Temporary(cache))),
         })
     }
 
@@ -224,14 +224,14 @@ impl SurveyData {
     /// Total number of rows
     ///
     /// Will default to `0` if data was not loaded
-    /// 
+    ///
     /// ```
     /// use triple_s::SurveyData;
-    /// 
+    ///
     /// let empty = SurveyData::empty();
-    /// 
+    ///
     /// assert_eq!(empty.num_response()?, 0);
-    /// 
+    ///
     /// Ok::<(), anyhow::Error>(())
     /// ```
     pub fn num_response(&self) -> PolarsResult<usize> {
@@ -320,15 +320,9 @@ impl SurveyData {
     }
 
     pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<Py<RowIterator>> {
-        let df = self.lazy()?
-            .clone()
-            .collect()
-            .map_err(PyPolarsErr::Polars)?;
+        let df = self.lazy()?.clone().collect().map_err(PyPolarsErr::Polars)?;
 
-        Py::new(py, RowIterator {
-            df,
-            index: 0,
-        })
+        Py::new(py, RowIterator { df, index: 0 })
     }
 
     /// Create new empty [`SurveyData`] instance
@@ -351,9 +345,8 @@ impl SurveyData {
     /// Export data as polars DataFrame
     #[pyo3(name = "to_polars")]
     pub fn py_to_polars<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let frame = self.to_polars()
-            .map(PyDataFrame)
-            .map_err(|err| PyPolarsErr::Polars(err))?;
+        let frame =
+            self.to_polars().map(PyDataFrame).map_err(|err| PyPolarsErr::Polars(err))?;
         frame.into_pyobject(py)
     }
 
@@ -387,24 +380,21 @@ impl std::fmt::Debug for SurveyData {
 }
 
 // ---------- Helpers -----------
-#[cfg(feature="pyo3")]
+#[cfg(feature = "pyo3")]
 #[pyclass]
 pub(crate) struct RowIterator {
     df: DataFrame,
     index: usize,
 }
 
-#[cfg(feature="pyo3")]
+#[cfg(feature = "pyo3")]
 #[pymethods]
 impl RowIterator {
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
-    fn __next__<'py>(
-        &mut self,
-        py: Python<'py>,
-    ) -> PyResult<Option<Bound<'py, PyAny>>> {
+    fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
         if self.index >= self.df.height() {
             return Ok(None);
         }
@@ -414,14 +404,9 @@ impl RowIterator {
         for column in self.df.columns() {
             use crate::utils::anyvalue_to_python;
 
-            let value = column
-                .get(self.index)
-                .map_err(PyPolarsErr::Polars)?;
+            let value = column.get(self.index).map_err(PyPolarsErr::Polars)?;
 
-            dict.set_item(
-                column.name().as_str(),
-                anyvalue_to_python(py, value)?,
-            )?;
+            dict.set_item(column.name().as_str(), anyvalue_to_python(py, value)?)?;
         }
 
         self.index += 1;
