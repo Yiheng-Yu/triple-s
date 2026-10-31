@@ -1,17 +1,14 @@
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{ path::{ Path, PathBuf }, sync::Arc };
 
 use anyhow::Result;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::{prelude::*, types::PyDict};
+use pyo3::{ prelude::*, types::PyDict };
 #[cfg(feature = "pyo3")]
-use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
+use pyo3_polars::{ PyDataFrame, error::PyPolarsErr };
 use tempfile::TempPath;
 
-use crate::error::{InvalidArg, NoDataError};
+use crate::error::{ InvalidArg, NoDataError };
 
 /// The backing file and its cleanup policy.
 #[derive(Debug)]
@@ -33,11 +30,8 @@ impl CacheDir {
     }
 }
 
-/// Survey data
-#[cfg_attr(
-    feature = "pyo3",
-    pyclass(module = "triple_s", name = "SurveyData", from_py_object)
-)]
+/// Respondent data with a lazy query plan and an optional backing cache.
+#[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "SurveyData", from_py_object))]
 #[derive(Default)]
 pub struct SurveyData {
     /// The query plan for reading data
@@ -70,10 +64,11 @@ impl SurveyData {
     pub fn cache(&self) -> Option<&str> {
         match self.cache.as_ref() {
             None => None,
-            Some(cache) => match cache {
-                CacheDir::Temporary(path) => Some(path.to_str()).flatten(),
-                CacheDir::Persistent(path) => Some(path.to_str()).flatten(),
-            },
+            Some(cache) =>
+                match cache {
+                    CacheDir::Temporary(path) => Some(path.to_str()).flatten(),
+                    CacheDir::Persistent(path) => Some(path.to_str()).flatten(),
+                }
         }
     }
 
@@ -103,10 +98,40 @@ impl SurveyData {
 }
 
 impl SurveyData {
+    /// Creates an empty `SurveyData` instance
+    ///
+    /// Example:
+    ///
+    /// ```
+    /// use triple_s::SurveyData;
+    ///
+    /// let data = SurveyData::empty();
+    /// assert_eq!(data.has_data(), false);
+    ///
+    /// ```
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    /// check if data loaded or not
+    ///
+    /// Example:
+    ///
+    /// ```
+    /// use triple_s::SurveyData;
+    ///
+    /// let data = SurveyData::default();
+    /// assert_eq!(data.has_data(), false);
+    /// ```
+    #[inline]
+    pub fn has_data(&self) -> bool {
+        self.frame.is_some()
+    }
+
     /// Create new instance fro parquet file
     pub fn from_parquet(
         path_parquet: impl AsRef<Path>,
-        schema: Option<Arc<Schema>>,
+        schema: Option<Arc<Schema>>
     ) -> Result<Self> {
         let cache = CacheDir::Persistent(std::path::absolute(path_parquet.as_ref())?);
         let args = ScanArgsParquet {
@@ -124,7 +149,7 @@ impl SurveyData {
         })
     }
 
-    /// Create new instance from in-memory [`polars::LazyFrame`]
+    /// Create new instance from in-memory [`polars::prelude::LazyFrame`]
     pub fn from_lazyframe(frame: LazyFrame) -> PolarsResult<Self> {
         let cache = tempfile::NamedTempFile::with_suffix(".parquet")?.into_temp_path();
 
@@ -146,7 +171,7 @@ impl SurveyData {
         })
     }
 
-    /// Create new instance from in-memory [`polars::DataFrame`]
+    /// Create new instance from in-memory [`polars::prelude::DataFrame`]
     pub fn from_polars(df: DataFrame) -> PolarsResult<Self> {
         Self::from_lazyframe(df.lazy())
     }
@@ -175,28 +200,68 @@ impl SurveyData {
             .collect()
     }
 
+    /// Dump cached data to parquet datafile
+    pub fn to_parquet(&self, parquet_path: impl AsRef<Path>) -> PolarsResult<()> {
+        let path_sink = PlRefPath::try_from_path(parquet_path.as_ref())?;
+        let path_sink = SinkDestination::File {
+            target: SinkTarget::Path(path_sink),
+        };
+
+        let write_option = ParquetWriteOptions::default();
+        let write_formt = FileWriteFormat::Parquet(Arc::new(write_option));
+
+        self.lazy()?.clone().sink(path_sink, write_formt, UnifiedSinkArgs::default())?.collect()?;
+
+        Ok(())
+    }
+
     /// Total number of rows
+    ///
+    /// Will default to `0` if data was not loaded
     pub fn num_response(&self) -> PolarsResult<usize> {
-        let num_response = self
-            .lazy()
-            .map_err(|err| PolarsError::NoData(err.to_string().into()))?
-            .clone()
-            .collect()?
-            .height();
-        Ok(num_response)
+        match self.frame.as_ref() {
+            Some(lf) => Ok(lf.clone().collect()?.height()),
+            None => Ok(0),
+        }
     }
 
     /// List of question names in the current instance
     pub fn questions(&self) -> PolarsResult<Vec<String>> {
         match self.frame.as_ref() {
             None => Ok(Vec::new()),
-            Some(lf) => Ok(lf
-                .clone()
-                .collect_schema()?
-                .iter_names()
-                .map(|s| s.to_string())
-                .collect::<Vec<String>>()),
+            Some(lf) =>
+                Ok(
+                    lf
+                        .clone()
+                        .collect_schema()?
+                        .iter_names()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<String>>()
+                ),
         }
+    }
+
+    /// Used by Survey::__repr__
+    #[cfg(feature = "pyo3")]
+    pub(crate) fn py_repr_content(&self) -> PolarsResult<Vec<(&str, String)>> {
+        let mut info = Vec::new();
+
+        const MAX_NUM_COLNAME_SHOW: usize = 3;
+        let colnames = self.questions().ok().unwrap_or_default();
+        let mut colname_repr = colnames[0..colnames.len().min(MAX_NUM_COLNAME_SHOW)]
+            .iter()
+            .map(|s| format!("{:?}", s))
+            .collect::<Vec<String>>()
+            .join(", ");
+        if colnames.len() > MAX_NUM_COLNAME_SHOW {
+            colname_repr.push_str(", ...");
+        }
+        let colname_repr = format!("[{}]", colname_repr);
+        info.push(("questions", colname_repr));
+
+        let num_response = self.num_response()?.to_string();
+        info.push(("num_response", num_response));
+        Ok(info)
     }
 }
 
@@ -210,8 +275,8 @@ impl SurveyData {
     }
 
     #[getter(num_response)]
-    fn py_get_num_response(&self) -> usize {
-        self.num_response().ok().unwrap_or_default()
+    fn py_get_num_response(&self) -> PyResult<usize> {
+        self.num_response().map_err(|err| PyPolarsErr::Polars(err).into())
     }
 
     fn __repr__(&self) -> PyResult<String> {
@@ -225,8 +290,8 @@ impl SurveyData {
             .collect::<Vec<String>>()
             .join(", ");
         if colnames.len() > MAX_NUM_COLNAME_SHOW {
-            colname_repr.push_str(", ...")
-        };
+            colname_repr.push_str(", ...");
+        }
         let colname_repr = format!("[{}]", colname_repr);
         info.push(("questions", colname_repr));
 
@@ -265,8 +330,10 @@ impl SurveyData {
     /// Export data as polars DataFrame
     #[pyo3(name = "to_polars")]
     pub fn py_to_polars<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let frame =
-            self.to_polars().map(PyDataFrame).map_err(|err| PyPolarsErr::Polars(err))?;
+        let frame = self
+            .to_polars()
+            .map(PyDataFrame)
+            .map_err(|err| PyPolarsErr::Polars(err))?;
         frame.into_pyobject(py)
     }
 
@@ -284,6 +351,12 @@ impl SurveyData {
     pub fn py_describe<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let frame = self.py_to_polars(py)?;
         frame.call_method("describe", (), None)
+    }
+
+    /// Check if data loaded or not
+    #[pyo3(name = "has_data")]
+    fn py_has_data(&self) -> bool {
+        self.has_data()
     }
 }
 

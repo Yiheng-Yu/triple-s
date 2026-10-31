@@ -666,7 +666,7 @@ impl Variant {
         self.mode.write()
     }
 
-    /// Corresponds to the `xml::lang attribute of a <text> node.
+    /// Corresponds to the `xml::lang` attribute of a `<text>` node.
     pub fn language(&self) -> Option<String> {
         self.language.read().as_ref().map(|item| item.clone())
     }
@@ -887,7 +887,7 @@ impl Variant {
         self.set_mode(mode).map_err(py_value_error)
     }
 
-    /// Corresponds to the `xml::lang attribute of a <text> node.
+    /// Corresponds to the `xml::lang` attribute of a `<text>` node.
     #[getter(language)]
     fn py_get_language(&self) -> Option<String> {
         self.language()

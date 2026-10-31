@@ -41,14 +41,14 @@ One subfield, two characters wide:
 
 - Raw data: "13"
 - Split: "13"
-- Selected codes: [13]
+- Selected codes: `[13]`
 
 Two subfields, each two characters wide. The second slot contains two
 spaces and is unused:
 
 - Raw data: "13  "
 - Split: "13" | "  "
-- Selected codes: [13]
+- Selected codes: `[13]`
 
 Three subfields, each three characters wide:
 

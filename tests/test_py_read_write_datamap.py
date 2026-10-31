@@ -269,18 +269,18 @@ def test_record_to_xml(xml1):
 
 
 @pytest.mark.parametrize("source", ["xml1", "classic"])
-def test_survey_to_xml1_from_to(source, request, tmp_path):
-    survey = request.getfixturevalue(source)
-    output = survey.to_xml()
+def test_datamap_to_xml1_from_to(source, request, tmp_path):
+    datamap = request.getfixturevalue(source)
+    output = datamap.to_xml()
     root = etree.fromstring(output)
     assert root.tag == "sss"
     assert root.find("survey") is not None
-    assert root.findtext("survey/name") == survey.survey_info.name
-    assert root.findtext("survey/title") == survey.title
-    assert xml_content(root.find("survey/record")) == xml_content(etree.fromstring(survey.record.to_xml()))
+    assert root.findtext("survey/name") == datamap.info.name
+    assert root.findtext("survey/title") == datamap.title
+    assert xml_content(root.find("survey/record")) == xml_content(etree.fromstring(datamap.record.to_xml()))
     path = tmp_path / "export.sss"
     path.write_text(output, encoding="utf-8")
     restored = triple_s.read_datamap(str(path))
-    # The reader currently drops options and retains escaped survey metadata.
+    # The reader currently drops options and retains escaped datamap metadata.
     # Question content should still survive a complete document round trip.
-    assert restored.record.to_xml() == survey.record.to_xml()
+    assert restored.record.to_xml() == datamap.record.to_xml()

@@ -3,19 +3,19 @@ Survey
 
 .. autoclass:: triple_s.Survey
 
-Attributes
-----------------
+Use :func:`triple_s.read_triple_s` to read a datamap and optional respondent
+file together. ``info`` shares metadata with ``datamap.info``; changing either
+view updates the survey. ``title`` is also writable.
 
-.. autoattribute:: triple_s.Survey.record
-.. autoattribute:: triple_s.Survey.survey_info
+Attributes
+----------
+
+.. autoattribute:: triple_s.Survey.datamap
+.. autoattribute:: triple_s.Survey.info
 .. autoattribute:: triple_s.Survey.title
 .. autoattribute:: triple_s.Survey.data
 
 Methods
--------------
+-------
 
-.. automethod:: triple_s.Survey.get_question
-.. automethod:: triple_s.Survey.from_dict
-.. automethod:: triple_s.Survey.to_classic
-.. automethod:: triple_s.Survey.to_xml
-.. automethod:: triple_s.Survey.load_data
+.. automethod:: triple_s.Survey.has_data

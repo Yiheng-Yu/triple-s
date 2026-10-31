@@ -47,7 +47,7 @@ html_css_files = ['style.css']
 
 PYTHON_API_CLASSES = {
     "Code", "CodeFormat", "DataRange", "DataFormat", "Location", "Mode",
-    "Question", "QuestionType", "Record", "Response", "Spread", "Survey",
+    "Question", "QuestionType", "Record", "Response", "Spread", "Datamap", "Survey",
     "SurveyInfo", "SurveyData", "Text", "Usage", "Value", "Variant", "Version",
 }
 PYTHON_API_FUNCTIONS = {"read_datamap", "read_triple_s"}
@@ -65,15 +65,12 @@ def rustdoc_link(match):
 
 def prepare_docstring(app, what, name, obj, options, lines):
     """Render the Rust bindings' Markdown examples as reStructuredText."""
-    if what == "class" and name.rsplit(".", 1)[-1] == "Survey":
+    if what == "class" and name.rsplit(".", 1)[-1] == "Datamap":
         # Read the Python guide directly so Sphinx does not need a rebuilt
         # native extension after documentation-only changes.
         source = Path(__file__).resolve().parents[1] / "src/doc/survey.python.rst"
         app.env.note_dependency(str(source))
-        lines[:] = (source.read_text(encoding="utf-8")
-                    .replace("survey.to_polars()", "survey.data.to_polars()")
-                    .replace("survey.to_pandas()", "survey.data.to_pandas()")
-                    .splitlines())
+        lines[:] = source.read_text(encoding="utf-8").splitlines()
         return
     if name == "triple_s.Question.format":
         # This inherited Rust docstring has an XML example without an opening fence.
@@ -85,8 +82,6 @@ def prepare_docstring(app, what, name, obj, options, lines):
     result = []
     in_code = False
     for line in lines:
-        line = (line.replace("Survey.to_polars()", "Survey.data.to_polars()")
-                    .replace("Survey.to_pandas()", "Survey.data.to_pandas()"))
         if line.strip().startswith("```"):
             if in_code:
                 in_code = False
@@ -106,9 +101,9 @@ def prepare_docstring(app, what, name, obj, options, lines):
                 result.extend(["", heading[1], "^" * len(heading[1]), ""])
             else:
                 result.append(line)
-    # The Question constructor's Attributes block uses unindented fields.
-    if name == "triple_s.Question" and "Attributes:" in result:
-        start = result.index("Attributes:") + 1
+    # The Question constructor's Args block uses unindented fields.
+    if name == "triple_s.Question" and "Args:" in result:
+        start = result.index("Args:") + 1
         result[start:] = ["    " + line if line else "" for line in result[start:]]
     lines[:] = result
 

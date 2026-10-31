@@ -5,10 +5,8 @@ pub mod response;
 pub mod survey_info;
 pub mod text;
 
-use std::path::Path;
-
 use anyhow::Result;
-use parking_lot::{ArcRwLockReadGuard, RawRwLock};
+use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*, types::PyDict};
 pub use question::{CodeFormat, Location, Question, QuestionType, Spread, Usage};
@@ -23,30 +21,37 @@ use crate::{
     data::SurveyData,
     utils::{get_type_name, py_value_error},
 };
-use crate::{prelude::Flag, utils::ArcLock};
+use crate::{
+    prelude::Flag,
+    utils::{ArcLock, lock_it_up},
+};
 
 // Rustdoc always uses the Rust guide, including builds with Python bindings.
 #[cfg_attr(any(not(feature = "pyo3"), doc), doc = include_str!("../doc/survey.rust.md"))]
 #[cfg_attr(all(feature = "pyo3", not(doc)), doc = include_str!("../doc/survey.python.rst"))]
-#[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "Survey"))]
-pub struct Survey {
-    info: SurveyInfo,
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(module = "triple_s", name = "Datamap", from_py_object)
+)]
+#[derive(Debug, Clone)]
+pub struct Datamap {
+    info: ArcLock<SurveyInfo>,
     record: Record,
 }
 
-impl Survey {
-    /// Creates an empty survey with some [`SurveyInfo`] provided
+impl Datamap {
+    /// Creates an empty datamap with the provided [`SurveyInfo`].
     pub fn new(info: SurveyInfo) -> Self {
         Self {
-            info,
+            info: lock_it_up(info),
             record: Record::default(),
         }
     }
 
-    /// cretes a default survey with version set to be `1.2`
+    /// Creates an empty datamap with Triple-S version 1.2.
     pub fn empty() -> Self {
         Self {
-            info: SurveyInfo::new(Version::V1_2),
+            info: lock_it_up(SurveyInfo::new(Version::V1_2)),
             record: Record::default(),
         }
     }
@@ -54,14 +59,14 @@ impl Survey {
     /// Collects survey meta information, i.e., survey name & title, creation
     /// date, etc.,
     #[inline]
-    pub fn info(&self) -> &SurveyInfo {
-        &self.info
+    pub fn info(&self) -> RwLockReadGuard<'_, SurveyInfo> {
+        self.info.read()
     }
 
     /// A read-write view of the `info` field
     #[inline]
-    pub fn info_mut(&mut self) -> &mut SurveyInfo {
-        &mut self.info
+    pub fn info_mut(&mut self) -> RwLockWriteGuard<'_, SurveyInfo> {
+        self.info.write()
     }
 
     /// survey record. For more info please check docuentation of the [`Record`]
@@ -87,20 +92,23 @@ impl Survey {
 
     /// export content of datamap to triple-s classic string.
     pub fn to_classic(&self) -> Result<String> {
-        let mut output = format!("SSS\nVERSION {}\n", self.info.version.to_string());
+        let mut output = format!("SSS\nVERSION {}\n", self.info().version().to_string());
         for (name, value) in [
-            ("DATE", &self.info.date),
-            ("TIME", &self.info.time),
-            ("ORIGIN", &self.info.origin),
-            ("USER", &self.info.user),
-            ("STANDARD", &self.info.standard),
+            ("DATE", &self.info().date().as_ref()),
+            ("TIME", &self.info().time().as_ref()),
+            ("ORIGIN", &self.info().origin().as_ref()),
+            ("USER", &self.info().user().as_ref()),
+            ("STANDARD", &self.info().standard().as_ref()),
         ] {
             if let Some(value) = value {
                 output.push_str(&format!("{name} \"{value}\"\n"));
             }
         }
         output.push_str("SURVEY\n");
-        for (name, value) in [("NAME", &self.info.name), ("TITLE", &self.info.title)] {
+        for (name, value) in [
+            ("NAME", self.info().name().as_ref()),
+            ("TITLE", self.info().title().as_ref()),
+        ] {
             if let Some(value) = value {
                 output.push_str(&format!("{name} \"{value}\"\n"));
             }
@@ -120,20 +128,22 @@ impl Survey {
     /// Writes survey metadata and the record, propagating serialisation and I/O
     /// errors.
     pub fn write_xml<W: std::io::Write>(&self, writer: &mut Writer<W>) -> Result<()> {
-        let version = self.info.version.to_string();
+        let version = self.info().version().to_string();
         let mut element =
             writer.create_element("sss").with_attribute(("version", version.as_str()));
-        if let Some(standard) = &self.info.standard {
+        if let Some(standard) = &self.info().standard().as_ref() {
             element = element.with_attribute(("options", standard.as_str()));
         }
-        if !self.info.language_options.is_empty() {
-            element = element
-                .with_attribute(("languages", self.info.language_options.join(" ").as_str()));
+        if !self.info().language_options().is_empty() {
+            element = element.with_attribute((
+                "languages",
+                self.info().language_options().join(" ").as_str(),
+            ));
         }
-        if !self.info.mode_options.is_empty() {
+        if !self.info().mode_options().is_empty() {
             let modes = self
-                .info
-                .mode_options
+                .info()
+                .mode_options()
                 .iter()
                 .map(Flag::to_string)
                 .collect::<Vec<_>>()
@@ -142,18 +152,21 @@ impl Survey {
         }
         element.write_inner_content(|children| {
             for (name, value) in [
-                ("date", &self.info.date),
-                ("time", &self.info.time),
-                ("origin", &self.info.origin),
-                ("user", &self.info.user),
-                ("style", &self.info.style),
+                ("date", &self.info().date().as_ref()),
+                ("time", &self.info().time().as_ref()),
+                ("origin", &self.info().origin().as_ref()),
+                ("user", &self.info().user().as_ref()),
+                ("style", &self.info().style().as_ref()),
             ] {
                 if let Some(value) = value {
                     children.create_element(name).write_text_content(BytesText::new(value))?;
                 }
             }
             children.create_element("survey").write_inner_content(|survey| {
-                for (name, value) in [("name", &self.info.name), ("title", &self.info.title)] {
+                for (name, value) in [
+                    ("name", &self.info().name().as_ref()),
+                    ("title", &self.info().title().as_ref()),
+                ] {
                     if let Some(value) = value {
                         survey
                             .create_element(name)
@@ -168,27 +181,20 @@ impl Survey {
     }
 
     /// (Optional) name of the datamap
-    pub fn name(&self) -> Option<&str> {
-        self.info.name.as_deref()
+    pub fn name(&self) -> Option<String> {
+        self.info().name().clone()
     }
 
     /// (Optional) title of the datamap
-    pub fn title(&self) -> Option<&str> {
-        self.info.title.as_deref()
-    }
-}
-
-impl Survey {
-    /// Load .asc or .csv data as UTF-8, or UTF-16LE/BE when a BOM is present.
-    pub fn load_data(&mut self, path_data: impl AsRef<Path>) -> Result<()> {
-        self.record_mut().load_data(path_data)
+    pub fn title(&self) -> Option<String> {
+        self.info().title().clone()
     }
 }
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl Survey {
-    /// Create a survey from a dictionary containing optional `survey_info`
+impl Datamap {
+    /// Create a datamap from a dictionary containing optional `survey_info`
     /// (or `info`) and `record` values. Each value may be its corresponding
     /// object or a dictionary accepted by that object's `from_dict` method.
     #[staticmethod]
@@ -229,7 +235,10 @@ impl Survey {
             }
         };
 
-        Ok(Self { info, record })
+        Ok(Self {
+            info: lock_it_up(info),
+            record,
+        })
     }
 
     /// get question by question name, returns `None` if question name not exist.
@@ -241,10 +250,15 @@ impl Survey {
     /// (optional) Title of the survey
     #[getter(title)]
     fn py_get_title(&self) -> Option<String> {
-        self.info.title.clone()
+        self.info().title().clone()
     }
 
-    /// Survey record. For more info please check docuentation of the `Record`
+    #[setter(title)]
+    fn py_set_title(&mut self, title: Option<String>) {
+        *self.info_mut().title_mut() = title;
+    }
+
+    /// Datamap record. For more info please check docuentation of the `Record`
     /// class.
     #[getter(record)]
     fn py_get_record(&self) -> Record {
@@ -252,17 +266,9 @@ impl Survey {
     }
 
     /// Collects survey meta information, i.e., survey name & title, creation date, etc.,
-    #[getter(survey_info)]
-    fn py_get_survey_info(&self) -> SurveyInfo {
-        self.info.clone()
-    }
-
-    /// Survey data
-    ///
-    /// Data is loaded via `load_data()` method
-    #[getter(data)]
-    fn py_get_data(&self) -> PyResult<SurveyData> {
-        Ok(self.record().data().clone())
+    #[getter(info)]
+    fn py_get_info(&self) -> SurveyInfo {
+        self.info().clone()
     }
 
     /// export content of datamap to triple-s classic string.
@@ -278,9 +284,10 @@ impl Survey {
     }
 
     /// Load an `.asc` or `.csv` file using the record's skip setting.
-    /// Updates the record's `href`, `data_format`, and loaded data on success.
+    /// Returns `SurveyData` and updates the record's `href` and `data_format`.
+    /// The returned data is not stored on the datamap.
     #[pyo3(name="load_data", signature=(path:"str"))]
-    fn py_load_data(&mut self, path: &str) -> PyResult<()> {
+    fn py_load_data(&mut self, path: &str) -> PyResult<SurveyData> {
         self.record_mut().load_data(path).map_err(py_value_error)
     }
 }
@@ -297,14 +304,16 @@ mod test {
 
         loop {
             match reader.read_event() {
-                Ok(Event::Eof) => break,
+                Ok(Event::Eof) => {
+                    break;
+                }
                 Ok(Event::Comment(_)) => (),
                 Ok(Event::Text(text)) if text.as_ref().trim().is_empty() => (),
                 Ok(Event::Start(tag)) => {
-                    events.push(format!("Start({})", tag.as_ref().trim()))
+                    events.push(format!("Start({})", tag.as_ref().trim()));
                 }
                 Ok(Event::Empty(tag)) => {
-                    events.push(format!("Empty({})", tag.as_ref().trim()))
+                    events.push(format!("Empty({})", tag.as_ref().trim()));
                 }
                 Ok(event) => events.push(format!("{event:?}")),
                 Err(e) => panic!("Invalid XML: {e}"),
@@ -317,17 +326,17 @@ mod test {
     #[test]
     fn survey_xml_metadata_and_record_attributes() {
         let mut info = SurveyInfo::new(Version::V2_0);
-        info.name = Some("hayır olduğunu".into());
-        info.title = Some("<Title>".into());
-        info.date = Some("2026-10-03".into());
-        info.time = Some("12:30".into());
-        info.origin = Some("Exporter".into());
-        info.user = Some("User".into());
-        info.style = Some("p > b { color: red; }".into());
-        info.standard = Some("standardnames".into());
-        info.language_options = vec!["en-GB".into(), "fr".into()];
-        info.mode_options = vec![text::Mode::Interview, text::Mode::Analysis];
-        let mut survey = Survey::new(info);
+        *info.name_mut() = Some("hayır olduğunu".into());
+        *info.title_mut() = Some("<Title>".into());
+        *info.date_mut() = Some("2026-10-03".into());
+        *info.time_mut() = Some("12:30".into());
+        *info.origin_mut() = Some("Exporter".into());
+        *info.user_mut() = Some("User".into());
+        *info.style_mut() = Some("p > b { color: red; }".into());
+        *info.standard_mut() = Some("standardnames".into());
+        *info.language_options_mut() = vec!["en-GB".into(), "fr".into()];
+        *info.mode_options_mut() = vec![text::Mode::Interview, text::Mode::Analysis];
+        let mut survey = Datamap::new(info);
         *survey.record.ident_mut() = 'V';
         *survey.record.skip_mut() = Some("1".into());
         *survey.record.href_mut() = Some("a&\"b.csv".into());
@@ -356,7 +365,7 @@ mod test {
 
     #[test]
     fn survey_write_xml_err() {
-        let mut survey = Survey::empty();
+        let mut survey = Datamap::empty();
         assert!(survey.to_xml().is_err());
         *survey.record.ident_mut() = 'V';
         let xml = survey.to_xml().unwrap();

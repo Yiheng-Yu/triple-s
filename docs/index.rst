@@ -36,28 +36,44 @@ Installation
 
 1) Install with ``pip``::
 
-   pip install triple-s -U
+      pip install triple-s-survey -U
 
 2) install with ``uv``::
 
-   uv pip install triple-s -U
+      uv pip install triple-s-survey -U
 
-Note: 
+Python API
+----------
 
-Installing it for the first time may be a bit slow, this is because one of `triple_s`'s dependency, `polars`,
-takes a while to compile. You might want to add `-v` to see a bit more information, like::
+Import the installed package as ``triple_s``. The API separates survey
+definitions from respondent data:
 
-   pip install triple-s -U -v
+* :class:`triple_s.Survey` combines ``datamap`` and ``data``.
+  :func:`triple_s.read_triple_s` returns a survey, with ``info`` providing
+  direct access to the datamap's metadata, with two main components combined together:
 
-Or if you were using `uv`::
+* :class:`triple_s.Datamap` contains metadata in ``info`` and question
+  definitions in ``record``. :func:`triple_s.read_datamap` returns a datamap.
+  
+* :class:`triple_s.SurveyData` contains respondent data. Both
+  ``datamap.load_data(path)`` and ``datamap.record.load_data(path)`` return
+  this object; use its ``to_polars()`` or ``to_pandas()`` methods to export it.
 
-   uv pip install triple-s -U -v
 
+.. code-block:: python
 
+   from triple_s import read_triple_s
 
+   survey = read_triple_s("survey.sss", "survey.asc")
+   print(survey.info.name)
+   df = survey.data.to_polars()
+   xml = survey.datamap.to_xml()
 
-See :doc:`getting_started/quickstart` for a working Python workflow and
-:doc:`api/index` documents the public Python API.
+Omit the data path to read only the definition; ``survey.has_data()`` then
+returns ``False``.
+
+See :doc:`getting_started/quickstart` for a complete workflow and
+:doc:`api/index` for the public Python API reference.
 
 .. toctree::
    :hidden:

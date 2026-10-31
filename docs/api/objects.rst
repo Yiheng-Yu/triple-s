@@ -7,6 +7,7 @@ Reference documentation for the public classes and enums exported by ``triple_s`
    :maxdepth: 1
 
    survey
+   datamap
    survey_info
    survey_data
    record
