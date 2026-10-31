@@ -4,5 +4,6 @@
       <a class="reference internal" href="{{ pathto(root_doc) }}"{% if pagename == root_doc %} aria-current="page"{% endif %}>Overview</a>
     </li>
   </ul>
-  {{ furo_navigation_tree }}
+  {# Always render the root navigation, including branches outside the current page. #}
+  {{ toctree(collapse=False, titles_only=True, maxdepth=3, includehidden=True) }}
 </div>

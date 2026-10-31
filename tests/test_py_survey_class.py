@@ -32,10 +32,10 @@ def test_read_file_success(survey):
     print()
     print("Survey data repr:")
     print(survey.data)
-
+    
     print()
-    print("Survey info repr:")
-    print(survey.info)
+    print("Survey iter:")
+    print(survey.__iter__())
 
 
 @pytest.mark.parametrize("index", [0, 1, 2])

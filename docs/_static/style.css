@@ -1,3 +1,20 @@
+/* Bundled under atkinson-hyperlegible-next-LICENSE.txt. */
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("atkinson-hyperlegible-next.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  font-style: italic;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("atkinson-hyperlegible-next-italic.ttf") format("truetype");
+}
+
 /* Show the full toctree in Furo's sidebar without disclosure controls. */
 .sidebar-tree .toctree-checkbox ~ ul {
   display: block;
@@ -18,6 +35,8 @@
   src: url("ibm-plex-mono-latin-400-normal.woff2") format("woff2");
 }
 body {
+  --font-stack: "Atkinson Hyperlegible Next", sans-serif;
+  --font-stack--headings: var(--font-stack);
   --code-panel: #f2f2f2;
   --code-border: oklch(96.7% .003 264.542);
   --code-text: oklch(37.3% .034 259.733);

@@ -28,7 +28,6 @@ impl CacheDir {
         match self {
             CacheDir::Temporary(path) => Ok(path.to_path_buf()),
             CacheDir::Persistent(path) => Ok(path.clone()),
-            // CacheDir::Memory => Err(InvalidArg::new("Memory cache has no filesystem path")),
         }
     }
 }

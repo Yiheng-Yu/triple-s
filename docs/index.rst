@@ -42,8 +42,9 @@ Installation
 
       uv pip install triple-s-survey -U
 
-Python API
-----------
+
+Library Overview
+----------------
 
 Import the installed package as ``triple_s``. The API separates survey
 definitions from respondent data:
@@ -72,12 +73,24 @@ definitions from respondent data:
 Omit the data path to read only the definition; ``survey.has_data()`` then
 returns ``False``.
 
-See :doc:`getting_started/quickstart` for a complete workflow and
+See :doc:`getting_started/overview` for an overview and links to the guides and
 :doc:`api/index` for the public Python API reference.
 
 .. toctree::
    :hidden:
    :maxdepth: 3
+   :caption: Getting Started
 
-   getting_started/quickstart
-   api/index
+   getting_started/overview
+   getting_started/survey
+   getting_started/datamap
+   getting_started/survey_data
+
+.. toctree::
+   :hidden:
+   :maxdepth: 3
+   :caption: API Reference
+
+   api/functions
+   api/objects
+   api/exceptions
