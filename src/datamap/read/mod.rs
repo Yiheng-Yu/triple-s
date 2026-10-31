@@ -13,7 +13,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use log::warn;
-use quick_xml::{encoding::DecodingReader, reader::Reader as XmlReader};
+use quick_xml::reader::Reader as XmlReader;
 use rayon::prelude::*;
 
 use crate::{
@@ -22,12 +22,12 @@ use crate::{
         Code,
         CodeFormat,
         DataFormat,
+        Datamap,
         Location,
         Question,
         QuestionType,
         Response,
         Spread,
-        Survey,
         Text,
         Usage,
         Value,
@@ -71,6 +71,7 @@ impl FileType {
 /// This functions auto detects triple-s version (classic/ xml), and currently
 /// supports up till triple-s version 2.0 with non-hierarchial data. Triple-s
 /// 3.0 stuff _should_be_ mostly okay, but fully tested (yet).
+/// Invalid UTF-8 sequences in XML input are replaced with U+FFFD (`�`).
 ///
 /// ## Example usage:
 ///
@@ -82,7 +83,7 @@ impl FileType {
 ///
 /// Ok::<(), Box<dyn std::error::Error>>(());
 /// ```
-pub fn read_datamap(sss_path: impl AsRef<Path>) -> Result<Survey> {
+pub fn read_datamap(sss_path: impl AsRef<Path>) -> Result<Datamap> {
     let path = sss_path.as_ref();
     let input = File::open(path)
         .map_err(error::FileReadError::from)
@@ -94,26 +95,27 @@ pub fn read_datamap(sss_path: impl AsRef<Path>) -> Result<Survey> {
     let context = format!("Reading datamap: '{:?}'", path.as_os_str());
     if let Some(summary) = read_log.warning_summary(context) {
         warn!("{}", summary);
-    };
+    }
 
     Ok(survey)
 }
 
 /// create datamap instance from utf-8 string, auto detects file types (sss
 /// classic/ xml)
-pub fn read_from_string(data: impl AsRef<str>) -> Result<Survey> {
+pub fn read_from_string(data: impl AsRef<str>) -> Result<Datamap> {
     let (survey, read_log) = read_from_reader(Cursor::new(data.as_ref().as_bytes()))?;
 
     if let Some(summary) = read_log.warning_summary("Reading from string") {
         warn!("{}", summary);
-    };
+    }
 
     Ok(survey)
 }
 
 /// create datamap instance from a reader/ stream, auto detects file types (sss
 /// classic/ xml)
-pub fn read_from_reader<R: BufRead>(mut input: R) -> Result<(Survey, EventLog)> {
+/// Invalid UTF-8 sequences in XML input are replaced with U+FFFD (`�`).
+pub fn read_from_reader<R: BufRead>(mut input: R) -> Result<(Datamap, EventLog)> {
     let mut prefix = Vec::new();
     let mut first_line = true;
     loop {
@@ -131,11 +133,18 @@ pub fn read_from_reader<R: BufRead>(mut input: R) -> Result<(Survey, EventLog)> 
         prefix.clear();
     }
     let file_type = FileType::parse(std::str::from_utf8(&prefix[..1])?)?;
-    let input = BufReader::new(Cursor::new(prefix).chain(input));
     let builder = match file_type {
-        FileType::Classic => classic::create_survey_builder(input.lines())?,
+        FileType::Classic => {
+            let input = BufReader::new(Cursor::new(prefix).chain(input));
+            classic::create_survey_builder(input.lines())?
+        }
         FileType::Xml => {
-            let mut reader = XmlReader::from_reader(DecodingReader::new(input));
+            input.read_to_end(&mut prefix)?;
+            let encoding = quick_xml::encoding::detect_encoding(&prefix)
+                .map(|detected| detected.encoding())
+                .unwrap_or(encoding_rs::UTF_8);
+            let (text, _) = encoding.decode_without_bom_handling(&prefix);
+            let mut reader = XmlReader::from_str(&text);
             reader.config_mut().trim_text(true);
             xml::create_survey_builder(reader)?
         }
@@ -174,7 +183,7 @@ where
                 text
             ));
             return Err(error.into());
-        };
+        }
 
         let from = parts
             .first()
@@ -256,14 +265,14 @@ impl SurveyBuilder {
         }
     }
 
-    pub fn build(mut self) -> Result<(Survey, EventLog)> {
-        let mut output = Survey::empty();
+    pub fn build(mut self) -> Result<(Datamap, EventLog)> {
+        let mut output = Datamap::empty();
         let mut log = EventLog::new();
 
-        output.info.title =
+        *output.info_mut().title_mut() =
             self.attributes.remove("title").and_then(|val| val.value.map(unquote));
 
-        output.info.name =
+        *output.info_mut().name_mut() =
             self.attributes.remove("name").and_then(|val| val.value.map(unquote));
 
         if let Some(record) = self.attributes.remove("record") {
@@ -293,22 +302,22 @@ impl SurveyBuilder {
             }
         }
 
-        output.info.origin =
+        *output.info_mut().origin_mut() =
             self.attributes.remove("origin").and_then(|val| val.value.map(unquote));
 
-        output.info.user =
+        *output.info_mut().user_mut() =
             self.attributes.remove("user").and_then(|val| val.value.map(unquote));
 
-        output.info.date =
+        *output.info_mut().date_mut() =
             self.attributes.remove("date").and_then(|val| val.value.map(unquote));
 
-        output.info.time =
+        *output.info_mut().time_mut() =
             self.attributes.remove("time").and_then(|val| val.value.map(unquote));
 
-        output.info.standard =
+        *output.info_mut().standard_mut() =
             self.attributes.remove("standard").and_then(|val| val.value.map(unquote));
 
-        output.info.version = self
+        *output.info_mut().version_mut() = self
             .attributes
             .remove("version")
             .ok_or(MissingAttributeError::new("sss", "version"))?
@@ -516,7 +525,7 @@ impl QuestionBuilder {
                 Spread::new(subfields, width).context("When parsing spread")?
             };
             *output.spread_mut() = Some(spread);
-        };
+        }
 
         let response = ResponseBuilder::from_question_read(self.responses.children)
             .context("When parsing field 'values'")?;
@@ -557,7 +566,7 @@ impl QuestionBuilder {
                 if let Some(range) = response.range().as_ref() {
                     validate_date(&range.start().to_string())?;
                     validate_date(&range.end().to_string())?;
-                };
+                }
                 *output.response_mut() = response;
                 warnings.extend(resp_warnings);
             }
@@ -567,7 +576,7 @@ impl QuestionBuilder {
                 if let Some(range) = response.range().as_ref() {
                     validate_time(&range.start().to_string())?;
                     validate_time(&range.end().to_string())?;
-                };
+                }
                 *output.response_mut() = response;
                 warnings.extend(resp_warnings);
             }
@@ -587,9 +596,10 @@ impl QuestionBuilder {
                             kind: error::WarningKind::DataLocation,
                             message: format!(
                                 "Field 'size' ({}) exceeds the width defined in question's data location ({}).",
-                                size, width
-                            )
-                        })
+                                size,
+                                width
+                            ),
+                        });
                     }
                 }
             }
@@ -705,7 +715,7 @@ impl ResponseBuilder {
                     .context("When parsing response field 'size'")?;
             } else {
                 return Err(UnknownAttribute::new("values", first_entry.tag.as_ref()).into());
-            };
+            }
 
             // collect code values
             let values = rest

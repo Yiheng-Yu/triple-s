@@ -28,12 +28,11 @@ impl CacheDir {
         match self {
             CacheDir::Temporary(path) => Ok(path.to_path_buf()),
             CacheDir::Persistent(path) => Ok(path.clone()),
-            // CacheDir::Memory => Err(InvalidArg::new("Memory cache has no filesystem path")),
         }
     }
 }
 
-/// Survey data
+/// Respondent data with a lazy query plan and an optional backing cache.
 #[cfg_attr(
     feature = "pyo3",
     pyclass(module = "triple_s", name = "SurveyData", from_py_object)
@@ -44,7 +43,7 @@ pub struct SurveyData {
     frame: Option<LazyFrame>,
 
     /// Cache that the `frame` sink into
-    cache: Option<CacheDir>,
+    cache: Option<Arc<CacheDir>>,
 }
 
 impl Clone for SurveyData {
@@ -54,7 +53,7 @@ impl Clone for SurveyData {
                 let new = lf.clone();
                 Self {
                     frame: Some(new),
-                    cache: None,
+                    cache: self.cache.clone(),
                 }
             }
             None => Self::default(),
@@ -70,7 +69,7 @@ impl SurveyData {
     pub fn cache(&self) -> Option<&str> {
         match self.cache.as_ref() {
             None => None,
-            Some(cache) => match cache {
+            Some(cache) => match cache.as_ref() {
                 CacheDir::Temporary(path) => Some(path.to_str()).flatten(),
                 CacheDir::Persistent(path) => Some(path.to_str()).flatten(),
             },
@@ -103,6 +102,35 @@ impl SurveyData {
 }
 
 impl SurveyData {
+    /// Creates an empty `SurveyData` instance
+    ///
+    /// Example:
+    ///
+    /// ```
+    /// use triple_s::SurveyData;
+    ///
+    /// let data = SurveyData::empty();
+    /// assert_eq!(data.has_data(), false);
+    /// ```
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    /// check if data loaded or not
+    ///
+    /// Example:
+    ///
+    /// ```
+    /// use triple_s::SurveyData;
+    ///
+    /// let data = SurveyData::default();
+    /// assert_eq!(data.has_data(), false);
+    /// ```
+    #[inline]
+    pub fn has_data(&self) -> bool {
+        self.frame.is_some()
+    }
+
     /// Create new instance fro parquet file
     pub fn from_parquet(
         path_parquet: impl AsRef<Path>,
@@ -120,11 +148,11 @@ impl SurveyData {
 
         Ok(Self {
             frame: Some(lazyframe),
-            cache: Some(cache),
+            cache: Some(Arc::new(cache)),
         })
     }
 
-    /// Create new instance from in-memory [`polars::LazyFrame`]
+    /// Create new instance from in-memory [`polars::prelude::LazyFrame`]
     pub fn from_lazyframe(frame: LazyFrame) -> PolarsResult<Self> {
         let cache = tempfile::NamedTempFile::with_suffix(".parquet")?.into_temp_path();
 
@@ -142,11 +170,11 @@ impl SurveyData {
 
         Ok(Self {
             frame: Some(frame),
-            cache: Some(CacheDir::Temporary(cache)),
+            cache: Some(Arc::new(CacheDir::Temporary(cache))),
         })
     }
 
-    /// Create new instance from in-memory [`polars::DataFrame`]
+    /// Create new instance from in-memory [`polars::prelude::DataFrame`]
     pub fn from_polars(df: DataFrame) -> PolarsResult<Self> {
         Self::from_lazyframe(df.lazy())
     }
@@ -163,7 +191,7 @@ impl SurveyData {
 
         Ok(Self {
             frame: Some(frame),
-            cache: Some(CacheDir::Temporary(cache)),
+            cache: Some(Arc::new(CacheDir::Temporary(cache))),
         })
     }
 
@@ -175,15 +203,42 @@ impl SurveyData {
             .collect()
     }
 
-    /// Total number of rows
-    pub fn num_response(&self) -> PolarsResult<usize> {
-        let num_response = self
-            .lazy()
-            .map_err(|err| PolarsError::NoData(err.to_string().into()))?
+    /// Dump cached data to parquet datafile
+    pub fn to_parquet(&self, parquet_path: impl AsRef<Path>) -> PolarsResult<()> {
+        let path_sink = PlRefPath::try_from_path(parquet_path.as_ref())?;
+        let path_sink = SinkDestination::File {
+            target: SinkTarget::Path(path_sink),
+        };
+
+        let write_option = ParquetWriteOptions::default();
+        let write_formt = FileWriteFormat::Parquet(Arc::new(write_option));
+
+        self.lazy()?
             .clone()
-            .collect()?
-            .height();
-        Ok(num_response)
+            .sink(path_sink, write_formt, UnifiedSinkArgs::default())?
+            .collect()?;
+
+        Ok(())
+    }
+
+    /// Total number of rows
+    ///
+    /// Will default to `0` if data was not loaded
+    ///
+    /// ```
+    /// use triple_s::SurveyData;
+    ///
+    /// let empty = SurveyData::empty();
+    ///
+    /// assert_eq!(empty.num_response()?, 0);
+    ///
+    /// Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn num_response(&self) -> PolarsResult<usize> {
+        match self.frame.as_ref() {
+            Some(lf) => Ok(lf.clone().collect()?.height()),
+            None => Ok(0),
+        }
     }
 
     /// List of question names in the current instance
@@ -198,6 +253,29 @@ impl SurveyData {
                 .collect::<Vec<String>>()),
         }
     }
+
+    /// Used by Survey::__repr__
+    #[cfg(feature = "pyo3")]
+    pub(crate) fn py_repr_content(&self) -> PolarsResult<Vec<(&str, String)>> {
+        let mut info = Vec::new();
+
+        const MAX_NUM_COLNAME_SHOW: usize = 3;
+        let colnames = self.questions().ok().unwrap_or_default();
+        let mut colname_repr = colnames[0..colnames.len().min(MAX_NUM_COLNAME_SHOW)]
+            .iter()
+            .map(|s| format!("{:?}", s))
+            .collect::<Vec<String>>()
+            .join(", ");
+        if colnames.len() > MAX_NUM_COLNAME_SHOW {
+            colname_repr.push_str(", ...");
+        }
+        let colname_repr = format!("[{}]", colname_repr);
+        info.push(("questions", colname_repr));
+
+        let num_response = self.num_response()?.to_string();
+        info.push(("num_response", num_response));
+        Ok(info)
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -210,8 +288,8 @@ impl SurveyData {
     }
 
     #[getter(num_response)]
-    fn py_get_num_response(&self) -> usize {
-        self.num_response().ok().unwrap_or_default()
+    fn py_get_num_response(&self) -> PyResult<usize> {
+        self.num_response().map_err(|err| PyPolarsErr::Polars(err).into())
     }
 
     fn __repr__(&self) -> PyResult<String> {
@@ -225,24 +303,26 @@ impl SurveyData {
             .collect::<Vec<String>>()
             .join(", ");
         if colnames.len() > MAX_NUM_COLNAME_SHOW {
-            colname_repr.push_str(", ...")
-        };
+            colname_repr.push_str(", ...");
+        }
         let colname_repr = format!("[{}]", colname_repr);
         info.push(("questions", colname_repr));
 
-        let num_response = self
-            .num_response()
-            .ok()
-            .unwrap_or_default() // empty SurveyData -> num_response would be zero
-            .to_string();
+        let num_response = self.num_response().map_err(PyPolarsErr::Polars)?.to_string();
         info.push(("num_response", num_response));
 
         let formatted = info
             .into_iter()
             .map(|(field, value)| format!("{}: {}", field, value))
             .collect::<Vec<String>>()
-            .join(",\n  ");
+            .join("\n  ");
         Ok(format!("SurveyData({{\n  {}\n}})", formatted))
+    }
+
+    pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<Py<RowIterator>> {
+        let df = self.lazy()?.clone().collect().map_err(PyPolarsErr::Polars)?;
+
+        Py::new(py, RowIterator { df, index: 0 })
     }
 
     /// Create new empty [`SurveyData`] instance
@@ -285,6 +365,12 @@ impl SurveyData {
         let frame = self.py_to_polars(py)?;
         frame.call_method("describe", (), None)
     }
+
+    /// Check if data loaded or not
+    #[pyo3(name = "has_data")]
+    fn py_has_data(&self) -> bool {
+        self.has_data()
+    }
 }
 
 impl std::fmt::Debug for SurveyData {
@@ -293,10 +379,41 @@ impl std::fmt::Debug for SurveyData {
     }
 }
 
-// pub struct QuestionData {
-//     qname: String,
-//     backend: Arc<SurveyData>
-// }
+// ---------- Helpers -----------
+#[cfg(feature = "pyo3")]
+#[pyclass]
+pub(crate) struct RowIterator {
+    df: DataFrame,
+    index: usize,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl RowIterator {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+        if self.index >= self.df.height() {
+            return Ok(None);
+        }
+
+        let dict = PyDict::new(py);
+
+        for column in self.df.columns() {
+            use crate::utils::anyvalue_to_python;
+
+            let value = column.get(self.index).map_err(PyPolarsErr::Polars)?;
+
+            dict.set_item(column.name().as_str(), anyvalue_to_python(py, value)?)?;
+        }
+
+        self.index += 1;
+
+        Ok(Some(dict.into_any()))
+    }
+}
 
 #[cfg(test)]
 mod tests {

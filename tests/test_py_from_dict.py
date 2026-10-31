@@ -391,8 +391,8 @@ def test_survey_info_from_dict_all_fields():
     info = SurveyInfo.from_dict(
         {
             "version": "2.0",
-            "name": "Survey name",
-            "title": "Survey title",
+            "name": "Datamap name",
+            "title": "Datamap title",
             "date": "2026-10-23",
             "time": "12:30",
             "origin": "Exporter",
@@ -405,8 +405,8 @@ def test_survey_info_from_dict_all_fields():
     )
 
     assert info.version == triple_s.Version.V2_0
-    assert info.name == "Survey name"
-    assert info.title == "Survey title"
+    assert info.name == "Datamap name"
+    assert info.title == "Datamap title"
     assert info.date == "2026-10-23"
     assert info.time == "12:30"
     assert info.origin == "Exporter"

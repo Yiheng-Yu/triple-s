@@ -696,7 +696,7 @@ impl Question {
 
 /// reading data
 impl Question {
-    /// Get [`polars::Field`] for the current question, it looks like this:
+    /// Get [`polars::prelude::Field`] for the current question, it looks like this:
     ///
     /// ```text
     /// {
@@ -1305,7 +1305,7 @@ impl Question {
     #[new]
     #[pyo3(signature=(
         name:"str", 
-        question_type:"str|QuestionType|None"=None,
+        question_type:"str|QuestionType|None",
         label:"str"=None, 
         filter:"str"=None, 
         format:"'numeric'|'literal'|None"=None,
@@ -1315,7 +1315,7 @@ impl Question {
     ))]
     fn py_new<'py>(
         name: &str,
-        question_type: Option<&Bound<'py, PyAny>>,
+        question_type: Bound<'py, PyAny>,
         label: Option<&str>,
         filter: Option<&str>,
         format: Option<&str>,
@@ -1323,21 +1323,17 @@ impl Question {
         location: Option<Location>,
         spread: Option<Spread>,
     ) -> PyResult<Self> {
-        let question_type = match question_type {
-            None => QuestionType::None,
-            Some(question_type) => {
-                if let Ok(value) = question_type.extract::<QuestionType>() {
-                    value
-                } else if let Ok(value) = question_type.extract::<&str>() {
-                    QuestionType::from_str(value)
-                        .with_context(|| format!("Expect 'question_type' to be one of the `QuestionType` flags, or one of: {:?}", QuestionType::available_options()))
-                        .map_err(py_value_error)?
-                } else {
-                    return Err(exceptions::PyTypeError::new_err(get_type_name(
-                        question_type,
-                    )?));
-                }
-            }
+        let question_type = if question_type.is_none() {
+            QuestionType::None
+        } else if let Ok(value) = question_type.extract::<QuestionType>() {
+            value
+        } else if let Ok(value) = question_type.extract::<&str>() {
+            QuestionType::from_str(value)
+                .with_context(|| format!("Expect 'question_type' to be one of the `QuestionType` flags, or one of: {:?}", QuestionType::available_options()))
+                .map_err(py_value_error)?
+        } else {
+            let type_name = get_type_name(&question_type)?;
+            return Err(exceptions::PyTypeError::new_err(type_name));
         };
 
         Self::new(
@@ -1722,8 +1718,7 @@ impl Question {
     ///
     /// 'question_type' (str|QuestionType):
     ///     type of the question.
-    ///     See QuestionType.available_options() for list of allowed string
-    /// values.
+    ///     See QuestionType.available_options() for list of allowed string values.
     ///
     /// 'location' (dict|Location|None, *optional*):
     ///     data location.
@@ -1992,7 +1987,7 @@ impl PartialEq for Location {
 /// ---
 impl Location {
     /// Start of a data location, this corresponse to the `start` attribute of
-    /// the <position> element
+    /// the `<position>` element
     pub fn start(&self) -> RwLockReadGuard<'_, u32> {
         self.start.read()
     }
@@ -2003,7 +1998,7 @@ impl Location {
     }
 
     /// End of a data location, this corresponds to the `end` attribute of the
-    /// <position> element
+    /// `<position>` element
     pub fn finish(&self) -> RwLockReadGuard<'_, u32> {
         self.finish.read()
     }
@@ -2154,7 +2149,7 @@ impl Location {
     }
 
     /// Start of a data location, this corresponse to the `start` attribute of
-    /// the <position> element
+    /// the `<position>` element
     #[getter(start)]
     fn py_get_start(&self) -> u32 {
         self.start.read().clone()
@@ -2167,7 +2162,7 @@ impl Location {
     }
 
     /// End of a data location, this corresponds to the `end` attribute of the
-    /// <position> element
+    /// `<position>` element
     #[getter(finish)]
     fn py_get_finish(&self) -> u32 {
         self.finish.read().clone()

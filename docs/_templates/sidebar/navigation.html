@@ -1,0 +1,9 @@
+<div class="sidebar-tree">
+  <ul>
+    <li class="toctree-l1{% if pagename == root_doc %} current current-page{% endif %}">
+      <a class="reference internal" href="{{ pathto(root_doc) }}"{% if pagename == root_doc %} aria-current="page"{% endif %}>Overview</a>
+    </li>
+  </ul>
+  {# Keep the full root tree on every page; edit its groups in index.rst. #}
+  {{ sidebar_toctree(collapse=False, titles_only=False, maxdepth=0, includehidden=True) }}
+</div>

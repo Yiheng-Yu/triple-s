@@ -7,7 +7,9 @@ use anyhow::{Context, Result};
 use encoding_rs::{Decoder, DecoderResult, UTF_8};
 use parking_lot::RwLock;
 #[cfg(feature = "pyo3")]
-use pyo3::{exceptions, prelude::*, types::PySlice};
+use polars::datatypes::AnyValue;
+#[cfg(feature = "pyo3")]
+use pyo3::{IntoPyObjectExt, exceptions, prelude::*, types::PySlice};
 
 use crate::prelude::DeepCopy;
 
@@ -62,6 +64,54 @@ pub fn get_type_name<'py>(object: &pyo3::Bound<'py, pyo3::PyAny>) -> pyo3::PyRes
             err
         ))
     })
+}
+
+#[cfg(feature = "pyo3")]
+pub(crate) fn anyvalue_to_python<'py>(
+    py: Python<'py>,
+    value: AnyValue<'_>,
+) -> PyResult<Bound<'py, PyAny>> {
+    match value {
+        AnyValue::Null => py.None().into_bound_py_any(py),
+        AnyValue::Boolean(v) => v.into_bound_py_any(py),
+        AnyValue::Int64(v) => v.into_bound_py_any(py),
+        AnyValue::Int32(v) => v.into_bound_py_any(py),
+        AnyValue::UInt64(v) => v.into_bound_py_any(py),
+        AnyValue::UInt32(v) => v.into_bound_py_any(py),
+        AnyValue::Float64(v) => v.into_bound_py_any(py),
+        AnyValue::Float32(v) => v.into_bound_py_any(py),
+        AnyValue::String(v) => v.into_bound_py_any(py),
+        AnyValue::StringOwned(v) => v.as_str().into_bound_py_any(py),
+        AnyValue::Date(days) => {
+            let date = chrono::NaiveDate::from_ymd_opt(1970, 1, 1)
+                .unwrap()
+                .checked_add_signed(chrono::Duration::days(i64::from(days)))
+                .ok_or_else(|| exceptions::PyValueError::new_err("Date out of range"))?;
+            date.into_bound_py_any(py)
+        }
+        AnyValue::Time(nanos) => {
+            let seconds = u32::try_from(nanos / 1_000_000_000).ok();
+            let fraction = u32::try_from(nanos % 1_000_000_000).ok();
+            let time = seconds
+                .zip(fraction)
+                .and_then(|(s, ns)| {
+                    chrono::NaiveTime::from_num_seconds_from_midnight_opt(s, ns)
+                })
+                .ok_or_else(|| exceptions::PyValueError::new_err("Time out of range"))?;
+            time.into_bound_py_any(py)
+        }
+        AnyValue::List(values) | AnyValue::Array(values, _) => {
+            let values = values
+                .iter()
+                .map(|value| anyvalue_to_python(py, value))
+                .collect::<PyResult<Vec<_>>>()?;
+            values.into_bound_py_any(py)
+        }
+        value => Err(exceptions::PyTypeError::new_err(format!(
+            "Unsupported Polars dtype: {:?}",
+            value.dtype()
+        ))),
+    }
 }
 
 #[cfg(feature = "pyo3")]

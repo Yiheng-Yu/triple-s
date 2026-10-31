@@ -82,4 +82,5 @@ let text = question.to_classic()?;
 Note that this would ignore attributes that exists in certain version but
 not in other versions (i.e., `usage` field exists in xml but not in classic).
 
-Respondent data is stored by [`Record`]; use [`Record::to_polars`] to export it.
+Respondent data is returned by [`crate::Record::load_data`]; use
+[`crate::SurveyData::to_polars`] to export it.

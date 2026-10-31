@@ -7,21 +7,25 @@ Reference documentation for the public classes and enums exported by ``triple_s`
    :maxdepth: 1
 
    survey
-   survey_info
+
+SurveyData
+----------
+
+.. toctree::
+   :maxdepth: 1
+
    survey_data
+   question_data
+
+Datamap
+-------
+
+.. toctree::
+   :maxdepth: 2
+
+   datamap
+   survey_info
    record
    question
-   data_range
-   location
-   spread
-   response
-   code
    text
-   variant
-   version
-   question_type
-   code_format
-   data_format
-   usage
-   mode
-   value
+   enums

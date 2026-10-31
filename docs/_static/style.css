@@ -1,13 +1,224 @@
-/* Show the full toctree in Furo's sidebar without disclosure controls. */
-.sidebar-tree .toctree-checkbox ~ ul {
-  display: block;
+/* Bundled under atkinson-hyperlegible-next-LICENSE.txt. */
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("atkinson-hyperlegible-next.woff") format("woff");
 }
 
-.sidebar-tree .toctree-checkbox ~ label {
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  font-style: italic;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("atkinson-hyperlegible-next-italic.woff") format("woff");
+}
+
+/* Keep nested navigation compact and section titles easy to scan. */
+.sidebar-tree {
+  --sidebar-caption-font-size: 1rem;
+}
+
+.sidebar-tree li > ul .reference {
+  padding-top: 3px;
+  padding-bottom: 3px;
+  line-height: 1.35;
+}
+
+/* Typography and syntax colors from https://huggingface.co/docs/datasets/load_hub.
+   Panel backgrounds use neutral grays.
+   IBM Plex Mono is bundled under the adjacent SIL Open Font License. */
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+}
+body {
+  --font-stack: "Atkinson Hyperlegible Next", sans-serif;
+  --font-stack--headings: var(--font-stack);
+  --code-panel: #f2f2f2;
+  --code-border: oklch(96.7% .003 264.542);
+  --code-text: oklch(37.3% .034 259.733);
+  --code-muted: oklch(44.6% .03 256.802);
+  --code-comment: #a0a1a7;
+  --code-keyword: #a626a4;
+  --code-string: #50a14f;
+  --code-number: #986801;
+  --code-function: #4078f2;
+  --code-builtin: #c18401;
+  --code-literal: #0184bb;
+  --code-meta: #4078f2;
+  --code-keyword-style: normal;
+  --code-builtin-style: normal;
+  --code-function-style: normal;
+}
+
+body[data-theme="dark"] {
+  --code-panel: #202020;
+  --code-border: #141c2e;
+  --code-text: oklch(87.2% .01 258.338);
+  --code-muted: #9ca3af;
+  --code-comment: #637777;
+  --code-keyword: #c792ea;
+  --code-string: #ecc48d;
+  --code-number: #f78c6c;
+  --code-function: #dcdcaa;
+  --code-builtin: #addb67;
+  --code-literal: #ff5874;
+  --code-meta: #82aaff;
+  --code-keyword-style: italic;
+  --code-builtin-style: italic;
+  --code-function-style: italic;
+}
+
+@media (prefers-color-scheme: dark) {
+  body:not([data-theme="light"]) {
+  --code-panel: #202020;
+  --code-border: #141c2e;
+  --code-text: oklch(87.2% .01 258.338);
+  --code-muted: #9ca3af;
+  --code-comment: #637777;
+  --code-keyword: #c792ea;
+  --code-string: #ecc48d;
+  --code-number: #f78c6c;
+  --code-function: #dcdcaa;
+  --code-builtin: #addb67;
+  --code-literal: #ff5874;
+  --code-meta: #82aaff;
+  --code-keyword-style: italic;
+  --code-builtin-style: italic;
+  --code-function-style: italic;
+}
+}
+
+body article .highlight.highlight {
+  position: relative;
+  /* The outer code-block wrapper already supplies paragraph spacing. */
+  margin: 0;
+  padding: 0;
+  background: var(--code-panel);
+  color: var(--code-text);
+  border: 1px solid var(--code-border);
+  border-radius: 6px;
+}
+
+body article .highlight.highlight pre {
+  margin: 0;
+  padding: 12px 16px;
+  background: transparent;
+  border: 0;
+  border-radius: inherit;
+  color: inherit;
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 24px;
+  overflow-x: auto;
+}
+
+/* Reset Pygments defaults before mapping its tokens to the reference palette. */
+body article .highlight.highlight pre span { font-weight: inherit; font-style: normal; }
+body article .highlight.highlight :is(.n, .nn, .p, .o, .w) { color: var(--code-text); }
+body article .highlight.highlight :is(.c, .c1, .cm, .cp, .cs) { color: var(--code-comment); font-style: italic; }
+body article .highlight.highlight :is(.k, .kd, .kn, .kp, .kr, .kt, .ow) { color: var(--code-keyword); font-style: var(--code-keyword-style); }
+body article .highlight.highlight .kc { color: var(--code-literal); }
+body article .highlight.highlight :is(.s, .s1, .s2, .sa, .sb, .sc, .sd, .se, .sh, .si, .sr, .ss) { color: var(--code-string); }
+body article .highlight.highlight :is(.m, .mi, .mf, .mh, .mo, .mb, .il) { color: var(--code-number); }
+body article .highlight.highlight :is(.nf, .fm, .nd) { color: var(--code-function); font-style: var(--code-function-style); }
+body article .highlight.highlight :is(.nb, .nc) { color: var(--code-builtin); font-style: var(--code-builtin-style); }
+body article .highlight.highlight .gp { color: var(--code-meta); }
+
+.code-copy-button {
+  position: absolute;
+  z-index: 1;
+  top: 10px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  margin: 0 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--code-muted);
+  font-size: 14px;
+  line-height: 20px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 200ms ease-in-out, color 200ms ease-in-out;
+}
+.code-copy-button svg { width: 1em; height: 1em; fill: currentColor; }
+.highlight:hover .code-copy-button,
+.highlight:focus-within .code-copy-button { opacity: 1; }
+.code-copy-button:focus-visible { outline: 2px solid var(--code-meta); outline-offset: 4px; }
+.code-copy-button[data-copied="true"] { color: #22c55e; }
+.code-copy-status {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #000;
+  color: #fff;
+  font: 14px/1.25 sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.code-copy-status:empty { display: none; }
+@media (hover: none) { .code-copy-button { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .code-copy-button { transition: none; } }
+@media (max-width: 767px) {
+  body article .highlight.highlight pre { font-size: 13.16px; line-height: 22.56px; padding: 11.28px 15.04px; }
+}
+@media print { .code-copy-button { display: none; } }
+
+/* Outputs share the code theme; a quiet label distinguishes results. */
+.code-output-label {
+  padding: 10px 44px 0 16px;
+  color: var(--code-muted);
+  font: 400 12px/16px var(--font-stack, sans-serif);
+}
+
+/* Keep Next steps in the guide without adding it to the global navigation. */
+.sidebar-tree li:has(> a[href$="#next-steps"]) {
   display: none;
 }
 
-/* Keep h2 structure while rendering it at the theme's h3 text size. */
-article h2 {
-  font-size: var(--font-size--h4);
+/* Mark the navigation destination in both light and dark themes. */
+.sidebar-tree .reference[aria-current] {
+  color: var(--color-foreground-primary);
+  font-weight: 700;
+}
+
+/* Keep desktop navigation pinned while the article scrolls independently. */
+@media (min-width: 63.001em) {
+  .sidebar-drawer {
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .sidebar-container,
+  .sidebar-sticky {
+    height: 100%;
+    min-height: 0;
+  }
+}
+
+.sidebar-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  scroll-behavior: auto;
+}
+
+/* Match the current topic styling in the page's table of contents. */
+.toc-tree li.scroll-current > .reference {
+  color: var(--color-foreground-primary);
+  font-weight: 700;
 }
