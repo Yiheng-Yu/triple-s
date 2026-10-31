@@ -4,13 +4,12 @@ Datamap
 :class:`triple_s.Datamap` contains survey metadata in ``info`` and question
 definitions in ``record``. It describes how to interpret the data file.
 
-Getting datamap of a survey
+Loading survey datamap
 ***************************
 
-1) From :attr:`triple_s.Survey.datamap`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+1. From :py:attr:`triple_s.Survey.datamap`
 
-Check survey datamap via attribute :attr:`triple_s.Survey.datamap`:
+Check survey datamap via attribute :py:attr:`triple_s.Survey.datamap`:
 
 .. code-block:: python
 
@@ -23,8 +22,7 @@ Check survey datamap via attribute :attr:`triple_s.Survey.datamap`:
    print(datamap)
 
 
-2) Use :func:`triple_s.read_datamap`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2. Use :func:`triple_s.read_datamap`
 
 Alternatively, to read just the datamap, use :func:`triple_s.read_datamap` function:
 
@@ -35,8 +33,57 @@ Alternatively, to read just the datamap, use :func:`triple_s.read_datamap` funct
    print(datamap.title)
    print(datamap.info.version)
 
-Inspect and edit a question
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Conceptually, a survey datamap consists of two parts: a :class:`SurveyInfo` that contains survey 
+metadata (name, title, creation date, etc.,) and a :class:`Record` that collects survey questions.
+
+Survey metadata
+*********************
+
+Survey metadata can be accessed by :py:attr:`Datamap.info`:
+
+.. code-block:: python
+
+   info = datamap.info
+   print(info)
+
+
+.. code-block:: python
+   :class: code-output
+
+   SurveyInfo(
+      version=Version.V2_0,
+      name='SP5201-1',
+      title='Historic House Exit Survey<br/>First Wave',
+      date='14 April 2005',
+      time='16:00',
+      origin='SurveyProg v1.3.05',
+      user='User Site',
+      style=None,
+      language_options=(),
+      mode_options=(),
+      standard=None,
+   )
+
+Survey records
+*********************
+
+Survey questions are collated under :py:attr:`Datamap.record` attribute:
+
+.. code-block:: python
+
+   record = datamap.record
+   print(record)
+
+Check questions in a survey
+***********************************
+
+Check each question by iterate the :py:attr:`Datamap.record`:
+
+.. code-block:: python
+   
+   for question in datamap.record:
+      # do someting..
 
 Look up a question by name with ``get_question()``. Names are case
 insensitive, and a missing question returns ``None``.
@@ -48,23 +95,31 @@ insensitive, and a missing question returns ``None``.
        print(question.name, question.label)
        question.label = "Updated question label"
 
-Question objects returned by this lookup share their fields with the datamap,
-so edits are included when you export the datamap.
 
-Export a datamap
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Convert between Triple-s Classic and XML
+************************************************
 
-Serialise the current datamap to XML and save the returned string:
+You can easily convert between triple-s classic/ triple-s xml via 
+:func:`Datamap.to_classic` and :func:`Datamap.to_xml` function call:
 
 .. code-block:: python
 
-   from pathlib import Path
-   xml = datamap.to_xml()
-   Path("updated.sss").write_text(xml, encoding="utf-8")
+   from triple_s import read_datamap
+   datamap = read_datamap("triple-s_xml.sss")
 
-``datamap.to_classic()`` returns a Triple-S Classic string. It raises
-``ValueError`` for features that Classic cannot represent, such as date
-questions. These exports contain the datamap, not the respondent data.
+   with open("converted.sss") as file:
+      file.write(datamap.to_classic())
 
 
-See :doc:`survey_data` to load respondent data using this definition.
+The :func:`Datamap.to_xml` function returns a string that can be read by any xml parser, 
+such as the `lxml <https://lxml.de/>`_ library:
+
+.. code-block:: python
+
+   from lxml import etree
+   from triple_s import read_datamap
+
+   datamap = read_datamap("triple-s_xml.sss")
+   xml_string = datamap.to_xml()
+
+   root = etree.fromstring(xml_string.encode("utf-8"))

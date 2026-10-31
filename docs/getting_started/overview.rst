@@ -33,12 +33,6 @@ Load triple-s survey via :func:`triple_s.read_triple_s`:
       num_response: 3
    })
 
-
-View Data map
----------------------
-
-See :doc:`Datamap <datamap>` for more details about `Datamap` class.
-
 View Survey Data
 ---------------------
 
@@ -95,10 +89,14 @@ For example:*
 See :doc:`SurveyData <survey_data>` for more details about `SurveyData` class.
 
 
+View Data map
+---------------------
+
+See :doc:`Datamap <datamap>` for more details about `Datamap` class.
+
+
 Next steps
 ----------
-
-Continue getting started with these guides:
 
 * :doc:`Datamap <datamap>`
   Inspect question definitions, edit survey metadata and labels, and export the updated datamap.

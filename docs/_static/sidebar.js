@@ -1,4 +1,4 @@
-/* Keep the navigation destination visible without moving the document or focus. */
+/* Follow the visible section without moving the document or keyboard focus. */
 document.addEventListener("DOMContentLoaded", () => {
   const sidebar = document.querySelector(".sidebar-tree");
   const scroller = sidebar?.closest(".sidebar-scroll");
@@ -25,54 +25,96 @@ document.addEventListener("DOMContentLoaded", () => {
     link.origin === location.origin && link.pathname === location.pathname
   );
   const pageLink = pageLinks.find((link) => !link.hash);
-  const sectionLinks = new Map();
-  for (const link of pageLinks) {
-    if (link.hash && link.hash !== "#next-steps") {
-      sectionLinks.set(decodeURIComponent(link.hash.slice(1)), link);
-    }
-  }
+  const sections = pageLinks
+    .filter((link) => link.hash && link.hash !== "#next-steps")
+    .map((link) => ({
+      link,
+      element: document.getElementById(decodeURIComponent(link.hash.slice(1))),
+      top: 0,
+    }));
   let activeLink = sidebar.querySelector("[aria-current]");
 
-  function keepVisible() {
-    if (!activeLink || !scroller.clientHeight) return;
-    const item = activeLink.getBoundingClientRect();
-    const viewport = scroller.getBoundingClientRect();
+  function keepVisible(link = activeLink, container = scroller) {
+    if (!link || !container.clientHeight) return;
+    const item = link.getBoundingClientRect();
+    const viewport = container.getBoundingClientRect();
     const margin = 16;
     if (item.top < viewport.top + margin || item.bottom > viewport.bottom - margin) {
-      scroller.scrollTo({
-        top: scroller.scrollTop + item.top - viewport.top
-          - (scroller.clientHeight - item.height) / 2,
+      container.scrollTo({
+        top: container.scrollTop + item.top - viewport.top
+          - (container.clientHeight - item.height) / 2,
         behavior: "instant",
       });
     }
   }
 
   function update() {
-    let target;
-    try {
-      target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
-    } catch {
-      // A hand-written URL may contain an invalid percent escape.
+    // Treat a heading near the top of the viewport as the current topic.
+    const readingPosition = window.scrollY + Math.min(120, window.innerHeight / 4);
+    let link = pageLink;
+    for (const section of sections) {
+      if (section.top > readingPosition) break;
+      link = section.link;
     }
-    // Nested headings use their nearest section represented in the sidebar.
-    while (target && !sectionLinks.has(target.id)) target = target.parentElement;
-    const link = (target && sectionLinks.get(target.id)) || pageLink;
-    if (link !== activeLink) {
-      activeLink?.removeAttribute("aria-current");
-      link?.setAttribute("aria-current", link === pageLink ? "page" : "location");
-      activeLink = link;
-    }
+    if (link === activeLink) return;
+    activeLink?.removeAttribute("aria-current");
+    link?.setAttribute("aria-current", link === pageLink ? "page" : "location");
+    activeLink = link;
     keepVisible();
   }
 
-  window.addEventListener("hashchange", update);
-  window.addEventListener("pageshow", (event) => {
-    if (event.persisted) update();
-  });
-  window.addEventListener("resize", keepVisible);
+  function measure() {
+    for (const section of sections) {
+      section.top = section.element.getBoundingClientRect().top + window.scrollY;
+    }
+    update();
+    keepVisible();
+  }
+
+  let pending = false;
+  function scheduleUpdate() {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => {
+      pending = false;
+      update();
+    });
+  }
+
+  // Scroll updates use cached heading positions and only change two links.
+  window.addEventListener("scroll", scheduleUpdate, { passive: true });
+  window.addEventListener("hashchange", scheduleUpdate);
+  window.addEventListener("pageshow", measure);
+  window.addEventListener("resize", measure);
   document.querySelector('input[name="__navigation"]')?.addEventListener("change", () => {
-    requestAnimationFrame(keepVisible);
+    requestAnimationFrame(() => keepVisible());
   });
-  update();
-  document.fonts.ready.then(keepVisible);
+  // Images and other content can shift headings after the initial layout.
+  const article = document.querySelector("article");
+  if (article) new ResizeObserver(measure).observe(article);
+  // Furo already tracks TOC sections; reuse its events rather than a second observer.
+  const toc = document.querySelector(".toc-tree");
+  const tocScroller = toc?.closest(".toc-scroll");
+  if (tocScroller) {
+    let activeTocLink;
+    function updateToc(link) {
+      activeTocLink?.removeAttribute("aria-current");
+      link?.setAttribute("aria-current", "location");
+      activeTocLink = link;
+      if (link) keepVisible(link, tocScroller);
+    }
+    toc.addEventListener("gumshoeActivate", (event) => updateToc(event.detail.link));
+    toc.addEventListener("gumshoeDeactivate", () => {
+      activeTocLink?.removeAttribute("aria-current");
+      activeTocLink = null;
+    });
+    requestAnimationFrame(() => updateToc(toc.querySelector(".scroll-current > a")));
+    document.querySelector('input[name="__toc"]')?.addEventListener("change", () => {
+      requestAnimationFrame(() => {
+        if (activeTocLink) keepVisible(activeTocLink, tocScroller);
+      });
+    });
+  }
+  measure();
+  document.fonts.ready.then(measure);
 });

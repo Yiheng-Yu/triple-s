@@ -21,8 +21,8 @@
 }
 
 .sidebar-tree li > ul .reference {
-  padding-top: 2px;
-  padding-bottom: 2px;
+  padding-top: 3px;
+  padding-bottom: 3px;
   line-height: 1.35;
 }
 
@@ -214,4 +214,10 @@ body article .highlight.highlight .gp { color: var(--code-meta); }
   overscroll-behavior-y: contain;
   scrollbar-gutter: stable;
   scroll-behavior: auto;
+}
+
+/* Match the current topic styling in the page's table of contents. */
+.toc-tree li.scroll-current > .reference {
+  color: var(--color-foreground-primary);
+  font-weight: 700;
 }
