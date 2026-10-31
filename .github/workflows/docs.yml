@@ -1,0 +1,24 @@
+name: Build documentation
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    environment: release-build
+    steps:
+      - name: Trigger Read the Docs
+        env:
+          READTHEDOCS_TOKEN: ${{ secrets.READTHEDOCS_TOKEN }}
+        run: |
+          for version in release latest; do
+            curl --fail-with-body --silent --show-error --max-time 30 \
+              --request POST \
+              --header "Authorization: Token ${READTHEDOCS_TOKEN}" \
+              "https://app.readthedocs.org/api/v3/projects/triple-s/versions/${version}/builds/"
+          done
