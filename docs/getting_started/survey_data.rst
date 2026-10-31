@@ -2,7 +2,7 @@ SurveyData
 ==========
 
 :class:`triple_s.SurveyData` holds the respondent data loaded using a datamap.
-When working with a :doc:`Survey <overview>`, access it through ``survey.data``.
+When working with a :doc:`Survey <survey>`, access it through ``survey.data``.
 
 Overview
 ---------------
@@ -17,19 +17,19 @@ Use `describe` to get a quick overview of the data:
    data = survey.data
    data.describe()
 
-Export respondent data
+Work with Polars
 -------------------------------
 
-Use the datamap to interpret its matching data file, then convert the loaded
-data into a ``polars.DataFrame`` or a ``pandas.DataFrame``:
-
-Polars dataframe:
+Convert the loaded data into a ``polars.DataFrame`` via `to_polars()`
 
 .. code-block:: python
 
    df = data.to_polars()
 
-Or alternatively, pandas dataframe:
+Work with Pandas
+-----------------------
+
+Convert into pandas dataframe:
 
 .. code-block:: python
 

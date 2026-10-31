@@ -65,28 +65,13 @@ a datamap and its matching data file:
    from triple_s import read_triple_s
 
    survey = read_triple_s("survey.sss", "survey.asc")
-   print(survey.info.name)
-   df = survey.data.to_polars()
-   xml = survey.datamap.to_xml()
+   print(survey)
 
-Replace the example paths with your own files. If you only have a datamap,
-leave out the second path to explore the survey definition without loading
-responses.
 
-You will mainly work with three objects:
+The main item this library provides is :doc:`Survey <getting_started/survey>`, which allows you 
+doing all sorts of things. See example usage can be found under :doc:`Task Receipts<getting_started/task_receipts>`.
 
-* :class:`triple_s.Survey` brings the definition and responses together.
-  Access them through ``survey.datamap`` and ``survey.data``, or use
-  ``survey.info`` to read and edit the survey's metadata.
-* :class:`triple_s.Datamap` holds metadata in ``info`` and question
-  definitions in ``record``. Use :func:`triple_s.read_datamap` when you
-  want to work with the definition on its own.
-* :class:`triple_s.SurveyData` holds the loaded responses. Use
-  ``to_polars()`` or ``to_pandas()`` to turn them into a DataFrame.
-
-For a closer look, follow the :doc:`Survey guide <getting_started/overview>`
-and the guides that follow it. The :doc:`API Reference <api/index>` has
-more detail on individual classes, methods, and functions.
+The :doc:`API Reference <api/index>` has more detail on individual classes, methods, and functions.
 
 Architecture and Implementation
 -------------------------------
@@ -106,7 +91,8 @@ directly from Rust.
    :maxdepth: 2
    :caption: Getting Started
 
-   getting_started/overview
+   getting_started/task_receipts
+   getting_started/survey
    getting_started/datamap
    getting_started/survey_data
 

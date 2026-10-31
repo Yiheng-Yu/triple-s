@@ -41,5 +41,9 @@ def test_load_asc_file(datamap):
 
 def test_datamap_iter(datamap):
     question_names = datamap.record.question_names
+    record = datamap.record
+    
     for (index, question) in enumerate(datamap.record):
-        assert question_names[index] == question.name
+        correct = question_names[index]
+        assert question.name == correct
+        assert record[index].name == correct  # check if indexing was correct for Record

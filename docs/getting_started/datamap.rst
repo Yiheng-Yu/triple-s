@@ -4,27 +4,7 @@ Datamap
 :class:`triple_s.Datamap` contains survey metadata in ``info`` and question
 definitions in ``record``. It describes how to interpret the data file.
 
-Loading survey datamap
-***************************
-
-1. From :py:attr:`triple_s.Survey.datamap`
-
-Check survey datamap via attribute :py:attr:`triple_s.Survey.datamap`:
-
-.. code-block:: python
-
-   from triple_s import read_triple_s
-   survey = read_triple_s(
-      "path/to/survey.sss",
-      path_data = None
-      )
-   datamap = survey.datamap
-   print(datamap)
-
-
-2. Use :func:`triple_s.read_datamap`
-
-Alternatively, to read just the datamap, use :func:`triple_s.read_datamap` function:
+To read just the datamap, use :func:`triple_s.read_datamap` function:
 
 .. code-block:: python
 
@@ -36,6 +16,9 @@ Alternatively, to read just the datamap, use :func:`triple_s.read_datamap` funct
 
 Conceptually, a survey datamap consists of two parts: a :class:`SurveyInfo` that contains survey 
 metadata (name, title, creation date, etc.,) and a :class:`Record` that collects survey questions.
+
+Overview
+----------------------------
 
 Survey metadata
 *********************
@@ -75,8 +58,9 @@ Survey questions are collated under :py:attr:`Datamap.record` attribute:
    record = datamap.record
    print(record)
 
+
 Check questions in a survey
-***********************************
+----------------------------------
 
 Check each question by iterate the :py:attr:`Datamap.record`:
 
@@ -85,19 +69,47 @@ Check each question by iterate the :py:attr:`Datamap.record`:
    for question in datamap.record:
       # do someting..
 
-Look up a question by name with ``get_question()``. Names are case
-insensitive, and a missing question returns ``None``.
+For getting specific questions in the datamap instance, you can do so by:
+
+A. via question name:
+
+.. code-block:: python
+
+   question = datamap["Q1"]
+   print(question.name, question.label)
+
+Use ``get_question()`` to get datamap of a specific question:
 
 .. code-block:: python
 
    question = datamap.get_question("Q1")
-   if question is not None:
-       print(question.name, question.label)
-       question.label = "Updated question label"
+   print(question.name, question.label)
+
+
+B. via question index:
+
+Just like indexing of any python list, you can do:
+
+.. code-block:: python
+
+   question = datamap[0]
+   print(question.name, question.label)
+
+
+Update Datamap
+---------------------
+
+You can simply update contents of any question like this:
+
+.. code-block:: python
+
+   datamap["Q1"].label = "Updated question label"
+
+      
 
 
 Convert between Triple-s Classic and XML
-************************************************
+-----------------------------------------------
 
 You can easily convert between triple-s classic/ triple-s xml via 
 :func:`Datamap.to_classic` and :func:`Datamap.to_xml` function call:

@@ -9,7 +9,7 @@ Import the installed package as ``triple_s``.
 Read triple-s files
 ----------------------
 
-Load triple-s survey via :func:`triple_s.read_triple_s`:
+Load triple-s survey via :func:`read_triple_s`:
 
 .. code-block:: python
 
