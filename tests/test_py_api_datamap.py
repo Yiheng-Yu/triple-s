@@ -47,3 +47,4 @@ def test_datamap_iter(datamap):
         correct = question_names[index]
         assert question.name == correct
         assert record[index].name == correct  # check if indexing was correct for Record
+        assert datamap[index].name == correct  # check if indexing was correct for Datamap

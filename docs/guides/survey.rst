@@ -22,6 +22,7 @@ Load triple-s survey via :func:`read_triple_s`:
 
    print(survey)
 
+This outputs:
 
 .. code-block:: python
    :class: code-output
@@ -88,6 +89,28 @@ For example:*
 
 See :doc:`SurveyData <survey_data>` for more details about `SurveyData` class.
 
+
+Work with one question's answers
+--------------------------------
+
+Use a question name to get a shared :class:`triple_s.QuestionData` view:
+
+.. code-block:: python
+
+   answers = survey["Q2"]
+   print(answers.question.label)
+   print(answers.to_polars())
+
+The view stays connected to the survey's data. ``to_polars()`` returns the
+answers as a Polars Series, ready to use directly:
+
+.. code-block:: python
+
+   values = answers.to_polars()
+   print(values.dtype)
+
+Editing the returned Series does not update the survey. You can assign new
+data with ``survey.data = new_data``; existing question views will read from it.
 
 View Data map
 ---------------------

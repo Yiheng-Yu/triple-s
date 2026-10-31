@@ -9,7 +9,7 @@ use parking_lot::RwLock;
 #[cfg(feature = "pyo3")]
 use polars::datatypes::AnyValue;
 #[cfg(feature = "pyo3")]
-use pyo3::{exceptions, prelude::*, types::PySlice, IntoPyObjectExt};
+use pyo3::{IntoPyObjectExt, exceptions, prelude::*, types::PySlice};
 
 use crate::prelude::DeepCopy;
 
@@ -92,19 +92,24 @@ pub(crate) fn anyvalue_to_python<'py>(
         AnyValue::Time(nanos) => {
             let seconds = u32::try_from(nanos / 1_000_000_000).ok();
             let fraction = u32::try_from(nanos % 1_000_000_000).ok();
-            let time = seconds.zip(fraction)
-                .and_then(|(s, ns)| chrono::NaiveTime::from_num_seconds_from_midnight_opt(s, ns))
+            let time = seconds
+                .zip(fraction)
+                .and_then(|(s, ns)| {
+                    chrono::NaiveTime::from_num_seconds_from_midnight_opt(s, ns)
+                })
                 .ok_or_else(|| exceptions::PyValueError::new_err("Time out of range"))?;
             time.into_bound_py_any(py)
         }
         AnyValue::List(values) | AnyValue::Array(values, _) => {
-            let values = values.iter()
+            let values = values
+                .iter()
                 .map(|value| anyvalue_to_python(py, value))
                 .collect::<PyResult<Vec<_>>>()?;
             values.into_bound_py_any(py)
         }
         value => Err(exceptions::PyTypeError::new_err(format!(
-            "Unsupported Polars dtype: {:?}", value.dtype()
+            "Unsupported Polars dtype: {:?}",
+            value.dtype()
         ))),
     }
 }

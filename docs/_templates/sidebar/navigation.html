@@ -4,6 +4,6 @@
       <a class="reference internal" href="{{ pathto(root_doc) }}"{% if pagename == root_doc %} aria-current="page"{% endif %}>Overview</a>
     </li>
   </ul>
-  {# Always render the root navigation, including branches outside the current page. #}
-  {{ toctree(collapse=False, titles_only=False, maxdepth=0, includehidden=True) }}
+  {# Keep the full root tree on every page; edit its groups in index.rst. #}
+  {{ sidebar_toctree(collapse=False, titles_only=False, maxdepth=0, includehidden=True) }}
 </div>

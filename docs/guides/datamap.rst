@@ -1,6 +1,9 @@
 Datamap
 =======
 
+Overview
+-----------------
+
 :class:`triple_s.Datamap` contains survey metadata in ``info`` and question
 definitions in ``record``. It describes how to interpret the data file.
 
@@ -14,13 +17,12 @@ To read just the datamap, use :func:`triple_s.read_datamap` function:
    print(datamap.info.version)
 
 
-Conceptually, a survey datamap consists of two parts: a :class:`SurveyInfo` that contains survey 
-metadata (name, title, creation date, etc.,) and a :class:`Record` that collects survey questions.
+Conceptually, a survey datamap consists of two parts:
 
-Overview
-----------------------------
+a. :class:`SurveyInfo` that contains survey metadata (name, title, creation date, etc.,) and 
+b. :class:`Record` that collects survey questions.
 
-Survey metadata
+Metadata
 *********************
 
 Survey metadata can be accessed by :py:attr:`Datamap.info`:
@@ -30,6 +32,7 @@ Survey metadata can be accessed by :py:attr:`Datamap.info`:
    info = datamap.info
    print(info)
 
+Returns:
 
 .. code-block:: python
    :class: code-output
@@ -48,7 +51,9 @@ Survey metadata can be accessed by :py:attr:`Datamap.info`:
       standard=None,
    )
 
-Survey records
+Details for these attributes can be found in the API documentation of the `SurveyInfo <reference/survey_info>` class.
+
+Records
 *********************
 
 Survey questions are collated under :py:attr:`Datamap.record` attribute:
@@ -62,7 +67,14 @@ Survey questions are collated under :py:attr:`Datamap.record` attribute:
 Check questions in a survey
 ----------------------------------
 
-Check each question by iterate the :py:attr:`Datamap.record`:
+Check each question by iterate through :class:`Datamap` or :py:attr:`Datamap.record`
+
+.. code-block:: python
+   
+   for question in datamap:
+      # do someting..
+
+Or:
 
 .. code-block:: python
    
@@ -75,7 +87,7 @@ A. via question name:
 
 .. code-block:: python
 
-   question = datamap["Q1"]
+   question = datamap["Q1"]  # or datamap.record["Q1"]
    print(question.name, question.label)
 
 Use ``get_question()`` to get datamap of a specific question:
@@ -92,7 +104,7 @@ Just like indexing of any python list, you can do:
 
 .. code-block:: python
 
-   question = datamap[0]
+   question = datamap[0]  # or datamap.record[0]
    print(question.name, question.label)
 
 
@@ -103,35 +115,11 @@ You can simply update contents of any question like this:
 
 .. code-block:: python
 
+   from triple_s import read_datamap
+   datamap = read_datamap("survey.sss")
    datamap["Q1"].label = "Updated question label"
 
-      
-
-
-Convert between Triple-s Classic and XML
------------------------------------------------
-
-You can easily convert between triple-s classic/ triple-s xml via 
-:func:`Datamap.to_classic` and :func:`Datamap.to_xml` function call:
-
-.. code-block:: python
-
-   from triple_s import read_datamap
-   datamap = read_datamap("triple-s_xml.sss")
-
-   with open("converted.sss") as file:
-      file.write(datamap.to_classic())
-
-
-The :func:`Datamap.to_xml` function returns a string that can be read by any xml parser, 
-such as the `lxml <https://lxml.de/>`_ library:
-
-.. code-block:: python
-
-   from lxml import etree
-   from triple_s import read_datamap
-
-   datamap = read_datamap("triple-s_xml.sss")
-   xml_string = datamap.to_xml()
-
-   root = etree.fromstring(xml_string.encode("utf-8"))
+   with open("updated survey.sss") as file:
+      updated = datamap.to_xml()
+      file.write(updated)
+   

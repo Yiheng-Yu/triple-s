@@ -4,7 +4,7 @@
   font-style: normal;
   font-weight: 200 800;
   font-display: swap;
-  src: url("atkinson-hyperlegible-next.ttf") format("truetype");
+  src: url("atkinson-hyperlegible-next.woff") format("woff");
 }
 
 @font-face {
@@ -12,7 +12,7 @@
   font-style: italic;
   font-weight: 200 800;
   font-display: swap;
-  src: url("atkinson-hyperlegible-next-italic.ttf") format("truetype");
+  src: url("atkinson-hyperlegible-next-italic.woff") format("woff");
 }
 
 /* Keep nested navigation compact and section titles easy to scan. */
@@ -96,7 +96,8 @@ body[data-theme="dark"] {
 
 body article .highlight.highlight {
   position: relative;
-  margin: 1.5rem 0;
+  /* The outer code-block wrapper already supplies paragraph spacing. */
+  margin: 0;
   padding: 0;
   background: var(--code-panel);
   color: var(--code-text);
