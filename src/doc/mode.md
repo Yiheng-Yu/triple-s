@@ -1,5 +1,6 @@
 Introduced in SSS Xml 2.0.
 Official documentation:
+Text modes, available from Triple-S XML 2.0:
 
 ```text
 (Optional) The use of specialised texts for interviewing and/or analysis within the
@@ -9,7 +10,3 @@ Two explicit modes are available: “interview” and “analysis”. In the abs
 a mode specification, the appropriate text is assumed to be used in both
 modes.
 ```
-
-Variants:
-- Analysis: mode 'analysis'
-- Interview: mode 'interview'

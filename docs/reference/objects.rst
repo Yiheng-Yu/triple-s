@@ -1,8 +1,6 @@
 Objects
 =======
 
-Reference documentation for the public classes and enums exported by ``triple_s``.
-
 .. toctree::
    :maxdepth: 1
 

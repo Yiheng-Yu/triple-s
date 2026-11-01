@@ -400,14 +400,14 @@ def test_set_question_response_range(question):
 
 
 def test_survey_mutate_question(xml):
-    example = xml.get_question("Q2")
+    example = xml.get("Q2")
     copy1 = example.copy()
-    copy2 = xml.get_question("Q2").copy()
+    copy2 = xml.get("Q2").copy()
     example.name = "Q3"
 
-    assert xml.get_question("Q3") is not None
+    assert xml.get("Q3") is not None
     assert copy1.name == copy2.name
     assert copy1.name != example.name
 
 # def test_question_repl(xml):
-    # example = xml.get_question("Q3")
+    # example = xml.get("Q3")

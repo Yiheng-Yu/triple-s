@@ -13,8 +13,7 @@ use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGua
 use polars::{frame::row::Row, prelude::*};
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    IntoPyObjectExt,
-    exceptions,
+    IntoPyObjectExt, exceptions,
     prelude::*,
     types::{PyDict, PySlice, PyTuple},
 };
@@ -25,11 +24,7 @@ use strum::{EnumIter, EnumString};
 use super::{ArcLock, Question};
 #[cfg(feature = "pyo3")]
 use crate::utils::{
-    extract_indicies,
-    get_type_name,
-    lock_it_up,
-    normalize_py_index,
-    py_value_error,
+    extract_indicies, get_type_name, lock_it_up, normalize_py_index, py_value_error,
 };
 use crate::{
     SurveyData,
@@ -195,7 +190,7 @@ impl Record {
 
 impl Record {
     #[inline]
-    fn get_question_(&self, question_name: &str) -> Option<ArcLock<Question>> {
+    fn find_question(&self, question_name: &str) -> Option<ArcLock<Question>> {
         self.content
             .read()
             .iter()
@@ -204,11 +199,8 @@ impl Record {
     }
 
     /// get a question by its question name, name matching is case insensitive.
-    pub fn get_question(
-        &self,
-        question_name: &str,
-    ) -> Option<ArcRwLockReadGuard<RawRwLock, Question>> {
-        self.get_question_(question_name).map(|item| item.read_arc())
+    pub fn get(&self, question_name: &str) -> Option<ArcRwLockReadGuard<RawRwLock, Question>> {
+        self.find_question(question_name).map(|item| item.read_arc())
     }
 
     /// export to triple-s classic.
@@ -272,6 +264,7 @@ impl Record {
 impl Record {
     /// Load respondent data from an `.asc` (fixed-width) or `.csv` file.
     /// Supports both UTF-8 and BOM-marked UTF-16LE/BE encodings.
+    /// Invalid sequences become `�` (U+FFFD), each occupying one fixed-width position.
     /// Returns [`SurveyData`] and updates `href` and `data_format` on success.
     /// The returned data is not stored in the record.
     ///
@@ -418,6 +411,7 @@ impl Record {
     }
 
     /// Validate an `.asc` or `.csv` file against the record's questions and skip setting.
+    /// Invalid Unicode sequences become `�` (U+FFFD), as in [`Record::load_data`].
     ///
     /// This method simply validates data file and would not alter any existing fields.
     ///
@@ -629,22 +623,24 @@ impl Record {
         PyTuple::new(py, items)
     }
 
-    /// Get question by question name, returns 'None' if it doesn't exist.
+    /// Get a question by name, returning `None` if it doesn't exist.
     ///
     /// Name matching is not case sensitive.
-    #[pyo3(name="get_question", signature=(question_name:"str"))]
-    pub fn py_get_question(&self, question_name: &str) -> Option<Question> {
-        self.get_question_(question_name).map(|item| item.read().clone())
+    #[pyo3(name="get", signature=(question_name:"str"))]
+    pub fn py_get(&self, question_name: &str) -> Option<Question> {
+        self.find_question(question_name).map(|item| item.read().clone())
     }
 
     /// Load respondent data and return `SurveyData`, updating `href` and `data_format`.
+    /// Invalid Unicode sequences become `�` (U+FFFD).
     #[pyo3(name = "load_data")]
     fn py_load_data(&mut self, path_data: &str) -> PyResult<SurveyData> {
         self.load_data(path_data)
             .map_err(|err| exceptions::PyRuntimeError::new_err(format!("{:#?}", err)))
     }
 
-    #[getter(question_names)]
+    /// List of question names in the record
+    #[getter(questions)]
     fn py_get_question_names(&self) -> Vec<String> {
         self.content().iter().map(|item| item.read().name()).collect()
     }
@@ -668,7 +664,7 @@ impl Record {
                 .ok_or(exceptions::PyIndexError::new_err(number))?;
             item.into_py_any(py)
         } else if let Ok(question_name) = index.extract::<String>() {
-            self.py_get_question(&question_name)
+            self.py_get(&question_name)
                 .ok_or(exceptions::PyKeyError::new_err(format!(
                     "Unable to find question with name '{}'",
                     question_name
@@ -815,6 +811,7 @@ impl Record {
     }
 
     /// Validate an `.asc` or `.csv` file without changing metadata or loading data.
+    /// Invalid Unicode sequences become `�` (U+FFFD).
     /// Use `load_data(path)` to load respondent data.
     #[pyo3(name = "validate_data")]
     fn py_validate_data(&self, path: &str) -> PyResult<()> {

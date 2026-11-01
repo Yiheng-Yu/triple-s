@@ -7,7 +7,7 @@ Overview
 :class:`triple_s.Datamap` contains survey metadata in ``info`` and question
 definitions in ``record``. It describes how to interpret the data file.
 
-To read just the datamap, use :func:`triple_s.read_datamap` function:
+Read a datamap with :func:`triple_s.read_datamap`:
 
 .. code-block:: python
 
@@ -17,15 +17,12 @@ To read just the datamap, use :func:`triple_s.read_datamap` function:
    print(datamap.info.version)
 
 
-Conceptually, a survey datamap consists of two parts:
-
-a. :class:`SurveyInfo` that contains survey metadata (name, title, creation date, etc.,) and 
-b. :class:`Record` that collects survey questions.
+****
 
 Metadata
 *********************
 
-Survey metadata can be accessed by :py:attr:`Datamap.info`:
+Access survey metadata through :py:attr:`Datamap.info`:
 
 .. code-block:: python
 
@@ -51,56 +48,49 @@ Returns:
       standard=None,
    )
 
-Details for these attributes can be found in the API documentation of the `SurveyInfo <reference/survey_info>` class.
+See :class:`triple_s.SurveyInfo` for the available attributes.
+
+****
 
 Records
 *********************
 
-Survey questions are collated under :py:attr:`Datamap.record` attribute:
+The :py:attr:`Datamap.record` attribute holds the questions:
 
 .. code-block:: python
 
    record = datamap.record
    print(record)
 
+****
 
 Check questions in a survey
 ----------------------------------
 
-Check each question by iterate through :class:`Datamap` or :py:attr:`Datamap.record`
+Iterate through :class:`Datamap` or :py:attr:`Datamap.record` to read each question:
 
 .. code-block:: python
    
    for question in datamap:
-      # do someting..
+      print(question.name, question.label)
 
-Or:
-
-.. code-block:: python
-   
-   for question in datamap.record:
-      # do someting..
-
-For getting specific questions in the datamap instance, you can do so by:
-
-A. via question name:
+Look up a question by name:
 
 .. code-block:: python
 
    question = datamap["Q1"]  # or datamap.record["Q1"]
    print(question.name, question.label)
 
-Use ``get_question()`` to get datamap of a specific question:
+Use ``get()`` to return ``None`` when the name is missing:
 
 .. code-block:: python
 
-   question = datamap.get_question("Q1")
-   print(question.name, question.label)
+   question = datamap.get("Q1")
+   if question is not None:
+      print(question.name, question.label)
 
 
-B. via question index:
-
-Just like indexing of any python list, you can do:
+You can also use a zero-based index, as with a Python list:
 
 .. code-block:: python
 
@@ -111,7 +101,7 @@ Just like indexing of any python list, you can do:
 Update Datamap
 ---------------------
 
-You can simply update contents of any question like this:
+Edit a question, then save the updated datamap:
 
 .. code-block:: python
 
@@ -119,7 +109,6 @@ You can simply update contents of any question like this:
    datamap = read_datamap("survey.sss")
    datamap["Q1"].label = "Updated question label"
 
-   with open("updated survey.sss") as file:
-      updated = datamap.to_xml()
-      file.write(updated)
+   with open("updated survey.sss", "w", encoding="utf-8") as file:
+      file.write(datamap.to_xml())
    

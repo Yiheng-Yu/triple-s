@@ -8,8 +8,7 @@ use pyo3::{exceptions, prelude::*, types::PyDict};
 use pyo3_polars::error::PyPolarsErr;
 
 use crate::{
-    Question,
-    QuestionType,
+    Question, QuestionType,
     data::SurveyData,
     datamap::Datamap,
     utils::{ArcLock, lock_it_up},
@@ -36,7 +35,7 @@ pub struct Survey {
 /// ---
 impl Survey {
     /// Title of survey
-    pub fn title<'a>(&'a self) -> Option<String> {
+    pub fn title(&self) -> Option<String> {
         self.datamap().title()
     }
 
@@ -47,7 +46,7 @@ impl Survey {
     }
 
     /// Name of survey
-    pub fn name<'a>(&'a self) -> Option<String> {
+    pub fn name(&self) -> Option<String> {
         self.datamap().name()
     }
 
@@ -113,7 +112,7 @@ impl Survey {
 
     /// Gets data of a question in a survey, returns `None` if question name doesn't exist.
     pub fn get_question_data(&self, name: &str) -> Option<QuestionData> {
-        let question = self.datamap.get_question(name)?.clone();
+        let question = self.datamap.get(name)?.clone();
 
         Some(QuestionData {
             data: Arc::clone(&self.data),
@@ -281,7 +280,7 @@ impl QuestionData {
         self.question.question_type()
     }
 
-    /// Export contents to [`polars::Column`]
+    /// Export contents to [`polars::prelude::Column`].
     pub fn to_polars(&self) -> PolarsResult<Column> {
         let data = self.data.read();
         let name = self.name();

@@ -1,8 +1,6 @@
-# Creating a new question
+# Create a question
 
-## 1.Via [`QuestionOptions`]
-
-To build a question:
+## Build with [`QuestionOptions`]
 
 ```rust
 use triple_s::{
@@ -22,7 +20,7 @@ assert_eq!(question.label().value(), "Would you visit again?");
 # Ok::<(), anyhow::Error>(())
 ```
 
-## 2. Read from triple-s strings
+## Read a Triple-S fragment
 
 ```rust
 use triple_s::Question;
@@ -50,7 +48,7 @@ assert_eq!(question.name(), "Q5".to_string());
 # Ok::<(), anyhow::Error>(())
 ```
 
-# Viewing and modifying
+# Read and edit metadata
 
 Access question metadata through methods such as [`Question::name()`],
 [`Question::label()`], and [`Question::location()`]. Setters and mutable
@@ -61,10 +59,10 @@ Cloning a question shares its lock-backed metadata, including the name, label,
 location, and response contents. Changes to that shared metadata are visible
 through other clones; the question index is copied independently.
 
-# Exporting
+# Export a question
 
-Use [`Question::to_classic`] or [`Question::to_xml`] to serialise a question
-back to either format as [`String`]:
+Use [`Question::to_classic`] or [`Question::to_xml`] to return the definition
+as a [`String`]:
 
 ```rust
 use triple_s::{QuestionOptions, QuestionType, Text};
@@ -79,8 +77,7 @@ let text = question.to_classic()?;
 # Ok::<(), anyhow::Error>(())
 ```
 
-Note that this would ignore attributes that exists in certain version but
-not in other versions (i.e., `usage` field exists in xml but not in classic).
+Classic output omits XML-only attributes such as `usage`.
 
 Respondent data is returned by [`crate::Record::load_data`]; use
 [`crate::SurveyData::to_polars`] to export it.

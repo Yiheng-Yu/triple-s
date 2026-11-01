@@ -5,57 +5,52 @@ Datamap Management
 Convert between Triple-s Classic and XML
 -------------------------------------------------
 
-You can easily convert between triple-s classic/ triple-s xml via 
-:func:`Datamap.to_classic` and :func:`Datamap.to_xml`:
+Convert between Triple-S Classic and XML with
+:meth:`triple_s.Datamap.to_classic` and :meth:`triple_s.Datamap.to_xml`:
 
 .. code-block:: python
 
     from triple_s import read_datamap
     datamap = read_datamap("triple-s_xml.sss")
 
-    # or .to_classic() to conver to triple-s classic
-    content = datamap.to_xml()  
+    content = datamap.to_xml()  # or datamap.to_classic()
 
-And write to a file:
+Save the result:
 
 .. code-block:: python
 
-    with open("converted.sss") as file:
+    with open("converted.sss", "w", encoding="utf-8") as file:
         file.write(content)
 
 Update Datamap
 ---------------------
 
-You can simply update contents of any question like this:
+Edit a question and save the datamap:
 
 .. code-block:: python
 
     from triple_s import read_datamap
     datamap = read_datamap("survey.sss")
 
-    # Example edits
     datamap["Q1"].label = "Updated question label"
 
-    # And some other edits..
-
-    with open("updated survey.sss") as file:
-       updated = datamap.to_xml()
-       file.write(updated)
+    with open("updated survey.sss", "w", encoding="utf-8") as file:
+       file.write(datamap.to_xml())
 
 
 Save survey data to a csv file
 -------------------------------------------------
 
-You can convert survey data to a `pandas.DataFrame` or a `polars.DataFrame` instance,
-and then call `to_csv` to export to a csv file:
+Convert the responses to pandas and call ``to_csv()``:
 
 .. code-block:: python
 
    from triple_s import read_triple_s
 
    survey = read_triple_s("survey.sss", "survey.asc")
-   df = survey.data.to_pandas()  # or to_polars() to get polars dataframe
-   df.to_csv("csv_file.csv")  # or df.write_csv() for polars dataframe
+   df = survey.data.to_pandas()
+   df.to_csv("survey.csv", index=False)
 
+For Polars, use ``survey.data.to_polars().write_csv("survey.csv")``.
 
 

@@ -1,5 +1,5 @@
 use polars::prelude::AnyValue;
-use triple_s::read_datamap;
+use triple_s::{QuestionOptions, QuestionType, Record, read_datamap};
 
 const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
 const PATH_DATAFILE_V2_0: &str = "tests/sss-examples/sss-2.0/example1.asc";
@@ -38,6 +38,75 @@ fn csv_and_fixed_examples_load_equivalent_responses() {
                 }
                 (csv, fixed) => assert_eq!(csv, fixed),
             }
+        }
+    }
+}
+
+#[test]
+fn invalid_utf8_is_replaced_in_fixed_and_csv_data() {
+    use std::io::Write;
+
+    for (example, extension) in [(1, "asc"), (2, "csv")] {
+        let base = format!("tests/sss-examples/sss-2.0/example{example}");
+        let mut datamap = read_datamap(format!("{base}.sss")).unwrap();
+        let mut bytes = std::fs::read(format!("{base}.{extension}")).unwrap();
+        let answer = b"Nottingham Goose Fair";
+        let offset = bytes.windows(answer.len()).position(|part| part == answer).unwrap();
+        bytes[offset] = 0x96;
+        let mut file =
+            tempfile::Builder::new().suffix(&format!(".{extension}")).tempfile().unwrap();
+        file.write_all(&bytes).unwrap();
+
+        let record = datamap.record_mut();
+        record.validate_data(file.path()).unwrap();
+        let data = record.load_data(file.path()).unwrap();
+        let frame = data.to_polars().unwrap();
+        assert_eq!(frame.height(), 3);
+        assert_eq!(
+            frame.column("Q3.a").unwrap().str().unwrap().get(0).unwrap().trim_end(),
+            "�ottingham Goose Fair"
+        );
+        assert_eq!(
+            frame.column("Q4").unwrap().get(0).unwrap(),
+            AnyValue::UInt32(2)
+        );
+    }
+}
+
+#[test]
+fn malformed_utf8_at_field_boundaries_and_eof_is_replaced() {
+    use std::{io::Write, sync::Arc};
+
+    for (bytes, expected) in [
+        (&b"\x96a\xff"[..], "�a�"),
+        (&b"\xff\x96\x80"[..], "���"),
+        (&b"a\xe2\x82"[..], "a�"),
+    ] {
+        for extension in ["asc", "csv"] {
+            let question = QuestionOptions::new("TEXT")
+                .with_question_type(QuestionType::Character)
+                .with_location(1, Some(expected.chars().count() as u32))
+                .finish()
+                .unwrap();
+            let mut record = Record::default();
+            record.content_mut().push(Arc::new(parking_lot::RwLock::new(question)));
+            let mut file =
+                tempfile::Builder::new().suffix(&format!(".{extension}")).tempfile().unwrap();
+            file.write_all(bytes).unwrap();
+
+            record.validate_data(file.path()).unwrap();
+            let data = record.load_data(file.path()).unwrap();
+            let frame = data.to_polars().unwrap();
+            assert_eq!(frame.shape(), (1, 1));
+            assert_eq!(
+                frame.column("TEXT").unwrap().get(0).unwrap(),
+                AnyValue::String(expected),
+                "{extension}: {bytes:?}"
+            );
+
+            record.content()[0].write().set_question_type(QuestionType::Quantity).unwrap();
+            assert!(record.validate_data(file.path()).is_err());
+            assert!(record.load_data(file.path()).is_err());
         }
     }
 }
