@@ -45,14 +45,15 @@ if let Some(question) = datamap.get("Q1") {
 
 Question names are case insensitive. [`Datamap::get`] and [`Record::get`] return a
 read guard for the matching question, or `None` if it does not exist.
+
 Use [`Datamap::record`] to access the full record.
 
 # Load and export respondent data
 
 Call [`Record::load_data`] through [`Datamap::record_mut`]. The extension
 selects fixed-width (`.asc`) or CSV (`.csv`) parsing, using the record's
-question definitions. CSV fields use question locations; set the record's
-`skip` to `Some("1".into())` to skip a header line.
+question definitions. CSV fields use question locations.
+
 Data loading and validation support UTF-8 and BOM-marked UTF-16. Invalid
 sequences become `�` (U+FFFD), each occupying one fixed-width position.
 
@@ -66,28 +67,10 @@ let frame = data.to_polars()?;
 ```
 
 Loading returns a [`crate::SurveyData`] backed by a temporary Parquet cache
-and updates the record's `href` and `data_format`. Keep the returned data
-owner alive while using the cache. The returned data is not stored in the
-record or attached to an existing [`crate::Survey`].
+and updates the record's `href` and `data_format`.
 
-To read both files into a survey, use [`crate::read_triple_s`]:
-
-```no_run
-use triple_s::read_triple_s;
-
-let survey = read_triple_s("survey.sss", Some("survey.asc"))?;
-let frame = survey.data().to_polars()?;
-let datamap = survey.datamap();
-# Ok::<(), anyhow::Error>(())
-```
-
-Passing `None::<&str>` as the data path reads only the definition and creates
-empty respondent data; `survey.has_data()` then returns `false`.
+To read both files into a survey, use [`crate::read_triple_s`] instead.
 
 # Export the datamap
 
-[`Datamap::to_classic`] and [`Datamap::to_xml`] return `Result<String>`
-containing the definition, not respondent data. They do not write files.
-The XML output is a complete Triple-S `<sss>` document. Classic export
-returns an error for unsupported question types, including date and time
-questions.
+[`Datamap::to_classic`] and [`Datamap::to_xml`] converts datamap to triple-s classic/ xml string respectively.
