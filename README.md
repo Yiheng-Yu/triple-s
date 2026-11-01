@@ -82,6 +82,8 @@ For CSV data, use a datamap with `<record format="csv">` and call
 is its one-based CSV field number. Set `skip="1"` on the record to skip a
 header, or another non-negative number to skip that many initial records.
 Quoted commas, escaped quotes, and multiline text fields are supported.
+Both formats support UTF-8 and BOM-marked UTF-16. Loading and validation
+replace invalid sequences with `�` (U+FFFD), which counts as one fixed-width character.
 
 ...And export to polars dataframe
 

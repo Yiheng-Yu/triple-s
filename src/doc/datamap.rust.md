@@ -37,23 +37,24 @@ loading respondent data, even when the record references a data file.
 use triple_s::read_datamap;
 
 let datamap = read_datamap("survey.sss")?;
-if let Some(question) = datamap.get_question("Q1") {
+if let Some(question) = datamap.get("Q1") {
     println!("Question label: {:?}", question.label());
 }
 # Ok::<(), anyhow::Error>(())
 ```
 
-Question names are case insensitive. [`Datamap::get_question`] returns a
+Question names are case insensitive. [`Datamap::get`] and [`Record::get`] return a
 read guard for the matching question, or `None` if it does not exist.
 Use [`Datamap::record`] to access the full record.
 
 # Load and export respondent data
 
-Call [`Record::load_data`] through [`Datamap::record_mut`]. The file extension
-selects fixed-width (`.asc`) or CSV (`.csv`) parsing. Both use the record's
-question definitions and `skip` setting. CSV fields are selected by question
-locations, not column names; set `skip` to skip a header line if necessary.
-Data loading supports UTF-8 and BOM-marked UTF-16.
+Call [`Record::load_data`] through [`Datamap::record_mut`]. The extension
+selects fixed-width (`.asc`) or CSV (`.csv`) parsing, using the record's
+question definitions. CSV fields use question locations; set the record's
+`skip` to `Some("1".into())` to skip a header line.
+Data loading and validation support UTF-8 and BOM-marked UTF-16. Invalid
+sequences become `�` (U+FFFD), each occupying one fixed-width position.
 
 ```no_run
 use triple_s::read_datamap;

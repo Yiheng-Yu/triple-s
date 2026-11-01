@@ -40,7 +40,7 @@ def test_load_asc_file(datamap):
 
 
 def test_datamap_iter(datamap):
-    question_names = datamap.record.question_names
+    question_names = datamap.record.questions
     record = datamap.record
     
     for (index, question) in enumerate(datamap.record):
@@ -48,3 +48,19 @@ def test_datamap_iter(datamap):
         assert question.name == correct
         assert record[index].name == correct  # check if indexing was correct for Record
         assert datamap[index].name == correct  # check if indexing was correct for Datamap
+        assert record.get(correct.lower()).name == record[correct.lower()].name == correct
+        assert datamap.get(correct.lower()).name == datamap[correct.lower()].name == correct
+
+    for container in [datamap, record]:
+        for name in ["missing", ""]:
+            assert container.get(name) is None
+            with pytest.raises(KeyError):
+                container[name]
+
+
+def test_get_empty_datamap():
+    datamap = Datamap.from_dict({})
+    for container in [datamap, datamap.record]:
+        assert container.questions == []
+        assert container.get("Q1") is None
+        assert container.get("") is None

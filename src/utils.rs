@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use encoding_rs::{Decoder, DecoderResult, UTF_8};
+use encoding_rs::{CoderResult, Decoder, UTF_8};
 use parking_lot::RwLock;
 #[cfg(feature = "pyo3")]
 use polars::datatypes::AnyValue;
@@ -152,8 +152,7 @@ pub(crate) fn extract_indicies<'py>(
     .collect())
 }
 
-/// Used to read various raw files with various file encodings, mostly to accomdate Microsoft.
-/// oh god please save me
+/// Stream UTF-8 or BOM-marked UTF-16 data, replacing malformed sequences with U+FFFD.
 pub(crate) struct TextReader<R> {
     source: R,
     decoder: Decoder,
@@ -195,22 +194,24 @@ impl<R: BufRead> Read for TextReader<R> {
 
             let input = self.source.fill_buf()?;
             let last = input.is_empty();
-            let (status, consumed, written) =
-                self.decoder.decode_to_utf8_without_replacement(input, &mut self.output, last);
+            // The decoder needs space for one complete UTF-8 character.
+            let direct = destination.len() >= 4;
+            let output = if direct {
+                &mut *destination
+            } else {
+                &mut self.output
+            };
+            let (status, consumed, written, _) =
+                self.decoder.decode_to_utf8(input, output, last);
             self.source.consume(consumed);
-            self.position = 0;
-            self.length = written;
-            match status {
-                DecoderResult::Malformed(..) => {
-                    self.finished = true;
-                    self.length = 0;
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "Malformed Unicode data",
-                    ));
+            self.finished = last && status == CoderResult::InputEmpty;
+            if direct {
+                if written != 0 {
+                    return Ok(written);
                 }
-                DecoderResult::InputEmpty if last => self.finished = true,
-                _ => {}
+            } else {
+                self.position = 0;
+                self.length = written;
             }
         }
     }
@@ -252,7 +253,63 @@ mod tests {
             reader.read_to_string(&mut decoded).unwrap();
             assert_eq!(decoded, text);
         }
+    }
+
+    #[test]
+    fn malformed_sequences_are_replaced_across_buffer_boundaries() {
+        let bytes = b"A\x96B\xc3\xa9\xf0\x9f\x98\x80\xe2\x82!\xff\xc3".repeat(3000);
+        let expected = "A�Bé😀�!��".repeat(3000);
+        for capacity in [1, 8192] {
+            let mut reader =
+                TextReader::new(BufReader::with_capacity(capacity, bytes.as_slice()));
+            let mut decoded = String::new();
+            reader.read_to_string(&mut decoded).unwrap();
+            assert_eq!(decoded, expected);
+        }
+
         let mut truncated = TextReader::new(&[0xff, 0xfe, 0x41][..]);
-        assert!(truncated.read_to_string(&mut String::new()).is_err());
+        let mut decoded = String::new();
+        truncated.read_to_string(&mut decoded).unwrap();
+        assert_eq!(decoded, "�");
+    }
+
+    #[test]
+    fn text_reader_handles_empty_reads_and_eof() {
+        for (input, expected) in [
+            (b"".as_slice(), ""),
+            (b"\xef\xbb\xbf", ""),
+            (b"\xff\xc3", "��"),
+        ] {
+            let mut reader = TextReader::new(input);
+            assert_eq!(reader.read(&mut []).unwrap(), 0);
+            let mut decoded = Vec::new();
+            let mut byte = [0];
+            while reader.read(&mut byte).unwrap() != 0 {
+                decoded.push(byte[0]);
+            }
+            assert_eq!(decoded, expected.as_bytes());
+            assert_eq!(reader.read(&mut byte).unwrap(), 0);
+        }
+    }
+
+    #[test]
+    fn text_reader_handles_mixed_read_sizes() {
+        let input = b"A\xc3\xa9\xf0\x9f\x98\x80\x96Z".repeat(3000);
+        let mut reader = TextReader::new(BufReader::with_capacity(3, input.as_slice()));
+        let mut decoded = Vec::new();
+        let mut buffer = [0; 8192];
+        for size in [0, 1, 3, 4, 2, 8192].into_iter().cycle() {
+            let count = reader.read(&mut buffer[..size]).unwrap();
+            if size == 0 {
+                assert_eq!(count, 0);
+                continue;
+            }
+            if count == 0 {
+                break;
+            }
+            decoded.extend_from_slice(&buffer[..count]);
+        }
+        assert_eq!(decoded, "Aé😀�Z".repeat(3000).as_bytes());
+        assert_eq!(reader.read(&mut buffer).unwrap(), 0);
     }
 }

@@ -1,13 +1,15 @@
 Functions
 ==========
 
-Read triple-s file
+Read a survey
 -------------------------
 
-.. autofunction:: triple_s.read_triple_s
+.. autofunction:: triple_s.read_triple_s(path_datamap, path_data=None) -> Survey
 
-Read datamap only
+****
+
+Read survey datamap
 --------------------------
 
-.. autofunction:: triple_s.read_datamap
+.. autofunction:: triple_s.read_datamap(path_datamap) -> Datamap
 

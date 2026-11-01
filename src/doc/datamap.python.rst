@@ -20,12 +20,11 @@ it does not load the data file referenced by the record.
 Create and edit metadata
 ------------------------
 
-Use ``Datamap.from_dict()`` to construct a datamap. The optional ``info``
-(or ``survey_info``) and ``record`` entries accept their corresponding
-objects or dictionaries accepted by ``SurveyInfo.from_dict()`` and
-``Record.from_dict()``. An omitted or ``None`` metadata entry defaults to
-Triple-S version 1.2; an omitted or ``None`` record creates an empty record.
-When supplying a metadata dictionary, include its ``version``.
+Build a datamap with ``Datamap.from_dict()``. The optional ``info`` (or
+``survey_info``) and ``record`` entries accept objects or dictionaries for
+``SurveyInfo.from_dict()`` and ``Record.from_dict()``. Include ``version`` in
+metadata dictionaries. Missing or ``None`` metadata uses Triple-S version 1.2;
+a missing or ``None`` record starts empty.
 
 .. code-block:: python
 
@@ -39,33 +38,32 @@ When supplying a metadata dictionary, include its ``version``.
    datamap.title = "Updated survey"
    assert datamap.info.title == "Updated survey"
 
-Metadata obtained through ``datamap.info`` shares its fields with the
-original datamap. Editing those fields updates the datamap, including when
-it is accessed through ``survey.datamap`` or ``survey.info``.
+Edits through ``datamap.info``, ``survey.datamap``, or ``survey.info`` update
+the shared metadata.
 
 Access questions
 ----------------
 
-The ``record`` property exposes the datamap's :class:`triple_s.Record`.
-The ``questions`` property returns a list of question names in record order.
-Use ``get_question()`` to look up a question by name. Names are case
-insensitive; a missing question returns ``None``.
+``questions`` lists question names in record order. Use ``get()`` on the
+datamap or record to look up a name. Matching is case insensitive; a missing
+question returns ``None``.
 
 .. code-block:: python
 
    datamap = read_datamap("survey.sss")
    print(datamap.questions)
-   question = datamap.get_question("Q1")
+   question = datamap.get("Q1")
    if question is not None:
        print(question.label)
 
 Load and export data
 --------------------
 
-``load_data()`` uses the record's question definitions and ``skip`` setting.
-The file extension selects the format: ``.asc`` for fixed-width data or
-``.csv`` for CSV data. CSV fields are selected by the questions' locations,
-not by column names; use the record's skip setting to skip a header line.
+``load_data()`` uses the record's question definitions. The extension selects
+fixed-width (``.asc``) or CSV (``.csv``) parsing. CSV fields use the questions'
+locations; set ``record.skip = "1"`` to skip a header line.
+Loading and validation support UTF-8 and BOM-marked UTF-16. Invalid sequences
+become ``�`` (U+FFFD), each occupying one fixed-width position.
 
 .. code-block:: python
 

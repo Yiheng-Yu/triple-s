@@ -1,9 +1,5 @@
-Describes how responses are stored for a question of type multiple.
-Spread corresponds to the optional spread element within a variable in
-Triple-S XML, or the SPREAD line in Triple-S classic.
-
-Multiple-choice responses use one of two layouts, depending on whether
-spread is defined.
+Controls how multiple-choice responses are stored: the optional `<spread>`
+element in Triple-S XML or `SPREAD` line in Triple-S Classic.
 
 Without spread (default)
 ------------------------------
@@ -43,11 +39,10 @@ One subfield, two characters wide:
 - Split: "13"
 - Selected codes: `[13]`
 
-Two subfields, each two characters wide. The second slot contains two
-spaces and is unused:
+Two subfields, each two characters wide. Zero marks an unused slot:
 
-- Raw data: "13  "
-- Split: "13" | "  "
+- Raw data: "1300"
+- Split: "13" | "00"
 - Selected codes: `[13]`
 
 Three subfields, each three characters wide:
@@ -55,6 +50,3 @@ Three subfields, each three characters wide:
 - Raw data: "001042999"
 - Split: "001" | "042" | "999"
 - Selected codes: [1, 42, 999]
-
-The subfield count and width determine how to split the data; the digits
-alone do not determine where one category code ends and the next begins.

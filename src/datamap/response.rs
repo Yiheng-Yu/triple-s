@@ -6,8 +6,7 @@ use anyhow::{Context, Result};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    IntoPyObjectExt,
-    exceptions,
+    IntoPyObjectExt, exceptions,
     prelude::*,
     types::{PyDict, PyFloat, PyInt, PySlice, PyString, PyTuple},
 };
@@ -17,11 +16,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use crate::{
     datamap::{QuestionType, Text},
     error::{
-        self,
-        InvalidArg,
-        MissingAttributeError,
-        TypeConvertionError,
-        UnsupportedFeature,
+        self, InvalidArg, MissingAttributeError, TypeConvertionError, UnsupportedFeature,
     },
     prelude::DeepCopy,
     utils::{ArcLock, lock_it_up},
@@ -249,7 +244,9 @@ impl Response {
     ///
     /// Returns an error if any value cannot be converted to `T`.
     pub fn cast<T>(&self) -> Result<Self>
-    where T: TryFrom<Value, Error = TypeConvertionError> + Into<Value> {
+    where
+        T: TryFrom<Value, Error = TypeConvertionError> + Into<Value>,
+    {
         let range =
             self.range().as_ref().map(|range| range.cast::<T>()).transpose().with_context(
                 || "When tryin to conver data type for `range` field.".to_string(),
@@ -974,7 +971,9 @@ impl Code {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn cast<T>(&self) -> Result<Self>
-    where T: TryFrom<Value, Error = TypeConvertionError> + Into<Value> {
+    where
+        T: TryFrom<Value, Error = TypeConvertionError> + Into<Value>,
+    {
         let mut copy = self.deepcopy();
         *copy.code_mut() = copy.code().cast::<T>().with_context(|| {
             format!(
@@ -1555,7 +1554,9 @@ impl Value {
     /// # Ok::<(), triple_s::error::TypeConvertionError>(())
     /// ```
     pub fn cast<T>(&self) -> Result<Self, TypeConvertionError>
-    where T: TryFrom<Self, Error = TypeConvertionError> + Into<Self> {
+    where
+        T: TryFrom<Self, Error = TypeConvertionError> + Into<Self>,
+    {
         let val = T::try_from(self.clone())?;
         Ok(val.into())
     }
@@ -1949,7 +1950,9 @@ impl DataRange {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn cast<T>(&self) -> Result<Self>
-    where T: TryFrom<Value, Error = TypeConvertionError> + Into<Value> {
+    where
+        T: TryFrom<Value, Error = TypeConvertionError> + Into<Value>,
+    {
         let start = self.start().cast::<T>()?;
         let end = self.end().cast::<T>()?;
 

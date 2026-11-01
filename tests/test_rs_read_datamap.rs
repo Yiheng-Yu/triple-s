@@ -10,6 +10,23 @@ fn example_datamap_classic() -> Datamap {
 fn test_read_classic() {
     let datamap = example_datamap_classic();
     assert_eq!(datamap.record().content().len(), 24);
+    for name in ["AGE", "age"] {
+        assert_eq!(datamap.get(name).unwrap().name(), "AGE");
+        assert_eq!(datamap.record().get(name).unwrap().name(), "AGE");
+    }
+    for name in ["missing", ""] {
+        assert!(datamap.get(name).is_none());
+        assert!(datamap.record().get(name).is_none());
+    }
+}
+
+#[test]
+fn test_get_empty_datamap() {
+    let datamap = Datamap::empty();
+    for name in ["AGE", ""] {
+        assert!(datamap.get(name).is_none());
+        assert!(datamap.record().get(name).is_none());
+    }
 }
 
 #[test]

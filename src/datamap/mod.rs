@@ -84,11 +84,8 @@ impl Datamap {
     }
 
     /// get question by its name, case insensitive.
-    pub fn get_question(
-        &self,
-        question_name: &str,
-    ) -> Option<ArcRwLockReadGuard<RawRwLock, Question>> {
-        self.record.get_question(question_name)
+    pub fn get(&self, question_name: &str) -> Option<ArcRwLockReadGuard<RawRwLock, Question>> {
+        self.record.get(question_name)
     }
 
     /// export content of datamap to triple-s classic string.
@@ -259,9 +256,9 @@ impl Datamap {
     }
 
     /// get question by question name, returns `None` if question name not exist.
-    #[pyo3(name="get_question", signature=(question_name:"str"))]
-    fn py_get_question(&self, question_name: &str) -> Option<Question> {
-        self.record.py_get_question(question_name)
+    #[pyo3(name="get", signature=(question_name:"str"))]
+    fn py_get(&self, question_name: &str) -> Option<Question> {
+        self.record.py_get(question_name)
     }
 
     /// (optional) Title of the survey
@@ -349,6 +346,7 @@ impl Datamap {
     }
 
     /// Load an `.asc` or `.csv` file using the record's skip setting.
+    /// Invalid Unicode sequences become `�` (U+FFFD).
     /// Returns `SurveyData` and updates the record's `href` and `data_format`.
     /// The returned data is not stored on the datamap.
     #[pyo3(name="load_data", signature=(path:"str"))]

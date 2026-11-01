@@ -15,9 +15,8 @@ A triple-s survey usually comes in two files:
   An ``.asc`` file stores values in fixed-width fields; a ``.csv`` file
   separates them with commas.
 
-The ``triple-s`` provides a (very!) fast access to these files. You can look through its questions, load 
-the survey data to do some analysis via `pandas`/ `polars` or `huggingface datasets`, 
-or make changes to the datamap and save it for later.
+You can explore questions, analyse responses with pandas or Polars,
+and edit and save the datamap.
 
 
 Currently, the library supports Triple-S Classic and XML formats up to Triple-S 2.0.
@@ -39,21 +38,9 @@ Or, if you use ``uv``:
    uv pip install triple-s-survey -U
 
 
-The installation process may take a little while, as the source code needs to be compiled. 
-One dependency in particular, `polars <https://pola.rs/>`_, 
-can take quite some time to compile, so don't worry if things seem a little slow!
-
-If you'd like to see what's happening along the way, you can add the `-v` flag to enable more detailed installation progress:
-
-.. code-block:: shell
-
-   pip install triple-s-survey -v -U
-
-Or for ``uv``:
-
-.. code-block:: shell
-
-   uv pip install triple-s-survey -v -U
+If no wheel matches your system, installation compiles the source. This can
+take a while, especially for `Polars <https://pola.rs/>`_. Add ``-v`` to
+either command to see progress.
 
 Library Overview
 ----------------
@@ -76,36 +63,29 @@ a datamap and its matching data file:
 Finding Your Way Around
 -----------------------
 
-The sidebar groups the documentation into three sections, depending on what
-you need:
+Choose a section from the sidebar:
 
-* **Contents** introduces the main parts of the library. Start with
+* **Contents** introduces the library. Start with
   :doc:`Survey <guides/survey>` to load a survey and look through its responses,
-  then head to :doc:`SurveyData <guides/survey_data>` or
-  :doc:`Datamap <guides/datamap>` when you want to work with either part in more detail.
-* **Task Recipes** has practical examples you can follow for a particular job.
+  then explore :doc:`SurveyData <guides/survey_data>` or
+  :doc:`Datamap <guides/datamap>`.
+* **Task Recipes** offers practical examples.
   See :doc:`Datamap Management <recipes/datamap>` for working with question
   definitions, or :doc:`Survey Data <recipes/survey_data>` for working with responses.
-* **API Reference** is there when you need the details of a class or function.
+* **API Reference** describes each class and function.
   Browse :doc:`Functions <reference/functions>`, :doc:`Objects <reference/objects>`,
-  or :doc:`Exceptions <reference/exceptions>`. Under Objects, the SurveyData and
-  Datamap groups keep related classes together.
+  or :doc:`Exceptions <reference/exceptions>`.
 
-Within a page, use the table of contents to jump to a particular section.
-If you already know the name of a class, method, or topic, try the search box
-in the sidebar. On a smaller screen, open the navigation menu to find these links.
+Use the sidebar search to find a class, method, or topic.
 
 Architecture and Implementation
 -------------------------------
 
-The library's core is written in Rust, with a Python interface built using
-PyO3 and maturin. This lets you work with familiar Python objects while
-Rust handles parsing and data processing.
+The Rust core handles parsing and data processing. PyO3 and maturin provide
+the Python interface.
 
-If you prefer working in Rust or want to explore how the library fits
-together, the `Rust API documentation on docs.rs
-<https://docs.rs/triple_s/latest/triple_s/index.html>`_ is a good place
-to start. Much of the functionality exposed in Python is also available directly from Rust.
+For Rust usage, see the `Rust API documentation
+<https://docs.rs/triple_s/latest/triple_s/index.html>`_.
 
 .. toctree::
    :hidden:
