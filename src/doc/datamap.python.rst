@@ -38,7 +38,7 @@ Alternatively, you can build a datamap with ``Datamap.from_dict()``:
 Access questions
 ----------------
 
-To see out all questions in a datamap, use :py:property:`Record.questions`, which lists question names in record order.
+To see out all questions in a datamap, use :py:attr:`Record.questions`, which lists question names in record order.
 
 Use ``get()`` on the datamap or record to get questions by its `name`, case insensitive; a missing
 question returns ``None``:
