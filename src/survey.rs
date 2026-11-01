@@ -22,7 +22,6 @@ use crate::{
 
 /// Triple-s survey.
 ///
-/// Internally, `Survey` A datamap together with respondent data.
 #[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "Survey"))]
 #[derive(Debug)]
 pub struct Survey {
