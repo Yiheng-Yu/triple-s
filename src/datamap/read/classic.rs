@@ -26,7 +26,6 @@ static PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(&pattern).unwrap()
 });
 
-#[allow(clippy::try_from_instead_of_from_str)]
 impl TryFrom<&str> for Node {
     type Error = anyhow::Error;
 

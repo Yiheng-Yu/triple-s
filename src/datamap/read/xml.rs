@@ -11,7 +11,9 @@ use super::{Node, QuestionBuilder, SurveyBuilder};
 use crate::error::{InternalError, UnknownAttribute};
 
 pub fn create_survey_builder<R>(mut reader: Reader<R>) -> Result<SurveyBuilder>
-where R: BufRead {
+where
+    R: BufRead,
+{
     let mut survey_builder = SurveyBuilder::empty(false);
     let mut buf = Vec::new();
     let _index: usize = 0;
@@ -420,7 +422,9 @@ fn extract_attributes(
 /// Read text with XML references decoded once, preserving embedded markup.
 #[inline]
 fn extract_text<R>(reader: &mut Reader<R>, start: &BytesStart) -> Result<String>
-where R: BufRead {
+where
+    R: BufRead,
+{
     let mut buf = Vec::new();
     let mut output = quick_xml::Writer::new(Vec::new());
     let mut depth = 0;

@@ -94,7 +94,7 @@
 //!
 //! Load a datamap with [`read_datamap`] or [`read_from_string`], then access
 //! its metadata and record directly or find a question by name with
-//! [`Datamap::get_question`]. You can also start with [`Datamap::empty`] and
+//! [`Datamap::get`]. You can also start with [`Datamap::empty`] and
 //! build a survey definition programmatically.
 //!
 //! # IMPORTANT: Trait `DeepCopy`
@@ -160,14 +160,7 @@ pub use data::SurveyData;
 pub use datamap::{
     Datamap,
     question::{
-        self,
-        CodeFormat,
-        Location,
-        Question,
-        QuestionOptions,
-        QuestionType,
-        Spread,
-        Usage,
+        self, CodeFormat, Location, Question, QuestionOptions, QuestionType, Spread, Usage,
     },
     read::{read_datamap, read_from_reader, read_from_string},
     record::{self, DataFormat, Record},

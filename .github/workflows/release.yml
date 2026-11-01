@@ -30,10 +30,13 @@ jobs:
 
       - name: Build manylinux wheel
         uses: PyO3/maturin-action@v1
+        env:
+          SCCACHE_GHA_VERSION: ${{ github.workflow }}-${{ github.job }}
         with:
           command: build
           args: --release --compatibility pypi --out dist
           manylinux: "2_28"
+          sccache: true
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4
@@ -83,6 +86,11 @@ jobs:
 
       - name: Install stable Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ github.workflow }}-rust
 
       - name: Publish crate
         run: cargo publish

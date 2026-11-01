@@ -17,7 +17,9 @@ Attributes
 
 Methods
 ^^^^^^^
-.. automethod:: triple_s.Version.available_options
+.. automethod:: triple_s.Version.available_options() -> list[str]
+
+****
 
 QuestionType
 ------------
@@ -38,7 +40,9 @@ Attributes
 
 Methods
 ^^^^^^^
-.. automethod:: triple_s.QuestionType.available_options
+.. automethod:: triple_s.QuestionType.available_options() -> list[str]
+
+****
 
 CodeFormat
 ----------
@@ -51,6 +55,8 @@ Attributes
 .. autoattribute:: triple_s.CodeFormat.UnSigned
 .. autoattribute:: triple_s.CodeFormat.Literal
 
+****
+
 DataFormat
 ----------
 
@@ -61,6 +67,8 @@ Attributes
 
 .. autoattribute:: triple_s.DataFormat.Csv
 .. autoattribute:: triple_s.DataFormat.Fixed
+
+****
 
 Usage
 -----
@@ -76,7 +84,9 @@ Attributes
 
 Methods
 ^^^^^^^
-.. automethod:: triple_s.Usage.available_options
+.. automethod:: triple_s.Usage.available_options() -> list[str]
+
+****
 
 Mode
 ----
@@ -88,6 +98,8 @@ Attributes
 
 .. autoattribute:: triple_s.Mode.Analysis
 .. autoattribute:: triple_s.Mode.Interview
+
+****
 
 Value
 -----
