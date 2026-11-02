@@ -7,11 +7,12 @@ Attributes
 ----------
 
 .. autoattribute:: triple_s.QuestionData.name
-	:annotation: -> str
+   :annotation: -> str
+
 .. autoattribute:: triple_s.QuestionData.type
-	:annotation: -> str | None
+   :annotation: -> str | None
 
 Methods
 -------
 
-.. automethod:: triple_s.QuestionData.to_polars() -> Incomplete
+.. automethod:: triple_s.QuestionData.to_polars() -> polars.Series
