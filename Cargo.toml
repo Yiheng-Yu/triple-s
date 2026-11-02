@@ -1,6 +1,6 @@
 [package]
 name = "triple_s"
-version = "0.4.132"
+version = "0.4.133"
 edition = "2024"
 description = "Read classic Triple-S survey definition files."
 repository = "https://github.com/Yiheng-Yu/triple-s"
@@ -34,12 +34,12 @@ codegen-units = 256
 rpath = false
 
 [profile.release]
+strip = "none"
 debug = "none"
 opt-level = 3
 overflow-checks = true
 debug-assertions = false
 incremental = true
-strip = true
 lto = "thin"
 
 [profile.docs]
@@ -50,20 +50,20 @@ codegen-units = 16
 debug = false
 
 [profile.python-dev]
+strip = "none"
 debug = "full"
 opt-level = 0
 overflow-checks = true
 debug-assertions = true
 panic = "unwind"
-strip = "none"
 lto = "off"
 inherits = "dev"
 
 [profile.python-release]
 overflow-checks = true
 debug-assertions = false
-strip = "symbols"
 lto = "thin"
+strip = "none"
 inherits = "release"
 
 [lib]
