@@ -7,22 +7,27 @@ Attributes
 ----------------
 
 .. autoattribute:: triple_s.Record.data_format
-	:annotation: -> DataFormat | None
+   :annotation: -> DataFormat | None
+
 .. autoattribute:: triple_s.Record.content
-	:annotation: -> tuple
+   :annotation: -> tuple[Question, ...]
+
 .. autoattribute:: triple_s.Record.href
-	:annotation: -> str | None
+   :annotation: -> str | None
+
 .. autoattribute:: triple_s.Record.ident
-	:annotation: -> str
+   :annotation: -> str
+
 .. autoattribute:: triple_s.Record.skip
-	:annotation: -> str | None
+   :annotation: -> str | None
 
 Properties
 -----------------
 
-.. py:property:: triple_s.Record.questions -> List[str]
+.. py:property:: triple_s.Record.questions
+   :type: List[str]
 
-List of question names.
+   List of question names.
 
 Methods
 -------------

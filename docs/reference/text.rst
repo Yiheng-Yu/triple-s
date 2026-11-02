@@ -10,9 +10,10 @@ Attributes
 ^^^^^^^^^^
 
 .. autoattribute:: triple_s.Text.value
-	:annotation: -> str
+   :annotation: -> str
+
 .. autoattribute:: triple_s.Text.variants
-	:annotation: -> tuple
+   :annotation: -> tuple[Variant, ...]
 
 Methods
 ^^^^^^^
@@ -30,11 +31,13 @@ Attributes
 ^^^^^^^^^^
 
 .. autoattribute:: triple_s.Variant.language
-	:annotation: -> str | None
+   :annotation: -> str | None
+
 .. autoattribute:: triple_s.Variant.value
-	:annotation: -> str
+   :annotation: -> str
+
 .. autoattribute:: triple_s.Variant.mode
-	:annotation: -> str | None
+   :annotation: -> str | None
 
 Methods
 ^^^^^^^

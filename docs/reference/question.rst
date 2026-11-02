@@ -9,23 +9,31 @@ Attributes
 ^^^^^^^^^^
 
 .. autoattribute:: triple_s.Question.type
-	:annotation: -> str | None
+   :annotation: -> str | None
+
 .. autoattribute:: triple_s.Question.location
-	:annotation: -> Location
+   :annotation: -> Location
+
 .. autoattribute:: triple_s.Question.label
-	:annotation: -> Text
+   :annotation: -> Text
+
 .. autoattribute:: triple_s.Question.spread
-	:annotation: -> Spread | None
+   :annotation: -> Spread | None
+
 .. autoattribute:: triple_s.Question.format
-	:annotation: -> str | None
+   :annotation: -> str | None
+
 .. autoattribute:: triple_s.Question.usage
-	:annotation: -> str | None
+   :annotation: -> str | None
+
 .. autoattribute:: triple_s.Question.filter
-	:annotation: -> str | None
+   :annotation: -> str | None
+
 .. autoattribute:: triple_s.Question.response
-	:annotation: -> Response
+   :annotation: -> Response
+
 .. autoattribute:: triple_s.Question.name
-	:annotation: -> str
+   :annotation: -> str
 
 Methods
 ^^^^^^^
@@ -48,9 +56,10 @@ Attributes
 ^^^^^^^^^^
 
 .. autoattribute:: triple_s.Location.start
-	:annotation: -> int
+   :annotation: -> int
+
 .. autoattribute:: triple_s.Location.finish
-	:annotation: -> int
+   :annotation: -> int
 
 Methods
 ^^^^^^^
@@ -67,9 +76,10 @@ Attributes
 ^^^^^^^^^^
 
 .. autoattribute:: triple_s.Spread.subfield_width
-	:annotation: -> int | None
+   :annotation: -> int | None
+
 .. autoattribute:: triple_s.Spread.num_subfields
-	:annotation: -> int
+   :annotation: -> int
 
 Methods
 ^^^^^^^
@@ -86,9 +96,10 @@ Attributes
 ^^^^^^^^^^
 
 .. autoattribute:: triple_s.Response.range
-	:annotation: -> DataRange | None
+   :annotation: -> DataRange | None
+
 .. autoattribute:: triple_s.Response.values
-	:annotation: -> tuple
+   :annotation: -> tuple[Code, ...]
 
 Methods
 ^^^^^^^
@@ -109,9 +120,10 @@ Attributes
 ^^^^^^^^^^
 
 .. autoattribute:: triple_s.DataRange.end
-	:annotation: -> Any
+   :annotation: -> int | float
+
 .. autoattribute:: triple_s.DataRange.start
-	:annotation: -> Any
+   :annotation: -> int | float
 
 Methods
 ^^^^^^^
@@ -132,13 +144,16 @@ Attributes
 ^^^^^^^^^^
 
 .. autoattribute:: triple_s.Code.label
-	:annotation: -> Text
+   :annotation: -> Text
+
 .. autoattribute:: triple_s.Code.code
-	:annotation: -> Any
+   :annotation: -> int | float | str
+
 .. autoattribute:: triple_s.Code.score
-	:annotation: -> float | None
+   :annotation: -> float | None
+
 .. autoattribute:: triple_s.Code.filter
-	:annotation: -> str | None
+   :annotation: -> str | None
 
 Methods
 ^^^^^^^

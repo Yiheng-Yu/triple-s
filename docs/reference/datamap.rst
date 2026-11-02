@@ -7,11 +7,13 @@ Attributes
 ----------------
 
 .. autoattribute:: triple_s.Datamap.record
-	:annotation: -> Record
+   :annotation: -> Record
+
 .. autoattribute:: triple_s.Datamap.info
-	:annotation: -> SurveyInfo
+   :annotation: -> SurveyInfo
+
 .. autoattribute:: triple_s.Datamap.title
-	:annotation: -> str | None
+   :annotation: -> str | None
 
 Methods
 -------------
