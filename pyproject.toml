@@ -41,7 +41,8 @@ python-source = "src_py"
 module-name = "triple_s"
 bindings = "pyo3"
 compatibility = "pypi"
-strip = true
+# Preserve introspection symbols for --generate-stubs.
+strip = false
 sdist-generator = "cargo"
 profile = "release"
 editable-profile = "python-dev"

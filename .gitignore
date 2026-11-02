@@ -16,9 +16,6 @@ _build
 __pycache__/
 .pytest_cache/
 *.py[cod]
-*.pyi
-*/*.pyi
-
 
 # C extensions
 *.so
@@ -90,7 +87,6 @@ docs/_build/
 
 **/triple_s.pdb
 **/triple_s.pyd
-/src_py/triple_s/triple_s/flags.pyi
 /src_py/triple_s/triple_s.pdb
 build_rs_cov.profraw
 tarpaulin-report.html
