@@ -19,7 +19,6 @@ __pycache__/
 *.pyi
 */*.pyi
 
-.maturin/*
 
 # C extensions
 *.so
@@ -95,3 +94,5 @@ docs/_build/
 /src_py/triple_s/triple_s.pdb
 build_rs_cov.profraw
 tarpaulin-report.html
+/.maturing
+/.maturing/_rust_locations.json
