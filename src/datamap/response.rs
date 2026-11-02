@@ -1,9 +1,10 @@
 #![doc = include_str!("../doc/rs_response.md")]
 
-use std::cmp::Ordering;
+use std::{cmp::Ordering, hash::{Hash, Hasher}};
 
 use anyhow::{Context, Result};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
+
 #[cfg(feature = "pyo3")]
 use pyo3::{
     IntoPyObjectExt, exceptions,
@@ -1643,6 +1644,36 @@ impl PartialEq for Value {
 }
 
 impl Eq for Value {}
+
+impl Hash for Value {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Value::UnSigned(value) => {
+                0u8.hash(state);
+                value.hash(state);
+            }
+            Value::Signed(value) => {
+                1u8.hash(state);
+                value.hash(state);
+            }
+            Value::Float(value) => {
+                2u8.hash(state);
+                let bits = if value.is_nan() {
+                    f64::NAN.to_bits()
+                } else if *value == 0.0 {
+                    0.0f64.to_bits()
+                } else {
+                    value.to_bits()
+                };
+                bits.hash(state);
+            }
+            Value::String(value) => {
+                3u8.hash(state);
+                value.hash(state);
+            }
+        }
+    }
+}
 
 impl From<u32> for Value {
     fn from(value: u32) -> Self {

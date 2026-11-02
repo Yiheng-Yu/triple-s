@@ -156,7 +156,7 @@ mod utils;
 use std::path::Path;
 
 use anyhow::Result;
-pub use data::SurveyData;
+pub use data::{QuestionData, SurveyData};
 pub use datamap::{
     Datamap,
     question::{
@@ -172,7 +172,7 @@ use error::EventLog;
 pub use prelude::DeepCopy;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-pub use survey::{QuestionData, Survey};
+pub use survey::Survey;
 
 // -------------------------------------------------------------------------------------------------
 
@@ -216,7 +216,7 @@ mod triple_s {
     pub use pyo3_polars::error::NoDataError;
 
     #[pymodule_export]
-    pub use crate::data::SurveyData;
+    pub use crate::data::{QuestionData, SurveyData};
     #[pymodule_export]
     pub use crate::datamap::{
         Datamap,
@@ -229,7 +229,7 @@ mod triple_s {
     #[pymodule_export]
     pub use crate::error::MissingKeyError;
     #[pymodule_export]
-    pub use crate::survey::{QuestionData, Survey};
+    pub use crate::survey::Survey;
     use crate::{datamap::read::read_from_reader, read_triple_s};
 
     /// Read triple-s datamap

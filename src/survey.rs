@@ -1,23 +1,21 @@
 use std::sync::Arc;
 
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
-use polars::{prelude::*, series::SeriesIter};
+use polars::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::{exceptions, prelude::*, types::{PyDict, PyTuple}};
+use pyo3::{exceptions, prelude::*, types::PyDict};
 #[cfg(feature = "pyo3")]
 use pyo3_polars::error::PyPolarsErr;
 
 use crate::{
-    Question, QuestionType,
-    data::SurveyData,
+    data::{QuestionData, SurveyData},
     datamap::Datamap,
     utils::{ArcLock, lock_it_up},
 };
 #[cfg(feature = "pyo3")]
 use crate::{
     SurveyInfo,
-    prelude::*,
-    utils::{anyvalue_to_python, get_type_name, normalize_py_index},
+    utils::{anyvalue_to_python, get_type_name},
 };
 
 /// Triple-s survey.
@@ -109,14 +107,12 @@ impl Survey {
         self.data().has_data()
     }
 
-    /// Gets data of a question in a survey, returns `None` if question name doesn't exist.
+    /// Gets a shared [`QuestionData`] view, or `None` if the question name doesn't exist.
+    /// Existing views follow replacements made through [`Self::data_mut`].
     pub fn get_question_data(&self, name: &str) -> Option<QuestionData> {
         let question = self.datamap.get(name)?.clone();
 
-        Some(QuestionData {
-            data: Arc::clone(&self.data),
-            question,
-        })
+        Some(QuestionData::new(Arc::clone(&self.data), question))
     }
 }
 
@@ -188,7 +184,7 @@ impl Survey {
         }
     }
 
-    fn __iter__(&self, py: Python<'_>) -> PyResult<Py<crate::data::RowIterator>> {
+    fn __iter__(&self, py: Python<'_>) -> PyResult<Py<crate::data::ResponseIterator>> {
         self.data().__iter__(py)
     }
 
@@ -249,150 +245,5 @@ impl Survey {
     #[pyo3(name = "has_data")]
     fn py_has_data(&self) -> bool {
         self.has_data()
-    }
-}
-
-/// Survey data for a single question.
-///
-/// `QuestionData` provides a convenient way to work with an individual question within a `SurveyData` instance.
-/// It shares the same underlying data as the `SurveyData` it was created from.
-#[cfg_attr(
-    feature = "pyo3",
-    pyclass(module = "triple_s", name = "QuestionData", skip_from_py_object)
-)]
-#[derive(Clone)]
-pub struct QuestionData {
-    data: ArcLock<SurveyData>,
-    question: Question,
-}
-
-impl QuestionData {
-    /// name of the question
-    #[inline]
-    pub fn name(&self) -> String {
-        self.question.name()
-    }
-
-    /// Type of the question
-    #[inline]
-    pub fn question_type(&self) -> RwLockReadGuard<'_, QuestionType> {
-        self.question.question_type()
-    }
-
-    /// Export contents to [`polars::prelude::Column`].
-    pub fn to_polars(&self) -> PolarsResult<Column> {
-        let data = self.data.read();
-        let name = self.name();
-
-        data.lazy()?.clone().select([col(&name)]).collect()?.drop_in_place(&name)
-    }
-
-    /// Get question data as an iterator
-    /// 
-    pub fn data<'a>(&'a self) -> PolarsResult<SeriesIter<'a>> {
-        let data = self.data.read();
-        let name = self.name();
-
-        let df = data.lazy()?
-            .clone()
-            .select([col(&name)])
-            .collect()?;
-
-        Ok(df.column(&name)?
-        .as_materialized_series()
-        .iter())
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl QuestionData {
-    /// Name of the question
-    #[getter(name)]
-    fn py_get_name(&self) -> String {
-        self.name()
-    }
-
-    /// Type of the question ('single', 'multiple' etc.,)
-    #[getter]
-    // `type` is a preserved keyword in rust
-    fn get_type(&self) -> Option<String> {
-        let qtype = self.question.question_type();
-        match qtype.clone() {
-            QuestionType::None => None,
-            _ => Some(qtype.to_string()),
-        }
-    }
-
-    /// Get a copy of question data as a python list
-    /// 
-    #[getter(data)]
-    fn py_get_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
-        let items = self.data()
-            .map_err(PyPolarsErr::Polars)?
-            .map(|value| anyvalue_to_python(py, value))
-            .collect::<PyResult<Vec<_>>>()?;
-
-        PyTuple::new(py, items)
-    }
-
-    fn __repr__(&self) -> PyResult<String> {
-        let mut content = Vec::new();
-
-        content.push(("name", format!("{:?}", self.name())));
-        match self.get_type() {
-            Some(value) => content.push(("type", format!("{:?}", value))),
-            None => content.push(("type", "None".into())),
-        };
-
-        const MAX_ROWS: usize = 5;
-        let col = self.to_polars().map_err(PyPolarsErr::Polars)?;
-        let mut sample = col
-            .as_materialized_series()
-            .iter()
-            .take(MAX_ROWS)
-            .map(|v| match v {
-                AnyValue::Null => "None".to_string(),
-                AnyValue::String(s) => format!("{s:?}"),
-                AnyValue::StringOwned(s) => format!("{s:?}"),
-                AnyValue::Boolean(b) => if b { "True" } else { "False" }.to_string(),
-                _ => v.to_string(),
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
-        if col.len() > MAX_ROWS {
-            sample.push_str(", ...");
-        }
-        let sample = format!("[{}]", sample);
-
-        let value = content
-            .into_iter()
-            .chain(std::iter::once(("data", sample)))
-            .map(|(name, value)| format!("{}: {}", name, value))
-            .collect::<Vec<String>>()
-            .join("\n  ");
-        Ok(format!("QuestionData({{\n  {}\n}})", value))
-    }
-
-    fn __getitem__<'py>(
-        &'py self,
-        py: Python<'py>,
-        index: isize,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let col = self.to_polars().map_err(PyPolarsErr::Polars)?;
-
-        let total = col.len();
-        let index = normalize_py_index(index, total).unwrap_or(index as usize);
-
-        let value = col.get(index).map_err(PyPolarsErr::Polars)?;
-        anyvalue_to_python(py, value)
-    }
-
-    /// Return the answers as a Polars Series (Python's column type).
-    #[pyo3(name = "to_polars")]
-    fn py_to_polars(&self) -> PyResult<pyo3_polars::PySeries> {
-        self.to_polars()
-            .map(|column| pyo3_polars::PySeries(column.take_materialized_series()))
-            .map_err(|err| PyPolarsErr::Polars(err).into())
     }
 }

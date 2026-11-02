@@ -40,6 +40,13 @@ impl fmt::Display for InternalError {
     }
 }
 
+#[cfg(feature = "pyo3")]
+impl From<InternalError> for pyo3::PyErr {
+    fn from(value: InternalError) -> Self {
+        exceptions::PyRuntimeError::new_err(value.to_string())
+    }
+}
+
 /// Wrong inputs, this gets converts into `pyo3::exceptions::PyValueError` for
 /// python-facing API. with the `pyo3` feature on.
 #[derive(Debug)]
