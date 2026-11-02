@@ -94,7 +94,7 @@ pub(crate) fn anyvalue_to_python<'py>(
                 .ok_or_else(|| exceptions::PyValueError::new_err("Time out of range"))?;
             time.into_bound_py_any(py)
         }
-        AnyValue::List(values) | AnyValue::Array(values, _) => {
+        AnyValue::List(values) => {
             let values = values
                 .iter()
                 .map(|value| anyvalue_to_python(py, value))
