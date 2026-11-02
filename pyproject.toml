@@ -18,11 +18,20 @@ dependencies = [
 ]
 description = "A Rust-backed Python parser for Triple-S survey data and datamaps."
 readme = "README.md"
+authors = [
+    { name="Yiheng-Yu", email="yuyiheng1994@gmail.com" }
+]
+maintainers = [
+    { name="Yiheng-Yu", email="yuyiheng1994@gmail.com" }
+]
+keywords = ["survey", "polars", "pandas", "data", "parser"]
+
 
 [project.urls]
 Homepage = "https://github.com/Yiheng-Yu/triple-s"
 Repository = "https://github.com/Yiheng-Yu/triple-s"
 Issues = "https://github.com/Yiheng-Yu/triple-s/issues"
+Documentation = "https://triple-s.readthedocs.io/"
 
 [project.optional-dependencies]
 testing = ["pytest", "lxml"]
