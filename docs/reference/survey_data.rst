@@ -7,9 +7,10 @@ Attributes
 ----------
 
 .. autoattribute:: triple_s.SurveyData.questions
-	:annotation: -> list[str]
+   :annotation: -> list[str]
+
 .. autoattribute:: triple_s.SurveyData.num_response
-	:annotation: -> int
+   :annotation: -> int
 
 Methods
 -------
@@ -17,6 +18,6 @@ Methods
 .. automethod:: triple_s.SurveyData.has_data() -> bool
 .. automethod:: triple_s.SurveyData.empty() -> SurveyData
 .. automethod:: triple_s.SurveyData.from_polars(frame) -> SurveyData
-.. automethod:: triple_s.SurveyData.to_polars() -> Any
-.. automethod:: triple_s.SurveyData.to_pandas() -> Any
-.. automethod:: triple_s.SurveyData.describe() -> Any
+.. automethod:: triple_s.SurveyData.to_polars() -> polars.DataFrame
+.. automethod:: triple_s.SurveyData.to_pandas() -> pandas.DataFrame
+.. automethod:: triple_s.SurveyData.describe() -> polars.DataFrame

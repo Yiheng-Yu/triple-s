@@ -11,13 +11,16 @@ Attributes
 ----------
 
 .. autoattribute:: triple_s.Survey.datamap
-	:annotation: -> Datamap
+   :annotation: -> Datamap
+
 .. autoattribute:: triple_s.Survey.info
-	:annotation: -> SurveyInfo
+   :annotation: -> SurveyInfo
+
 .. autoattribute:: triple_s.Survey.title
-	:annotation: -> str | None
+   :annotation: -> str | None
+
 .. autoattribute:: triple_s.Survey.data
-	:annotation: -> SurveyData
+   :annotation: -> SurveyData
 
 Methods
 -------

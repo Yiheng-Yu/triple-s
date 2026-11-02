@@ -37,6 +37,9 @@ sdist-generator = "cargo"
 profile = "release"
 editable-profile = "python-dev"
 features = ["pyo3", "pyo3/extension-module"]
+include = [
+    { path = "rust-toolchain.toml", format = "sdist" },
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
