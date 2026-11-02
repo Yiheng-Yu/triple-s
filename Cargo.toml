@@ -1,6 +1,6 @@
 [package]
 name = "triple_s"
-version = "0.4.131"
+version = "0.4.132"
 edition = "2024"
 description = "Read classic Triple-S survey definition files."
 repository = "https://github.com/Yiheng-Yu/triple-s"
@@ -22,21 +22,23 @@ exclude = [
 all-features = true
 
 [profile.dev]
-debug = "full"
 opt-level = 0
-overflow-checks = true
-debug-assertions = true
-split-debuginfo = "packed"
-panic = "unwind"
+debug = true
 strip = "none"
-lto = "off"
+debug-assertions = true
+overflow-checks = true
+lto = false
+panic = 'unwind'
+incremental = true
+codegen-units = 256
+rpath = false
 
 [profile.release]
 debug = "none"
-opt-level = "z"
+opt-level = 3
 overflow-checks = true
 debug-assertions = false
-incremental = false
+incremental = true
 strip = true
 lto = "thin"
 
@@ -52,7 +54,6 @@ debug = "full"
 opt-level = 0
 overflow-checks = true
 debug-assertions = true
-split-debuginfo = "packed"
 panic = "unwind"
 strip = "none"
 lto = "off"
@@ -61,8 +62,7 @@ inherits = "dev"
 [profile.python-release]
 overflow-checks = true
 debug-assertions = false
-incremental = false
-strip = true
+strip = "symbols"
 lto = "thin"
 inherits = "release"
 
@@ -88,7 +88,7 @@ pyo3 = { version = "0.29", features = [
     "chrono",
 ], optional = true }
 log = "0.4.34"
-polars = { version = "0.55", features = ["dtype-array", "lazy", "parquet"] }
+polars = { version = "0.55", features = ["dtype-array", "lazy", "parquet", "streaming"] }
 pyo3-polars = { version = ">=0.28.0", optional = true }
 language-tags = "0.3.2"
 tempfile = "3.27.0"

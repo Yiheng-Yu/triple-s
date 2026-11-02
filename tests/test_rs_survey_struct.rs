@@ -28,14 +28,14 @@ fn question_view_shares_replacement_and_owns_cache() {
     let replacement = survey.data().to_polars().unwrap().reverse();
     *survey.data_mut() = SurveyData::from_polars(replacement.clone()).unwrap();
     assert_eq!(
-        view.to_polars().unwrap(),
+        view.to_column().unwrap(),
         replacement.column("Q2").unwrap().clone()
     );
     let cache_path = survey.data().cache().unwrap().to_owned();
     drop(survey);
     assert!(std::path::Path::new(&cache_path).exists());
     assert_eq!(
-        view.to_polars().unwrap(),
+        view.to_column().unwrap(),
         replacement.column("Q2").unwrap().clone()
     );
     drop(view);

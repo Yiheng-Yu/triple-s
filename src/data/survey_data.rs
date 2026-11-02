@@ -5,8 +5,13 @@ use std::{
 
 use anyhow::Result;
 use polars::prelude::*;
+
+#[cfg(feature = "pyo3")]
+use crate::utils::anyvalue_to_python;
+
 #[cfg(feature = "pyo3")]
 use pyo3::{prelude::*, types::PyDict};
+
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use tempfile::TempPath;
@@ -319,10 +324,10 @@ impl SurveyData {
         Ok(format!("SurveyData({{\n  {}\n}})", formatted))
     }
 
-    pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<Py<RowIterator>> {
+    pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {
         let df = self.lazy()?.clone().collect().map_err(PyPolarsErr::Polars)?;
 
-        Py::new(py, RowIterator { df, index: 0 })
+        Py::new(py, ResponseIterator { df, index: 0 })
     }
 
     /// Create new empty [`SurveyData`] instance
@@ -380,16 +385,17 @@ impl std::fmt::Debug for SurveyData {
 }
 
 // ---------- Helpers -----------
+/// Iterates through individual responses of a question
 #[cfg(feature = "pyo3")]
 #[pyclass]
-pub(crate) struct RowIterator {
+pub(crate) struct ResponseIterator {
     df: DataFrame,
     index: usize,
 }
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl RowIterator {
+impl ResponseIterator {
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
@@ -402,15 +408,11 @@ impl RowIterator {
         let dict = PyDict::new(py);
 
         for column in self.df.columns() {
-            use crate::utils::anyvalue_to_python;
-
             let value = column.get(self.index).map_err(PyPolarsErr::Polars)?;
-
             dict.set_item(column.name().as_str(), anyvalue_to_python(py, value)?)?;
         }
 
         self.index += 1;
-
         Ok(Some(dict.into_any()))
     }
 }

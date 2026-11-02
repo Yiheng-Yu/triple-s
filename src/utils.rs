@@ -82,13 +82,7 @@ pub(crate) fn anyvalue_to_python<'py>(
         AnyValue::Float32(v) => v.into_bound_py_any(py),
         AnyValue::String(v) => v.into_bound_py_any(py),
         AnyValue::StringOwned(v) => v.as_str().into_bound_py_any(py),
-        AnyValue::Date(days) => {
-            let date = chrono::NaiveDate::from_ymd_opt(1970, 1, 1)
-                .unwrap()
-                .checked_add_signed(chrono::Duration::days(i64::from(days)))
-                .ok_or_else(|| exceptions::PyValueError::new_err("Date out of range"))?;
-            date.into_bound_py_any(py)
-        }
+        AnyValue::Date(days) => convert_date(days)?.into_bound_py_any(py),
         AnyValue::Time(nanos) => {
             let seconds = u32::try_from(nanos / 1_000_000_000).ok();
             let fraction = u32::try_from(nanos % 1_000_000_000).ok();
@@ -112,6 +106,26 @@ pub(crate) fn anyvalue_to_python<'py>(
             value.dtype()
         ))),
     }
+}
+
+#[cfg(feature = "pyo3")]
+#[inline]
+pub(crate) fn convert_date(value: i32) -> PyResult<chrono::NaiveDate> {
+    chrono::NaiveDate::from_ymd_opt(1970, 1, 1)
+        .unwrap()
+        .checked_add_signed(chrono::Duration::days(i64::from(value)))
+        .ok_or_else(|| exceptions::PyValueError::new_err("Date out of range"))
+}
+
+#[cfg(feature = "pyo3")]
+#[inline]
+pub(crate) fn convert_time(value: i64) -> PyResult<chrono::NaiveTime> {
+    let seconds = u32::try_from(value / 1_000_000_000).ok();
+    let fraction = u32::try_from(value % 1_000_000_000).ok();
+    seconds
+        .zip(fraction)
+        .and_then(|(s, ns)| chrono::NaiveTime::from_num_seconds_from_midnight_opt(s, ns))
+        .ok_or_else(|| exceptions::PyValueError::new_err("Time out of range"))
 }
 
 #[cfg(feature = "pyo3")]
