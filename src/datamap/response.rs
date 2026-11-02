@@ -1,6 +1,9 @@
 #![doc = include_str!("../doc/rs_response.md")]
 
-use std::{cmp::Ordering, hash::{Hash, Hasher}};
+use std::{
+    cmp::Ordering,
+    hash::{Hash, Hasher},
+};
 
 use anyhow::{Context, Result};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};

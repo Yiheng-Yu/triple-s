@@ -7,15 +7,15 @@ use pyo3::{exceptions, prelude::*, types::PyDict};
 #[cfg(feature = "pyo3")]
 use pyo3_polars::error::PyPolarsErr;
 
-use crate::{
-    data::{QuestionData, SurveyData},
-    datamap::Datamap,
-    utils::{ArcLock, lock_it_up},
-};
 #[cfg(feature = "pyo3")]
 use crate::{
     SurveyInfo,
     utils::{anyvalue_to_python, get_type_name},
+};
+use crate::{
+    data::{QuestionData, SurveyData},
+    datamap::Datamap,
+    utils::{ArcLock, lock_it_up},
 };
 
 /// Triple-s survey.

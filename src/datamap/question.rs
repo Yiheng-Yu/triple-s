@@ -1,6 +1,6 @@
 #![doc = include_str!("../doc/rs_question.md")]
 
-use std::{collections::{HashMap, HashSet}, range::Range, str::FromStr};
+use std::{collections::HashSet, range::Range, str::FromStr};
 
 use anyhow::{Context, Result};
 use chrono::{NaiveDate, NaiveTime, Timelike};
@@ -732,9 +732,7 @@ impl Question {
                     DataType::UInt32
                 }
             }
-            QuestionType::Multiple => {
-                DataType::List(Box::new(DataType::UInt32))
-            },
+            QuestionType::Multiple => DataType::List(Box::new(DataType::UInt32)),
             QuestionType::Character => DataType::String,
             QuestionType::Logical => DataType::UInt32,
             QuestionType::Quantity => DataType::Float64,

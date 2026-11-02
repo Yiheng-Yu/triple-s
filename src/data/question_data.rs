@@ -52,13 +52,7 @@ impl QuestionData {
     /// Get [`LazyFrame`] of the question data
     #[inline]
     pub fn lazy(&self) -> PolarsResult<LazyFrame> {
-        Ok(self
-            .data
-            .read()
-            .lazy()?
-            .clone()
-            .with_streaming(true)
-            .select([col(self.name())]))
+        Ok(self.data.read().lazy()?.clone().select([col(self.name())]))
     }
 
     /// Export contents to a polars [`Column`]
@@ -74,6 +68,20 @@ impl QuestionData {
     /// Export contents to a polars [`Series`]
     pub fn to_series(&self) -> PolarsResult<Series> {
         self.to_column().map(Column::take_materialized_series)
+    }
+
+    /// Create a DataFrame with the unique values of this Series and a column "counts" with dtype IdxType
+    ///
+    /// # Arguments
+    /// - `include_nan` (`bool`) - Toogle on/ off for counting Null values too.
+    pub fn value_counts(&self, include_nan: bool) -> PolarsResult<DataFrame> {
+        let series = if include_nan {
+            self.to_series()?
+        } else {
+            self.to_column()?.drop_nulls().take_materialized_series()
+        };
+
+        series.value_counts(true, true, self.name().into(), false)
     }
 }
 
@@ -230,10 +238,9 @@ impl ColumnIterator {
             return Ok(None);
         }
 
-        let value = self.column.get(self.index)
-            .map_err(PyPolarsErr::Polars)?;
+        let value = self.column.get(self.index).map_err(PyPolarsErr::Polars)?;
 
         self.index += 1;
-        anyvalue_to_python(py, value).map(Some)  // bound already checked
+        anyvalue_to_python(py, value).map(Some) // bound already checked
     }
 }
