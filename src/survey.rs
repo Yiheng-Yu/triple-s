@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
-use polars::prelude::*;
+use polars::{prelude::*, series::SeriesIter};
 #[cfg(feature = "pyo3")]
-use pyo3::{exceptions, prelude::*, types::PyDict};
+use pyo3::{exceptions, prelude::*, types::{PyDict, PyTuple}};
 #[cfg(feature = "pyo3")]
 use pyo3_polars::error::PyPolarsErr;
 
@@ -286,6 +286,22 @@ impl QuestionData {
 
         data.lazy()?.clone().select([col(&name)]).collect()?.drop_in_place(&name)
     }
+
+    /// Get question data as an iterator
+    /// 
+    pub fn data<'a>(&'a self) -> PolarsResult<SeriesIter<'a>> {
+        let data = self.data.read();
+        let name = self.name();
+
+        let df = data.lazy()?
+            .clone()
+            .select([col(&name)])
+            .collect()?;
+
+        Ok(df.column(&name)?
+        .as_materialized_series()
+        .iter())
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -306,6 +322,18 @@ impl QuestionData {
             QuestionType::None => None,
             _ => Some(qtype.to_string()),
         }
+    }
+
+    /// Get a copy of question data as a python list
+    /// 
+    #[getter(data)]
+    fn py_get_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        let items = self.data()
+            .map_err(PyPolarsErr::Polars)?
+            .map(|value| anyvalue_to_python(py, value))
+            .collect::<PyResult<Vec<_>>>()?;
+
+        PyTuple::new(py, items)
     }
 
     fn __repr__(&self) -> PyResult<String> {
