@@ -34,7 +34,7 @@ jobs:
           SCCACHE_GHA_VERSION: ${{ github.workflow }}-${{ github.job }}
         with:
           command: build
-          args: --release  --generate-stubs --compatibility pypi --out dist
+          args: --release --find-interpreter --generate-stubs --compatibility pypi --out dist
           manylinux: "2_28"
           sccache: true
 

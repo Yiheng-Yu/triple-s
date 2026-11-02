@@ -12,6 +12,9 @@ Attributes
 .. autoattribute:: triple_s.QuestionData.type
    :annotation: -> str | None
 
+.. autoattribute:: triple_s.QuestionData.data
+   :annotation: -> str | int | float | List[int] | None
+
 Methods
 -------
 

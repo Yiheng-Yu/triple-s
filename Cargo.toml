@@ -1,6 +1,6 @@
 [package]
 name = "triple_s"
-version = "0.4.124"
+version = "0.4.131"
 edition = "2024"
 description = "Read classic Triple-S survey definition files."
 repository = "https://github.com/Yiheng-Yu/triple-s"
@@ -17,6 +17,9 @@ exclude = [
     "/tests/*.ipynb",
     "/tests/documentation/",
 ]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [profile.dev]
 debug = "full"
@@ -106,6 +109,3 @@ pyo3 = [
     "pyo3/abi3",
     "pyo3/abi3-py310",
 ]
-
-[package.metadata.docs.rs]
-all-features = true
