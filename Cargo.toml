@@ -18,6 +18,9 @@ exclude = [
     "/tests/documentation/",
 ]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [profile.dev]
 debug = "full"
 opt-level = 0
@@ -106,6 +109,3 @@ pyo3 = [
     "pyo3/abi3",
     "pyo3/abi3-py310",
 ]
-
-[package.metadata.docs.rs]
-all-features = true
