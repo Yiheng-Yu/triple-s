@@ -56,13 +56,11 @@ lto = "off"
 inherits = "dev"
 
 [profile.python-release]
-debug = true
-opt-level = "z"
 overflow-checks = true
 debug-assertions = false
 incremental = false
 strip = true
-lto = "fat"
+lto = "thin"
 inherits = "release"
 
 [lib]
