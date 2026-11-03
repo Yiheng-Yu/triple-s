@@ -40,23 +40,10 @@ pub struct Datamap {
     record: Record,
 }
 
+/// ---
+/// 
+/// # Fields
 impl Datamap {
-    /// Creates an empty datamap with the provided [`SurveyInfo`].
-    pub fn new(info: SurveyInfo) -> Self {
-        Self {
-            info: lock_it_up(info),
-            record: Record::default(),
-        }
-    }
-
-    /// Creates an empty datamap with Triple-S version 1.2.
-    pub fn empty() -> Self {
-        Self {
-            info: lock_it_up(SurveyInfo::new(Version::V1_2)),
-            record: Record::default(),
-        }
-    }
-
     /// Collects survey meta information, i.e., survey name & title, creation
     /// date, etc.,
     #[inline]
@@ -81,6 +68,32 @@ impl Datamap {
     /// A read-write view of the [`Record`] field
     pub fn record_mut(&mut self) -> &mut Record {
         &mut self.record
+    }
+
+    /// List of all questions in the current datamap instance
+    pub fn question_names(&self) -> Vec<String> {
+        self.record().question_names()
+    }
+}
+
+/// ---
+/// 
+/// # Methods
+impl Datamap {
+    /// Creates an empty datamap with the provided [`SurveyInfo`].
+    pub fn new(info: SurveyInfo) -> Self {
+        Self {
+            info: lock_it_up(info),
+            record: Record::default(),
+        }
+    }
+
+    /// Creates an empty datamap with Triple-S version 1.2.
+    pub fn empty() -> Self {
+        Self {
+            info: lock_it_up(SurveyInfo::new(Version::V1_2)),
+            record: Record::default(),
+        }
     }
 
     /// get question by its name, case insensitive.
@@ -208,9 +221,23 @@ impl Datamap {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Datamap {
-    /// Create a datamap from a dictionary containing optional `survey_info`
-    /// (or `info`) and `record` values. Each value may be its corresponding
-    /// object or a dictionary accepted by that object's `from_dict` method.
+    /// Create a datamap from a dictionary that contains keys 'survey_info' and 'record':
+    /// 
+    /// Example: Creating new empty :py:class:`Datamap` from dictionary:
+    /// 
+    /// ```python
+    /// 
+    /// from triple_s import Datamap, SurveyInfo, Record
+    /// 
+    /// survey_info = SurveyInfo(version=1.2)  # must contain sss version
+    /// record = Record.empty()
+    /// 
+    /// datamap = Datamap.from_dict({
+    ///     'survey_info': survey_info, 
+    ///     'record': record
+    /// })
+    /// 
+    /// ```
     #[staticmethod]
     #[pyo3(name = "from_dict")]
     fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
@@ -243,7 +270,7 @@ impl Datamap {
                 } else {
                     let type_name = get_type_name(&value)?;
                     return Err(exceptions::PyTypeError::new_err(format!(
-                        "Expect `record` to be a dictionary or `Record` instance, got: '{type_name}'"
+                        "Expect `record` to be a dictionary or [ `Record` ] instance, got: '{type_name}'"
                     )));
                 }
             }
@@ -287,11 +314,7 @@ impl Datamap {
 
     #[getter(questions)]
     pub(crate) fn py_get_questions(&self) -> Vec<String> {
-        self.record()
-            .content()
-            .iter()
-            .map(|question| question.read().name())
-            .collect::<Vec<String>>()
+        self.question_names()
     }
 
     fn __repr__(&self) -> PyResult<String> {

@@ -1,6 +1,5 @@
 #[cfg(feature = "pyo3")]
 use chrono::{NaiveDate, NaiveTime};
-use parking_lot::RwLockReadGuard;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
@@ -9,20 +8,20 @@ use pyo3::{
     types::{PyDict, PyTuple},
 };
 #[cfg(feature = "pyo3")]
-use pyo3_polars::error::PyPolarsErr;
+use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 
 use super::SurveyData;
-use crate::{Question, QuestionType, utils::ArcLock};
 #[cfg(feature = "pyo3")]
 use crate::{
-    DataRange, Text, error::InternalError, prelude::*, utils::{anyvalue_to_python, convert_date, convert_time, normalize_py_index},
+    DataRange, Text,
+    error::InternalError,
+    prelude::*,
+    utils::{anyvalue_to_python, convert_date, convert_time, normalize_py_index},
 };
+use crate::{Question, QuestionType, utils::ArcLock};
 
-/// Survey data for a single question.
+/// Data for a single question.
 ///
-/// Obtain a view with [`crate::Survey::get_question_data`]. The view shares its
-/// question metadata and respondent data with the survey and remains usable after
-/// the survey is dropped. Replacing the survey data also updates existing views.
 #[cfg_attr(
     feature = "pyo3",
     pyclass(module = "triple_s", name = "QuestionData", skip_from_py_object)
@@ -33,11 +32,11 @@ pub struct QuestionData {
     question: Question,
 }
 
+/// Fields
+/// 
+/// ---
 impl QuestionData {
-    pub(crate) fn new(data: ArcLock<SurveyData>, question: Question) -> Self {
-        Self { data, question }
-    }
-
+    
     /// name of the question
     #[inline]
     pub fn name(&self) -> String {
@@ -46,14 +45,24 @@ impl QuestionData {
 
     /// Type of the question
     #[inline]
-    pub fn question_type(&self) -> RwLockReadGuard<'_, QuestionType> {
-        self.question.question_type()
+    pub fn question_type(&self) -> QuestionType {
+        self.question.question_type().clone()
     }
 
     /// Get [`LazyFrame`] of the question data
     #[inline]
     pub fn lazy(&self) -> PolarsResult<LazyFrame> {
         Ok(self.data.read().lazy()?.clone().select([col(self.name())]))
+    }
+}
+
+/// Methods
+/// 
+/// ---
+impl QuestionData {
+    /// Create new [`QuestionData`] instance
+    pub(crate) fn new(data: ArcLock<SurveyData>, question: Question) -> Self {
+        Self { data, question }
     }
 
     /// Export contents to a polars [`Column`]
@@ -71,24 +80,49 @@ impl QuestionData {
         self.to_column().map(Column::take_materialized_series)
     }
 
-    /// Create a DataFrame with the unique values of this Series and a column "counts" with dtype IdxType
+    /// Count unique values of this Series and a column "counts" with dtype IdxType
+    ///
+    /// This function basically calls [`polars::Series::value_counts`] under the hood, apart from multi-choice
+    /// questions ([`QuestionData::question_type()`] is [`QuestionType::Multiple`]),
+    /// where the choice for each respondant is counted individually.
     ///
     /// # Arguments
-    /// - `include_nan` (`bool`) - Toogle on/ off for counting Null values too.
-    pub fn value_counts(&self, include_nan: bool) -> PolarsResult<DataFrame> {
-        let series = if include_nan {
-            self.to_series()?
-        } else {
-            self.to_column()?.drop_nulls().take_materialized_series()
+    /// - `count_nan` (`bool`):
+    ///     - Toogle on/ off for counting Null values, note that multi-choices entries of an empty list (`[]`) will also count as `null`
+    ///
+    pub fn value_counts(&self, count_nan: bool) -> PolarsResult<DataFrame> {
+        let series = match self.question_type() {
+            QuestionType::Multiple => {
+                let config = ExplodeOptions {
+                    empty_as_null: true,
+                    keep_nulls: true, // cell with value `null` gets exploded into `null`
+                };
+                self.to_column()?.explode(config)?.take_materialized_series()
+            }
+            _ => self.to_series()?,
         };
 
-        series.value_counts(true, true, self.name().into(), false)
+        let series = if count_nan {
+            series.drop_nulls()
+        } else {
+            series
+        };
+
+        series.value_counts(true, true, "count".into(), false)?
+            .sort(
+                [self.name()],
+                SortMultipleOptions::default()
+                    .with_nulls_last(true)
+                    .with_maintain_order(false)
+                    .with_order_descending(false)
+            )
     }
 }
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl QuestionData {
+
     /// Name of the question
     #[getter(name)]
     fn py_get_name(&self) -> String {
@@ -101,9 +135,9 @@ impl QuestionData {
         self.question.label().clone()
     }
 
-    /// Minimum and maximum values allowed for a quantity response, 
-    /// or an implicit range of codes for a numeric categorical response. 
-    /// For character responses, the end stores the maximum size plus one. 
+    /// Minimum and maximum values allowed for a quantity response,
+    /// or an implicit range of codes for a numeric categorical response.
+    /// For character responses, the end stores the maximum size plus one.
     /// String categorical responses do not support a range.
     #[getter(range)]
     fn py_get_range(&self) -> Option<DataRange> {
@@ -112,13 +146,24 @@ impl QuestionData {
 
     /// Type of the question ('single', 'multiple' etc.,)
     #[getter]
-    // `type` is a preserved keyword in rust
+    // `type` is a preserved rust keyword, hence name of this function NEEDS TO BE `get_type`
     fn get_type(&self) -> Option<String> {
         let qtype = self.question.question_type();
         match qtype.clone() {
             QuestionType::None => None,
             _ => Some(qtype.to_string()),
         }
+    }
+
+    /// Datamap of the current question
+    ///
+    /// Note:
+    ///
+    /// *Modifying the datamp would also modify the datamap in the survey that the
+    /// current instance being a part of.*
+    #[getter(datamap)]
+    fn py_get_datamap(&self) -> Question {
+        self.question.clone()
     }
 
     /// Get a copy of question data as a Python tuple.
@@ -222,6 +267,27 @@ impl QuestionData {
     fn __iter__(&self) -> PyResult<ColumnIterator> {
         let column = self.to_column().map_err(PyPolarsErr::Polars)?;
         Ok(ColumnIterator { column, index: 0 })
+    }
+
+    /// Count unique values of this question data.
+    ///
+    /// This function basically calls ``poalrs.Seriesvalue_counts`` under the hood, apart from multi-choice
+    /// where the choice for each respondant is counted individually.
+    ///
+    /// Args:
+    ///     count_nan (`bool`, *optional*):
+    ///         Toogle on/ off for counting Null values, note that multi-choices entries of an empty list (`[]`) will also count as `null`.
+    ///         Default ``False``
+    ///
+    /// Returns:
+    ///     ``polars.DataFrame`` of the value counts
+    /// 
+    #[pyo3(name = "value_counts", signature=(count_nan:"bool" = None))]
+    fn py_value_counts(&self, count_nan:Option<bool>) -> PyResult<PyDataFrame> {
+        let count_nan = count_nan.unwrap_or(false);
+        let result = self.value_counts(count_nan)
+            .map_err(PyPolarsErr::Polars)?;
+        Ok(PyDataFrame(result))
     }
 
     /// Return the answers as a polars Series.

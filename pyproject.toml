@@ -41,11 +41,10 @@ python-source = "src_py"
 module-name = "triple_s"
 bindings = "pyo3"
 compatibility = "pypi"
-# Preserve introspection symbols for --generate-stubs.
 strip = false
 sdist-generator = "cargo"
 profile = "release"
-editable-profile = "python-dev"
+editable-profile = "dev"
 features = ["pyo3", "pyo3/extension-module"]
 
 [tool.pytest.ini_options]

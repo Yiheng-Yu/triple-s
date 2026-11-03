@@ -906,13 +906,15 @@ impl Variant {
     /// Create new `Variant` instance from dictionary with the following keys:
     ///
     /// - 'value' (str): content of the text variant
+    /// 
     /// - 'mode' (str | Mode, *optional*): mode, this can be one of ['analysis',
     ///   'interview', None], or one of [`Mode`] enum member.
+    /// 
     /// - 'language' (str, *optional*): language name
     ///
     /// Note that one of the `mode`, `language` key must present.
     ///
-    /// Example:
+    /// Example: Creating new variant from dictionary:
     ///
     /// ```python
     /// from triple_s import Variant

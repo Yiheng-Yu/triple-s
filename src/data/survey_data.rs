@@ -104,9 +104,9 @@ impl SurveyData {
 }
 
 impl SurveyData {
-    /// Creates an empty `SurveyData` instance
+    /// Creates an empty [`SurveyData`] instance
     ///
-    /// Example:
+    /// Example Creating new empty [`SurveyData`]:
     ///
     /// ```
     /// use triple_s::SurveyData;

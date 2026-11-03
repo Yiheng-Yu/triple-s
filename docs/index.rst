@@ -5,15 +5,15 @@ Welcome to ``triple-s``! This library helps you read, explore, and edit
 `Triple-S <https://www.triple-s.org/>`_ survey files in Python, with Rust
 handling the work behind the scenes. 
 
-`Triple-S <https://triple-s.org/documentation/faq/>`__ is a format for sharing
-survey data along with the information needed to interpret it. 
+`Triple-S <https://triple-s.org/documentation/faq/>`__ is a file format used for handling survey data. 
+This format has been relatively popular and been used accross many different 
+places, and most of the major survey platforms uses triple-s to transfer 
+survey data from one place to another.
+
 A triple-s survey usually comes in two files:
 
-* A **datamap** (``.sss``) describes the questions and explains how to read
-  each response from the data file.
-* A **data file** (``.asc`` or ``.csv``) contains the respondents' answers.
-  An ``.asc`` file stores values in fixed-width fields; a ``.csv`` file
-  separates them with commas.
+* A **datamap** (``.sss``) a datamap that record how the data file should be read. i.e., where's the data for each question for each respondent etc.,.
+* A **data file** (``.asc`` or ``.csv``)  this can either be a text .asc file that contains the raw data, or a csv that with question name as column headers. Most of the data files are of the former kind.
 
 You can explore questions, analyse responses with pandas or Polars,
 and edit and save the datamap.
@@ -63,15 +63,17 @@ a datamap and its matching data file:
 Finding Your Way Around
 -----------------------
 
-Choose a section from the sidebar:
+This documentation consists mainly three parts:
 
 * **Contents** introduces the library. Start with
   :doc:`Survey <guides/survey>` to load a survey and look through its responses,
   then explore :doc:`SurveyData <guides/survey_data>` or
   :doc:`Datamap <guides/datamap>`.
+
 * **Task Recipes** offers practical examples.
   See :doc:`Datamap Management <recipes/datamap>` for working with question
   definitions, or :doc:`Survey Data <recipes/survey_data>` for working with responses.
+
 * **API Reference** describes each class and function.
   Browse :doc:`Functions <reference/functions>`, :doc:`Objects <reference/objects>`,
   or :doc:`Exceptions <reference/exceptions>`.

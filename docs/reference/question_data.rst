@@ -19,6 +19,9 @@ Attributes
    :annotation: -> triple_s.DataRange | None
 
 .. autoattribute:: triple_s.QuestionData.data
+   :annotation: -> triple_s.Question
+
+.. autoattribute:: triple_s.QuestionData.data
    :annotation: -> tuple
 
    A copy of the answers as a tuple, with ``None`` for missing values.

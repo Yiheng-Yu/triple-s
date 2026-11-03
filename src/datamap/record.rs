@@ -101,7 +101,6 @@ pub struct Record {
     href: Option<String>,
     data_format: Option<DataFormat>,
     content: ArcLock<Vec<ArcLock<Question>>>,
-    data: ArcLock<SurveyData>,
 }
 
 /// # Fields
@@ -165,7 +164,7 @@ impl Record {
         &mut self.data_format
     }
 
-    /// Collections of `Question` instances of a survey, this corresponds to the
+    /// Collections of [ `Question` ] instances of a survey, this corresponds to the
     /// lists of `<variable>` child nodes
     pub fn content(&self) -> RwLockReadGuard<'_, Vec<ArcLock<Question>>> {
         self.content.read()
@@ -176,14 +175,13 @@ impl Record {
         self.content.write()
     }
 
-    /// A read only copy of the survey data.
-    pub fn data(&self) -> RwLockReadGuard<'_, SurveyData> {
-        self.data.read()
-    }
-
-    /// A read-write borrow of the survey data.
-    pub fn data_mut(&self) -> RwLockWriteGuard<'_, SurveyData> {
-        self.data.write()
+    /// List of all questions in the current datamap instance
+    #[inline]
+    pub fn question_names(&self) -> Vec<String> {
+        self.content()
+            .iter()
+            .map(|question| question.read().name())
+            .collect::<Vec<String>>()
     }
 }
 
@@ -215,7 +213,7 @@ impl Record {
         index.map(|index| self.content_mut().remove(index))
     }
 
-    /// Add a question to the current `Record` instance
+    /// Add a question to the current [ `Record` ] instance
     ///
     /// Would overwrite existing item if question with the same name already exists. Name matching is case insensitive.
     pub fn add_question(&mut self, question: Question) {
@@ -244,12 +242,6 @@ impl Record {
         }
         output.push_str("END RECORD\n");
         Ok(output)
-    }
-
-    /// Whether respondent data has been loaded.
-    #[inline]
-    pub fn has_data(&self) -> bool {
-        self.data().lazy().is_ok()
     }
 
     /// Serialises the record and its questions as a Triple-S XML `<record>`
@@ -648,7 +640,7 @@ impl Record {
         Ok(())
     }
 
-    /// Collections of `Question` instances of a survey, this corresponds to the
+    /// Collections of [ `Question` ] instances of a survey, this corresponds to the
     /// lists of `<variable>` child nodes
     #[getter(content)]
     fn py_get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
@@ -733,7 +725,7 @@ impl Record {
         Py::new(py, RecordIterator { content, index: 0 })
     }
 
-    /// Add a question to the current `Record` instance
+    /// Add a question to the current [ `Record` ] instance
     ///
     /// Would overwrite existing item if question with the same name already exists.
     #[pyo3(name = "add_question")]
@@ -755,7 +747,7 @@ impl Record {
     /// Create new instance from dictionary with the following keys:
     ///
     /// 'ident' (str|None, *optional*):
-    ///     id of the `Record` instance, default 'A'.
+    ///     id of the [ `Record` ] instance, default 'A'.
     ///
     /// 'href' (str|None, *optional*):
     ///     href,
@@ -858,8 +850,24 @@ impl Record {
             skip: skip,
             data_format: data_format,
             content: lock_it_up(questions),
-            data: lock_it_up(data),
         })
+    }
+
+    /// Creates a new empty [`Record`] instance.
+    /// 
+    /// Example:
+    /// 
+    /// ```python
+    /// 
+    /// from triple_s import Record
+    /// 
+    /// record = Record.empty()
+    /// assert len(record) == 0
+    /// ```
+    #[staticmethod]
+    #[pyo3(name="empty")]
+    fn py_empty() -> Self {
+        Self::default()
     }
 
     /// Validate an `.asc` or `.csv` file without changing metadata or loading data.

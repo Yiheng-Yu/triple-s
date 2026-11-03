@@ -580,7 +580,7 @@ impl Question {
         })
     }
 
-    /// Append a new `Code` to existing instance.
+    /// Append a new [ `Code` ] to existing instance.
     ///
     /// Raises error if already exists items with same `code` field.
     pub fn add_value(&mut self, value: Code) -> Result<()> {
@@ -1708,38 +1708,42 @@ impl Question {
         self.to_xml().map_err(py_value_error)
     }
 
-    /// Create new `Question` instance from dictionary with following keys and
+    /// Create new [ `Question` ] instance from dictionary with following keys and
     /// values:
     ///
-    /// 'index' (int|None, *optional*): index of a question, default 1,
+    /// ``'index'`` (int|None, *optional*): index of a question, default 1,
     ///
-    /// 'name' (str):
+    /// ``'name'`` (str):
     ///     name of the question
     ///
-    /// 'question_type' (str|QuestionType):
+    /// ``'question_type'`` (str|QuestionType ):
     ///     type of the question.
     ///     See QuestionType.available_options() for list of allowed string values.
     ///
-    /// 'location' (dict|Location|None, *optional*):
+    /// ``'location'`` (dict|Location|None, *optional*):
     ///     data location.
     ///     See help(Location.from_dict) for allowed keys in the dictionary.
-    ///     If unset, would defult to Location(start=1, finish=1)
+    ///     If unset, would defult to :py:meth:`Location(start=1, finish=1)`
     ///
-    /// 'label' (str|Text|dict):
+    /// ``'label'`` (str|Text|dict):
     ///     question title.
-    ///     See help(Text.from_dict) for allowed keys in the dictionary.
-    ///     If unset, would defult to Text("")
+    ///     See help(:py:meth:`Text.from_dict`) for allowed keys in the dictionary.
+    ///     If unset, would defult to ``Text("")``
     ///
-    /// 'format' (str|CodeFormat|None, *optional*):
+    /// ``'format'`` (str|CodeFormat|None, *optional*):
     ///     code format.
-    ///     See CodeFormat.available_options() for list of allowed string values.
+    ///     See :py:meth:`CodeFormat.available_options` for list of allowed string values.
     ///
-    /// 'filter' (str|None, *optional*):
+    /// ``'filter'`` (str|None, *optional*):
     ///     Question filter.
     ///
-    /// 'response' (Response|dict|None, *optional*):
-    ///     `Response` instance or dictionary to pass to Response.from_dict(),
+    /// ``'response'`` (Response|dict|None, *optional*):
+    ///     List of possible responses for the question.
+    /// 
+    ///     Accepts :py:class:`Response` instance or dictionary to pass to :py:meth:`Response.from_dict`,
+    ///     
     ///     Would default to the default response values according to each question type if left unset
+    /// 
     #[pyo3(name = "from_dict")]
     #[staticmethod]
     fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
@@ -2191,6 +2195,11 @@ impl Location {
 
         Self::py_new(start, finish)
     }
+
+    // #[pyo3(name = "to_dict")]
+    // fn py_to_dict(&self, py: Python<'_>) -> PyResult<Bound<'_, PyDict> {
+    //     todo!()
+    // }
 }
 
 #[doc=include_str!("../doc/spread.md")]
