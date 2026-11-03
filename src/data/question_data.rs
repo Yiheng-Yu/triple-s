@@ -3,7 +3,11 @@ use chrono::{NaiveDate, NaiveTime};
 use parking_lot::RwLockReadGuard;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::{prelude::*, types::PyTuple};
+use pyo3::{
+    IntoPyObjectExt,
+    prelude::*,
+    types::{PyDict, PyTuple},
+};
 #[cfg(feature = "pyo3")]
 use pyo3_polars::error::PyPolarsErr;
 
@@ -207,12 +211,28 @@ impl QuestionData {
         Ok(ColumnIterator { column, index: 0 })
     }
 
-    /// Return the answers as a Polars Series (Python's column type).
+    /// Return the answers as a polars Series.
     #[pyo3(name = "to_polars")]
     fn py_to_polars(&self) -> PyResult<pyo3_polars::PySeries> {
         self.to_series()
             .map(pyo3_polars::PySeries)
             .map_err(|err| PyPolarsErr::Polars(err).into())
+    }
+
+    /// Export the answers as a pandas Series object.
+    #[pyo3(name = "to_pandas")]
+    pub fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let frame = self.py_to_polars()?.into_bound_py_any(py)?;
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("use_pyarrow_extension_array", true)?;
+        frame.call_method("to_pandas", (), Some(&kwargs))
+    }
+
+    /// Export the answers as a list.
+    #[pyo3(name = "to_list")]
+    pub fn py_to_list<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let frame = self.py_to_polars()?.into_bound_py_any(py)?;
+        frame.call_method("to_list", (), None)
     }
 }
 
