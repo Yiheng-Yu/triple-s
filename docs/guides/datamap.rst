@@ -1,11 +1,14 @@
 Datamap
 =======
 
-Overview
------------------
-
 :class:`triple_s.Datamap` contains survey metadata in ``info`` and question
 definitions in ``record``. It describes how to interpret the data file.
+
+Create New Datamap
+------------------------
+
+From triple-s file
+*********************
 
 Read a datamap with :func:`triple_s.read_datamap`:
 
@@ -18,6 +21,25 @@ Read a datamap with :func:`triple_s.read_datamap`:
 
 
 ****
+
+Build one from scartch
+**************************
+
+Alternatively, you can build a datamap with ``Datamap.from_dict()``:
+
+.. code-block:: python
+
+   from triple_s import Datamap
+
+   datamap = Datamap.from_dict({
+       "info": {"version": "2.0", "name": "example", "title": "Example survey"},
+       "record": {"ident": "A"},
+   })
+   datamap.info.name = "updated-example"
+   datamap.title = "Updated survey"
+   assert datamap.info.title == "Updated survey"
+
+   
 
 Metadata
 *********************

@@ -1,10 +1,6 @@
 QuestionData
 ============
 
-Import with ``from triple_s import QuestionData`` and obtain a shared view using
-``survey["Q1"]``. Views remain usable after the survey is deleted and follow
-replacements of ``survey.data``.
-
 .. autoclass:: triple_s.QuestionData
 
 Attributes

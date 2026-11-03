@@ -2,35 +2,25 @@
 //! Uused for string questions inside the survey.
 #[cfg(feature = "pyo3")]
 use std::str::FromStr;
-use std::{
-    fs::File,
-    io::{BufRead, BufReader},
-    path::Path,
-};
+use std::{ fs::File, io::{ BufRead, BufReader }, path::Path };
 
-use anyhow::{Context, Result};
-use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
-use polars::{frame::row::Row, prelude::*};
+use anyhow::{ Context, Result };
+use parking_lot::{ ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard };
+use polars::{ frame::row::Row, prelude::* };
 #[cfg(feature = "pyo3")]
-use pyo3::{
-    IntoPyObjectExt, exceptions,
-    prelude::*,
-    types::{PyDict, PySlice, PyTuple},
-};
+use pyo3::{ IntoPyObjectExt, exceptions, prelude::*, types::{ PyDict, PySlice, PyTuple } };
 use quick_xml::Writer;
 use rayon::prelude::*;
-use strum::{EnumIter, EnumString};
+use strum::{ EnumIter, EnumString };
 
-use super::{ArcLock, Question};
+use super::{ ArcLock, Question };
 #[cfg(feature = "pyo3")]
-use crate::utils::{
-    extract_indicies, get_type_name, lock_it_up, normalize_py_index, py_value_error,
-};
+use crate::utils::{ extract_indicies, get_type_name, normalize_py_index, py_value_error };
 use crate::{
     SurveyData,
-    error::{self, InvalidArg},
-    prelude::{DeepCopy, Flag},
-    utils::TextReader,
+    error::{ self, InvalidArg },
+    prelude::{ DeepCopy, Flag },
+    utils::{ TextReader, lock_it_up },
 };
 
 const BATCH_SIZE: usize = 500; // no. rows when writing to paquet cache
@@ -81,20 +71,21 @@ impl DataFormat {
         match path.extension().and_then(|extension| extension.to_str()) {
             Some("asc") => Ok(Self::Fixed),
             Some("csv") => Ok(Self::Csv),
-            _ => Err(InvalidArg::new(format!(
-                "Invalid file type: Expect '.csv' or '.asc' file, got: {}",
-                path.display()
-            ))
-            .into()),
+            _ =>
+                Err(
+                    InvalidArg::new(
+                        format!(
+                            "Invalid file type: Expect '.csv' or '.asc' file, got: {}",
+                            path.display()
+                        )
+                    ).into()
+                ),
         }
     }
 }
 
 /// Content of a datamap
-#[cfg_attr(
-    feature = "pyo3",
-    pyclass(module = "triple_s", name = "Record", skip_from_py_object)
-)]
+#[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "Record", skip_from_py_object))]
 #[derive(Debug, Default, Clone)]
 pub struct Record {
     id: char,
@@ -203,6 +194,43 @@ impl Record {
         self.find_question(question_name).map(|item| item.read_arc())
     }
 
+    /// Remove a question from current record, returns the removed question.
+    ///
+    /// Name matching is case insensitive.
+    pub fn remove_question(&mut self, question_name: &str) -> Option<ArcLock<Question>> {
+        let upper_case = question_name.to_uppercase();
+        let index = self
+            .content_mut()
+            .iter()
+            .position(|item| &item.read().name().to_uppercase() == &upper_case);
+
+        match index {
+            Some(index) => Some(self.content_mut().remove(index)),
+            None => None,
+        }
+    }
+
+    /// Add a question to the current `Record` instance
+    ///
+    /// Would overwrite existing item if question with the same name already exists. Name matching is case insensitive.
+    pub fn add_question(&mut self, question: Question) {
+        let query = question.name().to_uppercase();
+        let mut content = self.content_mut();
+        match content.iter_mut().find(|item| item.read().name().to_uppercase() == query) {
+            Some(previous) => {
+                log::warn!(
+                    "A question named `{}` already exists. The existing question will be replaced with the new one.",
+                    question.name()
+                );
+
+                *previous = lock_it_up(question);
+            }
+            None => {
+                content.push(lock_it_up(question));
+            }
+        }
+    }
+
     /// export to triple-s classic.
     pub fn to_classic(&self) -> Result<String> {
         let mut output = format!("RECORD {}\n", self.id);
@@ -234,9 +262,11 @@ impl Record {
             return Err(InvalidArg::new("Record ident must be set before XML export").into());
         }
         let ident = self.id.to_string();
-        let mut element =
-            writer.create_element("record").with_attribute(("ident", ident.as_str()));
-        for (name, value) in [("skip", &self.skip), ("href", &self.href)] {
+        let mut element = writer.create_element("record").with_attribute(("ident", ident.as_str()));
+        for (name, value) in [
+            ("skip", &self.skip),
+            ("href", &self.href),
+        ] {
             if let Some(value) = value {
                 element = element.with_attribute((name, value.as_str()));
             }
@@ -289,17 +319,22 @@ impl Record {
     pub fn load_data(&mut self, path_data: impl AsRef<Path>) -> Result<SurveyData> {
         let path_data = path_data.as_ref();
         let data_format = DataFormat::from_path(path_data)?;
-        let (parquet_file, cache) =
-            tempfile::NamedTempFile::with_suffix(".parquet")?.into_parts();
+        let (parquet_file, cache) = tempfile::NamedTempFile::with_suffix(".parquet")?.into_parts();
 
-        let schema =
-            Schema::from_iter(self.content().iter().map(|item| item.read().polars_field()));
+        let schema = Schema::from_iter(
+            self
+                .content()
+                .iter()
+                .map(|item| item.read().polars_field())
+        );
         let mut writer = ParquetWriter::new(parquet_file).batched(&schema)?;
         let mut batch_buffer = Vec::new();
         for row in self.scan_data_file(path_data, &data_format)? {
-            batch_buffer.push(row.with_context(|| {
-                format!("When trying to load data from '{}'", path_data.display())
-            })?);
+            batch_buffer.push(
+                row.with_context(|| {
+                    format!("When trying to load data from '{}'", path_data.display())
+                })?
+            );
             if batch_buffer.len() == BATCH_SIZE {
                 Self::write_batch(&mut writer, &schema, &mut batch_buffer)?;
             }
@@ -317,7 +352,7 @@ impl Record {
     fn write_batch(
         writer: &mut polars::io::parquet::write::BatchedWriter<File>,
         schema: &Schema,
-        batch_buffer: &mut Vec<Row<'static>>,
+        batch_buffer: &mut Vec<Row<'static>>
     ) -> Result<()> {
         let df = DataFrame::from_rows_and_schema(batch_buffer, schema)?;
         writer.write_batch(&df)?;
@@ -328,7 +363,7 @@ impl Record {
     fn scan_data_file(
         &self,
         path_data: &Path,
-        data_format: &DataFormat,
+        data_format: &DataFormat
     ) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>> + '_>> {
         let file = File::open(path_data)
             .map_err(error::FileReadError::from)
@@ -337,8 +372,7 @@ impl Record {
         let mut reader = BufReader::new(reader);
 
         // first apply skip...
-        let skip = self
-            .skip
+        let skip = self.skip
             .as_deref()
             .unwrap_or("0")
             .parse::<usize>()
@@ -360,26 +394,37 @@ impl Record {
                     .map(|question| *question.read().location().finish() as usize)
                     .max()
                     .context("Cannot determine record width: no questions")?;
-                Ok(Box::new(std::iter::from_fn(
-                    move || match Self::read_one_record(&mut reader, width) {
-                        Ok(row) if row.is_empty() => None,
-                        Ok(row) => Some(
-                            self.content()
-                                .iter()
-                                .map(|question| {
-                                    let question = question.read();
-                                    let field = question.locate_data_asc(&row)?;
-                                    Ok(question.parse_question_value(field)?.into_static())
-                                })
-                                .collect::<Result<Vec<_>>>()
-                                .map(Row),
-                        ),
-                        Err(error) => Some(Err(error)),
-                    },
-                )))
+                Ok(
+                    Box::new(
+                        std::iter::from_fn(move || {
+                            match Self::read_one_record(&mut reader, width) {
+                                Ok(row) if row.is_empty() => None,
+                                Ok(row) =>
+                                    Some(
+                                        self
+                                            .content()
+                                            .iter()
+                                            .map(|question| {
+                                                let question = question.read();
+                                                let field = question.locate_data_asc(&row)?;
+                                                Ok(
+                                                    question
+                                                        .parse_question_value(field)?
+                                                        .into_static()
+                                                )
+                                            })
+                                            .collect::<Result<Vec<_>>>()
+                                            .map(Row)
+                                    ),
+                                Err(error) => Some(Err(error)),
+                            }
+                        })
+                    )
+                )
             }
             DataFormat::Csv => {
-                let rows = csv::ReaderBuilder::new()
+                let rows = csv::ReaderBuilder
+                    ::new()
                     .has_headers(false)
                     .flexible(true)
                     .from_reader(reader)
@@ -393,8 +438,9 @@ impl Record {
                             .iter()
                             .map(|question| {
                                 let question = question.read();
-                                let field =
-                                    question.locate_data_csv(&row).with_context(|| {
+                                let field = question
+                                    .locate_data_csv(&row)
+                                    .with_context(|| {
                                         format!(
                                             "When trying to extract data for question `{}`",
                                             question.name()
@@ -422,8 +468,7 @@ impl Record {
         let file = File::open(path)
             .map_err(error::FileReadError::from)
             .with_context(|| format!("When opening '{}'", path.display()))?;
-        let skip = self
-            .skip
+        let skip = self.skip
             .as_deref()
             .unwrap_or("0")
             .parse::<usize>()
@@ -433,14 +478,16 @@ impl Record {
 
         match data_format {
             DataFormat::Csv => {
-                let mut reader = csv::ReaderBuilder::new()
+                let mut reader = csv::ReaderBuilder
+                    ::new()
                     .has_headers(false)
                     .flexible(true)
                     .from_reader(file);
 
                 for (index, row) in reader.records().enumerate().skip(skip) {
-                    let row =
-                        row.with_context(|| format!("When reading CSV record {}", index + 1))?;
+                    let row = row.with_context(||
+                        format!("When reading CSV record {}", index + 1)
+                    )?;
 
                     content
                         .par_iter()
@@ -486,18 +533,17 @@ impl Record {
                 0xe0..=0xef => 3,
                 0xf0..=0xf4 => 4,
                 _ => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "Invalid UTF-8",
-                    )
-                    .into());
+                    return Err(
+                        std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid UTF-8").into()
+                    );
                 }
             };
             let mut bytes = [0u8; 4];
             bytes[0] = first[0];
             reader.read_exact(&mut bytes[1..len])?;
 
-            let character = std::str::from_utf8(&bytes[..len])
+            let character = std::str
+                ::from_utf8(&bytes[..len])
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
             result.push_str(character);
@@ -549,10 +595,7 @@ impl Record {
     }
 
     #[setter(data_format)]
-    fn py_set_data_format<'py>(
-        &mut self,
-        data_format: Option<&Bound<'py, PyAny>>,
-    ) -> PyResult<()> {
+    fn py_set_data_format<'py>(&mut self, data_format: Option<&Bound<'py, PyAny>>) -> PyResult<()> {
         self.data_format = match data_format {
             None => None,
             Some(bound) => {
@@ -571,11 +614,15 @@ impl Record {
                         .map_err(|err| exceptions::PyValueError::new_err(format!("{err:#}")))?
                 } else {
                     let type_name = get_type_name(bound)?;
-                    return Err(exceptions::PyTypeError::new_err(format!(
-                        "Expect to triple_s.DataFormat instance or one of {:?}, got: '{}'.",
-                        DataFormat::available_options(),
-                        type_name
-                    )));
+                    return Err(
+                        exceptions::PyTypeError::new_err(
+                            format!(
+                                "Expect to triple_s.DataFormat instance or one of {:?}, got: '{}'.",
+                                DataFormat::available_options(),
+                                type_name
+                            )
+                        )
+                    );
                 };
                 Some(value)
             }
@@ -619,7 +666,11 @@ impl Record {
     /// lists of `<variable>` child nodes
     #[getter(content)]
     fn py_get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
-        let items = self.content.read().clone().into_iter().map(|item| item.read().clone());
+        let items = self.content
+            .read()
+            .clone()
+            .into_iter()
+            .map(|item| item.read().clone());
         PyTuple::new(py, items)
     }
 
@@ -635,14 +686,18 @@ impl Record {
     /// Invalid Unicode sequences become `�` (U+FFFD).
     #[pyo3(name = "load_data")]
     fn py_load_data(&mut self, path_data: &str) -> PyResult<SurveyData> {
-        self.load_data(path_data)
-            .map_err(|err| exceptions::PyRuntimeError::new_err(format!("{:#?}", err)))
+        self.load_data(path_data).map_err(|err|
+            exceptions::PyRuntimeError::new_err(format!("{:#?}", err))
+        )
     }
 
     /// List of question names in the record
     #[getter(questions)]
     fn py_get_question_names(&self) -> Vec<String> {
-        self.content().iter().map(|item| item.read().name()).collect()
+        self.content()
+            .iter()
+            .map(|item| item.read().name())
+            .collect()
     }
 
     fn __len__(&self) -> usize {
@@ -654,10 +709,10 @@ impl Record {
 
         if let Ok(number) = index.extract::<isize>() {
             let total_length = self.__len__();
-            let sanitised = normalize_py_index(number, total_length)
-                .ok_or(exceptions::PyIndexError::new_err(number))?;
-            let item = self
-                .content
+            let sanitised = normalize_py_index(number, total_length).ok_or(
+                exceptions::PyIndexError::new_err(number)
+            )?;
+            let item = self.content
                 .read()
                 .get(sanitised)
                 .map(|item| item.read().clone())
@@ -665,10 +720,11 @@ impl Record {
             item.into_py_any(py)
         } else if let Ok(question_name) = index.extract::<String>() {
             self.py_get(&question_name)
-                .ok_or(exceptions::PyKeyError::new_err(format!(
-                    "Unable to find question with name '{}'",
-                    question_name
-                )))?
+                .ok_or(
+                    exceptions::PyKeyError::new_err(
+                        format!("Unable to find question with name '{}'", question_name)
+                    )
+                )?
                 .into_py_any(py)
         } else if let Ok(indicies) = index.cast::<PySlice>() {
             let total = self.__len__() as isize;
@@ -688,16 +744,37 @@ impl Record {
             result.into_py_any(py)
         } else {
             let type_name = index.get_type().name()?.extract::<String>()?;
-            Err(exceptions::PyTypeError::new_err(format!(
-                "`index` must be question index (as `int`) or question name (as `str`), found: {}",
-                type_name
-            )))
+            Err(
+                exceptions::PyTypeError::new_err(
+                    format!("`index` must be question index (as `int`) or question name (as `str`), found: {}", type_name)
+                )
+            )
         }
     }
 
     pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<Py<RecordIterator>> {
         let content = self.content().clone();
         Py::new(py, RecordIterator { content, index: 0 })
+    }
+
+    /// Add a question to the current `Record` instance
+    ///
+    /// Would overwrite existing item if question with the same name already exists.
+    #[pyo3(name="add_question")]
+    fn py_add_question(&mut self, question: Question) -> PyResult<()> {
+        let deepcopy = question.deepcopy();
+        self.add_question(deepcopy);
+        Ok(())
+    }
+
+    /// Remove a question from current record, returns the removed question.
+    ///
+    /// Name matching is case insensitive.
+    #[pyo3(name="remove_question")]
+    fn py_remove_question(&mut self, question_name: &str) -> PyResult<Option<Question>> {
+        let deepcopy = self.remove_question(question_name)
+            .map(|item| item.read().deepcopy());
+        Ok(deepcopy)
     }
 
     /// Create new instance from dictionary with the following keys:

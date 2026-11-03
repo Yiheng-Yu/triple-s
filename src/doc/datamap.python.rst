@@ -1,6 +1,6 @@
-A Triple-S datamap containing survey metadata in :class:`triple_s.SurveyInfo`
-and question definitions in :class:`triple_s.Record`.
-Use :class:`triple_s.Survey` to work with a datamap and respondent data together.
+Datamap describes how to interpret the data file, a datamap consists of two parts:
+- survey metadata in ``info`` and,
+- question definitions in ``record``. 
 
 Read a datamap
 --------------
@@ -33,6 +33,15 @@ Alternatively, you can build a datamap with ``Datamap.from_dict()``:
    datamap.info.name = "updated-example"
    datamap.title = "Updated survey"
    assert datamap.info.title == "Updated survey"
+
+You can either pass your list of questions to the `record` child dictionary, 
+or ues :func:`Datamap.record.add_question` and :func:`Datamap.record.remove_question` later too add/ 
+remove survey questions:
+
+.. code-block:: python
+
+   datamap.add_question(q1)
+   datamap.remove_question(q2)
 
 
 Access questions
