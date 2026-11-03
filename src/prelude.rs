@@ -11,9 +11,7 @@ pub trait Flag: strum::IntoEnumIterator {
 #[cfg(feature = "pyo3")]
 pub(crate) trait PyEnum: Flag + std::str::FromStr {
     fn from_py_any<'py>(value: pyo3::Bound<'py, pyo3::PyAny>) -> pyo3::PyResult<Self>
-    where
-        Self: for<'a> pyo3::FromPyObject<'a, 'py>,
-    {
+    where Self: for<'a> pyo3::FromPyObject<'a, 'py> {
         if let Ok(value) = value.extract::<Self>() {
             return Ok(value);
         }

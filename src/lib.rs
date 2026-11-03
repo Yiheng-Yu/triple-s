@@ -160,7 +160,14 @@ pub use data::{QuestionData, SurveyData};
 pub use datamap::{
     Datamap,
     question::{
-        self, CodeFormat, Location, Question, QuestionOptions, QuestionType, Spread, Usage,
+        self,
+        CodeFormat,
+        Location,
+        Question,
+        QuestionOptions,
+        QuestionType,
+        Spread,
+        Usage,
     },
     read::{read_datamap, read_from_reader, read_from_string},
     record::{self, DataFormat, Record},

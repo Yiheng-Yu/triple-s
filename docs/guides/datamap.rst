@@ -39,7 +39,16 @@ Alternatively, you can build a datamap with ``Datamap.from_dict()``:
    datamap.title = "Updated survey"
    assert datamap.info.title == "Updated survey"
 
-   
+
+You can either pass your list of questions to the `record` child dictionary, 
+or ues :func:`Datamap.record.add_question` and :func:`Datamap.record.remove_question` later too add/ 
+remove survey questions:
+
+.. code-block:: python
+
+   datamap.add_question(q1)
+   datamap.remove_question(q2)
+
 
 Metadata
 *********************
@@ -134,3 +143,40 @@ Edit a question, then save the updated datamap:
    with open("updated survey.sss", "w", encoding="utf-8") as file:
       file.write(datamap.to_xml())
    
+
+
+Load and export survey data
+----------------------------------
+
+:func:`Datamap.load_data()`/ :func:`Record.load_data()` uses the record's question definitions.
+
+*Loading and validation support UTF-8 and BOM-marked UTF-16; invalid sequences become ``�`` (U+FFFD), each occupying one fixed-width position.*
+
+.. code-block:: python
+
+   data = datamap.load_data("survey.asc")
+   df = data.to_polars()
+   pandas_df = data.to_pandas()
+
+Loading returns a :class:`triple_s.SurveyData` instance, 
+it updates the datamap record's ``href`` to to the path of the data file, as well as ``data_format`` to the type of data file. 
+
+*To read the definition and respondent data together, use :func:`triple_s.read_triple_s`:*
+
+
+Export the datamap
+------------------
+
+``to_classic()`` returns Triple-S classic document:
+
+.. code-block:: python
+
+   classic = datamap.to_classic()
+
+
+``to_xml()`` returns a complete Triple-S XML document:
+
+.. code-block:: python
+
+   xml = datamap.to_xml()
+

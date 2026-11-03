@@ -6,7 +6,8 @@ use std::str::FromStr;
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    PyResult, exceptions,
+    PyResult,
+    exceptions,
     prelude::*,
     types::{PyDict, PyString, PyTuple},
 };

@@ -1,8 +1,7 @@
-use parking_lot::RwLockReadGuard;
-use polars::prelude::*;
-
 #[cfg(feature = "pyo3")]
 use chrono::{NaiveDate, NaiveTime};
+use parking_lot::RwLockReadGuard;
+use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{prelude::*, types::PyTuple};
 #[cfg(feature = "pyo3")]

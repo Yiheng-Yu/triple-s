@@ -19,7 +19,6 @@ use crate::{
 };
 
 /// Triple-s survey.
-///
 #[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "Survey"))]
 #[derive(Debug)]
 pub struct Survey {
