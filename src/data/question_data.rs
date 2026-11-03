@@ -15,9 +15,7 @@ use super::SurveyData;
 use crate::{Question, QuestionType, utils::ArcLock};
 #[cfg(feature = "pyo3")]
 use crate::{
-    error::InternalError,
-    prelude::*,
-    utils::{anyvalue_to_python, convert_date, convert_time, normalize_py_index},
+    DataRange, Text, error::InternalError, prelude::*, utils::{anyvalue_to_python, convert_date, convert_time, normalize_py_index},
 };
 
 /// Survey data for a single question.
@@ -95,6 +93,21 @@ impl QuestionData {
     #[getter(name)]
     fn py_get_name(&self) -> String {
         self.name()
+    }
+
+    /// Title of the question
+    #[getter(label)]
+    fn py_get_label(&self) -> Text {
+        self.question.label().clone()
+    }
+
+    /// Minimum and maximum values allowed for a quantity response, 
+    /// or an implicit range of codes for a numeric categorical response. 
+    /// For character responses, the end stores the maximum size plus one. 
+    /// String categorical responses do not support a range.
+    #[getter(range)]
+    fn py_get_range(&self) -> Option<DataRange> {
+        self.question.response().range().clone()
     }
 
     /// Type of the question ('single', 'multiple' etc.,)
