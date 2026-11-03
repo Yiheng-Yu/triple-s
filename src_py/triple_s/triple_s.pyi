@@ -265,9 +265,9 @@ class Datamap:
     
     
     Load and export survey data
-    --------------------
+    ------------------------------
     
-    :func:`Datamap.load_data()`/ :func:`Record.load_data()` uses the record's question definitions.
+    :func:`Datamap.load_data()`/ :func:`Record.load_data()`:
     
     *Loading and validation support UTF-8 and BOM-marked UTF-16; invalid sequences become ``�`` (U+FFFD), each occupying one fixed-width position.*
     
@@ -284,7 +284,7 @@ class Datamap:
     
     
     Export the datamap
-    ------------------
+    -----------------------
     
     ``to_classic()`` returns Triple-S classic document
     
