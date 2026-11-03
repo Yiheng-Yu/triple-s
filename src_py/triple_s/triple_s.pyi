@@ -212,9 +212,9 @@ class DataRange:
 @final
 class Datamap:
     """
-    A Triple-S datamap containing survey metadata in :class:`triple_s.SurveyInfo`
-    and question definitions in :class:`triple_s.Record`.
-    Use :class:`triple_s.Survey` to work with a datamap and respondent data together.
+    Datamap describes how to interpret the data file, a datamap consists of two parts:
+    - survey metadata in ``info`` and,
+    - question definitions in ``record``. 
     
     Read a datamap
     --------------
@@ -248,27 +248,26 @@ class Datamap:
        datamap.title = "Updated survey"
        assert datamap.info.title == "Updated survey"
     
+    You can either pass your list of questions to the `record` child dictionary, 
+    or ues :func:`Datamap.record.add_question` and :func:`Datamap.record.remove_question` later too add/ 
+    remove survey questions:
+    
+    .. code-block:: python
+    
+       datamap.add_question(q1)
+       datamap.remove_question(q2)
+    
     
     Access questions
     ----------------
     
     To see out all questions in a datamap, use :py:attr:`Record.questions`, which lists question names in record order.
     
-    Use ``get()`` on the datamap or record to get questions by its `name`, case insensitive; a missing
-    question returns ``None``:
     
-    .. code-block:: python
-    
-       datamap = read_datamap("survey.sss")
-       print(datamap.questions)
-       question = datamap.get("Q1")
-       if question is not None:
-           print(question.label)
-    
-    Load and export data
+    Load and export survey data
     --------------------
     
-    ``load_data()`` uses the record's question definitions.
+    :func:`Datamap.load_data()`/ :func:`Record.load_data()` uses the record's question definitions.
     
     *Loading and validation support UTF-8 and BOM-marked UTF-16; invalid sequences become ``�`` (U+FFFD), each occupying one fixed-width position.*
     
@@ -723,13 +722,34 @@ class QuestionData:
         Get a copy of question data as a Python tuple.
         """
     @property
+    def label(self, /) -> Text:
+        """
+        Title of the question
+        """
+    @property
     def name(self, /) -> str:
         """
         Name of the question
         """
+    @property
+    def range(self, /) -> DataRange |None:
+        """
+        Minimum and maximum values allowed for a quantity response, 
+        or an implicit range of codes for a numeric categorical response. 
+        For character responses, the end stores the maximum size plus one. 
+        String categorical responses do not support a range.
+        """
+    def to_list(self, /) -> Any:
+        """
+        Export the answers as a list.
+        """
+    def to_pandas(self, /) -> Any:
+        """
+        Export the answers as a pandas Series object.
+        """
     def to_polars(self, /) -> Incomplete:
         """
-        Return the answers as a Polars Series (Python's column type).
+        Return the answers as a polars Series.
         """
     @property
     def type(self, /) -> str |None:
@@ -788,6 +808,12 @@ class Record:
     def __getitem__(self, index: Any, /) -> Any: ...
     def __iter__(self, /) -> Any: ...
     def __len__(self, /) -> int: ...
+    def add_question(self, /, question: Question) -> None:
+        """
+        Add a question to the current `Record` instance
+        
+        Would overwrite existing item if question with the same name already exists.
+        """
     @property
     def content(self, /) -> tuple:
         """
@@ -865,6 +891,12 @@ class Record:
     def questions(self, /) -> list[str]:
         """
         List of question names in the record
+        """
+    def remove_question(self, /, question_name: str) -> Question |None:
+        """
+        Remove a question from current record, returns the removed question.
+        
+        Name matching is case insensitive.
         """
     @property
     def skip(self, /) -> str |None:
