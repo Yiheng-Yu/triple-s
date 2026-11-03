@@ -5,18 +5,15 @@ use std::{
 
 use anyhow::Result;
 use polars::prelude::*;
-
-#[cfg(feature = "pyo3")]
-use crate::utils::anyvalue_to_python;
-
 #[cfg(feature = "pyo3")]
 use pyo3::{prelude::*, types::PyDict};
-
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use tempfile::TempPath;
 
 use crate::error::{InvalidArg, NoDataError};
+#[cfg(feature = "pyo3")]
+use crate::utils::anyvalue_to_python;
 
 /// The backing file and its cleanup policy.
 #[derive(Debug)]
@@ -107,9 +104,9 @@ impl SurveyData {
 }
 
 impl SurveyData {
-    /// Creates an empty `SurveyData` instance
+    /// Creates an empty [`SurveyData`] instance
     ///
-    /// Example:
+    /// Example Creating new empty [`SurveyData`]:
     ///
     /// ```
     /// use triple_s::SurveyData;

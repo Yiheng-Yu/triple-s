@@ -158,8 +158,14 @@ Attributes
 Methods
 ^^^^^^^
 
+Creating new instance with various data types:
+*********************************************************
+
 .. automethod:: triple_s.Code.unsigned(value, label=None, filter=None, score=None) -> Code
 .. automethod:: triple_s.Code.string(value, label=None, filter=None, score=None) -> Code
 .. automethod:: triple_s.Code.float(value, label=None, filter=None, score=None) -> Code
 .. automethod:: triple_s.Code.signed(value, label=None, filter=None, score=None) -> Code
+
+Creating new instance from dictionary:
+*********************************************************
 .. automethod:: triple_s.Code.from_dict(content) -> Code

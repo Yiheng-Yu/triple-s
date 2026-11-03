@@ -8,11 +8,14 @@
 //! survey data from one place to another.
 //!
 //! It typically consists of two independent files:
+//! 
 //! A. a data file, this can either be a _text_ .asc file that contains the raw
 //! data, or a _csv_ that with question name as column headers. Most of the data
-//! files are of the former kind. B. a datamap that record how the data file
+//! files are of the former kind. 
+//! 
+//! B. a datamap that record how the data file
 //! should be read. i.e., where's the data for each question for each respondent
-//! etc.,
+//! etc.
 //!
 //! The current library provides a (very!) fast and convenient way of reading/
 //! loading/ modfying triple-s files. Supports all triple-s file format
@@ -100,7 +103,7 @@
 //! # IMPORTANT: Trait `DeepCopy`
 //!
 //! In order to accomdate python's (painful) dynamic typing & mutation, most of
-//! the fields for `Datamap` and its members (`Question`, `Response` etc,) are
+//! the fields for [ `Datamap` ] and its members (`Question`, `Response` etc,) are
 //! wrapped inside `Arc<parking_lot::RwLock<T>>`. You should be able to access
 //! them via their respective method calls, please refer to the documentation
 //! for each item for the list of fields accessible.
@@ -160,7 +163,14 @@ pub use data::{QuestionData, SurveyData};
 pub use datamap::{
     Datamap,
     question::{
-        self, CodeFormat, Location, Question, QuestionOptions, QuestionType, Spread, Usage,
+        self,
+        CodeFormat,
+        Location,
+        Question,
+        QuestionOptions,
+        QuestionType,
+        Spread,
+        Usage,
     },
     read::{read_datamap, read_from_reader, read_from_string},
     record::{self, DataFormat, Record},
@@ -206,7 +216,6 @@ pub fn read_triple_s(
     Ok(survey)
 }
 
-/// A Python module implemented in Rust.
 #[cfg(feature = "pyo3")]
 #[pymodule]
 mod triple_s {
@@ -235,8 +244,7 @@ mod triple_s {
     /// Read triple-s datamap
     ///
     /// Args:
-    ///     path_datamap (str): path to the triple-s datamap file, supports both
-    /// classic and xml format.
+    ///     path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
     #[pyfunction(name="read_datamap", signature=(path_datamap: "str"))]
     pub fn py_read_datamap(py: Python<'_>, path_datamap: &str) -> PyResult<Datamap> {
         let input = std::fs::File::open(path_datamap)?;

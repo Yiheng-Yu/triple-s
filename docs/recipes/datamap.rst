@@ -6,7 +6,7 @@ Convert between Triple-s Classic and XML
 -------------------------------------------------
 
 Convert between Triple-S Classic and XML with
-:meth:`triple_s.Datamap.to_classic` and :meth:`triple_s.Datamap.to_xml`:
+:meth:`Datamap.to_classic` and :meth:`Datamap.to_xml`:
 
 .. code-block:: python
 

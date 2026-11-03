@@ -33,7 +33,21 @@ Install with:
 pip install triple-s-survey
 ```
 
-#### Read a datamap
+#### Read a triple-s survey file
+
+Read a triple-s survey file via `read_triple_s` function:
+
+```python
+
+from triple_s import read_triple_s
+
+survey = read_triple_s("path/to/datamap.sss", "path/to/data.asc")
+
+```
+
+More usage examples can be found in the [survey data task recipe page](https://triple-s.readthedocs.io/en/release/recipes/survey_data.html).
+
+#### Read just the datamap
 
 ```python
 from triple_s import read_datamap
@@ -59,53 +73,7 @@ question = datamap["Q1"]
 question.text = "Updated question text"
 ```
 
-Datamap can be iterated:
-
-```python
-for question in datamap:
-    print(question.name)
-```
-
-#### Load triple-s data file
-
-Read `.asc` data file:
-
-```python
-from triple_s import read_datamap
-
-datamap = read_datamap("path/to/datamap.sss")
-datamap.load_data("path/to/data.asc")
-```
-
-For CSV data, use a datamap with `<record format="csv">` and call
-`datamap.load_data("path/to/data.csv")`. Each question's `position start`
-is its one-based CSV field number. Set `skip="1"` on the record to skip a
-header, or another non-negative number to skip that many initial records.
-Quoted commas, escaped quotes, and multiline text fields are supported.
-Both formats support UTF-8 and BOM-marked UTF-16. Loading and validation
-replace invalid sequences with `�` (U+FFFD), which counts as one fixed-width character.
-
-...And export to polars dataframe
-
-```python
-df = datamap.to_polars()
-```
-
-#### Exporting
-
-Export instance to sss classic (sss 1.1):
-
-```python
-string = datamap.to_classic()
-print(string)
-```
-
-Alternatively, insead of the entire datamap, you can also export individual datamap components (i.e., individual questions, question response, data location) as well:
-
-```python
-question_string = datamap.record[3].to_classic()
-print(question_string)
-```
+More usage examples can be found in the [datamap task recipe page](https://triple-s.readthedocs.io/en/release/recipes/datamap.html).
 
 
 ## Development

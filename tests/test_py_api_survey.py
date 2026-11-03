@@ -47,7 +47,7 @@ def test_indexing_individual_responses(survey, index):
 
 def test_survey_iter(survey):
     df = survey.data.to_polars()
-    for index, entry in enumerate(survey):
+    for index, entry in enumerate(survey.iter_rows()):
         assert entry == df.row(index, named=True)
 
 
@@ -145,3 +145,10 @@ def test_survey_without_data():
     data = survey.datamap.load_data(PATH_ASC)
     assert data.has_data()
     assert not survey.has_data()
+
+
+def test_value_counts(survey):
+    print()
+    for question in survey.iter_questions():
+        summary = question.value_counts()
+        print(summary)

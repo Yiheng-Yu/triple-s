@@ -1,5 +1,5 @@
 A Triple-S datamap containing survey metadata ([`SurveyInfo`]) and question
-definitions ([`Record`]). Use [`crate::Survey`] to work with a datamap and
+definitions ([`Record`]). Use [`Survey`] to work with a datamap and
 respondent data together.
 
 See the [Triple-S documentation](https://triple-s.org/documentation/manuals/)
@@ -30,7 +30,7 @@ guards before requesting write access to the same metadata.
 
 # Read a datamap and access questions
 
-[`crate::read_datamap`] reads Triple-S Classic or XML definitions without
+[`read_datamap`] reads Triple-S Classic or XML definitions without
 loading respondent data, even when the record references a data file.
 
 ```no_run
@@ -66,10 +66,10 @@ let frame = data.to_polars()?;
 # Ok::<(), anyhow::Error>(())
 ```
 
-Loading returns a [`crate::SurveyData`] backed by a temporary Parquet cache
+Loading returns a [`SurveyData`] backed by a temporary Parquet cache
 and updates the record's `href` and `data_format`.
 
-To read both files into a survey, use [`crate::read_triple_s`] instead.
+To read both files into a survey, use [`read_triple_s`] instead.
 
 # Export the datamap
 

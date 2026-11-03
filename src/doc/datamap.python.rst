@@ -1,6 +1,6 @@
-A Triple-S datamap containing survey metadata in :class:`triple_s.SurveyInfo`
-and question definitions in :class:`triple_s.Record`.
-Use :class:`triple_s.Survey` to work with a datamap and respondent data together.
+Datamap describes how to interpret the data file, a datamap consists of two parts:
+- survey metadata in ``info`` and,
+- question definitions in ``record``. 
 
 Read a datamap
 --------------
@@ -34,27 +34,26 @@ Alternatively, you can build a datamap with ``Datamap.from_dict()``:
    datamap.title = "Updated survey"
    assert datamap.info.title == "Updated survey"
 
+You can either pass your list of questions to the `record` child dictionary, 
+or ues :func:`Datamap.record.add_question` and :func:`Datamap.record.remove_question` later too add/ 
+remove survey questions:
+
+.. code-block:: python
+
+   datamap.add_question(q1)
+   datamap.remove_question(q2)
+
 
 Access questions
 ----------------
 
 To see out all questions in a datamap, use :py:attr:`Record.questions`, which lists question names in record order.
 
-Use ``get()`` on the datamap or record to get questions by its `name`, case insensitive; a missing
-question returns ``None``:
 
-.. code-block:: python
+Load and export survey data
+------------------------------
 
-   datamap = read_datamap("survey.sss")
-   print(datamap.questions)
-   question = datamap.get("Q1")
-   if question is not None:
-       print(question.label)
-
-Load and export data
---------------------
-
-``load_data()`` uses the record's question definitions.
+:func:`Datamap.load_data()`/ :func:`Record.load_data()`:
 
 *Loading and validation support UTF-8 and BOM-marked UTF-16; invalid sequences become ``�`` (U+FFFD), each occupying one fixed-width position.*
 
@@ -71,7 +70,7 @@ it updates the datamap record's ``href`` to to the path of the data file, as wel
 
 
 Export the datamap
-------------------
+-----------------------
 
 ``to_classic()`` returns Triple-S classic document
 

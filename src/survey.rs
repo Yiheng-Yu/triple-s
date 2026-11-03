@@ -19,9 +19,8 @@ use crate::{
 };
 
 /// Triple-s survey.
-///
-#[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "Survey"))]
-#[derive(Debug)]
+#[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "Survey", skip_from_py_object))]
+#[derive(Debug, Clone)]
 pub struct Survey {
     datamap: Datamap,
     data: ArcLock<SurveyData>,
@@ -63,15 +62,19 @@ impl Survey {
         &mut self.datamap
     }
 
-    /// Read access to shared survey data. Drop the guard before writing through a view.
+    /// Read access to shared survey data.
     pub fn data(&self) -> RwLockReadGuard<'_, SurveyData> {
         self.data.read()
     }
 
     /// Write access to respondent data. Replacing it updates existing question views.
-    /// Drop the guard before accessing the data through another view.
     pub fn data_mut(&self) -> RwLockWriteGuard<'_, SurveyData> {
         self.data.write()
+    }
+
+    /// List of question names in the current instance
+    pub fn question_names(&self) -> Vec<String> {
+        self.datamap().question_names()
     }
 }
 
@@ -108,7 +111,6 @@ impl Survey {
     }
 
     /// Gets a shared [`QuestionData`] view, or `None` if the question name doesn't exist.
-    /// Existing views follow replacements made through [`Self::data_mut`].
     pub fn get_question_data(&self, name: &str) -> Option<QuestionData> {
         let question = self.datamap.get(name)?.clone();
 
@@ -184,8 +186,26 @@ impl Survey {
         }
     }
 
-    fn __iter__(&self, py: Python<'_>) -> PyResult<Py<crate::data::ResponseIterator>> {
+
+    fn __iter__(&self) -> PyResult<()> {
+        Err(exceptions::PyNotImplementedError::new_err(
+            "`Survey.__iter__` not implemented. Explicitly call `iter_rows()` or `iter_questions()` to iter over a survey!"
+        ))
+    }
+
+    /// Iter each individual respondant data
+    fn iter_rows(&self, py: Python<'_>) -> PyResult<Py<crate::data::ResponseIterator>> {
         self.data().__iter__(py)
+    }
+
+    fn iter_questions(&self, py: Python<'_>) -> PyResult<Py<QuestionDataIterator>> {
+        let pointer = Arc::new(self.clone());  // clones a shallow copy
+        let iterator = QuestionDataIterator {
+            survey: pointer,
+            index: 0
+        };
+
+        Py::new(py, iterator)
     }
 
     /// (optional) Name of the survey
@@ -245,5 +265,40 @@ impl Survey {
     #[pyo3(name = "has_data")]
     fn py_has_data(&self) -> bool {
         self.has_data()
+    }
+}
+
+
+// ---------- Helpers -----------
+/// Iterates each ``QuestionData``` in a survey
+#[cfg(feature = "pyo3")]
+#[pyclass]
+pub(crate) struct QuestionDataIterator {
+    survey: Arc<Survey>,
+    index: usize,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl QuestionDataIterator {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> PyResult<Option<QuestionData>> {
+        let questions = self.survey.question_names();
+        if self.index >= questions.len() {
+            return Ok(None)
+        };
+
+        let target = questions.get(self.index)
+            .ok_or(exceptions::PyIndexError::new_err(self.index))?  // unlikely,,
+            .clone();
+
+        let instance = self.survey.get_question_data(&target)
+            .ok_or(exceptions::PyKeyError::new_err(target))?;  // unlikely,,
+
+        self.index += 1;
+        Ok(Some(instance))
     }
 }

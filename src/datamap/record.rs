@@ -13,7 +13,8 @@ use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGua
 use polars::{frame::row::Row, prelude::*};
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    IntoPyObjectExt, exceptions,
+    IntoPyObjectExt,
+    exceptions,
     prelude::*,
     types::{PyDict, PySlice, PyTuple},
 };
@@ -23,14 +24,12 @@ use strum::{EnumIter, EnumString};
 
 use super::{ArcLock, Question};
 #[cfg(feature = "pyo3")]
-use crate::utils::{
-    extract_indicies, get_type_name, lock_it_up, normalize_py_index, py_value_error,
-};
+use crate::utils::{extract_indicies, get_type_name, normalize_py_index, py_value_error};
 use crate::{
     SurveyData,
     error::{self, InvalidArg},
     prelude::{DeepCopy, Flag},
-    utils::TextReader,
+    utils::{TextReader, lock_it_up},
 };
 
 const BATCH_SIZE: usize = 500; // no. rows when writing to paquet cache
@@ -102,7 +101,6 @@ pub struct Record {
     href: Option<String>,
     data_format: Option<DataFormat>,
     content: ArcLock<Vec<ArcLock<Question>>>,
-    data: ArcLock<SurveyData>,
 }
 
 /// # Fields
@@ -166,7 +164,7 @@ impl Record {
         &mut self.data_format
     }
 
-    /// Collections of `Question` instances of a survey, this corresponds to the
+    /// Collections of [ `Question` ] instances of a survey, this corresponds to the
     /// lists of `<variable>` child nodes
     pub fn content(&self) -> RwLockReadGuard<'_, Vec<ArcLock<Question>>> {
         self.content.read()
@@ -177,14 +175,13 @@ impl Record {
         self.content.write()
     }
 
-    /// A read only copy of the survey data.
-    pub fn data(&self) -> RwLockReadGuard<'_, SurveyData> {
-        self.data.read()
-    }
-
-    /// A read-write borrow of the survey data.
-    pub fn data_mut(&self) -> RwLockWriteGuard<'_, SurveyData> {
-        self.data.write()
+    /// List of all questions in the current datamap instance
+    #[inline]
+    pub fn question_names(&self) -> Vec<String> {
+        self.content()
+            .iter()
+            .map(|question| question.read().name())
+            .collect::<Vec<String>>()
     }
 }
 
@@ -203,6 +200,40 @@ impl Record {
         self.find_question(question_name).map(|item| item.read_arc())
     }
 
+    /// Remove a question from current record, returns the removed question.
+    ///
+    /// Name matching is case insensitive.
+    pub fn remove_question(&mut self, question_name: &str) -> Option<ArcLock<Question>> {
+        let upper_case = question_name.to_uppercase();
+        let index = self
+            .content_mut()
+            .iter()
+            .position(|item| item.read().name().to_uppercase() == upper_case);
+
+        index.map(|index| self.content_mut().remove(index))
+    }
+
+    /// Add a question to the current [ `Record` ] instance
+    ///
+    /// Would overwrite existing item if question with the same name already exists. Name matching is case insensitive.
+    pub fn add_question(&mut self, question: Question) {
+        let query = question.name().to_uppercase();
+        let mut content = self.content_mut();
+        match content.iter_mut().find(|item| item.read().name().to_uppercase() == query) {
+            Some(previous) => {
+                log::warn!(
+                    "A question named `{}` already exists. The existing question will be replaced with the new one.",
+                    question.name()
+                );
+
+                *previous = lock_it_up(question);
+            }
+            None => {
+                content.push(lock_it_up(question));
+            }
+        }
+    }
+
     /// export to triple-s classic.
     pub fn to_classic(&self) -> Result<String> {
         let mut output = format!("RECORD {}\n", self.id);
@@ -211,12 +242,6 @@ impl Record {
         }
         output.push_str("END RECORD\n");
         Ok(output)
-    }
-
-    /// Whether respondent data has been loaded.
-    #[inline]
-    pub fn has_data(&self) -> bool {
-        self.data().lazy().is_ok()
     }
 
     /// Serialises the record and its questions as a Triple-S XML `<record>`
@@ -615,7 +640,7 @@ impl Record {
         Ok(())
     }
 
-    /// Collections of `Question` instances of a survey, this corresponds to the
+    /// Collections of [ `Question` ] instances of a survey, this corresponds to the
     /// lists of `<variable>` child nodes
     #[getter(content)]
     fn py_get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
@@ -700,10 +725,29 @@ impl Record {
         Py::new(py, RecordIterator { content, index: 0 })
     }
 
+    /// Add a question to the current [ `Record` ] instance
+    ///
+    /// Would overwrite existing item if question with the same name already exists.
+    #[pyo3(name = "add_question")]
+    fn py_add_question(&mut self, question: Question) -> PyResult<()> {
+        let deepcopy = question.deepcopy();
+        self.add_question(deepcopy);
+        Ok(())
+    }
+
+    /// Remove a question from current record, returns the removed question.
+    ///
+    /// Name matching is case insensitive.
+    #[pyo3(name = "remove_question")]
+    fn py_remove_question(&mut self, question_name: &str) -> PyResult<Option<Question>> {
+        let deepcopy = self.remove_question(question_name).map(|item| item.read().deepcopy());
+        Ok(deepcopy)
+    }
+
     /// Create new instance from dictionary with the following keys:
     ///
     /// 'ident' (str|None, *optional*):
-    ///     id of the `Record` instance, default 'A'.
+    ///     id of the [ `Record` ] instance, default 'A'.
     ///
     /// 'href' (str|None, *optional*):
     ///     href,
@@ -806,8 +850,24 @@ impl Record {
             skip: skip,
             data_format: data_format,
             content: lock_it_up(questions),
-            data: lock_it_up(data),
         })
+    }
+
+    /// Creates a new empty [`Record`] instance.
+    /// 
+    /// Example:
+    /// 
+    /// ```python
+    /// 
+    /// from triple_s import Record
+    /// 
+    /// record = Record.empty()
+    /// assert len(record) == 0
+    /// ```
+    #[staticmethod]
+    #[pyo3(name="empty")]
+    fn py_empty() -> Self {
+        Self::default()
     }
 
     /// Validate an `.asc` or `.csv` file without changing metadata or loading data.

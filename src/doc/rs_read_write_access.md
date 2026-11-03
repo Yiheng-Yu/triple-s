@@ -1,7 +1,7 @@
 #
  Read-write access of field values
 
-In order to work with python's dynamic tying, all fieds in the `Question` struct
+In order to work with python's dynamic tying, all fieds in the ``Question`` struct
 are `Arc<parking_lot::RwLock<T>>` pointers that points towards data stored on the heap.
 
 You should be able to access these field values via function calls `{field_name}()` that
