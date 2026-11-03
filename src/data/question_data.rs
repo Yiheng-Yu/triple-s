@@ -271,7 +271,7 @@ impl QuestionData {
 
     /// Count unique values of this question data.
     ///
-    /// This function basically calls ``poalrs.Seriesvalue_counts`` under the hood, apart from multi-choice
+    /// This function basically calls ``poalrs.Series.value_counts`` under the hood, apart from multi-choice
     /// where the choice for each respondant is counted individually.
     ///
     /// Args:
