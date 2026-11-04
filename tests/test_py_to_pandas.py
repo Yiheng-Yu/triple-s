@@ -51,4 +51,6 @@ def test_loaded_data_to_pandas(datamap):
     assert result["Q8"].iloc[2] == "C"
     assert result["WT"].iloc[0] == pytest.approx(1.1310)
 
-    pd.testing.assert_frame_equal(result, data.to_polars().to_pandas(use_pyarrow_extension_array=True))
+    pd.testing.assert_frame_equal(
+        result, data.to_polars().to_pandas(use_pyarrow_extension_array=True)
+    )

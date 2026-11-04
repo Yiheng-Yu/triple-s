@@ -38,11 +38,9 @@ pip install triple-s-survey
 Read a triple-s survey file via `read_triple_s` function:
 
 ```python
-
 from triple_s import read_triple_s
 
 survey = read_triple_s("path/to/datamap.sss", "path/to/data.asc")
-
 ```
 
 More usage examples can be found in the [survey data task recipe page](https://triple-s.readthedocs.io/en/release/recipes/survey_data.html).
@@ -62,7 +60,7 @@ Accessing contents within a datamap:
 ```python
 # Lookup by question name, case insensitive
 print(datamap["Q1"].label)
-print(datamap['q1'].label)  # this will also do
+print(datamap["q1"].label)  # this will also do
 ```
 
 Edit the loaded datamap:

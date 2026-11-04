@@ -8,11 +8,11 @@
 //! survey data from one place to another.
 //!
 //! It typically consists of two independent files:
-//! 
+//!
 //! A. a data file, this can either be a _text_ .asc file that contains the raw
 //! data, or a _csv_ that with question name as column headers. Most of the data
-//! files are of the former kind. 
-//! 
+//! files are of the former kind.
+//!
 //! B. a datamap that record how the data file
 //! should be read. i.e., where's the data for each question for each respondent
 //! etc.

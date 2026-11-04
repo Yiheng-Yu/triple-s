@@ -15,6 +15,14 @@ Attributes
 .. autoattribute:: triple_s.Datamap.title
    :annotation: -> str | None
 
+Properties
+----------------
+.. :py:property:: triple_s.Datamap.question_names
+   :type: -> List[str]
+
+.. :py:property:: triple_s.Datamap.num_questions
+   :type: -> int
+
 Methods
 -------------
 

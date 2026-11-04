@@ -26,6 +26,11 @@ Attributes
 
    A copy of the answers as a tuple, with ``None`` for missing values.
 
+Properties
+-------------------
+.. :py:property:: triple_s.QuestionData.data_label
+   :annotation: Dict[str | int | float, Text]
+
 Iteration and indexing
 ----------------------
 

@@ -53,7 +53,6 @@ jobs:
           target: ${{ matrix.target }}
           args: --release --compatibility pypi --out dist
           manylinux: "2_28"
-          sccache: true
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4

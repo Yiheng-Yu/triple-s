@@ -3,7 +3,17 @@ from copy import copy, deepcopy
 import pytest
 import warnings
 import triple_s
-from triple_s import Text, DataRange, Response, Variant, SurveyInfo, Question, Mode, CodeFormat, Usage
+from triple_s import (
+    Text,
+    DataRange,
+    Response,
+    Variant,
+    SurveyInfo,
+    Question,
+    Mode,
+    CodeFormat,
+    Usage,
+)
 
 # =============================================================================
 # Text & Variant
@@ -50,7 +60,11 @@ def test_variant_setattr_success(variant, field, value):
 
 @pytest.mark.parametrize(
     "cls, field, value, error",
-    [(cls, "value", value, TypeError) for cls in (Text, Variant) for value in (None, 42)]
+    [
+        (cls, "value", value, TypeError)
+        for cls in (Text, Variant)
+        for value in (None, 42)
+    ]
     + [
         (Variant, "mode", "NEW", ValueError),
         (Variant, "mode", 42, TypeError),
@@ -157,7 +171,11 @@ def test_drop_duplicated_variant(variant):
 @pytest.mark.parametrize("index", [0, -1])
 def test_remove_variant(text, index):
     removed = text.remove_variant(index)
-    assert (removed.value, removed.mode, removed.language) == ("original", "analysis", "en-GB")
+    assert (removed.value, removed.mode, removed.language) == (
+        "original",
+        "analysis",
+        "en-GB",
+    )
     assert text.variants == ()
 
 
@@ -171,6 +189,7 @@ def test_remove_variant_out_of_range(text, index):
 # =============================================================================
 # Meta
 # =============================================================================
+
 
 def test_meta_options_are_tuples():
     meta = SurveyInfo("2.0", language_options=["en-GB"], mode_options=["analysis"])
@@ -191,7 +210,11 @@ def test_meta_setter_success():
     meta.name = "example"
     meta.title = "title"
     meta.standard = "standardnames"
-    assert (meta.name, meta.title, meta.standard) == ("example", "title", "standardnames")
+    assert (meta.name, meta.title, meta.standard) == (
+        "example",
+        "title",
+        "standardnames",
+    )
 
     meta.language_options = ["en", "fr"]
     assert meta.language_options == ("en", "fr")
@@ -385,14 +408,15 @@ def test_set_question_location_success(question, attr, value):
 def test_set_question_response_range(question):
     response = question.response
     range = question.response.range
-    
+
     question.response.range.start = 3
     assert response.range.start == 3
     assert range.start == 3
-    
+
     question.response.range.end = 55
     assert response.range.end == 55
     assert range.end == 55
+
 
 # =============================================================================
 # Datamap
@@ -409,5 +433,6 @@ def test_survey_mutate_question(xml):
     assert copy1.name == copy2.name
     assert copy1.name != example.name
 
+
 # def test_question_repl(xml):
-    # example = xml.get("Q3")
+# example = xml.get("Q3")

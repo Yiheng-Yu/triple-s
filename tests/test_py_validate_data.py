@@ -64,7 +64,9 @@ def text_record():
         ("utf-16-be", b"\xfe\xff"),
     ],
 )
-def test_valid_unicode_encodings_are_preserved(tmp_path, text_record, extension, encoding, bom):
+def test_valid_unicode_encodings_are_preserved(
+    tmp_path, text_record, extension, encoding, bom
+):
     path = tmp_path / f"responses.{extension}"
     path.write_bytes(bom + "Café—😀\n".encode(encoding))
 
@@ -73,7 +75,9 @@ def test_valid_unicode_encodings_are_preserved(tmp_path, text_record, extension,
     assert data.to_polars()["TEXT"].to_list() == ["Café—😀"]
 
 
-def test_fixed_width_replacement_preserves_records_and_truncated_eof(tmp_path, text_record):
+def test_fixed_width_replacement_preserves_records_and_truncated_eof(
+    tmp_path, text_record
+):
     path = tmp_path / "responses.asc"
     path.write_bytes(b"\x96ab\xff\x80c\n" + "Café—😀\r\n".encode() + b"abcde\xe2\x82")
 

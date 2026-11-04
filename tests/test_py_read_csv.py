@@ -39,8 +39,10 @@ def test_load_csv_example(datamap):
 
 @pytest.mark.parametrize("skip", [0, 1, 2])
 def test_csv_quoting_and_skip(tmp_path, datamap, skip):
-    
-    with open("tests/sss-examples/sss-2.0/example2.csv", encoding="utf-8", newline="") as source:
+
+    with open(
+        "tests/sss-examples/sss-2.0/example2.csv", encoding="utf-8", newline=""
+    ) as source:
         rows = list(csv.reader(source))
     row = rows[1]
     row[6] = '  Cafe, "你好"\nsecond line  '
@@ -51,7 +53,7 @@ def test_csv_quoting_and_skip(tmp_path, datamap, skip):
         for _ in range(skip):
             writer.writerow(["documentation"])
         writer.writerow(row)
-        
+
     metadata = Path("tests/sss-examples/sss-2.0/example2.sss").read_text()
     datamap_path = tmp_path / "datamap.sss"
     datamap_path.write_text(metadata.replace('skip="1"', f'skip="{skip}"'))

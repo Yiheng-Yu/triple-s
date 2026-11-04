@@ -44,3 +44,4 @@ Methods
 
 .. automethod:: triple_s.Variant.copy() -> Variant
 .. automethod:: triple_s.Variant.from_dict(content) -> Variant
+.. automethod:: triple_s.Variant.to_dict() -> Dict[str, str] 

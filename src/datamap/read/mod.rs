@@ -789,7 +789,7 @@ impl ResponseBuilder {
             }
         };
         let instance = Code {
-            code: lock_it_up(value),
+            value: lock_it_up(value),
             label: lock_it_up(label),
             filter: lock_it_up(raw.filter.map(|s| s.to_string())),
             score: lock_it_up(score),

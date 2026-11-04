@@ -10,8 +10,9 @@ def response():
             Code.unsigned(1, "haha"),
             Code.unsigned(2, "yes", filter=None, score=3.2),
             Code.unsigned(5, None, filter="filter", score=-5.5),
-        ]
+        ],
     )
+
 
 @pytest.fixture
 def code():
@@ -19,11 +20,11 @@ def code():
 
 
 def test_init_response_code_value(response):
-    assert response[0].code == 1
-    assert response[1].code == 2
-    assert response[2].code == 5
-    assert response[-1].code == 5
-    assert response[-2].code == 2
+    assert response[0].value == 1
+    assert response[1].value == 2
+    assert response[2].value == 5
+    assert response[-1].value == 5
+    assert response[-2].value == 2
 
 
 def test_init_response_code_label_text(response):
@@ -88,7 +89,7 @@ def test_code_variant_validation(method, existing_factory, incoming_factory):
 def test_empty_response_accepts_first_code(method):
     response = Response()
     getattr(response, method)(Code.signed(-1, "first"))
-    assert response[0].code == -1
+    assert response[0].value == -1
 
 
 def test_add_duplicate_and_set_existing_code(response):
@@ -103,17 +104,20 @@ def test_add_duplicate_and_set_existing_code(response):
     response.set_value(existing)
     assert existing.label.value == "updated"
 
+
 def test_update_code(code):
     code.label.add_variant("variant", "analysis")
     code.filter = "Q2"
     assert code.filter == "Q2"
 
 
-@pytest.mark.parametrize("index, expected", [(0, 1), (1, 2), (2, 5), (-1, 5), (-2, 2), (-3, 1)])
+@pytest.mark.parametrize(
+    "index, expected", [(0, 1), (1, 2), (2, 5), (-1, 5), (-2, 2), (-3, 1)]
+)
 def test_response_getitem_integer(response, index, expected):
     result = response[index]
     assert isinstance(result, Code)
-    assert result.code == expected
+    assert result.value == expected
 
 
 @pytest.mark.parametrize("index", [3, -4, 100, -100])
@@ -125,19 +129,31 @@ def test_response_getitem_out_of_bounds(response, index):
 @pytest.mark.parametrize(
     "index",
     [
-        slice(None), slice(1, 3), slice(None, 2), slice(1, None),
-        slice(-2, None), slice(None, -1), slice(None, None, 2),
-        slice(-100, 100), slice(2, 1), slice(3, 10), slice(-10, -5),
-        slice(None, None, -1), slice(2, 0, -1), slice(None, None, -2),
-        slice(100, -100, -1), slice(0, 2, -1),
-        slice(None, None, 10**100), slice(None, None, -(10**100)),
+        slice(None),
+        slice(1, 3),
+        slice(None, 2),
+        slice(1, None),
+        slice(-2, None),
+        slice(None, -1),
+        slice(None, None, 2),
+        slice(-100, 100),
+        slice(2, 1),
+        slice(3, 10),
+        slice(-10, -5),
+        slice(None, None, -1),
+        slice(2, 0, -1),
+        slice(None, None, -2),
+        slice(100, -100, -1),
+        slice(0, 2, -1),
+        slice(None, None, 10**100),
+        slice(None, None, -(10**100)),
     ],
 )
 def test_response_getitem_slice(response, index):
     result = response[index]
     assert isinstance(result, list)
     assert all(isinstance(item, Code) for item in result)
-    assert [item.code for item in result] == [1, 2, 5][index]
+    assert [item.value for item in result] == [1, 2, 5][index]
 
 
 @pytest.mark.parametrize("index", ["1", 1.5, None, [0], (0,), {}])

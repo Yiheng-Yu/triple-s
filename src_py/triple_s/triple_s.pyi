@@ -11,14 +11,6 @@ class Code:
     def __new__(cls, /, value: Any, label: Any | None, filter: Any | None, score: Any | None) -> Code: ...
     def __repr__(self, /) -> str: ...
     @property
-    def code(self, /) -> Any:
-        """
-        Code value. This corresponds to the `code` attribute of triple-s
-        `<value>` tag. This can be float, string or int.
-        Code value `string` is introduced in triple-s xml 2.0 (via
-        format='literal' toggle).
-        """
-    @property
     def filter(self, /) -> str | None:
         """
         response filter
@@ -32,8 +24,8 @@ class Code:
         """
         creates new instance from dictionary with the following keys:
 
-        'code' (float|int|str):
-            code of the new instance
+        'value' (float|int|str):
+            code value of the new instance
 
         'label' (str|Text|dict|None, *optional*):
             code label of the new instance.
@@ -71,6 +63,14 @@ class Code:
     def unsigned(value: "int", label: "Option[str]" = None, filter: "Option[str]" = None, score: "Option[str]" = None) -> Code:
         """
         Used for questions of type 'Single/ Multiple/ Date/ Time'
+        """
+    @property
+    def value(self, /) -> Any:
+        """
+        Code value. This corresponds to the `code` attribute of triple-s
+        `<value>` tag. This can be float, string or int.
+        Code value `string` is introduced in triple-s xml 2.0 (via
+        format='literal' toggle).
         """
 
 @final
@@ -314,10 +314,9 @@ class Datamap:
         record = Record.empty()
 
         datamap = Datamap.from_dict({
-            'survey_info': survey_info, 
+            'survey_info': survey_info,
             'record': record
         })
-
         ```
         """
     def get(self, /, question_name: "str") -> Question | None:
@@ -337,7 +336,15 @@ class Datamap:
         The returned data is not stored on the datamap.
         """
     @property
-    def questions(self, /) -> list[str]: ...
+    def num_questions(self, /) -> int:
+        """
+        Total number of questions in the survey datamap
+        """
+    @property
+    def question_names(self, /) -> list[str]:
+        """
+        List of question names in the survey
+        """
     @property
     def record(self, /) -> Record:
         """
@@ -499,6 +506,14 @@ class Question:
         Changes to the copy do not affect the original.
         """
     @property
+    def data_label(self, /) -> dict:
+        """
+        Get the lookup table for items in the `Question.response.values`, asdictionary of { value: label }
+
+        Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
+        method will not mutate the caller.
+        """
+    @property
     def filter(self, /) -> str | None:
         """
         Returns the optional name of a previously defined logical variable used
@@ -544,33 +559,33 @@ class Question:
         Create new [ `Question` ] instance from dictionary with following keys and
         values:
 
-        ``'index'`` (int|None, *optional*): index of a question, default 1,
+        `'index'` (int|None, *optional*): index of a question, default 1,
 
-        ``'name'`` (str):
+        `'name'` (str):
             name of the question
 
-        ``'question_type'`` (str|QuestionType ):
+        `'question_type'` (str|QuestionType ):
             type of the question.
             See QuestionType.available_options() for list of allowed string values.
 
-        ``'location'`` (dict|Location|None, *optional*):
+        `'location'` (dict|Location|None, *optional*):
             data location.
             See help(Location.from_dict) for allowed keys in the dictionary.
             If unset, would defult to :py:meth:`Location(start=1, finish=1)`
 
-        ``'label'`` (str|Text|dict):
+        `'label'` (str|Text|dict):
             question title.
             See help(:py:meth:`Text.from_dict`) for allowed keys in the dictionary.
             If unset, would defult to ``Text("")``
 
-        ``'format'`` (str|CodeFormat|None, *optional*):
+        `'format'` (str|CodeFormat|None, *optional*):
             code format.
             See :py:meth:`CodeFormat.available_options` for list of allowed string values.
 
-        ``'filter'`` (str|None, *optional*):
+        `'filter'` (str|None, *optional*):
             Question filter.
 
-        ``'response'`` (Response|dict|None, *optional*):
+        `'response'` (Response|dict|None, *optional*):
             List of possible responses for the question.
 
             Accepts :py:class:`Response` instance or dictionary to pass to :py:meth:`Response.from_dict`,
@@ -731,6 +746,14 @@ class QuestionData:
         Get a copy of question data as a Python tuple.
         """
     @property
+    def data_label(self, /) -> dict:
+        """
+        Get the lookup table for items in the `Question.response.values`, asdictionary of { value: label }
+
+        Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
+        method will not mutate the caller.
+        """
+    @property
     def datamap(self, /) -> Question:
         """
         Datamap of the current question
@@ -779,7 +802,7 @@ class QuestionData:
         """
         Count unique values of this question data.
 
-        This function basically calls ``poalrs.Seriesvalue_counts`` under the hood, apart from multi-choice
+        This function basically calls ``poalrs.Series.value_counts`` under the hood, apart from multi-choice
         where the choice for each respondant is counted individually.
 
         Args:
@@ -898,10 +921,6 @@ class Record:
             list of [`Question`] instance or dictionaries to pass to
             Question.from_dict,
             Default to be an empty list (`[]`)
-
-        'data' (SurveyData|None, *optional*):
-            data of the corresponding survey.
-            Default SurveyData.empty()
         """
     def get(self, /, question_name: "str") -> Question | None:
         """
@@ -937,7 +956,12 @@ class Record:
         Invalid Unicode sequences become `�` (U+FFFD).
         """
     @property
-    def questions(self, /) -> list[str]:
+    def num_questions(self, /) -> int:
+        """
+        Total num of questions in the record. Also used by `len()`
+        """
+    @property
+    def question_names(self, /) -> list[str]:
         """
         List of question names in the record
         """
@@ -983,6 +1007,8 @@ class Response:
         """
         Append a code, rejecting duplicate values and different Value variants.
         """
+    @property
+    def data_label(self, /) -> dict: ...
     @staticmethod
     def from_dict(content: dict) -> Response:
         """
@@ -994,9 +1020,9 @@ class Response:
         'values' (list[Code|dict]):
             list of code values or dictionary to to `Code.from_dict`
         """
-    def get_code(self, /, code: "str|int|float") -> Code | None:
+    def get_value(self, /, value: "str|int|float") -> Code | None:
         """
-        get [ `Code` ] inside `self.values` with `code.code` given.
+        get [ `Code` ] inside `self.values` with `code.value` given.
 
         Returns `None` if the input `code` was not found.
         """
@@ -1591,6 +1617,27 @@ class Variant:
         """
     @mode.setter
     def mode(self, /, mode: str | None) -> None: ...
+    def to_dict(self, /) -> dict:
+        """
+        Convert to dictionary
+
+        Example
+        ----------
+
+        ```python
+        from triple_s import Variant
+
+        content = dict(
+            value = "test value",
+            mode = "interview",
+            language = "tr"
+        )
+        variant = Variant.from_dict(content)
+
+        output = variant.to_dict()
+        print(output)  # {'value': 'test value', 'mode': 'interview', 'language': 'tr'}
+        ``` 
+        """
     @property
     def value(self, /) -> str: ...
     @value.setter
