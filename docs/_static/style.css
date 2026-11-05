@@ -113,9 +113,7 @@ body article .highlight.highlight pre {
   border-radius: inherit;
   color: inherit;
   font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 24px;
+  font-size: 0.80rem;
   overflow-x: auto;
 }
 
@@ -143,8 +141,7 @@ body article .highlight.highlight .gp { color: var(--code-meta); }
   border: 0;
   background: transparent;
   color: var(--code-muted);
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 1rem;
   cursor: pointer;
   opacity: 0;
   transition: opacity 200ms ease-in-out, color 200ms ease-in-out;
@@ -170,7 +167,7 @@ body article .highlight.highlight .gp { color: var(--code-meta); }
 @media (hover: none) { .code-copy-button { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .code-copy-button { transition: none; } }
 @media (max-width: 767px) {
-  body article .highlight.highlight pre { font-size: 13.16px; line-height: 22.56px; padding: 11.28px 15.04px; }
+  body article .highlight.highlight pre { font-size: 0.80rem; padding: 11.28px 15.04px; }
 }
 @media print { .code-copy-button { display: none; } }
 

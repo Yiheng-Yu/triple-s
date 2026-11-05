@@ -531,8 +531,7 @@ impl Text {
     ///
     /// Instance with same content can later be constructed again via `from_dict` method.
     ///
-    /// Example
-    /// ----------
+    /// Example:
     ///
     /// ```python
     /// from triple_s import Text
@@ -734,7 +733,8 @@ impl Variant {
 
     /// Returns a mutable `value` field for updating it.
     ///
-    /// # Example
+    /// # Example: Update `value` field
+    /// 
     /// ```rust
     /// use triple_s::text::Variant;
     ///
@@ -754,7 +754,8 @@ impl Variant {
 
     /// Returns a mutable `mode` field for updating it.
     ///
-    /// # Example
+    /// # Example: Update `mode` field
+    /// 
     /// ```rust
     /// use triple_s::text::{Mode, Variant};
     ///
@@ -777,7 +778,8 @@ impl Variant {
     /// Direct updates bypass language tag validation. Use
     /// [`Self::set_language`] to validate the new language tag.
     ///
-    /// # Example
+    /// # Example: Update `language` field
+    /// 
     /// ```rust
     /// use triple_s::text::Variant;
     ///
@@ -827,6 +829,8 @@ impl Variant {
     /// check if `other` has same variant as `self`.
     /// very handy.
     ///
+    /// # Example: comparing variants types 
+    /// 
     /// ```rust
     /// use triple_s::Variant;
     ///
@@ -889,7 +893,7 @@ impl Variant {
     ///
     /// Mode and language default to `None`.
     ///
-    /// # Examples
+    /// # Example: Creating new text variant
     ///
     /// ```python
     /// from triple_s import Variant

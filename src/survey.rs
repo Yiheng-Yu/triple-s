@@ -189,10 +189,9 @@ impl Survey {
         }
     }
 
-    fn __iter__(&self) -> PyResult<()> {
-        Err(exceptions::PyNotImplementedError::new_err(
-            "`Survey.__iter__` not implemented. Explicitly call `iter_rows()` or `iter_questions()` to iter over a survey!",
-        ))
+    /// Iterate each response row by row, same as `iter_rows()`
+    fn __iter__(&self, py: Python<'_>) -> PyResult<Py<crate::data::ResponseIterator>> {
+        self.data().__iter__(py)
     }
 
     /// Iter each individual respondant data

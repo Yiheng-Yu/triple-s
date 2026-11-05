@@ -323,7 +323,6 @@ impl SurveyData {
 
     pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {
         let df = self.lazy()?.clone().collect().map_err(PyPolarsErr::Polars)?;
-
         Py::new(py, ResponseIterator { df, index: 0 })
     }
 
