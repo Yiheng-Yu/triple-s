@@ -1,5 +1,15 @@
 import triple_s
-from triple_s import DataRange, Text, Variant, Spread, Location, Question, Code, SurveyInfo, MissingKeyError
+from triple_s import (
+    DataRange,
+    Text,
+    Variant,
+    Spread,
+    Location,
+    Question,
+    Code,
+    SurveyInfo,
+    MissingKeyError,
+)
 import pytest
 
 
@@ -65,7 +75,9 @@ def test_variant_from_dict_missing_key_err(dic):
             id="both-options-none",
         ),
         pytest.param({"value": "3", "mode": "ok"}, ValueError, id="invalid-mode"),
-        pytest.param({"value": "3", "language": "what"}, ValueError, id="invalid-language"),
+        pytest.param(
+            {"value": "3", "language": "what"}, ValueError, id="invalid-language"
+        ),
         pytest.param("random text", TypeError, id="type-err"),
     ],
 )
@@ -78,15 +90,29 @@ def test_variant_from_dict_fail(dic, error):
     "dic, correct",
     [
         pytest.param(dict(value="haha"), Text("haha"), id="no-variant"),
-        pytest.param(dict(value="haha", variants=None), Text("haha"), id="null-variants"),
+        pytest.param(
+            dict(value="haha", variants=None), Text("haha"), id="null-variants"
+        ),
         pytest.param(
             dict(value="haha", variants=[dict(value="yes", mode="interview")]),
             Text("haha", variants=[Variant("yes", mode="interview")]),
             id="has-one-variant",
         ),
         pytest.param(
-            dict(value="haha", variants=[dict(value="yes", mode="interview"), Variant("haha", language="en-GB")]),
-            Text("haha", variants=[Variant("haha", language="en-GB"), Variant("yes", mode="interview")]),
+            dict(
+                value="haha",
+                variants=[
+                    dict(value="yes", mode="interview"),
+                    Variant("haha", language="en-GB"),
+                ],
+            ),
+            Text(
+                "haha",
+                variants=[
+                    Variant("haha", language="en-GB"),
+                    Variant("yes", mode="interview"),
+                ],
+            ),
             id="has-multiple-variants",
         ),
     ],
@@ -97,7 +123,14 @@ def test_text_from_dict_success(dic, correct):
 
 def test_text_from_dict_missing_key():
     with pytest.raises(MissingKeyError):
-        Text.from_dict(dict(variants=[dict(value="yes", mode="interview"), Variant("haha", language="en-GB")]))
+        Text.from_dict(
+            dict(
+                variants=[
+                    dict(value="yes", mode="interview"),
+                    Variant("haha", language="en-GB"),
+                ]
+            )
+        )
 
 
 @pytest.mark.parametrize(
@@ -115,8 +148,12 @@ def test_text_from_dict_err(dic):
     "dic, correct",
     [
         pytest.param(dict(num_subfields=3), Spread(3), id="no-width"),
-        pytest.param(dict(num_subfields=3, subfield_width=None), Spread(3), id="null-width"),
-        pytest.param(dict(num_subfields=3, subfield_width=2), Spread(3, 2), id="with-width"),
+        pytest.param(
+            dict(num_subfields=3, subfield_width=None), Spread(3), id="null-width"
+        ),
+        pytest.param(
+            dict(num_subfields=3, subfield_width=2), Spread(3, 2), id="with-width"
+        ),
     ],
 )
 def test_spread_from_dict_success(dic, correct):
@@ -171,9 +208,15 @@ def test_location_from_dict_fail(dic, error):
 @pytest.mark.parametrize(
     "dic, correct",
     [
-        pytest.param(dict(start=1, end=10), DataRange.signed(1, 10), id="integer-range"),
-        pytest.param(dict(start=-5, end=10), DataRange.signed(-5, 10), id="signed-range"),
-        pytest.param(dict(start=1.5, end=10.5), DataRange.float(1.5, 10.5), id="float-range"),
+        pytest.param(
+            dict(start=1, end=10), DataRange.signed(1, 10), id="integer-range"
+        ),
+        pytest.param(
+            dict(start=-5, end=10), DataRange.signed(-5, 10), id="signed-range"
+        ),
+        pytest.param(
+            dict(start=1.5, end=10.5), DataRange.float(1.5, 10.5), id="float-range"
+        ),
     ],
 )
 def test_data_range_from_dict_success(dic, correct):
@@ -199,17 +242,17 @@ def test_data_range_from_dict_fail(dic, error):
 @pytest.mark.parametrize(
     "dic, correct",
     [
-        pytest.param(dict(code=1), Code.signed(1), id="unsigned-code"),
-        pytest.param(dict(code=-1), Code.signed(-1), id="signed-code"),
-        pytest.param(dict(code=1.5), Code.float(1.5), id="float-code"),
-        pytest.param(dict(code="A"), Code.string("A"), id="string-code"),
+        pytest.param(dict(value=1), Code.signed(1), id="unsigned-code"),
+        pytest.param(dict(value=-1), Code.signed(-1), id="signed-code"),
+        pytest.param(dict(value=1.5), Code.float(1.5), id="float-code"),
+        pytest.param(dict(value="A"), Code.string("A"), id="string-code"),
         pytest.param(
-            dict(code=1, label="Yes", filter="Q1", score=2.5),
+            dict(value=1, label="Yes", filter="Q1", score=2.5),
             Code.signed(1, "Yes", filter="Q1", score=2.5),
             id="all-fields",
         ),
         pytest.param(
-            dict(code=1, label=None, filter=None, score=None),
+            dict(value=1, label=None, filter=None, score=None),
             Code.signed(1),
             id="null-optional-fields",
         ),
@@ -224,10 +267,10 @@ def test_code_from_dict_success(dic, correct):
     "dic, error",
     [
         pytest.param({}, MissingKeyError, id="missing-code"),
-        pytest.param(dict(code=None), TypeError, id="null-code"),
-        pytest.param(dict(code=[]), TypeError, id="invalid-code-type"),
-        pytest.param(dict(code=1, filter=1), TypeError, id="invalid-filter-type"),
-        pytest.param(dict(code=1, score="high"), TypeError, id="invalid-score-type"),
+        pytest.param(dict(value=None), TypeError, id="null-code"),
+        pytest.param(dict(value=[]), TypeError, id="invalid-code-type"),
+        pytest.param(dict(value=1, filter=1), TypeError, id="invalid-filter-type"),
+        pytest.param(dict(value=1, score="high"), TypeError, id="invalid-score-type"),
         pytest.param("random text", TypeError, id="not-a-dictionary"),
     ],
 )
@@ -261,7 +304,10 @@ def test_question_from_dict_null_optional_keys():
     [
         pytest.param(
             {"name": "Q1", "question_type": "single"},
-            "single", None, None, id="required-fields-and-defaults",
+            "single",
+            None,
+            None,
+            id="required-fields-and-defaults",
         ),
         pytest.param(
             {
@@ -275,7 +321,10 @@ def test_question_from_dict_null_optional_keys():
                 "location": {"start": 2, "finish": 5},
                 "spread": {"num_subfields": 2, "subfield_width": 3},
             },
-            "single", "literal", "weight", id="all-fields-from-dictionaries",
+            "single",
+            "literal",
+            "weight",
+            id="all-fields-from-dictionaries",
         ),
         pytest.param(
             {
@@ -288,11 +337,16 @@ def test_question_from_dict_null_optional_keys():
                 "location": Location(3, 4),
                 "spread": Spread(2),
             },
-            "single", None, None, id="optional-fields-as-instances-and-none",
+            "single",
+            None,
+            None,
+            id="optional-fields-as-instances-and-none",
         ),
     ],
 )
-def test_question_from_dict_success(dic, expected_type, expected_format, expected_usage):
+def test_question_from_dict_success(
+    dic, expected_type, expected_format, expected_usage
+):
     question = Question.from_dict(dic)
 
     assert question.name == dic["name"]
@@ -333,17 +387,48 @@ def test_question_from_dict_success(dic, expected_type, expected_format, expecte
         pytest.param({"name": "Q1"}, id="missing-question-type"),
         pytest.param({"question_type": "single"}, id="missing-name"),
         pytest.param({"name": 1, "question_type": "single"}, id="invalid-name-type"),
-        pytest.param({"name": "Q1", "question_type": "unknown"}, id="invalid-question-type"),
-        pytest.param({"name": "Q1", "question_type": "single", "index": -1}, id="invalid-index"),
-        pytest.param({"name": "Q1", "question_type": "single", "format": "unknown"}, id="invalid-format"),
-        pytest.param({"name": "Q1", "question_type": "single", "usage": "unknown"}, id="invalid-usage"),
-        pytest.param({"name": "Q1", "question_type": "single", "filter": 1}, id="invalid-filter-type"),
-        pytest.param({"name": "Q1", "question_type": "single", "label": 1}, id="invalid-label-type"),
-        pytest.param({"name": "Q1", "question_type": "single", "location": 1}, id="invalid-location-type"),
-        pytest.param({"name": "Q1", "question_type": "single", "location": {}}, id="invalid-location-dictionary"),
-        pytest.param({"name": "Q1", "question_type": "single", "spread": 1}, id="invalid-spread-type"),
-        pytest.param({"name": "Q1", "question_type": "single", "spread": {}}, id="invalid-spread-dictionary"),
-        pytest.param({"name": "Q1", "question_type": "single", "response": 1}, id="invalid-response-type"),
+        pytest.param(
+            {"name": "Q1", "question_type": "unknown"}, id="invalid-question-type"
+        ),
+        pytest.param(
+            {"name": "Q1", "question_type": "single", "index": -1}, id="invalid-index"
+        ),
+        pytest.param(
+            {"name": "Q1", "question_type": "single", "format": "unknown"},
+            id="invalid-format",
+        ),
+        pytest.param(
+            {"name": "Q1", "question_type": "single", "usage": "unknown"},
+            id="invalid-usage",
+        ),
+        pytest.param(
+            {"name": "Q1", "question_type": "single", "filter": 1},
+            id="invalid-filter-type",
+        ),
+        pytest.param(
+            {"name": "Q1", "question_type": "single", "label": 1},
+            id="invalid-label-type",
+        ),
+        pytest.param(
+            {"name": "Q1", "question_type": "single", "location": 1},
+            id="invalid-location-type",
+        ),
+        pytest.param(
+            {"name": "Q1", "question_type": "single", "location": {}},
+            id="invalid-location-dictionary",
+        ),
+        pytest.param(
+            {"name": "Q1", "question_type": "single", "spread": 1},
+            id="invalid-spread-type",
+        ),
+        pytest.param(
+            {"name": "Q1", "question_type": "single", "spread": {}},
+            id="invalid-spread-dictionary",
+        ),
+        pytest.param(
+            {"name": "Q1", "question_type": "single", "response": 1},
+            id="invalid-response-type",
+        ),
         pytest.param("random text", id="not-a-dictionary"),
     ],
 )
@@ -366,9 +451,13 @@ def test_question_from_dict_rejects_response_for_character_question():
 @pytest.mark.parametrize(
     "dic, expected_version",
     [
-        pytest.param({"version": "1.2"}, triple_s.Version.V1_2, id="version-string-defaults"),
+        pytest.param(
+            {"version": "1.2"}, triple_s.Version.V1_2, id="version-string-defaults"
+        ),
         pytest.param({"version": 2.0}, triple_s.Version.V2_0, id="version-float"),
-        pytest.param({"version": triple_s.Version.V3_0}, triple_s.Version.V3_0, id="version-enum"),
+        pytest.param(
+            {"version": triple_s.Version.V3_0}, triple_s.Version.V3_0, id="version-enum"
+        ),
     ],
 )
 def test_survey_info_from_dict_defaults(dic, expected_version):
@@ -441,9 +530,21 @@ def test_survey_info_from_dict_accepts_legacy_language_key_and_nulls():
         pytest.param({"version": "4.0"}, ValueError, id="unsupported-version"),
         pytest.param({"version": None}, TypeError, id="null-version"),
         pytest.param({"version": "2.0", "name": 1}, TypeError, id="invalid-name-type"),
-        pytest.param({"version": "2.0", "language_options": "en"}, TypeError, id="invalid-language-options-type"),
-        pytest.param({"version": "2.0", "language_options": ["not a tag"]}, ValueError, id="invalid-language-tag"),
-        pytest.param({"version": "2.0", "mode_options": ["invalid"]}, ValueError, id="invalid-mode-option"),
+        pytest.param(
+            {"version": "2.0", "language_options": "en"},
+            TypeError,
+            id="invalid-language-options-type",
+        ),
+        pytest.param(
+            {"version": "2.0", "language_options": ["not a tag"]},
+            ValueError,
+            id="invalid-language-tag",
+        ),
+        pytest.param(
+            {"version": "2.0", "mode_options": ["invalid"]},
+            ValueError,
+            id="invalid-mode-option",
+        ),
         pytest.param("random text", TypeError, id="not-a-dictionary"),
     ],
 )

@@ -35,6 +35,12 @@ Attributes
 .. autoattribute:: triple_s.Question.name
    :annotation: -> str
 
+
+Properties
+^^^^^^^^^^^
+.. :py:property:: triple_s.Question.data_label
+      :type: -> Dict[str | int | float, Text]
+
 Methods
 ^^^^^^^
 
@@ -104,7 +110,7 @@ Attributes
 Methods
 ^^^^^^^
 
-.. automethod:: triple_s.Response.get_code(code) -> Code | None
+.. automethod:: triple_s.Response.get_value(value) -> Code | None
 .. automethod:: triple_s.Response.add_value(value) -> None
 .. automethod:: triple_s.Response.set_value(value) -> None
 .. automethod:: triple_s.Response.from_dict(content) -> Response
@@ -146,7 +152,7 @@ Attributes
 .. autoattribute:: triple_s.Code.label
    :annotation: -> Text
 
-.. autoattribute:: triple_s.Code.code
+.. autoattribute:: triple_s.Code.value
    :annotation: -> int | float | str
 
 .. autoattribute:: triple_s.Code.score

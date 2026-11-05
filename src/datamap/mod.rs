@@ -41,7 +41,7 @@ pub struct Datamap {
 }
 
 /// ---
-/// 
+///
 /// # Fields
 impl Datamap {
     /// Collects survey meta information, i.e., survey name & title, creation
@@ -77,7 +77,7 @@ impl Datamap {
 }
 
 /// ---
-/// 
+///
 /// # Methods
 impl Datamap {
     /// Creates an empty datamap with the provided [`SurveyInfo`].
@@ -204,7 +204,7 @@ impl Datamap {
     #[cfg(feature = "pyo3")]
     pub(crate) fn py_question_repr(&self) -> Vec<(&str, String)> {
         const MAX_NUM_COLNAME_SHOW: usize = 3;
-        let colnames = self.py_get_questions();
+        let colnames = self.question_names();
         let mut colname_repr = colnames[0..colnames.len().min(MAX_NUM_COLNAME_SHOW)]
             .iter()
             .map(|s| format!("{:?}", s))
@@ -222,21 +222,20 @@ impl Datamap {
 #[pymethods]
 impl Datamap {
     /// Create a datamap from a dictionary that contains keys 'survey_info' and 'record':
-    /// 
+    ///
     /// Example: Creating new empty :py:class:`Datamap` from dictionary:
-    /// 
+    ///
     /// ```python
     /// 
     /// from triple_s import Datamap, SurveyInfo, Record
-    /// 
+    ///
     /// survey_info = SurveyInfo(version=1.2)  # must contain sss version
     /// record = Record.empty()
-    /// 
+    ///
     /// datamap = Datamap.from_dict({
-    ///     'survey_info': survey_info, 
+    ///     'survey_info': survey_info,
     ///     'record': record
     /// })
-    /// 
     /// ```
     #[staticmethod]
     #[pyo3(name = "from_dict")]
@@ -312,9 +311,16 @@ impl Datamap {
         self.info().clone()
     }
 
-    #[getter(questions)]
-    pub(crate) fn py_get_questions(&self) -> Vec<String> {
+    /// List of question names in the survey
+    #[getter(question_names)]
+    pub(crate) fn py_get_question_names(&self) -> Vec<String> {
         self.question_names()
+    }
+
+    /// Total number of questions in the survey datamap
+    #[getter(num_questions)]
+    fn py_get_num_questions(&self) -> usize {
+        self.record.content().len()
     }
 
     fn __repr__(&self) -> PyResult<String> {
@@ -327,7 +333,7 @@ impl Datamap {
         content.push(("title", format!("{:?}", title)));
 
         const MAX_NUM_COLNAME_SHOW: usize = 3;
-        let colnames = self.py_get_questions();
+        let colnames = self.question_names();
         let mut colname_repr = colnames[0..colnames.len().min(MAX_NUM_COLNAME_SHOW)]
             .iter()
             .map(|s| format!("{:?}", s))

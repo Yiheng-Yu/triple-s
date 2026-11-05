@@ -45,7 +45,7 @@ strip = false
 sdist-generator = "cargo"
 profile = "release"
 editable-profile = "dev"
-features = ["pyo3", "pyo3/extension-module"]
+features = ["pyo3"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

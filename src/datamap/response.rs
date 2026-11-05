@@ -2,11 +2,13 @@
 
 use std::{
     cmp::Ordering,
+    collections::HashMap,
     hash::{Hash, Hasher},
 };
 
 use anyhow::{Context, Result};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
+use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
     IntoPyObjectExt,
@@ -105,6 +107,20 @@ impl Response {
     pub fn values_mut(&mut self) -> RwLockWriteGuard<'_, Vec<ArcLock<Code>>> {
         self.values.write()
     }
+
+    /// Get the lookup table for items in the [`Response::values()`] field, as: { [`Code::value`]: [`Code::label()`] }
+    ///
+    /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
+    /// method will not mutate the caller.
+    pub fn data_label(&self) -> HashMap<Value, Text> {
+        self.values()
+            .iter()
+            .map(|item| {
+                let item = item.read();
+                (item.value().clone(), item.label().deepcopy())
+            })
+            .collect()
+    }
 }
 
 /// <hr />
@@ -178,13 +194,13 @@ impl Response {
     /// Ok::<(), triple_s::error::InvalidArg>(())
     /// ```
     pub fn add_value(&mut self, value: Code) -> Result<(), InvalidArg> {
-        let key = value.code();
+        let key = value.value();
 
         if let Some(sample) = self.values.read().iter().next() {
-            Self::validate_code_variant(&sample.read().code(), &key)?;
+            Self::validate_code_variant(&sample.read().value(), &key)?;
         };
 
-        if self.values.read().iter().any(|item| item.read().code() == key) {
+        if self.values.read().iter().any(|item| item.read().value() == key) {
             return Err(InvalidArg::new(format!(
                 "Cannot append item '{}' because an item with same 'code' attribute already exists. Use 'set_value' to overwrite existing entry.",
                 key.to_string()
@@ -217,7 +233,7 @@ impl Response {
     /// Ok::<(), triple_s::error::InvalidArg>(())
     /// ```
     pub fn set_value(&mut self, value: Code) -> Result<(), InvalidArg> {
-        let key = value.code();
+        let key = value.value();
         // needs to clone these fields outside of the for loop,
         // or it would deadlock the loop (label() etc., acquires a read lock
         // whilst xx_mut() would acquire a write loop of the same parent field.)
@@ -226,12 +242,12 @@ impl Response {
         let score = value.score();
 
         if let Some(sample) = self.values.read().iter().next() {
-            Self::validate_code_variant(&sample.read().code(), &key)?;
+            Self::validate_code_variant(&sample.read().value(), &key)?;
         };
 
         for current in self.values.write().iter_mut() {
             let mut current = current.write();
-            if current.code() == key {
+            if current.value() == key {
                 *current.label_mut() = label;
                 *current.filter_mut() = filter;
                 *current.score_mut() = score;
@@ -602,25 +618,43 @@ impl Response {
         )
     }
 
-    /// get [ `Code` ] inside `self.values` with `code.code` given.
+    #[getter(data_label)]
+    pub(crate) fn py_get_data_label<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let output = PyDict::new(py);
+
+        // iter through instead of calling self.data_label() because HashMap is not ordered
+        for code in self.values().iter() {
+            let code = code.read();
+            let value = code.value().convert_to_py_any(py);
+            let text = code.label().deepcopy();
+            output.set_item(value, text)?;
+        }
+
+        Ok(output)
+    }
+
+    /// get [ `Code` ] inside `self.values` with `code.value` given.
     ///
     /// Returns `None` if the input `code` was not found.
-    #[pyo3(name = "get_code", signature = (code: "str|int|float"))]
-    fn py_get_code<'py>(&self, code: &Bound<'py, PyAny>) -> PyResult<Option<Code>> {
-        if !code.is_instance_of::<PyString>()
-            && !code.is_instance_of::<PyInt>()
-            && !code.is_instance_of::<PyFloat>()
+    #[pyo3(name = "get_value", signature = (value: "str|int|float"))]
+    fn py_get_value<'py>(&self, value: &Bound<'py, PyAny>) -> PyResult<Option<Code>> {
+        if !value.is_instance_of::<PyString>()
+            && !value.is_instance_of::<PyInt>()
+            && !value.is_instance_of::<PyFloat>()
         {
             return Err(exceptions::PyTypeError::new_err(
-                "code must be str, int, or float",
+                "Input must be str, int, or float",
             ));
         }
 
         for item in self.values.read().iter() {
             let item = item.read();
-            let stored = item.code().to_py_any(code.py());
+            let stored = item.value().to_py_any(value.py());
 
-            if stored.eq(code)? {
+            if stored.eq(value)? {
                 return Ok(Some(item.clone()));
             }
         }
@@ -656,7 +690,7 @@ impl Response {
         let range = content.get_item("range")?.map(DataRange::from_py_any).transpose()?;
 
         let values = content
-            .get_item("range")?
+            .get_item("values")?
             .map(|item| item.extract::<Vec<Bound<'_, PyAny>>>())
             .transpose()?
             .unwrap_or_default()
@@ -676,7 +710,7 @@ impl Response {
 #[derive(Debug)]
 pub struct Code {
     /// code value, this can be String, Float or u32
-    pub(crate) code: ArcLock<Value>,
+    pub(crate) value: ArcLock<Value>,
     /// text label
     pub(crate) label: ArcLock<Text>,
     /// Response filter.
@@ -690,7 +724,7 @@ impl Clone for Code {
     /// makes a shallow copy of the data
     fn clone(&self) -> Self {
         Self {
-            code: self.code.clone(),
+            value: self.value.clone(),
             label: self.label.clone(),
             filter: self.filter.clone(),
             score: self.score.clone(),
@@ -702,7 +736,7 @@ impl DeepCopy for Code {
     #[doc = include_str!("../doc/rs_deep_copy_impl.md")]
     fn deepcopy(&self) -> Self {
         Self {
-            code: lock_it_up(self.code.read().clone()),
+            value: lock_it_up(self.value.read().clone()),
             label: lock_it_up(self.label.read().clone()),
             filter: lock_it_up(self.filter.read().clone()),
             score: lock_it_up(*self.score.read()),
@@ -712,7 +746,7 @@ impl DeepCopy for Code {
 
 impl PartialEq for Code {
     fn eq(&self, other: &Self) -> bool {
-        (self.code() == other.code())
+        (self.value() == other.value())
             & (self.label().clone() == other.label().clone())
             & (self.filter() == other.filter())
             & (self.score() == other.score())
@@ -734,7 +768,7 @@ impl Code {
     /// use triple_s::response::{Code, Value};
     ///
     /// let code = Code::new_literal("A", "Tea & coffee", None, None);
-    /// assert_eq!(code.code(), Value::String("A".into()))
+    /// assert_eq!(code.value(), Value::String("A".into()))
     /// ```
     ///
     /// Note that mutating the item returned from `code()` method does would not
@@ -746,17 +780,17 @@ impl Code {
     /// use triple_s::response::{Code, Value};
     ///
     /// let mut example = Code::new_literal("A", "Tea & coffee", None, None);
-    /// let mut example_code = example.code();
+    /// let mut example_code = example.value();
     ///
     /// match &mut example_code {
     ///     Value::String(item) => *item = "B".to_string(),
     ///     _ => (),
     /// };
     /// assert_eq!(example_code, Value::String("B".into()));
-    /// assert_ne!(example_code, example.code());
+    /// assert_ne!(example_code, example.value());
     /// ```
-    pub fn code(&self) -> Value {
-        self.code.read().clone()
+    pub fn value(&self) -> Value {
+        self.value.read().clone()
     }
 
     /// Returns a mutable `code` field for updating it.
@@ -768,11 +802,11 @@ impl Code {
     /// let mut example = Code::new_literal("A", "Tea & coffee", None, None);
     ///
     /// let new_code = Value::UnSigned(32);
-    /// *example.code_mut() = new_code.clone();
-    /// assert_eq!(example.code(), new_code);
+    /// *example.value_mut() = new_code.clone();
+    /// assert_eq!(example.value(), new_code);
     /// ```
-    pub fn code_mut(&mut self) -> RwLockWriteGuard<'_, Value> {
-        self.code.write()
+    pub fn value_mut(&mut self) -> RwLockWriteGuard<'_, Value> {
+        self.value.write()
     }
 
     /// text label of a response option for a question.
@@ -818,7 +852,7 @@ impl Code {
     /// use triple_s::response::{Code, Value};
     ///
     /// let code = Code::new(Value::Signed(-3), "special value", None, Some(0.3));
-    /// assert_eq!(code.code(), Value::Signed(-3));
+    /// assert_eq!(code.value(), Value::Signed(-3));
     /// ```
     ///
     /// adding text variants:
@@ -839,7 +873,7 @@ impl Code {
         score: Option<f64>,
     ) -> Self {
         Self {
-            code: lock_it_up(value),
+            value: lock_it_up(value),
             label: lock_it_up(Text::new(label)),
             filter: lock_it_up(filter.map(|item| item.into())),
             score: lock_it_up(score),
@@ -863,7 +897,7 @@ impl Code {
         score: Option<f64>,
     ) -> Self {
         Self {
-            code: lock_it_up(Value::UnSigned(value)),
+            value: lock_it_up(Value::UnSigned(value)),
             label: lock_it_up(Text::new(label)),
             filter: lock_it_up(filter.map(|item| item.into())),
             score: lock_it_up(score),
@@ -887,7 +921,7 @@ impl Code {
         score: Option<f64>,
     ) -> Self {
         Self {
-            code: lock_it_up(Value::Signed(value)),
+            value: lock_it_up(Value::Signed(value)),
             label: lock_it_up(Text::new(label)),
             filter: lock_it_up(filter.map(|item| item.into())),
             score: lock_it_up(score),
@@ -911,7 +945,7 @@ impl Code {
         score: Option<f64>,
     ) -> Self {
         Self {
-            code: lock_it_up(Value::Float(value)),
+            value: lock_it_up(Value::Float(value)),
             label: lock_it_up(Text::new(label)),
             filter: lock_it_up(filter.map(|item| item.into())),
             score: lock_it_up(score),
@@ -935,7 +969,7 @@ impl Code {
         score: Option<f64>,
     ) -> Self {
         Self {
-            code: lock_it_up(Value::String(value.into())),
+            value: lock_it_up(Value::String(value.into())),
             label: lock_it_up(Text::new(label)),
             filter: lock_it_up(filter.map(|item| item.into())),
             score: lock_it_up(score),
@@ -969,20 +1003,20 @@ impl Code {
     ///
     /// // create a new [ `Code` ] with signed `code` field:
     /// let code = Code::new_signed(3, "test", None, None);
-    /// assert_eq!(code.code().clone(), Value::Signed(3));
+    /// assert_eq!(code.value().clone(), Value::Signed(3));
     ///
     /// let unsigned = code.cast::<u32>()?;
-    /// assert_eq!(unsigned.code().clone(), Value::UnSigned(3));
+    /// assert_eq!(unsigned.value().clone(), Value::UnSigned(3));
     ///
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn cast<T>(&self) -> Result<Self>
     where T: TryFrom<Value, Error = TypeConvertionError> + Into<Value> {
         let mut copy = self.deepcopy();
-        *copy.code_mut() = copy.code().cast::<T>().with_context(|| {
+        *copy.value_mut() = copy.value().cast::<T>().with_context(|| {
             format!(
                 "When trying to conver data type for [ `Code` ] instance with 'code' value '{}'",
-                self.code().to_string()
+                self.value().to_string()
             )
         })?;
 
@@ -994,7 +1028,7 @@ impl Code {
     pub fn to_classic(&self) -> Result<String> {
         Ok(format!(
             "{} \"{}\"",
-            self.code.read().to_classic()?,
+            self.value.read().to_classic()?,
             self.label.read().to_classic(),
         ))
     }
@@ -1003,7 +1037,7 @@ impl Code {
         &self,
         writer: &mut Writer<W>,
     ) -> Result<(), std::io::Error> {
-        let code = self.code().to_string();
+        let code = self.value().to_string();
         let score = self.score().map(|score| score.to_string());
 
         let mut attributes = vec![("code", code.as_str())];
@@ -1130,7 +1164,7 @@ impl Code {
 
     fn __repr__(&self) -> String {
         let mut content = vec![
-            format!("code={}", self.code().to_string()),
+            format!("value={}", self.value().to_string()),
             format!(
                 "label=Text(value='{}', variant=[total: {}])",
                 self.label().value(),
@@ -1178,9 +1212,9 @@ impl Code {
     /// `<value>` tag. This can be float, string or int.
     /// Code value `string` is introduced in triple-s xml 2.0 (via
     /// format='literal' toggle).
-    #[getter(code)]
-    fn py_get_code<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
-        self.code.read().to_py_any(py)
+    #[getter(value)]
+    fn py_get_value<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
+        self.value.read().to_py_any(py)
     }
 
     /// Values to be used when computing statistics such as Mean, Standard
@@ -1208,8 +1242,8 @@ impl Code {
 
     /// creates new instance from dictionary with the following keys:
     ///
-    /// 'code' (float|int|str):
-    ///     code of the new instance
+    /// 'value' (float|int|str):
+    ///     code value of the new instance
     ///
     /// 'label' (str|Text|dict|None, *optional*):
     ///     code label of the new instance.
@@ -1223,7 +1257,7 @@ impl Code {
     #[staticmethod]
     #[pyo3(name = "from_dict")]
     fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
-        let code = content.get_item("code")?.ok_or(missing_key_err("code"))?;
+        let code = content.get_item("value")?.ok_or(missing_key_err("value"))?;
         let code = Value::from_py_any(code)?;
 
         let label = content
@@ -1244,7 +1278,7 @@ impl Code {
             .flatten();
 
         Ok(Self {
-            code: lock_it_up(code),
+            value: lock_it_up(code),
             label: lock_it_up(label),
             filter: lock_it_up(filter),
             score: lock_it_up(score),
@@ -1599,6 +1633,17 @@ impl Value {
             )))
         }
     }
+
+    /// `into_py_any` alreay exists
+    #[cfg(feature = "pyo3")]
+    pub(crate) fn convert_to_py_any<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
+        match self {
+            Value::Float(val) => PyFloat::new(py, val.clone()).into_any(),
+            Value::Signed(val) => PyInt::new(py, val.clone()).into_any(),
+            Value::UnSigned(val) => PyInt::new(py, val.clone()).into_any(),
+            Value::String(val) => PyString::new(py, val.as_str()).into_any(),
+        }
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -1802,6 +1847,17 @@ impl TryFrom<Value> for String {
             Value::UnSigned(item) => Ok(item.to_string()),
             Value::Float(item) => Ok(item.to_string()),
             Value::String(item) => Ok(item.clone()),
+        }
+    }
+}
+
+impl<'a> From<Value> for AnyValue<'a> {
+    fn from(value: Value) -> Self {
+        match value {
+            Value::Float(val) => Self::Float64(val),
+            Value::Signed(val) => Self::Int32(val),
+            Value::UnSigned(val) => Self::UInt32(val),
+            Value::String(val) => Self::StringOwned(val.into()),
         }
     }
 }
@@ -2217,7 +2273,7 @@ mod test {
                 instance.with_value_read(index, |code| code.label().value().to_string());
             assert_eq!(label, Some(correct.label().value().to_string()));
             let item_got = instance.with_value_read(index, |val| val.deepcopy()).unwrap();
-            assert_eq!(correct.code().clone(), item_got.code().clone());
+            assert_eq!(correct.value().clone(), item_got.value().clone());
             assert_eq!(correct.label().deepcopy(), item_got.label().deepcopy());
             assert_eq!(correct.filter().clone(), item_got.filter().clone());
             assert_eq!(correct.score().clone(), item_got.score().clone());

@@ -24,10 +24,16 @@ Attributes
 Properties
 -----------------
 
-.. py:property:: triple_s.Record.questions
+.. py:property:: triple_s.Record.question_names
    :type: List[str]
 
    List of question names.
+
+.. py:property:: triple_s.Record.num_questions
+   :type: int
+
+.. py:property:: triple_s.Record.data_label
+   :type: Dict[int | float | str, Text]
 
 Methods
 -------------

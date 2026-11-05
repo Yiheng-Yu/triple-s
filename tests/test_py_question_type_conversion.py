@@ -136,7 +136,7 @@ def test_set_type_time_success(time, target):
 def test_set_type_logical_success(logical, target):
     logical.type = target
     assert logical.type == target
-    
+
 
 @pytest.mark.parametrize(
     "target",

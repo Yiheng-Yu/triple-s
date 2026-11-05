@@ -49,7 +49,9 @@ def xml_content(tree):
         attributes = dict(element.attrib)
         if element.tag == "range":
             attributes = {key: Decimal(value) for key, value in attributes.items()}
-        content.append((element.tag, sorted(attributes.items()), (element.text or "").strip()))
+        content.append(
+            (element.tag, sorted(attributes.items()), (element.text or "").strip())
+        )
     return sorted(content)
 
 
@@ -78,8 +80,14 @@ def test_question_parse_error_includes_cause():
     "content, expected",
     [
         ("Have you visited <br/> here before?", "Have you visited <br/> here before?"),
-        ("Have you visited &lt;br/&gt; here before?", "Have you visited <br/> here before?"),
-        ('<b class="emphasis">Tea</b> &amp; coffee', '<b class="emphasis">Tea</b> & coffee'),
+        (
+            "Have you visited &lt;br/&gt; here before?",
+            "Have you visited <br/> here before?",
+        ),
+        (
+            '<b class="emphasis">Tea</b> &amp; coffee',
+            '<b class="emphasis">Tea</b> & coffee',
+        ),
         ("&#60;br/&#62;", "<br/>"),
         ("&amp;lt;br/&amp;gt;", "&lt;br/&gt;"),
         ("<![CDATA[<br/> &lt;b&gt;]]>", "<br/> &lt;b&gt;"),
@@ -121,7 +129,9 @@ def test_question_xml_read_write(xml1, original_tree):
         ident = question_tree.get("ident")
         original_question_tree = original_tree.find(f'.//variable[@ident="{ident}"]')
         assert original_question_tree is not None, f"Missing original question {ident}"
-        assert xml_content(question_tree) == xml_content(original_question_tree), f"Question {ident}"
+        assert xml_content(question_tree) == xml_content(original_question_tree), (
+            f"Question {ident}"
+        )
 
 
 def assert_eq_questions(a: Question, b: Question):
@@ -131,11 +141,15 @@ def assert_eq_questions(a: Question, b: Question):
     assert a.usage == b.usage
     assert a.spread == b.spread
     assert a.label.value == b.label.value
-    assert a.label.variants == b.label.variants  # sss classic does not have text variants
-    assert a.response.range == b.response.range  # TODO! INTERFACE FOR DEFINING DATA RANGE
+    assert (
+        a.label.variants == b.label.variants
+    )  # sss classic does not have text variants
+    assert (
+        a.response.range == b.response.range
+    )  # TODO! INTERFACE FOR DEFINING DATA RANGE
 
     for code_classic in a.response:
-        code_xml = b.response.get_code(code_classic.code)
+        code_xml = b.response.get_value(code_classic.value)
         assert code_classic == code_xml
 
 
@@ -263,7 +277,9 @@ def test_record_to_xml(xml1):
         "href": record.href,
         "format": "csv",
     }
-    assert [item.findtext("name") for item in root] == [question.name for question in record.content]
+    assert [item.findtext("name") for item in root] == [
+        question.name for question in record.content
+    ]
     for element, question in zip(root, record.content):
         assert xml_content(element) == xml_content(etree.fromstring(question.to_xml()))
 
@@ -277,7 +293,9 @@ def test_datamap_to_xml1_from_to(source, request, tmp_path):
     assert root.find("survey") is not None
     assert root.findtext("survey/name") == datamap.info.name
     assert root.findtext("survey/title") == datamap.title
-    assert xml_content(root.find("survey/record")) == xml_content(etree.fromstring(datamap.record.to_xml()))
+    assert xml_content(root.find("survey/record")) == xml_content(
+        etree.fromstring(datamap.record.to_xml())
+    )
     path = tmp_path / "export.sss"
     path.write_text(output, encoding="utf-8")
     restored = triple_s.read_datamap(str(path))

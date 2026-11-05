@@ -665,13 +665,19 @@ impl Record {
     }
 
     /// List of question names in the record
-    #[getter(questions)]
+    #[getter(question_names)]
     fn py_get_question_names(&self) -> Vec<String> {
-        self.content().iter().map(|item| item.read().name()).collect()
+        self.question_names()
+    }
+
+    /// Total num of questions in the record. Also used by `len()`
+    #[getter(num_questions)]
+    fn py_get_num_questions(&self) -> usize {
+        self.question_names().len()
     }
 
     fn __len__(&self) -> usize {
-        self.content().len()
+        self.py_get_num_questions()
     }
 
     pub(crate) fn __getitem__<'py>(&self, index: &Bound<'py, PyAny>) -> PyResult<Py<PyAny>> {
@@ -760,10 +766,6 @@ impl Record {
     ///     list of [`Question`] instance or dictionaries to pass to
     ///     Question.from_dict,
     ///     Default to be an empty list (`[]`)
-    ///
-    /// 'data' (SurveyData|None, *optional*):
-    ///     data of the corresponding survey.
-    ///     Default SurveyData.empty()
     #[pyo3(name = "from_dict")]
     #[staticmethod]
     #[allow(unused_variables)]
@@ -831,19 +833,6 @@ impl Record {
             .transpose()?
             .flatten();
 
-        let data = content
-            .get_item("data")?
-            .map(|item| {
-                if let Ok(value) = item.extract::<SurveyData>() {
-                    Ok(value)
-                } else {
-                    let type_name = get_type_name(&item)?;
-                    Err(exceptions::PyTypeError::new_err(type_name))
-                }
-            })
-            .transpose()?
-            .unwrap_or(SurveyData::default());
-
         Ok(Self {
             id: ident,
             href: href,
@@ -854,18 +843,18 @@ impl Record {
     }
 
     /// Creates a new empty [`Record`] instance.
-    /// 
+    ///
     /// Example:
-    /// 
+    ///
     /// ```python
     /// 
     /// from triple_s import Record
-    /// 
+    ///
     /// record = Record.empty()
     /// assert len(record) == 0
     /// ```
     #[staticmethod]
-    #[pyo3(name="empty")]
+    #[pyo3(name = "empty")]
     fn py_empty() -> Self {
         Self::default()
     }

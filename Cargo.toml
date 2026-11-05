@@ -1,6 +1,6 @@
 [package]
 name = "triple_s"
-version = "0.4.211"
+version = "0.4.212"
 edition = "2024"
 description = "Read classic Triple-S survey definition files."
 repository = "https://github.com/Yiheng-Yu/triple-s"
@@ -30,7 +30,7 @@ overflow-checks = true
 lto = false
 panic = 'unwind'
 incremental = true
-codegen-units = 256
+codegen-units = 128
 rpath = false
 
 [profile.release]

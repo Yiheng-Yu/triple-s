@@ -1,6 +1,10 @@
 #![doc = include_str!("../doc/rs_question.md")]
 
-use std::{collections::HashSet, range::Range, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    range::Range,
+    str::FromStr,
+};
 
 use anyhow::{Context, Result};
 use chrono::{NaiveDate, NaiveTime, Timelike};
@@ -492,9 +496,24 @@ impl Question {
     pub fn response_mut(&mut self) -> &mut Response {
         &mut self.response
     }
+
+    /// Get the lookup table for items in the [`Question::Response()::values()`] field, as: { [`Code::value`]: [`Code::label()`] }
+    ///
+    /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
+    /// method will not mutate the caller.
+    pub fn data_label(&self) -> HashMap<Value, Text> {
+        self.response()
+            .values()
+            .iter()
+            .map(|item| {
+                let item = item.read();
+                (item.value().clone(), item.label().deepcopy())
+            })
+            .collect()
+    }
 }
 
-/// <hr />
+/// ---
 ///
 /// # Content management
 impl Question {
@@ -523,13 +542,13 @@ impl Question {
     /// ```
     pub fn try_add_value(
         &mut self,
-        code: Value,
+        value: Value,
         label: Option<&str>,
         filter: Option<&str>,
         score: Option<f64>,
     ) -> Result<(), anyhow::Error> {
         let label = label.unwrap_or_default();
-        let new = Code::new(code, label, filter, score);
+        let new = Code::new(value, label, filter, score);
         self.response_mut().add_value(new).with_context(|| {
             format!(
                 "Error raised when tying to add value for question {}",
@@ -539,7 +558,7 @@ impl Question {
     }
 
     /// Adds a new response item to the current list of responses,
-    /// or overwriting existing entriey with the same `code` field.
+    /// or overwriting existing entriey with the same `value` field.
     ///
     /// # Example
     ///
@@ -564,14 +583,14 @@ impl Question {
     /// ```
     pub fn set_value(
         &mut self,
-        code: Value,
+        value: Value,
         label: Option<&str>,
         filter: Option<&str>,
         score: Option<f64>,
     ) -> Result<(), anyhow::Error> {
         // if !self.does_code_exist(&code) {
         let label = label.unwrap_or_default();
-        let new = Code::new(code, label, filter, score);
+        let new = Code::new(value, label, filter, score);
         self.response_mut().set_value(new).with_context(|| {
             format!(
                 "Error raised when tying to set value for question {}",
@@ -582,7 +601,7 @@ impl Question {
 
     /// Append a new [ `Code` ] to existing instance.
     ///
-    /// Raises error if already exists items with same `code` field.
+    /// Raises error if already exists items with same `value` field.
     pub fn add_value(&mut self, value: Code) -> Result<()> {
         self.response_mut().add_value(value).with_context(|| {
             format!(
@@ -694,7 +713,9 @@ impl Question {
     }
 }
 
-/// reading data
+/// ---
+///
+/// # Reading data
 impl Question {
     /// Get [`polars::prelude::Field`] for the current question, it looks like this:
     ///
@@ -934,7 +955,7 @@ impl Question {
             .values()
             .iter()
             .map(|item| {
-                let value = item.read().code().clone();
+                let value = item.read().value().clone();
                 match value {
                     Value::UnSigned(value) => Ok(value),
                     _ => Err(error::TypeMismatch::new(format!(
@@ -1350,7 +1371,7 @@ impl Question {
     }
 
     /// Returns a representation containing the question name, type, and label.
-    fn __repr__<'py>(&self, py: Python<'py>) -> PyResult<String> {
+    fn __repr__(&self) -> String {
         let mut info = Vec::new();
         // name
         info.push(("name", single_quote(self.name())));
@@ -1360,7 +1381,7 @@ impl Question {
         ));
 
         // main text
-        let label_repr = self.label.__repr__(py)?;
+        let label_repr = self.label.__repr__();
         info.push(("label", label_repr));
 
         // filter
@@ -1387,7 +1408,7 @@ impl Question {
             .collect::<Vec<String>>()
             .join(",\n  ");
 
-        Ok(format!("Question(\n  {}\n)", formatted))
+        format!("Question(\n  {}\n)", formatted)
     }
 
     /// Creates an independent deep copy of this question.
@@ -1650,6 +1671,15 @@ impl Question {
         }
     }
 
+    /// Get the lookup table for items in the `Question.response.values`, asdictionary of { value: label }
+    ///
+    /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
+    /// method will not mutate the caller.
+    #[getter(data_label)]
+    fn py_get_data_label<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        self.response().py_get_data_label(py)
+    }
+
     /// Parses a question from a Triple-S classic or XML fragment, detecting the
     /// format automatically. Raises `ValueError` if the fragment cannot be
     /// parsed into a question.
@@ -1711,39 +1741,38 @@ impl Question {
     /// Create new [ `Question` ] instance from dictionary with following keys and
     /// values:
     ///
-    /// ``'index'`` (int|None, *optional*): index of a question, default 1,
+    /// `'index'` (int|None, *optional*): index of a question, default 1,
     ///
-    /// ``'name'`` (str):
+    /// `'name'` (str):
     ///     name of the question
     ///
-    /// ``'question_type'`` (str|QuestionType ):
+    /// `'question_type'` (str|QuestionType ):
     ///     type of the question.
     ///     See QuestionType.available_options() for list of allowed string values.
     ///
-    /// ``'location'`` (dict|Location|None, *optional*):
+    /// `'location'` (dict|Location|None, *optional*):
     ///     data location.
     ///     See help(Location.from_dict) for allowed keys in the dictionary.
     ///     If unset, would defult to :py:meth:`Location(start=1, finish=1)`
     ///
-    /// ``'label'`` (str|Text|dict):
+    /// `'label'` (str|Text|dict):
     ///     question title.
     ///     See help(:py:meth:`Text.from_dict`) for allowed keys in the dictionary.
     ///     If unset, would defult to ``Text("")``
     ///
-    /// ``'format'`` (str|CodeFormat|None, *optional*):
+    /// `'format'` (str|CodeFormat|None, *optional*):
     ///     code format.
     ///     See :py:meth:`CodeFormat.available_options` for list of allowed string values.
     ///
-    /// ``'filter'`` (str|None, *optional*):
+    /// `'filter'` (str|None, *optional*):
     ///     Question filter.
     ///
-    /// ``'response'`` (Response|dict|None, *optional*):
+    /// `'response'` (Response|dict|None, *optional*):
     ///     List of possible responses for the question.
-    /// 
+    ///
     ///     Accepts :py:class:`Response` instance or dictionary to pass to :py:meth:`Response.from_dict`,
     ///     
     ///     Would default to the default response values according to each question type if left unset
-    /// 
     #[pyo3(name = "from_dict")]
     #[staticmethod]
     fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {

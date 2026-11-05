@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 #[cfg(feature = "pyo3")]
 use chrono::{NaiveDate, NaiveTime};
 use polars::prelude::*;
@@ -10,18 +12,21 @@ use pyo3::{
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 
-use super::SurveyData;
 #[cfg(feature = "pyo3")]
 use crate::{
-    DataRange, Text,
+    DataRange,
     error::InternalError,
     prelude::*,
     utils::{anyvalue_to_python, convert_date, convert_time, normalize_py_index},
 };
-use crate::{Question, QuestionType, utils::ArcLock};
+use crate::{
+    QuestionType,
+    data::SurveyData,
+    datamap::{Question, Text, Value},
+    utils::ArcLock,
+};
 
 /// Data for a single question.
-///
 #[cfg_attr(
     feature = "pyo3",
     pyclass(module = "triple_s", name = "QuestionData", skip_from_py_object)
@@ -33,10 +38,9 @@ pub struct QuestionData {
 }
 
 /// Fields
-/// 
+///
 /// ---
 impl QuestionData {
-    
     /// name of the question
     #[inline]
     pub fn name(&self) -> String {
@@ -54,10 +58,18 @@ impl QuestionData {
     pub fn lazy(&self) -> PolarsResult<LazyFrame> {
         Ok(self.data.read().lazy()?.clone().select([col(self.name())]))
     }
+
+    /// Get the lookup table for items in the [`Question::Response()::values()`] field, as: { [`Code::value`]: [`Code::label()`] }
+    ///
+    /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
+    /// method will not mutate the caller.
+    pub fn data_label(&self) -> HashMap<Value, Text> {
+        self.question.data_label()
+    }
 }
 
 /// Methods
-/// 
+///
 /// ---
 impl QuestionData {
     /// Create new [`QuestionData`] instance
@@ -89,8 +101,8 @@ impl QuestionData {
     /// # Arguments
     /// - `count_nan` (`bool`):
     ///     - Toogle on/ off for counting Null values, note that multi-choices entries of an empty list (`[]`) will also count as `null`
-    ///
     pub fn value_counts(&self, count_nan: bool) -> PolarsResult<DataFrame> {
+        // Get raw value counts
         let series = match self.question_type() {
             QuestionType::Multiple => {
                 let config = ExplodeOptions {
@@ -108,21 +120,38 @@ impl QuestionData {
             series
         };
 
-        series.value_counts(true, true, "count".into(), false)?
-            .sort(
-                [self.name()],
-                SortMultipleOptions::default()
-                    .with_nulls_last(true)
-                    .with_maintain_order(false)
-                    .with_order_descending(false)
-            )
+        let df = series.value_counts(true, true, "count".into(), false)?.sort(
+            [self.name()],
+            SortMultipleOptions::default()
+                .with_nulls_last(true)
+                .with_maintain_order(false)
+                .with_order_descending(false),
+        )?;
+
+        // append data label
+        let (keys, values): (Vec<AnyValue<'_>>, Vec<String>) = self
+            .data_label()
+            .into_iter()
+            .map(|(key, val)| (AnyValue::from(key), val.value()))
+            .unzip();
+
+        let keys_dtype = df.column(self.name().as_str())?.dtype().clone();
+        let keys = Column::new(self.name().into(), keys).cast(&keys_dtype)?;
+
+        let labels = Column::new("label".into(), values);
+        let height = labels.len();
+        let data_label = DataFrame::new(height, vec![keys, labels])?;
+
+        df.lazy()
+            .left_join(data_label.lazy(), col(self.name()), col(self.name()))
+            .select([col(self.name()), col("label"), col("count")])
+            .collect()
     }
 }
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl QuestionData {
-
     /// Name of the question
     #[getter(name)]
     fn py_get_name(&self) -> String {
@@ -215,15 +244,31 @@ impl QuestionData {
         }
     }
 
+    /// Get the lookup table for items in the `Question.response.values`, asdictionary of { value: label }
+    ///
+    /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
+    /// method will not mutate the caller.
+    #[getter(data_label)]
+    fn py_get_data_label<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        self.question.response().py_get_data_label(py)
+    }
+
     fn __repr__(&self) -> PyResult<String> {
         let mut content = Vec::new();
 
+        // Name of the question
         content.push(("name", format!("{:?}", self.name())));
+
+        // response type
         match self.get_type() {
             Some(value) => content.push(("type", format!("{:?}", value))),
             None => content.push(("type", "None".into())),
-        };
+        }
 
+        // question text
+        content.push(("title", self.py_get_label().__repr__()));
+
+        // No. rows
         const MAX_ROWS: usize = 5;
         let series = self.to_series().map_err(PyPolarsErr::Polars)?;
         let mut sample = series
@@ -233,7 +278,7 @@ impl QuestionData {
                 AnyValue::Null => "None".to_string(),
                 AnyValue::String(s) => format!("{s:?}"),
                 AnyValue::StringOwned(s) => format!("{s:?}"),
-                AnyValue::Boolean(b) => if b { "True" } else { "False" }.to_string(),
+                AnyValue::Boolean(b) => (if b { "True" } else { "False" }).to_string(),
                 _ => v.to_string(),
             })
             .collect::<Vec<_>>()
@@ -243,6 +288,7 @@ impl QuestionData {
         }
         let sample = format!("[{}]", sample);
 
+        // final formatting
         let value = content
             .into_iter()
             .chain(std::iter::once(("data", sample)))
@@ -281,12 +327,10 @@ impl QuestionData {
     ///
     /// Returns:
     ///     ``polars.DataFrame`` of the value counts
-    /// 
     #[pyo3(name = "value_counts", signature=(count_nan:"bool" = None))]
-    fn py_value_counts(&self, count_nan:Option<bool>) -> PyResult<PyDataFrame> {
+    fn py_value_counts(&self, count_nan: Option<bool>) -> PyResult<PyDataFrame> {
         let count_nan = count_nan.unwrap_or(false);
-        let result = self.value_counts(count_nan)
-            .map_err(PyPolarsErr::Polars)?;
+        let result = self.value_counts(count_nan).map_err(PyPolarsErr::Polars)?;
         Ok(PyDataFrame(result))
     }
 

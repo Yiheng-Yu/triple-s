@@ -21,6 +21,7 @@ Methods
 .. automethod:: triple_s.Text.add_variant(variant, mode=None, language=None) -> None
 .. automethod:: triple_s.Text.remove_variant(index) -> Variant
 .. automethod:: triple_s.Text.from_dict(content) -> Text
+.. automethod:: triple_s.Text.to_dict() -> Dict[str, str|List[Dict[str, str]]]
 
 Variant
 -------
@@ -44,3 +45,4 @@ Methods
 
 .. automethod:: triple_s.Variant.copy() -> Variant
 .. automethod:: triple_s.Variant.from_dict(content) -> Variant
+.. automethod:: triple_s.Variant.to_dict() -> Dict[str, str] 

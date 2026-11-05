@@ -19,7 +19,10 @@ use crate::{
 };
 
 /// Triple-s survey.
-#[cfg_attr(feature = "pyo3", pyclass(module = "triple_s", name = "Survey", skip_from_py_object))]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(module = "triple_s", name = "Survey", skip_from_py_object)
+)]
 #[derive(Debug, Clone)]
 pub struct Survey {
     datamap: Datamap,
@@ -186,10 +189,9 @@ impl Survey {
         }
     }
 
-
     fn __iter__(&self) -> PyResult<()> {
         Err(exceptions::PyNotImplementedError::new_err(
-            "`Survey.__iter__` not implemented. Explicitly call `iter_rows()` or `iter_questions()` to iter over a survey!"
+            "`Survey.__iter__` not implemented. Explicitly call `iter_rows()` or `iter_questions()` to iter over a survey!",
         ))
     }
 
@@ -199,10 +201,10 @@ impl Survey {
     }
 
     fn iter_questions(&self, py: Python<'_>) -> PyResult<Py<QuestionDataIterator>> {
-        let pointer = Arc::new(self.clone());  // clones a shallow copy
+        let pointer = Arc::new(self.clone()); // clones a shallow copy
         let iterator = QuestionDataIterator {
             survey: pointer,
-            index: 0
+            index: 0,
         };
 
         Py::new(py, iterator)
@@ -268,7 +270,6 @@ impl Survey {
     }
 }
 
-
 // ---------- Helpers -----------
 /// Iterates each ``QuestionData``` in a survey
 #[cfg(feature = "pyo3")]
@@ -288,15 +289,18 @@ impl QuestionDataIterator {
     fn __next__(&mut self) -> PyResult<Option<QuestionData>> {
         let questions = self.survey.question_names();
         if self.index >= questions.len() {
-            return Ok(None)
+            return Ok(None);
         };
 
-        let target = questions.get(self.index)
-            .ok_or(exceptions::PyIndexError::new_err(self.index))?  // unlikely,,
+        let target = questions
+            .get(self.index)
+            .ok_or(exceptions::PyIndexError::new_err(self.index))? // unlikely,,
             .clone();
 
-        let instance = self.survey.get_question_data(&target)
-            .ok_or(exceptions::PyKeyError::new_err(target))?;  // unlikely,,
+        let instance = self
+            .survey
+            .get_question_data(&target)
+            .ok_or(exceptions::PyKeyError::new_err(target))?; // unlikely,,
 
         self.index += 1;
         Ok(Some(instance))

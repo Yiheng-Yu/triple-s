@@ -13,7 +13,7 @@ use tempfile::TempPath;
 
 use crate::error::{InvalidArg, NoDataError};
 #[cfg(feature = "pyo3")]
-use crate::utils::anyvalue_to_python;
+use crate::utils::{anyvalue_to_python, polars_to_pandas};
 
 /// The backing file and its cleanup policy.
 #[derive(Debug)]
@@ -355,10 +355,8 @@ impl SurveyData {
     /// Export loaded data as a pandas DataFrame
     #[pyo3(name = "to_pandas")]
     pub fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let frame = self.py_to_polars(py)?;
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("use_pyarrow_extension_array", true)?;
-        frame.call_method("to_pandas", (), Some(&kwargs))
+        let df = self.to_polars().map_err(PyPolarsErr::Polars)?;
+        polars_to_pandas(df, py)
     }
 
     /// Get a brief overview of each column of data, equivalent of `self.to_polars().describe()`

@@ -8,11 +8,11 @@
 //! survey data from one place to another.
 //!
 //! It typically consists of two independent files:
-//! 
+//!
 //! A. a data file, this can either be a _text_ .asc file that contains the raw
 //! data, or a _csv_ that with question name as column headers. Most of the data
-//! files are of the former kind. 
-//! 
+//! files are of the former kind.
+//!
 //! B. a datamap that record how the data file
 //! should be read. i.e., where's the data for each question for each respondent
 //! etc.
@@ -153,6 +153,8 @@ mod datamap;
 mod survey;
 
 pub mod error;
+// pub use data::config;
+
 mod prelude;
 mod utils;
 
@@ -240,6 +242,12 @@ mod triple_s {
     #[pymodule_export]
     pub use crate::survey::Survey;
     use crate::{datamap::read::read_from_reader, read_triple_s};
+
+    // #[pymodule]
+    // pub mod config {
+    //     #[pymodule_export]
+    //     pub use crate::config::TableKind;
+    // }
 
     /// Read triple-s datamap
     ///
