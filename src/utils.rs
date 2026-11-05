@@ -7,9 +7,16 @@ use anyhow::{Context, Result};
 use encoding_rs::{CoderResult, Decoder, UTF_8};
 use parking_lot::RwLock;
 #[cfg(feature = "pyo3")]
-use polars::datatypes::AnyValue;
+use polars::{datatypes::AnyValue, frame::DataFrame};
 #[cfg(feature = "pyo3")]
-use pyo3::{IntoPyObjectExt, exceptions, prelude::*, types::PySlice};
+use pyo3::{
+    IntoPyObjectExt,
+    exceptions,
+    prelude::*,
+    types::{PyDict, PySlice},
+};
+#[cfg(feature = "pyo3")]
+use pyo3_polars::PyDataFrame;
 
 use crate::prelude::DeepCopy;
 
@@ -53,6 +60,19 @@ pub fn normalize_py_index(index: isize, total: usize) -> Option<usize> {
     } else {
         Some(index as usize)
     }
+}
+
+/// Convert polars datafame to pandas datafram via `to_pandas` call from the python side.
+#[cfg(feature = "pyo3")]
+#[inline]
+pub(crate) fn polars_to_pandas<'py>(
+    df: DataFrame,
+    py: Python<'py>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let frame = PyDataFrame(df).into_bound_py_any(py)?;
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("use_pyarrow_extension_array", true)?;
+    frame.call_method("to_pandas", (), Some(&kwargs))
 }
 
 #[cfg(feature = "pyo3")]

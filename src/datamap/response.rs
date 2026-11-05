@@ -9,7 +9,6 @@ use std::{
 use anyhow::{Context, Result};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use polars::prelude::*;
-
 #[cfg(feature = "pyo3")]
 use pyo3::{
     IntoPyObjectExt,
@@ -620,7 +619,10 @@ impl Response {
     }
 
     #[getter(data_label)]
-    pub(crate) fn py_get_data_label<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    pub(crate) fn py_get_data_label<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyDict>> {
         let output = PyDict::new(py);
 
         // iter through instead of calling self.data_label() because HashMap is not ordered
@@ -629,7 +631,7 @@ impl Response {
             let value = code.value().convert_to_py_any(py);
             let text = code.label().deepcopy();
             output.set_item(value, text)?;
-        };
+        }
 
         Ok(output)
     }

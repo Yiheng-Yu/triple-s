@@ -153,6 +153,8 @@ mod datamap;
 mod survey;
 
 pub mod error;
+// pub use data::config;
+
 mod prelude;
 mod utils;
 
@@ -240,6 +242,12 @@ mod triple_s {
     #[pymodule_export]
     pub use crate::survey::Survey;
     use crate::{datamap::read::read_from_reader, read_triple_s};
+
+    // #[pymodule]
+    // pub mod config {
+    //     #[pymodule_export]
+    //     pub use crate::config::TableKind;
+    // }
 
     /// Read triple-s datamap
     ///

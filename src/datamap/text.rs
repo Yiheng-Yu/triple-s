@@ -50,9 +50,7 @@ use anyhow::{Context, Result};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    exceptions::{self, PyTypeError, PyValueError},
-    prelude::*,
-    types::{PyDict, PyList, PyTuple},
+    exceptions::{self, PyTypeError, PyValueError}, prelude::*, types::{PyDict, PyList, PyString, PyTuple},
 };
 use quick_xml::{
     events::{BytesText, Event},
@@ -483,9 +481,6 @@ impl Text {
     /// - 'variants' (list[dict[str, str] | Variant], optional): A list of text
     ///   variants. Each item may be either an existing [`Variant`] instance or
     ///   a dictionary used to construct a [`Variant`] via Variant.from_dict.
-    ///
-    /// Returns an error if a required key is missing or a value cannot be
-    /// converted to the expected type.
     #[pyo3(name = "from_dict")]
     #[staticmethod]
     pub(crate) fn py_from_dict(content: &Bound<'_, PyDict>) -> PyResult<Self> {
@@ -499,32 +494,78 @@ impl Text {
             Some(variants) if variants.is_none() => Self::py_new(value, None),
             Some(input_variants) => {
                 let type_name = get_type_name(&input_variants)?;
-                let input_variants = input_variants.extract::<Bound<'_, PyList>>()
-                    .map_err(|_| PyValueError::new_err(format!(
-                        "Expect value of `variants` be list of dictionaries or Variant instance, got: '{}'",
-                        type_name
-                    ))
-                )?;
 
-                let variants = input_variants.into_iter()
-                .map(|item| {
-                    if let Ok(variant) = item.extract::<Variant>() {
-                        Ok(variant)
-                    } else if let Ok(content) = item.extract::<Bound<'_, PyDict>>() {
-                        Variant::py_from_dict(content)
-                    } else {
-                        let type_name = get_type_name(&item)?;
-                        Err(PyTypeError::new_err(format!(
-                            "Expect items in `variants` to be dictionary or Variant instance, got: '{}'",
-                            type_name
-                        )))
-                    }
-                })
-                .collect::<PyResult<Vec<Variant>>>()?;
+                // Only allow pylist or pytuple
+                if !input_variants.is_instance_of::<PyList>()
+                    && !input_variants.is_instance_of::<PyTuple>()
+                {
+                    return Err(PyTypeError::new_err(format!(
+                        "Expect value of `variants` be list/ tuple of dictionaries or Variant instance, got: '{}'",
+                        type_name
+                    )));
+                };
+
+                let variants = input_variants.try_iter()?
+                    .map(|item| {
+                        let item = item?;
+                        if let Ok(variant) = item.extract::<Variant>() {
+                            Ok(variant)
+                        } else if let Ok(content) = item.extract::<Bound<'_, PyDict>>() {
+                            Variant::py_from_dict(content)
+                        } else {
+                            let type_name = get_type_name(&item)?;
+                            Err(PyTypeError::new_err(format!(
+                                "Expect items in `variants` to be dictionary or Variant instance, got: '{}'",
+                                type_name
+                            )))
+                        }
+                    })
+                    .collect::<PyResult<Vec<Variant>>>()?;
 
                 Self::py_new(value, Some(variants))
             }
         }
+    }
+
+    /// Convert contents of current isntance to a dictionary.
+    ///
+    /// Instance with same content can later be constructed again via `from_dict` method.
+    ///
+    /// Example
+    /// ----------
+    ///
+    /// ```python
+    /// from triple_s import Text
+    ///
+    /// data = dict(
+    ///     value = "Text value",
+    ///     variants = [
+    ///         dict(value="variant 1", mode="analysis"),
+    ///         dict(value="variant 2", mode="analysis", language="tr")
+    ///     ]
+    /// )
+    ///
+    /// original = Text.from_dict(data)
+    /// converted = original.to_dict()
+    ///
+    /// new_instance = Text.from_dict(converted)
+    /// assert new_instance == original
+    /// ```
+    #[pyo3(name = "to_dict")]
+    pub(crate) fn py_to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let dict = PyDict::new(py);
+        dict.set_item("value", self.value())?;
+
+        let variants = self
+            .variants()
+            .iter()
+            .map(|variant| variant.py_to_dict(py))
+            .collect::<PyResult<Vec<Bound<'py, PyDict>>>>()?;
+
+        let variants = PyTuple::new(py, variants)?;
+        dict.set_item("variants", variants)?;
+
+        Ok(dict)
     }
 
     pub(crate) fn __repr__(&self) -> String {
@@ -909,8 +950,8 @@ impl Variant {
 
     fn __repr__(&self) -> String {
         let value = self.value();
-        let mode = self.mode().map(|item| item.to_string()).unwrap_or("None".into());
-        let language = self.language().unwrap_or("None".into());
+        let mode = self.mode().map(|item| format!("{:?}", item.to_string())).unwrap_or("None".into());
+        let language = self.language().map(|s| format!("{:?}", s)).unwrap_or("None".into());
         format!("Variant(value={value}, mode={mode}, language={language})")
     }
 
@@ -1041,33 +1082,36 @@ impl Variant {
     ///
     /// Example
     /// ----------
-    /// 
+    ///
     /// ```python
     /// from triple_s import Variant
-    /// 
+    ///
     /// content = dict(
     ///     value = "test value",
     ///     mode = "interview",
     ///     language = "tr"
     /// )
     /// variant = Variant.from_dict(content)
-    /// 
+    ///
     /// output = variant.to_dict()
     /// print(output)  # {'value': 'test value', 'mode': 'interview', 'language': 'tr'}
-    /// ``` 
-    #[pyo3(name="to_dict")]
+    /// ```
+    #[pyo3(name = "to_dict")]
     pub(crate) fn py_to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let output = PyDict::new(py);
         output.set_item("value", self.value())?;
-        
+
         if let Some(mode) = self.py_get_mode() {
-            output.set_item("mode", mode)?;
-        }
-        
-        if let Some(language) = self.py_get_language() {
-            output.set_item("language", language)?;
+            output.set_item("mode", PyString::new(py, mode.as_str()))?;
+        } else {
+            output.set_item("mode", py.None())?;
         }
 
+        if let Some(language) = self.py_get_language() {
+            output.set_item("language", PyString::new(py, language.as_str()))?;
+        } else {
+            output.set_item("language", py.None())?;
+        }
         Ok(output)
     }
 }

@@ -1414,11 +1414,35 @@ class Text:
         - 'variants' (list[dict[str, str] | Variant], optional): A list of text
           variants. Each item may be either an existing [`Variant`] instance or
           a dictionary used to construct a [`Variant`] via Variant.from_dict.
-
-        Returns an error if a required key is missing or a value cannot be
-        converted to the expected type.
         """
     def remove_variant(self, /, index: int) -> Variant: ...
+    def to_dict(self, /) -> dict:
+        """
+        Convert contents of current isntance to a dictionary.
+
+        Instance with same content can later be constructed again via `from_dict` method.
+
+        Example
+        ----------
+
+        ```python
+        from triple_s import Text
+
+        data = dict(
+            value = "Text value",
+            variants = [
+                dict(value="variant 1", mode="analysis"),
+                dict(value="variant 2", mode="analysis", language="tr")
+            ]
+        )
+
+        original = Text.from_dict(data)
+        converted = original.to_dict()
+
+        new_instance = Text.from_dict(converted)
+        assert new_instance == original
+        ```
+        """
     @property
     def value(self, /) -> str:
         """
@@ -1636,7 +1660,7 @@ class Variant:
 
         output = variant.to_dict()
         print(output)  # {'value': 'test value', 'mode': 'interview', 'language': 'tr'}
-        ``` 
+        ```
         """
     @property
     def value(self, /) -> str: ...
