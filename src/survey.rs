@@ -1,3 +1,5 @@
+#[cfg(feature = "pyo3")]
+use std::str::FromStr;
 use std::sync::Arc;
 
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
@@ -13,7 +15,12 @@ use crate::{
     utils::{anyvalue_to_python, get_type_name},
 };
 use crate::{
-    data::{QuestionData, SurveyData},
+    prelude::*,
+    data::{
+        QuestionData, 
+        SurveyData, 
+        config::{Config, DataFrameFormat}
+    },
     datamap::Datamap,
     utils::{ArcLock, lock_it_up},
 };
@@ -27,6 +34,7 @@ use crate::{
 pub struct Survey {
     datamap: Datamap,
     data: ArcLock<SurveyData>,
+    config: ArcLock<Config>,
 }
 
 /// Fields
@@ -79,6 +87,16 @@ impl Survey {
     pub fn question_names(&self) -> Vec<String> {
         self.datamap().question_names()
     }
+
+    /// Configuration options
+    pub fn config(&self) -> RwLockReadGuard<'_, Config> {
+        self.config.read()
+    }
+
+    /// Mutable view of survey configuration options
+    pub fn config_mut(&mut self) -> RwLockWriteGuard<'_, Config> {
+        self.config.write()
+    } 
 }
 
 impl Survey {
@@ -87,6 +105,7 @@ impl Survey {
         Self {
             datamap,
             data: lock_it_up(data),
+            config: lock_it_up(Config::default())
         }
     }
 
@@ -116,8 +135,7 @@ impl Survey {
     /// Gets a shared [`QuestionData`] view, or `None` if the question name doesn't exist.
     pub fn get_question_data(&self, name: &str) -> Option<QuestionData> {
         let question = self.datamap.get(name)?.clone();
-
-        Some(QuestionData::new(Arc::clone(&self.data), question))
+        Some(QuestionData::new(Arc::clone(&self.data), question, Arc::clone(&self.config)))
     }
 }
 
@@ -135,12 +153,15 @@ impl Survey {
     fn __repr__(&self) -> PyResult<String> {
         let mut content = Vec::new();
 
+        // name of the survey
         let name = self.py_get_name().unwrap_or("None".to_string());
         content.push(("name", format!("{:?}", name)));
 
+        // title of the survey
         let title = self.py_get_title().unwrap_or("None".to_string());
         content.push(("title", format!("{:?}", title)));
 
+        // list of survey questions
         let data = self.data();
         let question_repr = if data.has_data() {
             data.py_repr_content().map_err(PyPolarsErr::Polars)?
@@ -150,6 +171,11 @@ impl Survey {
             q_repr
         };
 
+        // configuration options
+        let dataframe_format = self.config().py_dataframe_format.to_string();
+        content.push(("dataframe_format", dataframe_format));
+
+        // formatting
         let value = content
             .into_iter()
             .chain(question_repr.into_iter())
@@ -257,9 +283,33 @@ impl Survey {
         self.datamap.info().clone()
     }
 
+    /// Total number of responses
     #[getter(num_response)]
     fn py_get_num_response(&self) -> PyResult<usize> {
         self.num_response().map_err(|err| PyPolarsErr::Polars(err).into())
+    }
+
+    /// Default DataFrame library used when returning results to Python. 
+    /// Supported values are `"pandas"` and `"polars"`, default `"polars"`
+    ///
+    /// Note:
+    /// 
+    /// All DataFrame operations are performed internally using Rust Polars,
+    /// regardless of the selected output format.
+    ///
+    /// When `"pandas"` is selected, the resulting Polars DataFrame is converted
+    /// to pandas using `to_pandas()`. This introduces an additional conversion
+    /// step, which may take a bit longer but shouldn't be too much, since majorities of the 
+    /// computation-heavy stuff are already handled on the Rust side.
+    #[getter(dataframe_format)]
+    fn py_get_dataframe_format(&self) -> String {
+        self.config().py_dataframe_format.to_string()
+    }
+
+    #[setter(dataframe_format)]
+    fn py_set_dataframe_format(&mut self, value: Bound<'_, PyAny>) -> PyResult<()> {
+        self.config_mut().py_dataframe_format = DataFrameFormat::from_py_any(value)?;
+        Ok(())
     }
 
     /// Check if data loaded or not

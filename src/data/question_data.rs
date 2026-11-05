@@ -15,9 +15,12 @@ use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 #[cfg(feature = "pyo3")]
 use crate::{
     DataRange,
+    config::{Config, DataFrameFormat},
     error::InternalError,
     prelude::*,
-    utils::{anyvalue_to_python, convert_date, convert_time, normalize_py_index},
+    utils::{
+        anyvalue_to_python, convert_date, convert_time, normalize_py_index, polars_to_pandas,
+    },
 };
 use crate::{
     QuestionType,
@@ -34,6 +37,7 @@ use crate::{
 #[derive(Clone)]
 pub struct QuestionData {
     data: ArcLock<SurveyData>,
+    config: ArcLock<Config>,
     question: Question,
 }
 
@@ -73,8 +77,16 @@ impl QuestionData {
 /// ---
 impl QuestionData {
     /// Create new [`QuestionData`] instance
-    pub(crate) fn new(data: ArcLock<SurveyData>, question: Question) -> Self {
-        Self { data, question }
+    pub(crate) fn new(
+        data: ArcLock<SurveyData>,
+        question: Question,
+        config: ArcLock<Config>,
+    ) -> Self {
+        Self {
+            data,
+            question,
+            config,
+        }
     }
 
     /// Export contents to a polars [`Column`]
@@ -320,18 +332,47 @@ impl QuestionData {
     /// This function basically calls ``poalrs.Series.value_counts`` under the hood, apart from multi-choice
     /// where the choice for each respondant is counted individually.
     ///
-    /// Args:
-    ///     count_nan (`bool`, *optional*):
-    ///         Toogle on/ off for counting Null values, note that multi-choices entries of an empty list (`[]`) will also count as `null`.
-    ///         Default ``False``
+    /// Kwargs:
+    ///     count_nan (bool, *optional*):
+    ///         Toogle on/ off for counting Null values.
+    ///         Note: multi-choice entries of an empty list (`[]`) will also count as `null`.
+    ///         Default `False`
+    ///     
+    ///     foramt ('polars' | 'pandas' |DataFrameFormat, *optional*):
+    ///         Select what kind of dataframe to output:
+    ///         'polars' | DataFrameFormat.Polars: polars.DataFrame
+    ///         'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
+    ///
+    ///         Default:
+    ///             consistent with the survey current instance created from.        
     ///
     /// Returns:
-    ///     ``polars.DataFrame`` of the value counts
-    #[pyo3(name = "value_counts", signature=(count_nan:"bool" = None))]
-    fn py_value_counts(&self, count_nan: Option<bool>) -> PyResult<PyDataFrame> {
+    ///     polars.DataFrame | pandas.DataFrame
+    #[pyo3(
+        name = "value_counts", 
+        signature=(
+            count_nan:"bool" = None,
+            format: "'polars'|'pandas'|DataFrameFormat" = None
+        )
+    )]
+    fn py_value_counts<'py>(
+        &self,
+        py: Python<'py>,
+        count_nan: Option<bool>,
+        format: Option<Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let count_nan = count_nan.unwrap_or(false);
         let result = self.value_counts(count_nan).map_err(PyPolarsErr::Polars)?;
-        Ok(PyDataFrame(result))
+
+        // prep output
+        let format = format
+            .map(|value| DataFrameFormat::from_py_any(value))
+            .transpose()?
+            .unwrap_or(self.config.read().py_dataframe_format.clone());
+        match format {
+            DataFrameFormat::Polars => PyDataFrame(result).into_bound_py_any(py),
+            DataFrameFormat::Pandas => polars_to_pandas(result, py),
+        }
     }
 
     /// Return the answers as a polars Series.

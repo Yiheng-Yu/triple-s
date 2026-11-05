@@ -6,41 +6,41 @@ SurveyInfo
 Attributes
 ----------------
 
-.. autoattribute:: triple_s.SurveyInfo.time
+.. autoattribute:: SurveyInfo.time
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.SurveyInfo.style
+.. autoattribute:: SurveyInfo.style
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.SurveyInfo.name
+.. autoattribute:: SurveyInfo.name
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.SurveyInfo.user
+.. autoattribute:: SurveyInfo.user
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.SurveyInfo.origin
+.. autoattribute:: SurveyInfo.origin
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.SurveyInfo.title
+.. autoattribute:: SurveyInfo.title
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.SurveyInfo.standard
+.. autoattribute:: SurveyInfo.standard
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.SurveyInfo.date
+.. autoattribute:: SurveyInfo.date
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.SurveyInfo.version
+.. autoattribute:: SurveyInfo.version
    :annotation: -> Version
 
-.. autoattribute:: triple_s.SurveyInfo.language_options
+.. autoattribute:: SurveyInfo.language_options
    :annotation: -> tuple[str, ...]
 
-.. autoattribute:: triple_s.SurveyInfo.mode_options
+.. autoattribute:: SurveyInfo.mode_options
    :annotation: -> tuple[Mode, ...]
 
 Methods
 -------------
 
-.. automethod:: triple_s.SurveyInfo.from_dict(content) -> SurveyInfo
-.. automethod:: triple_s.SurveyInfo.to_dict() -> dict[str, Version | str | list[str] | list[Mode]]
+.. automethod:: SurveyInfo.from_dict(content) -> SurveyInfo
+.. automethod:: SurveyInfo.to_dict() -> dict[str, Version | str | list[str] | list[Mode]]

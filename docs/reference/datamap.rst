@@ -6,13 +6,13 @@ Datamap
 Attributes
 ----------------
 
-.. autoattribute:: triple_s.Datamap.record
+.. autoattribute:: Datamap.record
    :annotation: -> Record
 
-.. autoattribute:: triple_s.Datamap.info
+.. autoattribute:: Datamap.info
    :annotation: -> SurveyInfo
 
-.. autoattribute:: triple_s.Datamap.title
+.. autoattribute:: Datamap.title
    :annotation: -> str | None
 
 Properties
@@ -26,8 +26,8 @@ Properties
 Methods
 -------------
 
-.. automethod:: triple_s.Datamap.get(question_name) -> Question | None
-.. automethod:: triple_s.Datamap.from_dict(content) -> Datamap
-.. automethod:: triple_s.Datamap.to_classic() -> str
-.. automethod:: triple_s.Datamap.to_xml() -> str
-.. automethod:: triple_s.Datamap.load_data(path) -> SurveyData
+.. automethod:: Datamap.get(question_name) -> Question | None
+.. automethod:: Datamap.from_dict(content) -> Datamap
+.. automethod:: Datamap.to_classic() -> str
+.. automethod:: Datamap.to_xml() -> str
+.. automethod:: Datamap.load_data(path) -> SurveyData

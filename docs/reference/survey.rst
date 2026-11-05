@@ -10,19 +10,19 @@ view updates the survey. ``title`` is also writable.
 Attributes
 ----------
 
-.. autoattribute:: triple_s.Survey.datamap
+.. autoattribute:: Survey.datamap
    :annotation: -> Datamap
 
-.. autoattribute:: triple_s.Survey.info
+.. autoattribute:: Survey.info
    :annotation: -> SurveyInfo
 
-.. autoattribute:: triple_s.Survey.title
+.. autoattribute:: Survey.title
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.Survey.data
+.. autoattribute:: Survey.data
    :annotation: -> SurveyData
 
 Methods
 -------
 
-.. automethod:: triple_s.Survey.has_data() -> bool
+.. automethod:: Survey.has_data() -> bool

@@ -245,7 +245,7 @@ mod triple_s {
     #[pymodule]
     pub mod config {
         #[pymodule_export]
-        pub use crate::config::TableKind;
+        pub use crate::config::DataFrameFormat;
     }
 
     /// Read triple-s datamap
