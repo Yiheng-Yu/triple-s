@@ -1,5 +1,5 @@
-from re import L
-import pprint
+import polars
+import pandas
 
 import pytest
 from triple_s import NoDataError, read_triple_s
@@ -147,7 +147,20 @@ def test_survey_without_data():
 
 
 def test_value_counts(survey):
-    print()
     for question in survey.iter_questions():
         summary = question.value_counts()
         print(summary)
+
+
+def test_dataframe_format_config(survey):
+    assert survey.dataframe_format == 'polars'   # the default
+    
+    for question in survey.iter_questions():
+        assert question.dataframe_format == 'polars'
+        assert type(question.value_counts()) == polars.DataFrame
+    
+    survey.dataframe_format = 'pandas'
+    assert survey.dataframe_format == 'pandas'
+    for question in survey.iter_questions():
+        assert question.dataframe_format == 'pandas'
+        assert type(question.value_counts()) == pandas.DataFrame

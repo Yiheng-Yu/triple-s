@@ -1,4 +1,5 @@
 //! Configuration options for reading/ exporting/ intereacting with objects
+#[cfg(feature="pyo3")]
 use std::str::FromStr;
 
 #[cfg(feature="pyo3")]
@@ -7,7 +8,6 @@ use crate::utils::get_type_name;
 #[cfg(feature="pyo3")]
 use pyo3::{exceptions, prelude::*};
 
-#[cfg(feature="pyo3")]
 use strum::{EnumString, EnumIter};
 
 use crate::prelude::*;

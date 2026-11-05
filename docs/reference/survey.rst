@@ -22,7 +22,12 @@ Attributes
 .. autoattribute:: Survey.data
    :annotation: -> SurveyData
 
+.. autoattribute:: Survey.dataframe_format
+   :annotation: -> str
+
 Methods
 -------
 
 .. automethod:: Survey.has_data() -> bool
+.. automethod:: Survey.iter_rows() -> Generator[dict[str, Any]]
+.. automethod:: Survey.iter_questions() -> Generator[QuestionData]

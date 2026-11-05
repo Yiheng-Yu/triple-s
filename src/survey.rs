@@ -1,5 +1,4 @@
 #[cfg(feature = "pyo3")]
-use std::str::FromStr;
 use std::sync::Arc;
 
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
@@ -11,15 +10,16 @@ use pyo3_polars::error::PyPolarsErr;
 
 #[cfg(feature = "pyo3")]
 use crate::{
+    prelude::*,
     SurveyInfo,
+    config::DataFrameFormat,
     utils::{anyvalue_to_python, get_type_name},
 };
 use crate::{
-    prelude::*,
     data::{
         QuestionData, 
         SurveyData, 
-        config::{Config, DataFrameFormat}
+        config::{Config}
     },
     datamap::Datamap,
     utils::{ArcLock, lock_it_up},
@@ -298,8 +298,7 @@ impl Survey {
     /// regardless of the selected output format.
     ///
     /// When `"pandas"` is selected, the resulting Polars DataFrame is converted
-    /// to pandas using `to_pandas()`. This introduces an additional conversion
-    /// step, which may take a bit longer but shouldn't be too much, since majorities of the 
+    /// to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the 
     /// computation-heavy stuff are already handled on the Rust side.
     #[getter(dataframe_format)]
     fn py_get_dataframe_format(&self) -> String {

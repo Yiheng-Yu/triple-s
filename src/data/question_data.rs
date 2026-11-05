@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 #[cfg(feature = "pyo3")]
 use chrono::{NaiveDate, NaiveTime};
+use parking_lot::RwLockReadGuard;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
@@ -15,8 +16,8 @@ use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 #[cfg(feature = "pyo3")]
 use crate::{
     DataRange,
-    config::{Config, DataFrameFormat},
     error::InternalError,
+    config::DataFrameFormat,
     prelude::*,
     utils::{
         anyvalue_to_python, convert_date, convert_time, normalize_py_index, polars_to_pandas,
@@ -24,7 +25,10 @@ use crate::{
 };
 use crate::{
     QuestionType,
-    data::SurveyData,
+    data::{
+        config::Config,
+        survey_data::SurveyData,
+    },
     datamap::{Question, Text, Value},
     utils::ArcLock,
 };
@@ -41,9 +45,9 @@ pub struct QuestionData {
     question: Question,
 }
 
-/// Fields
-///
 /// ---
+/// 
+/// # Fields
 impl QuestionData {
     /// name of the question
     #[inline]
@@ -69,6 +73,11 @@ impl QuestionData {
     /// method will not mutate the caller.
     pub fn data_label(&self) -> HashMap<Value, Text> {
         self.question.data_label()
+    }
+
+    /// Configuration options
+    pub fn config(&self) -> RwLockReadGuard<'_, Config> {
+        self.config.read()
     }
 }
 
@@ -263,6 +272,22 @@ impl QuestionData {
     #[getter(data_label)]
     fn py_get_data_label<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         self.question.response().py_get_data_label(py)
+    }
+
+    /// Default DataFrame library used when returning results to Python. 
+    /// Supported values are `"pandas"` and `"polars"`, default `"polars"`
+    ///
+    /// Note:
+    /// 
+    /// All DataFrame operations are performed internally using Rust Polars,
+    /// regardless of the selected output format.
+    ///
+    /// When `"pandas"` is selected, the resulting Polars DataFrame is converted
+    /// to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the 
+    /// computation-heavy stuff are already handled on the Rust side.
+    #[getter(dataframe_format)]
+    fn py_get_dataframe_format(&self) -> String {
+        self.config().py_dataframe_format.to_string()
     }
 
     fn __repr__(&self) -> PyResult<String> {
