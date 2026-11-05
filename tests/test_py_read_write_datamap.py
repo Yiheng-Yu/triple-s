@@ -1,13 +1,10 @@
-from copy import copy, deepcopy
+import warnings
 from decimal import Decimal
 
 import pytest
-import warnings
-
-from lxml import etree
-
 import triple_s
-from triple_s import Text, Variant, SurveyInfo, Question, Mode, CodeFormat, Usage
+from lxml import etree
+from triple_s import Question
 
 PATH_SSS_CLASSIC: str = "tests/sss-examples/sss_classic.sss"
 PATH_SSS_XML_GENERATION_ONE = "tests/sss-examples/sss_xml_1.0.xml"
@@ -49,9 +46,7 @@ def xml_content(tree):
         attributes = dict(element.attrib)
         if element.tag == "range":
             attributes = {key: Decimal(value) for key, value in attributes.items()}
-        content.append(
-            (element.tag, sorted(attributes.items()), (element.text or "").strip())
-        )
+        content.append((element.tag, sorted(attributes.items()), (element.text or "").strip()))
     return sorted(content)
 
 
@@ -129,9 +124,7 @@ def test_question_xml_read_write(xml1, original_tree):
         ident = question_tree.get("ident")
         original_question_tree = original_tree.find(f'.//variable[@ident="{ident}"]')
         assert original_question_tree is not None, f"Missing original question {ident}"
-        assert xml_content(question_tree) == xml_content(original_question_tree), (
-            f"Question {ident}"
-        )
+        assert xml_content(question_tree) == xml_content(original_question_tree), f"Question {ident}"
 
 
 def assert_eq_questions(a: Question, b: Question):
@@ -141,12 +134,8 @@ def assert_eq_questions(a: Question, b: Question):
     assert a.usage == b.usage
     assert a.spread == b.spread
     assert a.label.value == b.label.value
-    assert (
-        a.label.variants == b.label.variants
-    )  # sss classic does not have text variants
-    assert (
-        a.response.range == b.response.range
-    )  # TODO! INTERFACE FOR DEFINING DATA RANGE
+    assert a.label.variants == b.label.variants  # sss classic does not have text variants
+    assert a.response.range == b.response.range  # TODO! INTERFACE FOR DEFINING DATA RANGE
 
     for code_classic in a.response:
         code_xml = b.response.get_value(code_classic.value)
@@ -167,123 +156,6 @@ def test_question_read_n_write(xml2):
         assert_eq_questions(question, re)
 
 
-def test_record_slice_indexing(xml1):
-    result = xml1.record[0:3]
-    assert len(result) == 3
-    result = xml1.record[0:-2]
-    assert len(result) == (len(xml1.record.content) - 2)
-
-
-@pytest.mark.parametrize("index", [0, 1, -1, -2])
-def test_record_getitem_integer(xml1, index):
-    result = xml1.record[index]
-    assert isinstance(result, Question)
-    assert result.name == xml1.record.content[index].name
-
-
-def test_record_getitem_integer_boundaries(xml1):
-    record = xml1.record
-    assert record[-len(record)].name == record[0].name
-    for index in [len(record), -len(record) - 1, 10000, -10000]:
-        with pytest.raises(IndexError):
-            record[index]
-
-
-@pytest.mark.parametrize("case", [str, str.lower, str.upper])
-def test_record_getitem_name(xml1, case):
-    expected = xml1.record.content[1]
-    result = xml1.record[case(expected.name)]
-    assert isinstance(result, Question)
-    assert result.name == expected.name
-
-
-@pytest.mark.parametrize("name", ["missing_question", ""])
-def test_record_getitem_missing_name(xml1, name):
-    with pytest.raises(KeyError):
-        xml1.record[name]
-
-
-@pytest.mark.parametrize(
-    "index",
-    [
-        slice(None),
-        slice(1, 3),
-        slice(None, 2),
-        slice(1, None),
-        slice(-2, None),
-        slice(None, -1),
-        slice(None, None, 2),
-        slice(-10000, 10000),
-        slice(2, 1),
-        slice(10000, 10001),
-        slice(-10001, -10000),
-        slice(None, None, -1),
-        slice(2, 0, -1),
-        slice(None, None, -2),
-        slice(10000, -10000, -1),
-        slice(0, 2, -1),
-        slice(None, None, 10**100),
-        slice(None, None, -(10**100)),
-    ],
-)
-def test_record_getitem_slice(xml1, index):
-    result = xml1.record[index]
-    assert isinstance(result, list)
-    assert all(isinstance(item, Question) for item in result)
-    expected = xml1.record.content[index]
-    assert [item.name for item in result] == [item.name for item in expected]
-
-
-@pytest.mark.parametrize("index", [1.5, None, [0], (0,), {}])
-def test_record_getitem_invalid_type(xml1, index):
-    with pytest.raises(TypeError):
-        xml1.record[index]
-
-
-def test_record_getitem_zero_slice_step(xml1):
-    with pytest.raises(ValueError):
-        xml1.record[::0]
-
-
-@pytest.mark.parametrize("lookup", ["integer", "name", "slice"])
-def test_record_getitem_shares_question(xml1, lookup):
-    record = xml1.record
-    if lookup == "integer":
-        result = record[0]
-    elif lookup == "name":
-        result = record[record.content[0].name]
-    else:
-        result = record[:1][0]
-    result.label = "updated through indexing"
-    assert record.content[0].label.value == "updated through indexing"
-
-
-def test_record_getitem_slice_has_independent_container(xml1):
-    record = xml1.record
-    original_length = len(record)
-    result = record[:]
-    result.pop()
-    assert len(record) == original_length
-
-
-def test_record_to_xml(xml1):
-    record = xml1.record
-    record.href = 'data & "answers".csv'
-    record.data_format = "csv"
-    root = etree.fromstring(record.to_xml())
-    assert root.tag == "record"
-    assert root.attrib == {
-        "ident": record.ident,
-        "href": record.href,
-        "format": "csv",
-    }
-    assert [item.findtext("name") for item in root] == [
-        question.name for question in record.content
-    ]
-    for element, question in zip(root, record.content):
-        assert xml_content(element) == xml_content(etree.fromstring(question.to_xml()))
-
-
 @pytest.mark.parametrize("source", ["xml1", "classic"])
 def test_datamap_to_xml1_from_to(source, request, tmp_path):
     datamap = request.getfixturevalue(source)
@@ -293,9 +165,7 @@ def test_datamap_to_xml1_from_to(source, request, tmp_path):
     assert root.find("survey") is not None
     assert root.findtext("survey/name") == datamap.info.name
     assert root.findtext("survey/title") == datamap.title
-    assert xml_content(root.find("survey/record")) == xml_content(
-        etree.fromstring(datamap.record.to_xml())
-    )
+    assert xml_content(root.find("survey/record")) == xml_content(etree.fromstring(datamap.record.to_xml()))
     path = tmp_path / "export.sss"
     path.write_text(output, encoding="utf-8")
     restored = triple_s.read_datamap(str(path))

@@ -10,22 +10,19 @@ use pyo3_polars::error::PyPolarsErr;
 
 #[cfg(feature = "pyo3")]
 use crate::{
-    prelude::*,
     SurveyInfo,
     config::DataFrameFormat,
+    prelude::*,
     utils::{anyvalue_to_python, get_type_name},
 };
 use crate::{
-    data::{
-        QuestionData, 
-        SurveyData, 
-        config::{Config}
-    },
+    data::{QuestionData, SurveyData, config::Config},
     datamap::Datamap,
     utils::{ArcLock, lock_it_up},
 };
 
-/// Triple-s survey.
+#[cfg_attr(any(not(feature = "pyo3"), doc), doc = include_str!("./doc/survey_rs.md"))]
+#[cfg_attr(all(feature = "pyo3", not(doc)), doc = include_str!("./doc/survey_py.md"))]
 #[cfg_attr(
     feature = "pyo3",
     pyclass(module = "triple_s", name = "Survey", skip_from_py_object)
@@ -96,7 +93,7 @@ impl Survey {
     /// Mutable view of survey configuration options
     pub fn config_mut(&mut self) -> RwLockWriteGuard<'_, Config> {
         self.config.write()
-    } 
+    }
 }
 
 impl Survey {
@@ -105,7 +102,7 @@ impl Survey {
         Self {
             datamap,
             data: lock_it_up(data),
-            config: lock_it_up(Config::default())
+            config: lock_it_up(Config::default()),
         }
     }
 
@@ -135,7 +132,11 @@ impl Survey {
     /// Gets a shared [`QuestionData`] view, or `None` if the question name doesn't exist.
     pub fn get_question_data(&self, name: &str) -> Option<QuestionData> {
         let question = self.datamap.get(name)?.clone();
-        Some(QuestionData::new(Arc::clone(&self.data), question, Arc::clone(&self.config)))
+        Some(QuestionData::new(
+            Arc::clone(&self.data),
+            question,
+            Arc::clone(&self.config),
+        ))
     }
 }
 
@@ -289,16 +290,16 @@ impl Survey {
         self.num_response().map_err(|err| PyPolarsErr::Polars(err).into())
     }
 
-    /// Default DataFrame library used when returning results to Python. 
+    /// Default DataFrame library used when returning results to Python.
     /// Supported values are `"pandas"` and `"polars"`, default `"polars"`
     ///
     /// Note:
-    /// 
+    ///
     /// All DataFrame operations are performed internally using Rust Polars,
     /// regardless of the selected output format.
     ///
     /// When `"pandas"` is selected, the resulting Polars DataFrame is converted
-    /// to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the 
+    /// to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the
     /// computation-heavy stuff are already handled on the Rust side.
     #[getter(dataframe_format)]
     fn py_get_dataframe_format(&self) -> String {

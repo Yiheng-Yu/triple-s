@@ -1,4 +1,4 @@
-#![doc = include_str!("../doc/rs_question.md")]
+#![doc = include_str!("../doc/datamap_question_rs.md")]
 
 use std::{
     collections::{HashMap, HashSet},
@@ -189,12 +189,12 @@ impl QuestionOptions {
 /// A survey variable, represented by a `<variable>` element in Triple-S XML.
 #[cfg_attr(
     not(feature = "pyo3"),
-    doc = include_str!("../doc/rs_question.md")
+    doc = include_str!("../doc/datamap_question_rs.md")
 )]
 #[cfg_attr(
     feature = "pyo3",
     pyclass(module = "triple_s", name = "Question", from_py_object),
-    doc = include_str!("../doc/py_question.md")
+    doc = include_str!("../doc/datamap_question_py.md")
 )]
 #[derive(Debug)]
 pub struct Question {
@@ -2231,7 +2231,58 @@ impl Location {
     // }
 }
 
-#[doc=include_str!("../doc/spread.md")]
+/// Controls how multiple-choice responses are stored: the optional `<spread>`
+/// element in Triple-S XML or `SPREAD` line in Triple-S Classic.
+///
+/// Without spread (default)
+/// ------------------------------
+///
+/// When spread is absent (None), each character in the question's data field
+/// represents a category: 1 means selected and 0 means not selected.
+///
+/// Positions start at 1 and correspond directly to category codes:
+///
+/// - Category codes: 1, 2, 3, 4, 5
+/// - Selection flags: 1, 0, 1, 0, 0 (stored as "10100")
+/// - Selected codes: [1, 3]
+///
+/// With spread
+/// --------------
+///
+/// When spread is present, the data contains consecutive slots called
+/// subfields. The subfield count specifies the number of slots; width
+/// specifies the number of characters in each slot.
+///
+/// Width can be omitted for fixed-width (.asc) data when equal-width slots
+/// exactly fill the question's field. It is then calculated as the field
+/// width divided by the subfield count. Width is required for CSV data.
+///
+/// Examples
+/// --------
+///
+/// Two subfields, each one character wide:
+///
+/// - Raw data: "13"
+/// - Split: "1" | "3"
+/// - Selected codes: [1, 3]
+///
+/// One subfield, two characters wide:
+///
+/// - Raw data: "13"
+/// - Split: "13"
+/// - Selected codes: `[13]`
+///
+/// Two subfields, each two characters wide. Zero marks an unused slot:
+///
+/// - Raw data: "1300"
+/// - Split: "13" | "00"
+/// - Selected codes: `[13]`
+///
+/// Three subfields, each three characters wide:
+///
+/// - Raw data: "001042999"
+/// - Split: "001" | "042" | "999"
+/// - Selected codes: [1, 42, 999]
 #[cfg_attr(
     feature = "pyo3",
     pyclass(module = "triple_s", name = "Spread", from_py_object)

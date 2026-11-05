@@ -50,7 +50,9 @@ use anyhow::{Context, Result};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    exceptions::{self, PyTypeError, PyValueError}, prelude::*, types::{PyDict, PyList, PyString, PyTuple},
+    exceptions::{self, PyTypeError, PyValueError},
+    prelude::*,
+    types::{PyDict, PyList, PyString, PyTuple},
 };
 use quick_xml::{
     events::{BytesText, Event},
@@ -734,7 +736,7 @@ impl Variant {
     /// Returns a mutable `value` field for updating it.
     ///
     /// # Example: Update `value` field
-    /// 
+    ///
     /// ```rust
     /// use triple_s::text::Variant;
     ///
@@ -755,7 +757,7 @@ impl Variant {
     /// Returns a mutable `mode` field for updating it.
     ///
     /// # Example: Update `mode` field
-    /// 
+    ///
     /// ```rust
     /// use triple_s::text::{Mode, Variant};
     ///
@@ -779,7 +781,7 @@ impl Variant {
     /// [`Self::set_language`] to validate the new language tag.
     ///
     /// # Example: Update `language` field
-    /// 
+    ///
     /// ```rust
     /// use triple_s::text::Variant;
     ///
@@ -829,8 +831,8 @@ impl Variant {
     /// check if `other` has same variant as `self`.
     /// very handy.
     ///
-    /// # Example: comparing variants types 
-    /// 
+    /// # Example: comparing variants types
+    ///
     /// ```rust
     /// use triple_s::Variant;
     ///
@@ -954,7 +956,10 @@ impl Variant {
 
     fn __repr__(&self) -> String {
         let value = self.value();
-        let mode = self.mode().map(|item| format!("{:?}", item.to_string())).unwrap_or("None".into());
+        let mode = self
+            .mode()
+            .map(|item| format!("{:?}", item.to_string()))
+            .unwrap_or("None".into());
         let language = self.language().map(|s| format!("{:?}", s)).unwrap_or("None".into());
         format!("Variant(value={value}, mode={mode}, language={language})")
     }

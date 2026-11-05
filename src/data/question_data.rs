@@ -16,19 +16,20 @@ use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 #[cfg(feature = "pyo3")]
 use crate::{
     DataRange,
-    error::InternalError,
     config::DataFrameFormat,
+    error::InternalError,
     prelude::*,
     utils::{
-        anyvalue_to_python, convert_date, convert_time, normalize_py_index, polars_to_pandas,
+        anyvalue_to_python,
+        convert_date,
+        convert_time,
+        normalize_py_index,
+        polars_to_pandas,
     },
 };
 use crate::{
     QuestionType,
-    data::{
-        config::Config,
-        survey_data::SurveyData,
-    },
+    data::{config::Config, survey_data::SurveyData},
     datamap::{Question, Text, Value},
     utils::ArcLock,
 };
@@ -46,7 +47,7 @@ pub struct QuestionData {
 }
 
 /// ---
-/// 
+///
 /// # Fields
 impl QuestionData {
     /// name of the question
@@ -274,16 +275,16 @@ impl QuestionData {
         self.question.response().py_get_data_label(py)
     }
 
-    /// Default DataFrame library used when returning results to Python. 
+    /// Default DataFrame library used when returning results to Python.
     /// Supported values are `"pandas"` and `"polars"`, default `"polars"`
     ///
     /// Note:
-    /// 
+    ///
     /// All DataFrame operations are performed internally using Rust Polars,
     /// regardless of the selected output format.
     ///
     /// When `"pandas"` is selected, the resulting Polars DataFrame is converted
-    /// to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the 
+    /// to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the
     /// computation-heavy stuff are already handled on the Rust side.
     #[getter(dataframe_format)]
     fn py_get_dataframe_format(&self) -> String {

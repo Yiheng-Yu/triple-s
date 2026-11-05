@@ -28,8 +28,8 @@ use crate::{
 };
 
 // Rustdoc always uses the Rust guide, including builds with Python bindings.
-#[cfg_attr(any(not(feature = "pyo3"), doc), doc = include_str!("../doc/datamap.rust.md"))]
-#[cfg_attr(all(feature = "pyo3", not(doc)), doc = include_str!("../doc/datamap.python.rst"))]
+#[cfg_attr(any(not(feature = "pyo3"), doc), doc = include_str!("../doc/datamap_survey_rs.md"))]
+#[cfg_attr(all(feature = "pyo3", not(doc)), doc = include_str!("../doc/datamap_survey_py.rst"))]
 #[cfg_attr(
     feature = "pyo3",
     pyclass(module = "triple_s", name = "Datamap", from_py_object)
