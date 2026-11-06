@@ -10,7 +10,10 @@ use pyo3_polars::error::PyPolarsErr;
 
 #[cfg(feature = "pyo3")]
 use crate::{
-    SurveyInfo, config::{DataFrameFormat, Show}, prelude::*, utils::{anyvalue_to_python, get_type_name},
+    SurveyInfo,
+    config::{DataFrameFormat, Show},
+    prelude::*,
+    utils::{anyvalue_to_python, get_type_name},
 };
 use crate::{
     data::{QuestionData, SurveyData, config::Config},
@@ -313,9 +316,9 @@ impl Survey {
         Ok(())
     }
 
-    /// Flag for indicating how the raw data for single and multi-choices questions 
+    /// Flag for indicating how the raw data for single and multi-choices questions
     /// should be displayed, can be one of ['label', 'value'].
-    /// 
+    ///
     /// Default 'value'
     #[getter(show)]
     fn py_get_show(&self) -> String {

@@ -3,7 +3,6 @@
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 
-
 /// Represents one topline table
 ///
 /// # Fields:
@@ -16,7 +15,7 @@ pub struct ToplineTable {
     /// name of question to be used as the rows of the table
     pub side: String,
     /// top: list of question names used as columns of the table
-    pub top: Vec<String>
+    pub top: Vec<String>,
 }
 
 /// ---
@@ -27,7 +26,7 @@ impl ToplineTable {
     pub fn new(side: impl Into<String>, top: impl Iterator<Item = impl Into<String>>) -> Self {
         Self {
             side: side.into(),
-            top: top.into_iter().map(|item| item.into()).collect()
+            top: top.into_iter().map(|item| item.into()).collect(),
         }
     }
 }

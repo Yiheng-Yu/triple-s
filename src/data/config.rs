@@ -19,14 +19,14 @@ pub struct Config {
     pub py_dataframe_format: DataFrameFormat,
 
     /// Flag for indicating how the raw data for single and multi-choices questions should be displayed.
-    pub show: Show
+    pub show: Show,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             py_dataframe_format: DataFrameFormat::default(),
-            show: Show::default()
+            show: Show::default(),
         }
     }
 }
@@ -76,15 +76,14 @@ impl Flag for DataFrameFormat {
     }
 }
 
-
-/// Flag for indicating how the raw data for single and multi-choices questions 
+/// Flag for indicating how the raw data for single and multi-choices questions
 /// should be displayed.
-/// 
+///
 /// Members:
-/// `Value`: 
+/// `Value`:
 ///     display code value (the `code` attribute of a `<value>` tag).
 ///     i.e., [1, 1, 2, ...]
-/// `Label`: 
+/// `Label`:
 ///     display choice text (content of a `<value>` tag).
 ///     i.e., ["London", "London", "Scotland", ...]
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]

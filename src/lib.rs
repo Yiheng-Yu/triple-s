@@ -238,7 +238,7 @@ mod triple_s {
         text::{Mode, Text, Variant},
     };
     #[pymodule_export]
-    pub use crate::error::{MissingKeyError};
+    pub use crate::error::MissingKeyError;
     #[pymodule_export]
     pub use crate::survey::Survey;
     use crate::{datamap::read::read_from_reader, read_triple_s};

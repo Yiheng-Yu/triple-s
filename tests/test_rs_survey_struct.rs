@@ -41,13 +41,13 @@ fn test_question_view_shares_replacement_and_owns_cache() {
     assert!(!std::path::Path::new(&cache_path).exists());
 }
 
-
 #[test]
 fn test_value_display_toggle() {
     let mut survey = get_survey_struct();
     let question = survey.get_question_data("Q2").unwrap();
     assert_eq!(question.config().show, Show::Value);
 
+    todo!("TODO: ASSERT LABELLING FAILURE!");
     println!("Current: Show::Value | Column");
     println!("{:?}", question.to_column().unwrap());
     println!("Current: Show::Value | Series");

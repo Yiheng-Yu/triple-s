@@ -29,7 +29,11 @@ use crate::{
     },
 };
 use crate::{
-    QuestionType, config::Show, data::{config::Config, survey_data::SurveyData}, datamap::{Question, Text, Value}, utils::ArcLock,
+    QuestionType,
+    config::Show,
+    data::{config::Config, survey_data::SurveyData},
+    datamap::{Question, Text, Value},
+    utils::ArcLock,
 };
 
 /// Data for a single question.
@@ -101,12 +105,10 @@ impl QuestionData {
     pub fn to_column(&self) -> PolarsResult<Column> {
         match self.config().show {
             Show::Value => self.to_value_column(),
-            Show::Label => {
-                match self.question_type() {
-                    QuestionType::Single => self.to_labelled_column_single_choice(),
-                    _ => self.to_value_column()
-                }
-            }
+            Show::Label => match self.question_type() {
+                QuestionType::Single => self.to_labelled_column_single_choice(),
+                _ => self.to_value_column(),
+            },
         }
     }
 
@@ -173,11 +175,7 @@ impl QuestionData {
             .into_iter()
             .map(|(key, val)| (AnyValue::from(key), val.value()))
             .unzip();
-        let keys = Series::from_any_values(
-            self.name().into(),
-            &keys,
-            true,
-        )?;
+        let keys = Series::from_any_values(self.name().into(), &keys, true)?;
         let labels = Series::new("label".into(), values);
         Ok((keys, labels))
     }
@@ -185,16 +183,19 @@ impl QuestionData {
     fn to_labelled_column_single_choice(&self) -> PolarsResult<Column> {
         let (keys, labels) = self.get_datalabel_key_value()?;
         let question_name = self.name();
-        let query = self.lazy()?.select([
-            col(&question_name).replace_strict(lit(keys), lit(labels), None, Some(DataTypeExpr::Literal(DataType::String)))
-        ]);
-        query.collect()?
+        let query = self.lazy()?.select([col(&question_name).replace_strict(
+            lit(keys),
+            lit(labels),
+            None,
+            Some(DataTypeExpr::Literal(DataType::String)),
+        )]);
+        query
+            .collect()?
             .into_columns()
             .into_iter()
             .next()
-            .ok_or(PolarsError::ColumnNotFound(format!(
-                "Unable to find column '{}' in `SurveyData`", 
-                self.name()).into()
+            .ok_or(PolarsError::ColumnNotFound(
+                format!("Unable to find column '{}' in `SurveyData`", self.name()).into(),
             ))
     }
 
@@ -227,7 +228,7 @@ impl QuestionData {
     //         )
 
     // fn label_single_choice(&self) {
-        // self.lazy()?.select()
+    // self.lazy()?.select()
     // }
     // fn label_data(&self, column: Column) -> PolarsResult<Column> {
     //     let hashmap = self.data_label()
