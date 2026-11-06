@@ -112,7 +112,7 @@ impl Response {
     ///
     /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
     /// method will not mutate the caller.
-    pub fn data_label(&self) -> HashMap<Value, Text> {
+    pub fn response_label(&self) -> HashMap<Value, Text> {
         self.values()
             .iter()
             .map(|item| {
@@ -618,14 +618,14 @@ impl Response {
         )
     }
 
-    #[getter(data_label)]
-    pub(crate) fn py_get_data_label<'py>(
+    #[getter(response_label)]
+    pub(crate) fn py_get_response_label<'py>(
         &self,
         py: Python<'py>,
     ) -> PyResult<Bound<'py, PyDict>> {
         let output = PyDict::new(py);
 
-        // iter through instead of calling self.data_label() because HashMap is not ordered
+        // iter through instead of calling self.response_label() because HashMap is not ordered
         for code in self.values().iter() {
             let code = code.read();
             let value = code.value().convert_to_py_any(py);

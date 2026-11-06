@@ -38,7 +38,7 @@ Attributes
 
 Properties
 ^^^^^^^^^^^
-.. :py:property:: triple_s.Question.data_label
+.. :py:property:: triple_s.Question.response_label
       :type: -> Dict[str | int | float, Text]
 
 Methods

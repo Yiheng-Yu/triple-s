@@ -250,7 +250,7 @@ mod triple_s {
     #[pymodule]
     pub mod config {
         #[pymodule_export]
-        pub use crate::config::DataFrameFormat;
+        pub use crate::config::{DataFrameFormat, ResponseDisplay};
     }
 
     /// Read triple-s datamap

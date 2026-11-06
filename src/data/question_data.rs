@@ -6,8 +6,7 @@ use parking_lot::RwLockReadGuard;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    IntoPyObjectExt,
-    exceptions,
+    IntoPyObjectExt, exceptions,
     prelude::*,
     types::{PyDict, PyTuple},
 };
@@ -21,16 +20,12 @@ use crate::{
     error::InternalError,
     prelude::*,
     utils::{
-        anyvalue_to_python,
-        convert_date,
-        convert_time,
-        normalize_py_index,
-        polars_to_pandas,
+        anyvalue_to_python, convert_date, convert_time, normalize_py_index, polars_to_pandas,
     },
 };
 use crate::{
     QuestionType,
-    config::Show,
+    config::ResponseDisplay,
     data::{config::Config, survey_data::SurveyData},
     datamap::{Question, Text, Value},
     utils::ArcLock,
@@ -70,12 +65,24 @@ impl QuestionData {
         Ok(self.data.read().lazy()?.clone().select([col(self.name())]))
     }
 
+    /// Get datamap for the current question
+    #[inline]
+    pub fn datamap(&self) -> &Question {
+        &self.question
+    }
+
+    /// Get mutable view of the datamap for the current question
+    #[inline]
+    pub fn datamap_mut(&mut self) -> &mut Question {
+        &mut self.question
+    }
+
     /// Get the lookup table for items in the [`Question::Response()::values()`] field, as: { [`Code::value`]: [`Code::label()`] }
     ///
     /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
     /// method will not mutate the caller.
-    pub fn data_label(&self) -> HashMap<Value, Text> {
-        self.question.data_label()
+    pub fn response_label(&self) -> HashMap<Value, Text> {
+        self.question.response_label()
     }
 
     /// Configuration options
@@ -103,9 +110,9 @@ impl QuestionData {
 
     /// Export contents to a polars [`Column`]
     pub fn to_column(&self) -> PolarsResult<Column> {
-        match self.config().show {
-            Show::Value => self.to_value_column(),
-            Show::Label => match self.question_type() {
+        match self.config().response_display {
+            ResponseDisplay::Value => self.to_value_column(),
+            ResponseDisplay::Label => match self.question_type() {
                 QuestionType::Single => self.to_labelled_column_single_choice(),
                 _ => self.to_value_column(),
             },
@@ -156,10 +163,10 @@ impl QuestionData {
         // append data label
         let (keys, labels) = self.get_datalabel_key_value()?;
         let height = labels.len();
-        let data_label = DataFrame::new(height, vec![keys.into(), labels.into()])?;
+        let response_label = DataFrame::new(height, vec![keys.into(), labels.into()])?;
 
         df.lazy()
-            .left_join(data_label.lazy(), col(self.name()), col(self.name()))
+            .left_join(response_label.lazy(), col(self.name()), col(self.name()))
             .select([col(self.name()), col("label"), col("count")])
             .collect()
     }
@@ -171,7 +178,7 @@ impl QuestionData {
 
     fn get_datalabel_key_value(&self) -> PolarsResult<(Series, Series)> {
         let (keys, values): (Vec<AnyValue<'_>>, Vec<String>) = self
-            .data_label()
+            .response_label()
             .into_iter()
             .map(|(key, val)| (AnyValue::from(key), val.value()))
             .unzip();
@@ -180,23 +187,45 @@ impl QuestionData {
         Ok((keys, labels))
     }
 
+    /// Convert single quesiton labels -> values
     fn to_labelled_column_single_choice(&self) -> PolarsResult<Column> {
         let (keys, labels) = self.get_datalabel_key_value()?;
         let question_name = self.name();
         let query = self.lazy()?.select([col(&question_name).replace_strict(
-            lit(keys),
+            lit(keys.clone()),
             lit(labels),
             None,
             Some(DataTypeExpr::Literal(DataType::String)),
         )]);
-        query
-            .collect()?
+
+        query.collect()
+            .map_err(|err| {
+                Self::map_missing_label_error(err, &self.name(), &keys)
+            })?
             .into_columns()
             .into_iter()
             .next()
             .ok_or(PolarsError::ColumnNotFound(
                 format!("Unable to find column '{}' in `SurveyData`", self.name()).into(),
             ))
+    }
+    
+    #[inline]
+    fn map_missing_label_error(err: PolarsError, question_name: &str, unique_keys: &Series) -> PolarsError {
+        match &err {
+            PolarsError::ExprContext { error, expr } if expr.contains(".replace_strict") => {
+                if expr.contains(").replace_strict") {
+                    PolarsError::ComputeError(format!(
+                        "Question '{}' contains response values with no matching label, expect to be one of: {}",
+                        question_name,
+                        unique_keys.fmt_list()
+                    ).into())
+                } else {
+                    err
+                }
+            }
+            _ => err
+        }
     }
 
     fn to_value_column(&self) -> PolarsResult<Column> {
@@ -206,42 +235,6 @@ impl QuestionData {
             ),
         )
     }
-
-    // /// Data labelling, used only for `single` and `multiple` question types.
-    // fn label_raw_data(&self) -> PolarsResult<Column> {
-    //     let hashmap = self.data_label()
-    //         .into_iter()
-    //         .map(|(key, val)| (AnyValue::from(key), val.value()))
-    //         .collect::<HashMap<AnyValue<'_>, String>>();
-    //     let question_name = self.name();
-    //     let query = self.lazy()?
-    //         .select([col(&question_name)
-    //         ]);
-    //     query.collect()?
-    //         .into_columns()
-    //         .into_iter()
-    //         .next()
-    //         .ok_or(
-    //             PolarsError::ColumnNotFound(
-    //                 format!("Unable to find column '{}' in `SurveyData`", self.name()).into(),
-    //             ),
-    //         )
-
-    // fn label_single_choice(&self) {
-    // self.lazy()?.select()
-    // }
-    // fn label_data(&self, column: Column) -> PolarsResult<Column> {
-    //     let hashmap = self.data_label()
-    //         .into_iter()
-    //         .map(|(key, val)| (AnyValue::from(key), val.value()))
-    //         .collect::<HashMap<AnyValue, String>>();
-    //     column.take_materialized_series()
-    //         .iter()
-    //         .into_iter()
-    //         .map(|value| hashmap.get(value))
-    //         // .rechunk()?
-
-    // }
 }
 
 #[cfg(feature = "pyo3")]
@@ -350,9 +343,9 @@ impl QuestionData {
     ///
     /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
     /// method will not mutate the caller.
-    #[getter(data_label)]
-    fn py_get_data_label<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        self.question.response().py_get_data_label(py)
+    #[getter(response_label)]
+    fn py_get_response_label<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        self.question.response().py_get_response_label(py)
     }
 
     /// Default DataFrame library used when returning results to Python.
@@ -369,6 +362,12 @@ impl QuestionData {
     #[getter(dataframe_format)]
     fn py_get_dataframe_format(&self) -> String {
         self.config().py_dataframe_format.to_string()
+    }
+
+    /// Controls whether choice responses are represented by their values or labels.
+    #[getter(response_display)]
+    fn py_get_response_display(&self) -> String {
+        self.config().response_display.to_string()
     }
 
     fn __repr__(&self) -> PyResult<String> {

@@ -139,6 +139,22 @@ Attributes
 
 ****
 
+ResponseDisplay
+---------------
+
+.. autoclass:: triple_s.config.ResponseDisplay
+
+Attributes
+^^^^^^^^^^
+
+.. autoattribute:: ResponseDisplay.Value
+   :annotation: -> ResponseDisplay
+
+.. autoattribute:: ResponseDisplay.Label
+   :annotation: -> ResponseDisplay
+
+****
+
 Value
 -----
 

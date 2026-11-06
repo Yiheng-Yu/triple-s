@@ -25,6 +25,9 @@ Attributes
 .. autoattribute:: Survey.dataframe_format
    :annotation: -> str
 
+.. autoattribute:: Survey.response_display
+   :annotation: -> str
+
 Methods
 -------
 

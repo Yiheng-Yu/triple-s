@@ -178,23 +178,23 @@ def test_set_dataframe_format_config_fail(survey):
         survey.dataframe_format = "pppppppolars"
 
 
-def test_set_flag_toggle_show_success(survey):
-    assert survey.show == "value"
+def test_set_flag_toggle_response_display_success(survey):
+    assert survey.response_display == "value"
     
     for question in survey.iter_questions():
-        assert question.show == 'value'
+        assert question.response_display == 'value'
         
-    survey.show = "label"
+    survey.response_display = "label"
     for question in survey.iter_questions():
-        assert question.show == 'label'
+        assert question.response_display == 'label'
         
 
-def test_set_flag_toggle_show_fail(survey):
+def test_set_flag_toggle_response_display_fail(survey):
     with pytest.raises(TypeError):
-        survey.show = None
-        survey.show = []
-        survey.show = lambda s: s
+        survey.response_display = None
+        survey.response_display = []
+        survey.response_display = lambda s: s
     
     with pytest.raises(ValueError):
-        survey.show = ""
-        survey.show = "pppppppolars"
+        survey.response_display = ""
+        survey.response_display = "pppppppolars"

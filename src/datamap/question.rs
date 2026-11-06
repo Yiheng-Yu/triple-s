@@ -501,7 +501,7 @@ impl Question {
     ///
     /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
     /// method will not mutate the caller.
-    pub fn data_label(&self) -> HashMap<Value, Text> {
+    pub fn response_label(&self) -> HashMap<Value, Text> {
         self.response()
             .values()
             .iter()
@@ -1675,9 +1675,9 @@ impl Question {
     ///
     /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
     /// method will not mutate the caller.
-    #[getter(data_label)]
-    fn py_get_data_label<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        self.response().py_get_data_label(py)
+    #[getter(response_label)]
+    fn py_get_response_label<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        self.response().py_get_response_label(py)
     }
 
     /// Parses a question from a Triple-S classic or XML fragment, detecting the

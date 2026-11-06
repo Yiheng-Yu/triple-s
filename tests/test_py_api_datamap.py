@@ -86,7 +86,7 @@ def test_get_empty_datamap():
         assert container.get("") is None
 
 
-def test_question_data_labels():
+def test_question_response_labels():
     labels = [
         dict(value=1, label="item 1"),
         dict(value=2, label="item 2"),
@@ -103,9 +103,9 @@ def test_question_data_labels():
         )
     )
 
-    data_label = question.data_label
-    assert data_label[1] == Text("item 1")
-    assert data_label[2] == Text("item 2")
-    assert data_label[3] == Text("item 3")
-    assert data_label[4] == Text("item 4")
-    assert data_label[5] == Text("item 5")
+    response_label = question.response_label
+    assert response_label[1] == Text("item 1")
+    assert response_label[2] == Text("item 2")
+    assert response_label[3] == Text("item 3")
+    assert response_label[4] == Text("item 4")
+    assert response_label[5] == Text("item 5")

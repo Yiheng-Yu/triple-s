@@ -506,7 +506,7 @@ class Question:
         Changes to the copy do not affect the original.
         """
     @property
-    def data_label(self, /) -> dict:
+    def response_label(self, /) -> dict:
         """
         Get the lookup table for items in the `Question.response.values`, asdictionary of { value: label }
 
@@ -746,7 +746,7 @@ class QuestionData:
         Get a copy of question data as a Python tuple.
         """
     @property
-    def data_label(self, /) -> dict:
+    def response_label(self, /) -> dict:
         """
         Get the lookup table for items in the `Question.response.values`, asdictionary of { value: label }
 
@@ -1008,7 +1008,7 @@ class Response:
         Append a code, rejecting duplicate values and different Value variants.
         """
     @property
-    def data_label(self, /) -> dict: ...
+    def response_label(self, /) -> dict: ...
     @staticmethod
     def from_dict(content: dict) -> Response:
         """

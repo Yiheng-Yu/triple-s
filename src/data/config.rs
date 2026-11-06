@@ -18,15 +18,15 @@ pub struct Config {
     /// Default `Polars`.
     pub py_dataframe_format: DataFrameFormat,
 
-    /// Flag for indicating how the raw data for single and multi-choices questions should be displayed.
-    pub show: Show,
+    /// Controls whether choice responses are represented by their values or labels.
+    pub response_display: ResponseDisplay,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             py_dataframe_format: DataFrameFormat::default(),
-            show: Show::default(),
+            response_display: ResponseDisplay::default(),
         }
     }
 }
@@ -76,8 +76,7 @@ impl Flag for DataFrameFormat {
     }
 }
 
-/// Flag for indicating how the raw data for single and multi-choices questions
-/// should be displayed.
+/// Controls whether choice responses are represented by their values or labels.
 ///
 /// Members:
 /// `Value`:
@@ -88,7 +87,7 @@ impl Flag for DataFrameFormat {
 ///     i.e., ["London", "London", "Scotland", ...]
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Default, Debug, Clone, EnumString, EnumIter, PartialEq, Eq)]
-pub enum Show {
+pub enum ResponseDisplay {
     /// Display code value (the `code` attribute of a `<value>` tag), i.e. [1, 1, 2, ...].
     #[default]
     #[strum(serialize = "value")]
@@ -99,27 +98,27 @@ pub enum Show {
     Label,
 }
 
-impl Show {
+impl ResponseDisplay {
     #[cfg(feature = "pyo3")]
     pub(crate) fn from_py_any<'py>(value: Bound<'py, PyAny>) -> PyResult<Self> {
-        if let Ok(value) = value.extract::<Show>() {
+        if let Ok(value) = value.extract::<ResponseDisplay>() {
             Ok(value)
         } else if let Ok(value) = value.extract::<String>() {
             Self::from_str(&value)
                 .map_err(|_| exceptions::PyValueError::new_err(format!(
-                    "Expect input to be one of ['value', 'label'] or `Show` instance, got: '{}'", value
+                    "Expect input to be one of ['value', 'label'] or `ResponseDisplay` instance, got: '{}'", value
                 )))
         } else {
             let type_name = get_type_name(&value)?;
             Err(exceptions::PyTypeError::new_err(format!(
-                "Expect input to be one of ['value', 'label'] or `Show` instance, got: '{}'",
+                "Expect input to be one of ['value', 'label'] or `ResponseDisplay` instance, got: '{}'",
                 type_name
             )))
         }
     }
 }
 
-impl Flag for Show {
+impl Flag for ResponseDisplay {
     fn to_string(&self) -> String {
         match self {
             Self::Value => "value".into(),

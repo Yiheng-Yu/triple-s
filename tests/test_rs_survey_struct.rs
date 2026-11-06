@@ -1,4 +1,5 @@
-use triple_s::{Survey, SurveyData, config::Show, read_triple_s};
+use polars::prelude::*;
+use triple_s::{Survey, SurveyData, Value, config::ResponseDisplay, read_triple_s};
 
 const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
 const PATH_DATAFILE_V2_0: &str = "tests/sss-examples/sss-2.0/example1.asc";
@@ -42,22 +43,36 @@ fn test_question_view_shares_replacement_and_owns_cache() {
 }
 
 #[test]
-fn test_value_display_toggle() {
+fn test_value_display_success() {
     let mut survey = get_survey_struct();
     let question = survey.get_question_data("Q2").unwrap();
-    assert_eq!(question.config().show, Show::Value);
+    let series_value = question.to_series().unwrap();
+    assert_eq!(series_value.dtype(), &DataType::UInt32);
 
-    todo!("TODO: ASSERT LABELLING FAILURE!");
-    println!("Current: Show::Value | Column");
-    println!("{:?}", question.to_column().unwrap());
-    println!("Current: Show::Value | Series");
-    println!("{:?}", question.to_series().unwrap());
+    survey.config_mut().response_display = ResponseDisplay::Label;
+    assert_eq!(question.config().response_display, ResponseDisplay::Label);
+    let series_label = question.to_series().unwrap();
+    assert_eq!(series_label.dtype(), &DataType::String)
+}
 
-    survey.config_mut().show = Show::Label;
-    assert_eq!(question.config().show, Show::Label);
+#[test]
+fn test_value_display_label_not_found() {
+    let mut survey = get_survey_struct();
+    let mut question = survey.get_question_data("Q2").unwrap();
+    question
+        .datamap_mut()
+        .response_mut()
+        .with_value_write(0, |item| *item.value_mut() = Value::UnSigned(55));
 
-    println!("Current: Show::Label | Column");
-    println!("{:?}", question.to_column().unwrap());
-    println!("Current: Show::Label | Series");
-    println!("{:?}", question.to_series().unwrap());
+    survey.config_mut().response_display = ResponseDisplay::Label;
+    match question.to_series() {
+        Ok(_) => panic!("Error not raised"),
+        // correct error
+        Err(PolarsError::ComputeError(message)) => {
+            assert!(message.contains("contains response values with no matching label"));
+        }
+        Err(error) => {
+            panic!("Wrong type of error raised:\n {:?}", error)
+        }
+    }
 }

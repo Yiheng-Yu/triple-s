@@ -32,7 +32,7 @@ Properties
 .. py:property:: triple_s.Record.num_questions
    :type: int
 
-.. py:property:: triple_s.Record.data_label
+.. py:property:: triple_s.Record.response_label
    :type: Dict[int | float | str, Text]
 
 Methods

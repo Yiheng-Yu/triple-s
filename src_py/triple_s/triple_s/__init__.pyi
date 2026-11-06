@@ -507,7 +507,7 @@ class Question:
         Changes to the copy do not affect the original.
         """
     @property
-    def data_label(self, /) -> dict:
+    def response_label(self, /) -> dict:
         """
         Get the lookup table for items in the `Question.response.values`, asdictionary of { value: label }
 
@@ -748,7 +748,7 @@ class QuestionData:
         Get a copy of question data as a Python tuple.
         """
     @property
-    def data_label(self, /) -> dict:
+    def response_label(self, /) -> dict:
         """
         Get the lookup table for items in the `Question.response.values`, asdictionary of { value: label }
 
@@ -769,6 +769,11 @@ class QuestionData:
         When `"pandas"` is selected, the resulting Polars DataFrame is converted
         to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the
         computation-heavy stuff are already handled on the Rust side.
+        """
+    @property
+    def response_display(self, /) -> str:
+        """
+        Controls whether choice responses are represented by their values or labels.
         """
     @property
     def datamap(self, /) -> Question:
@@ -1034,7 +1039,7 @@ class Response:
         Append a code, rejecting duplicate values and different Value variants.
         """
     @property
-    def data_label(self, /) -> dict: ...
+    def response_label(self, /) -> dict: ...
     @staticmethod
     def from_dict(content: dict) -> Response:
         """
@@ -1243,15 +1248,14 @@ class Survey:
         Total number of responses
         """
     @property
-    def show(self, /) -> str:
+    def response_display(self, /) -> str:
         """
-        Flag for indicating how the raw data for single and multi-choices questions 
-        should be displayed, can be one of ['label', 'value'].
+        Controls whether choice responses are represented by their values or labels; can be 'value' or 'label'.
 
         Default 'value'
         """
-    @show.setter
-    def show(self, /, value: Any) -> None: ...
+    @response_display.setter
+    def response_display(self, /, value: Any) -> None: ...
     @property
     def title(self, /) -> str | None:
         """
