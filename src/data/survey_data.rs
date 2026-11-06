@@ -436,7 +436,7 @@ mod tests {
     }
 
     #[test]
-    fn persistent_source_survives_drop_and_cache_replacement() -> Result<()> {
+    fn test_persistent_source_survives_drop_and_cache_replacement() -> Result<()> {
         let dir = tempfile::tempdir()?;
         let source = dir.path().join("source.parquet");
         let destination = dir.path().join("cache.parquet");
@@ -456,7 +456,7 @@ mod tests {
     }
 
     #[test]
-    fn failed_set_cache_preserves_files_and_removes_staging_file() -> Result<()> {
+    fn test_failed_set_cache_preserves_files_and_removes_staging_file() -> Result<()> {
         let dir = tempfile::tempdir()?;
         let destination = dir.path().join("existing.parquet");
         std::fs::write(&destination, b"keep me")?;

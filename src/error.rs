@@ -5,7 +5,7 @@
 use std::{error::Error, fmt, sync::Arc};
 
 #[cfg(feature = "pyo3")]
-use pyo3::{create_exception, exceptions, types::PyAnyMethods};
+use pyo3::{PyErr, create_exception, exceptions, types::PyAnyMethods};
 use strum::IntoStaticStr;
 
 #[cfg(feature = "pyo3")]
@@ -16,6 +16,34 @@ create_exception!(triple_s, MissingKeyError, pyo3::exceptions::PyException);
 pub(crate) fn missing_key_err(key: &str) -> pyo3::PyErr {
     MissingKeyError::new_err(format!("Missing required key: {}", key))
 }
+
+// #[derive(Debug)]
+// pub struct DifferentSurvey {
+//     pub name_1: String,
+//     pub name_2: String,
+// }
+
+// impl Error for DifferentSurvey {}
+
+// impl fmt::Display for DifferentSurvey {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         write!(
+//             f,
+//             "Unable to proceed because question {:?} and {:?} belongs to two different Surveys.",
+//             self.name_1, self.name_2
+//         )
+//     }
+// }
+
+// #[cfg(feature = "pyo3")]
+// create_exception!(triple_s, NotSameSurvey, pyo3::exceptions::PyException);
+
+// #[cfg(feature = "pyo3")]
+// impl From<DifferentSurvey> for PyErr {
+//     fn from(value: DifferentSurvey) -> Self {
+//         NotSameSurvey::new_err(value.to_string())
+//     }
+// }
 
 /// Error when some part of the code themselves were wrong, usually means
 /// there's something wrong with the code itself.

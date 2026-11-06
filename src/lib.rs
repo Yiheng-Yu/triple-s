@@ -153,7 +153,7 @@ mod datamap;
 mod survey;
 
 pub mod error;
-pub use data::config;
+pub use data::{analysis, config};
 
 mod prelude;
 mod utils;
@@ -238,10 +238,15 @@ mod triple_s {
         text::{Mode, Text, Variant},
     };
     #[pymodule_export]
-    pub use crate::error::MissingKeyError;
+    pub use crate::error::{MissingKeyError};
     #[pymodule_export]
     pub use crate::survey::Survey;
     use crate::{datamap::read::read_from_reader, read_triple_s};
+    #[pymodule]
+    pub mod analysis {
+        #[pymodule_export]
+        pub use crate::analysis::ToplineTable;
+    }
     #[pymodule]
     pub mod config {
         #[pymodule_export]
@@ -287,8 +292,14 @@ mod triple_s {
     }
 
     #[pymodule_init]
-    fn init(_m: &Bound<'_, PyModule>) -> PyResult<()> {
+    fn init(bound: &Bound<'_, PyModule>) -> PyResult<()> {
+        // init python logger
         pyo3_log::init();
+
+        // Set submodules
+        let modules = bound.py().import("sys")?.getattr("modules")?;
+        modules.set_item("triple_s.analysis", bound.getattr("analysis")?)?; // analysis
+        modules.set_item("triple_s.config", bound.getattr("config")?)?; // config
 
         Ok(())
     }

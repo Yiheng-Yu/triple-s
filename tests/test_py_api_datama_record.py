@@ -13,7 +13,7 @@ PATH_SSS_XML_GENERATION_ONE = "tests/sss-examples/sss_xml_1.0.xml"
 def record():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return triple_s.read_datamap(PATH_SSS_XML_GENERATION_ONE)
+        return triple_s.read_datamap(PATH_SSS_XML_GENERATION_ONE).record
 
 
 def xml_content(tree):

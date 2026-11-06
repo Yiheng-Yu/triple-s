@@ -27,10 +27,15 @@ Python API mirrors that of Rusts', with some minor tweaks to accomdate python's 
 
 ### Getting started
 
-Install with:
+Install with `pip`:
 
 ```bash
 pip install triple-s-survey
+```
+
+Or with `uv`:
+```bash
+uv pip install triple-s-survey
 ```
 
 #### Read a triple-s survey file

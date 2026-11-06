@@ -152,7 +152,7 @@ def test_value_counts(survey):
         print(summary)
 
 
-def test_dataframe_format_config(survey):
+def test_set_dataframe_format_config_success(survey):
     assert survey.dataframe_format == 'polars'   # the default
     
     for question in survey.iter_questions():
@@ -164,3 +164,37 @@ def test_dataframe_format_config(survey):
     for question in survey.iter_questions():
         assert question.dataframe_format == 'pandas'
         assert type(question.value_counts()) == pandas.DataFrame
+
+
+def test_set_dataframe_format_config_fail(survey):
+    with pytest.raises(TypeError):
+        survey.dataframe_format = None
+        survey.dataframe_format = 3.14
+        survey.dataframe_format = []
+        survey.dataframe_format = lambda s: s
+    
+    with pytest.raises(ValueError):
+        survey.dataframe_format = ""
+        survey.dataframe_format = "pppppppolars"
+
+
+def test_set_flag_toggle_show_success(survey):
+    assert survey.show == "value"
+    
+    for question in survey.iter_questions():
+        assert question.show == 'value'
+        
+    survey.show = "label"
+    for question in survey.iter_questions():
+        assert question.show == 'label'
+        
+
+def test_set_flag_toggle_show_fail(survey):
+    with pytest.raises(TypeError):
+        survey.show = None
+        survey.show = []
+        survey.show = lambda s: s
+    
+    with pytest.raises(ValueError):
+        survey.show = ""
+        survey.show = "pppppppolars"

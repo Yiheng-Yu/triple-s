@@ -3026,7 +3026,7 @@ mod test {
     }
 
     #[test]
-    fn fixed_width_locations_count_unicode_characters() {
+    fn test_fixed_width_locations_count_unicode_characters() {
         let row = "中é😀文 42";
         for ((start, end), expected) in [
             ((1, 1), "中"),

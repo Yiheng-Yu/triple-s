@@ -10,10 +10,7 @@ use pyo3_polars::error::PyPolarsErr;
 
 #[cfg(feature = "pyo3")]
 use crate::{
-    SurveyInfo,
-    config::DataFrameFormat,
-    prelude::*,
-    utils::{anyvalue_to_python, get_type_name},
+    SurveyInfo, config::{DataFrameFormat, Show}, prelude::*, utils::{anyvalue_to_python, get_type_name},
 };
 use crate::{
     data::{QuestionData, SurveyData, config::Config},
@@ -172,9 +169,13 @@ impl Survey {
             q_repr
         };
 
-        // configuration options
+        // Config: dataframe library
         let dataframe_format = self.config().py_dataframe_format.to_string();
         content.push(("dataframe_format", dataframe_format));
+
+        // Config: return label or value
+        let show = self.config().show.to_string();
+        content.push(("show", show));
 
         // formatting
         let value = content
@@ -309,6 +310,21 @@ impl Survey {
     #[setter(dataframe_format)]
     fn py_set_dataframe_format(&mut self, value: Bound<'_, PyAny>) -> PyResult<()> {
         self.config_mut().py_dataframe_format = DataFrameFormat::from_py_any(value)?;
+        Ok(())
+    }
+
+    /// Flag for indicating how the raw data for single and multi-choices questions 
+    /// should be displayed, can be one of ['label', 'value'].
+    /// 
+    /// Default 'value'
+    #[getter(show)]
+    fn py_get_show(&self) -> String {
+        self.config().show.to_string()
+    }
+
+    #[setter(show)]
+    fn py_set_show(&mut self, value: Bound<'_, PyAny>) -> PyResult<()> {
+        self.config_mut().show = Show::from_py_any(value)?;
         Ok(())
     }
 

@@ -1,4 +1,4 @@
-from . import config as config
+from . import analysis as analysis, config as config
 from _typeshed import Incomplete
 from collections.abc import Sequence
 from typing import Any, Final, final
@@ -740,6 +740,7 @@ class QuestionData:
     """
     def __getitem__(self, index: int, /) -> Any: ...
     def __iter__(self, /) -> Any: ...
+    def __new__(cls, /) -> QuestionData: ...
     def __repr__(self, /) -> str: ...
     @property
     def data(self, /) -> tuple:
@@ -757,7 +758,7 @@ class QuestionData:
     @property
     def dataframe_format(self, /) -> str:
         """
-        Default DataFrame library used when returning results to Python. 
+        Default DataFrame library used when returning results to Python.
         Supported values are `"pandas"` and `"polars"`, default `"polars"`
 
         Note:
@@ -766,7 +767,7 @@ class QuestionData:
         regardless of the selected output format.
 
         When `"pandas"` is selected, the resulting Polars DataFrame is converted
-        to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the 
+        to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the
         computation-heavy stuff are already handled on the Rust side.
         """
     @property
@@ -1171,7 +1172,7 @@ class Spread:
 @final
 class Survey:
     """
-    Triple-s survey.
+    Survey object
     """
     def __getitem__(self, index: Any, /) -> Any: ...
     def __iter__(self, /) -> Any:
@@ -1196,7 +1197,7 @@ class Survey:
     @property
     def dataframe_format(self, /) -> str:
         """
-        Default DataFrame library used when returning results to Python. 
+        Default DataFrame library used when returning results to Python.
         Supported values are `"pandas"` and `"polars"`, default `"polars"`
 
         Note:
@@ -1205,7 +1206,7 @@ class Survey:
         regardless of the selected output format.
 
         When `"pandas"` is selected, the resulting Polars DataFrame is converted
-        to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the 
+        to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the
         computation-heavy stuff are already handled on the Rust side.
         """
     @dataframe_format.setter
@@ -1241,6 +1242,16 @@ class Survey:
         """
         Total number of responses
         """
+    @property
+    def show(self, /) -> str:
+        """
+        Flag for indicating how the raw data for single and multi-choices questions 
+        should be displayed, can be one of ['label', 'value'].
+
+        Default 'value'
+        """
+    @show.setter
+    def show(self, /, value: Any) -> None: ...
     @property
     def title(self, /) -> str | None:
         """

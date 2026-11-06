@@ -315,8 +315,11 @@ impl Text {
     ///
     /// # Example: Conditionally return text variant
     ///
-    /// ```
-    /// use triple_s::{Mode, Text, Variant};
+    /// ```rust
+    /// use triple_s::{
+    ///     DeepCopy,
+    ///     text::{Mode, Text, Variant},
+    /// };
     ///
     /// // Create a instance with 3 variants
     /// let variant_1 = Variant::new("Variant 1", Some("interview"), Some("en-us"))?;
@@ -324,9 +327,9 @@ impl Text {
     /// let variant_3 = Variant::new("Variant 3", Some("analysis"), Some("en-us"))?;
     ///
     /// let mut text = Text::new("Main text");
-    /// text.add_variant(variant_1)?;
-    /// text.add_variant(variant_2)?;
-    /// text.add_variant(variant_3)?;
+    /// text.add_variant(variant_1.deepcopy())?;
+    /// text.add_variant(variant_2.deepcopy())?;
+    /// text.add_variant(variant_3.deepcopy())?;
     ///
     /// // Get the main text
     /// let main_text = text.display(None, None)?;
@@ -345,7 +348,7 @@ impl Text {
     /// assert_eq!(var_3_got, variant_3.value());
     ///
     /// // Raises error if the nominated variant was not found
-    /// assert!(text.display(Some(Mode::Interview), Some("tr")).is_err())
+    /// assert!(text.display(Some(Mode::Interview), Some("tr")).is_err());
     ///
     /// # Ok::<(), anyhow::Error>(())
     /// ```

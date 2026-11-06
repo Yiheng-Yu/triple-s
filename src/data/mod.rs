@@ -1,3 +1,4 @@
+pub mod analysis;
 pub mod config;
 mod question_data;
 mod survey_data;

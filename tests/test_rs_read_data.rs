@@ -1,8 +1,19 @@
 use polars::prelude::AnyValue;
-use triple_s::{QuestionOptions, QuestionType, Record, read_datamap};
+use triple_s::{QuestionOptions, QuestionType, Record, Survey, read_datamap, read_triple_s};
 
 const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
 const PATH_DATAFILE_V2_0: &str = "tests/sss-examples/sss-2.0/example1.asc";
+
+fn get_example_1() -> Survey {
+    read_triple_s(PATH_DATAMAP_V2_0, Some(PATH_DATAFILE_V2_0)).unwrap()
+}
+
+#[test]
+fn test_read_survey() {
+    let survey = get_example_1();
+    assert!(survey.has_data());
+    assert_eq!(survey.num_response().unwrap(), 3);
+}
 
 #[test]
 fn test_create_parquet() {
@@ -14,7 +25,7 @@ fn test_create_parquet() {
 }
 
 #[test]
-fn csv_and_fixed_examples_load_equivalent_responses() {
+fn test_csv_and_fixed_examples_load_equivalent_responses() {
     let mut csv = read_datamap("tests/sss-examples/sss-2.0/example2.sss").unwrap();
     let csv_data =
         csv.record_mut().load_data("tests/sss-examples/sss-2.0/example2.csv").unwrap();
@@ -43,7 +54,7 @@ fn csv_and_fixed_examples_load_equivalent_responses() {
 }
 
 #[test]
-fn invalid_utf8_is_replaced_in_fixed_and_csv_data() {
+fn test_invalid_utf8_is_replaced_in_fixed_and_csv_data() {
     use std::io::Write;
 
     for (example, extension) in [(1, "asc"), (2, "csv")] {
@@ -74,7 +85,7 @@ fn invalid_utf8_is_replaced_in_fixed_and_csv_data() {
 }
 
 #[test]
-fn malformed_utf8_at_field_boundaries_and_eof_is_replaced() {
+fn test_malformed_utf8_at_field_boundaries_and_eof_is_replaced() {
     use std::{io::Write, sync::Arc};
 
     for (bytes, expected) in [
