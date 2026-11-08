@@ -28,6 +28,7 @@ Attributes
 
 Methods
 ^^^^^^^
+
 .. automethod:: Version.available_options() -> list[str]
 
 ****

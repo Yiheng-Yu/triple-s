@@ -19,7 +19,6 @@ class Code:
     def __eq__(self, other: object, /) -> bool: ...
     def __new__(cls, /, value: Any, label: Any |None, filter: Any |None, score: Any |None) -> Code:
         """
-        
         Create a Code instance.
         
         Args:
@@ -42,7 +41,6 @@ class Code:
     @staticmethod
     def float(value: "float", label: "Option[str]" = None, filter: "Option[str]" = None, score: "Option[str]" = None) -> Code:
         """
-        
         Create a code with a floating-point value.
         
         Args:
@@ -55,12 +53,10 @@ class Code:
         
         Returns:
             Code: The constructed Code instance.
-        
         """
     @staticmethod
     def from_dict(content: dict) -> Code:
         """
-        
         creates new instance from dictionary with the following keys:
         
         'value' (float|int|str):
@@ -81,7 +77,6 @@ class Code:
         
         Returns:
             Code: The constructed Code instance.
-        
         """
     @property
     def label(self, /) -> Text:
@@ -101,7 +96,6 @@ class Code:
     @staticmethod
     def signed(value: "float", label: "Option[str]" = None, filter: "Option[str]" = None, score: "Option[str]" = None) -> Code:
         """
-        
         Create a code with a signed integer value.
         
         Args:
@@ -114,12 +108,10 @@ class Code:
         
         Returns:
             Code: The constructed Code instance.
-        
         """
     @staticmethod
     def string(value: "str", label: "Option[str]" = None, filter: "Option[str]" = None, score: "Option[str]" = None) -> Code:
         """
-        
         Used for questions of type 'Single/ Multiple/ Date/ Time'
         
         Args:
@@ -132,12 +124,10 @@ class Code:
         
         Returns:
             Code: The constructed Code instance.
-        
         """
     @staticmethod
     def unsigned(value: "int", label: "Option[str]" = None, filter: "Option[str]" = None, score: "Option[str]" = None) -> Code:
         """
-        
         Used for questions of type 'Single/ Multiple/ Date/ Time'
         
         Args:
@@ -150,7 +140,6 @@ class Code:
         
         Returns:
             Code: The constructed Code instance.
-        
         """
     @property
     def value(self, /) -> Any:
@@ -243,7 +232,6 @@ class DataRange:
     def __eq__(self, other: object, /) -> bool: ...
     def __new__(cls, /, start: Any, end: Any) -> DataRange:
         """
-        
         Create a DataRange instance.
         
         Args:
@@ -264,7 +252,6 @@ class DataRange:
     @staticmethod
     def float(start: float, end: float) -> DataRange:
         """
-        
         creates a new instance with values being decimals.
         This is used for questions of 'quantity' type only.
         
@@ -274,12 +261,10 @@ class DataRange:
         
         Returns:
             DataRange: The constructed DataRange instance.
-        
         """
     @staticmethod
     def from_dict(content: dict) -> DataRange:
         """
-        
         creates new instance from dictionary with the following keys:
         
         - start (float|int|str): start of a data range
@@ -290,12 +275,10 @@ class DataRange:
         
         Returns:
             DataRange: The constructed DataRange instance.
-        
         """
     @staticmethod
     def signed(start: int, end: int) -> DataRange:
         """
-        
         creates a new instance with values being integers that can either be
         positive/ negative. This is used for questions of 'quantity' type
         only.
@@ -306,7 +289,6 @@ class DataRange:
         
         Returns:
             DataRange: The constructed DataRange instance.
-        
         """
     @property
     def start(self, /) -> Any:
@@ -318,7 +300,6 @@ class DataRange:
     @staticmethod
     def unsigned(start: int, end: int) -> DataRange:
         """
-        
         creates a new instance with values being exclusively positive integers.
         This is used for questions of 'single', 'multiple', and 'date/ time'
         types.
@@ -329,7 +310,6 @@ class DataRange:
         
         Returns:
             DataRange: The constructed DataRange instance.
-        
         """
 
 @final
@@ -425,7 +405,6 @@ class Datamap:
     @staticmethod
     def from_dict(content: dict) -> Datamap:
         """
-        
         Create a datamap from a dictionary that contains keys 'survey_info' and 'record':
         
         Args:
@@ -453,7 +432,6 @@ class Datamap:
         """
     def get(self, /, question_name: "str") -> Question |None:
         """
-        
         get question by question name, returns `None` if question name not exist.
         
         Args:
@@ -461,7 +439,6 @@ class Datamap:
         
         Returns:
             Question | None: The matching question, or None if it does not exist.
-        
         """
     @property
     def info(self, /) -> SurveyInfo:
@@ -470,7 +447,6 @@ class Datamap:
         """
     def load_data(self, /, path: "str") -> SurveyData:
         """
-        
         Load an `.asc` or `.csv` file using the record's skip setting.
         Invalid Unicode sequences become `�` (U+FFFD).
         Returns `SurveyData` and updates the record's `href` and `data_format`.
@@ -481,7 +457,6 @@ class Datamap:
         
         Returns:
             SurveyData: The loaded respondent data.
-        
         """
     @property
     def num_questions(self, /) -> int:
@@ -508,21 +483,17 @@ class Datamap:
     def title(self, /, title: str |None) -> None: ...
     def to_classic(self, /) -> str:
         """
-        
         export content of datamap to triple-s classic string.
         
         Returns:
             str: The Triple-S Classic representation.
-        
         """
     def to_xml(self, /) -> str:
         """
-        
         Serialises the survey as a complete Triple-S XML `<sss>` document.
         
         Returns:
             str: The Triple-S XML representation.
-        
         """
 
 @final
@@ -543,7 +514,6 @@ class Location:
     def __eq__(self, other: object, /) -> bool: ...
     def __new__(cls, /, start: "int", finish: "int" = None) -> Location:
         """
-        
         Raises `ValueError` if `finish` is less than `start`.
         
         Args:
@@ -576,7 +546,6 @@ class Location:
     @staticmethod
     def from_dict(value: dict) -> Location:
         """
-        
         Creates new instance from dictionary with the following keys:
         
         'start' (int): start of a data location
@@ -587,7 +556,6 @@ class Location:
         
         Returns:
             Location: The constructed Location instance.
-        
         """
     @property
     def start(self, /) -> int:
@@ -665,7 +633,6 @@ class Question:
         """
     def __new__(cls, /, name: "str", question_type: "str|QuestionType|None", label: "str" = None, filter: "str" = None, format: "'numeric'|'literal'|None" = None, usage: "'serial'|'weight'|None" = None, location: Location |None = None, spread: Spread |None = None) -> Question:
         """
-        
         Create a question with index zero and an empty response definition.
         Accepts a type name or a `QuestionType` flag; optional metadata defaults
         to `None`.
@@ -699,13 +666,11 @@ class Question:
         """
     def copy(self, /) -> Question:
         """
-        
         Creates an independent deep copy of this question.
         Changes to the copy do not affect the original.
         
         Returns:
             Question: An independent deep copy of this instance.
-        
         """
     @property
     def filter(self, /) -> str |None:
@@ -724,7 +689,6 @@ class Question:
     @property
     def format(self, /) -> str |None:
         """
-        
         Flag for indicating the data type of `code` field in a <value> node.
         Only used for `Single` type of questions.
         
@@ -754,7 +718,6 @@ class Question:
     @staticmethod
     def from_dict(content: dict) -> Question:
         """
-        
         Create new [ `Question` ] instance from dictionary with following keys and
         values:
         
@@ -796,12 +759,10 @@ class Question:
         
         Returns:
             Question: The constructed Question instance.
-        
         """
     @staticmethod
     def from_string(question_fragment: "str") -> Question:
         """
-        
         Parses a question from a Triple-S classic or XML fragment, detecting the
         format automatically. Raises `ValueError` if the fragment cannot be
         parsed into a question.
@@ -903,7 +864,6 @@ class Question:
         """
     def set_location(self, /, start: "int" = None, finish: "int" = None) -> None:
         """
-        
         Updates data location of the current question.
         
         Keyword Args:
@@ -927,7 +887,6 @@ class Question:
     @property
     def spread(self, /) -> Spread |None:
         """
-        
         Returns the optional `<spread>` layout for a multiple-response variable.
         
         `spread` field controls how to parse response data of questions with
@@ -944,21 +903,17 @@ class Question:
         """
     def to_classic(self, /) -> str:
         """
-        
         Serialises the question as a Triple-S classic `VARIABLE` block.
         
         Returns:
             str: The Triple-S Classic representation.
-        
         """
     def to_xml(self, /) -> str:
         """
-        
         Serialises the question as a Triple-S XML `<variable>` element.
         
         Returns:
             str: The Triple-S XML representation.
-        
         """
     @property
     def type(self, /) -> str |None: ...
@@ -990,7 +945,6 @@ class QuestionData:
     def __iter__(self, /) -> Any: ...
     def __new__(cls, /) -> QuestionData:
         """
-        
         Create a QuestionData instance.
         
         Raises:
@@ -1060,30 +1014,24 @@ class QuestionData:
         """
     def to_list(self, /) -> Any:
         """
-        
         Export the answers as a list.
         
         Returns:
             list: The response values in row order.
-        
         """
     def to_pandas(self, /) -> Any:
         """
-        
         Export the answers as a pandas Series object.
         
         Returns:
             pandas.Series: The respondent data in pandas format.
-        
         """
     def to_polars(self, /) -> Incomplete:
         """
-        
         Return the answers as a polars Series.
         
         Returns:
             polars.Series: The respondent data in Polars format.
-        
         """
     @property
     def type(self, /) -> str |None:
@@ -1092,7 +1040,6 @@ class QuestionData:
         """
     def value_counts(self, /, count_nan: "bool" = None, format: "'polars'|'pandas'|DataFrameFormat" = None) -> Any:
         """
-        
         Count unique values of this question data.
         
         This function basically calls ``poalrs.Series.value_counts`` under the hood, apart from multi-choice
@@ -1159,12 +1106,10 @@ class QuestionType:
     @staticmethod
     def available_options() -> list[str]:
         """
-        
         List the available QuestionType values.
         
         Returns:
             list[str]: Accepted string values for this enumeration.
-        
         """
 
 @final
@@ -1177,7 +1122,6 @@ class Record:
     def __len__(self, /) -> int: ...
     def add_question(self, /, question: Question) -> None:
         """
-        
         Add a question to the current [ `Record` ] instance
         
         Would overwrite existing item if question with the same name already exists.
@@ -1187,7 +1131,6 @@ class Record:
         
         Returns:
             None: This method updates or validates the existing object in place.
-        
         """
     @property
     def content(self, /) -> tuple:
@@ -1208,7 +1151,6 @@ class Record:
     @staticmethod
     def empty() -> Record:
         """
-        
         Creates a new empty [`Record`] instance.
         
         Returns:
@@ -1227,7 +1169,6 @@ class Record:
     @staticmethod
     def from_dict(content: dict) -> Record:
         """
-        
         Create new instance from dictionary with the following keys:
         
         'ident' (str|None, *optional*):
@@ -1250,11 +1191,9 @@ class Record:
         
         Returns:
             Record: The constructed Record instance.
-        
         """
     def get(self, /, question_name: "str") -> Question |None:
         """
-        
         Get a question by name, returning `None` if it doesn't exist.
         
         Name matching is not case sensitive.
@@ -1264,7 +1203,6 @@ class Record:
         
         Returns:
             Question | None: The matching question, or None if it does not exist.
-        
         """
     @property
     def href(self, /) -> str |None:
@@ -1290,7 +1228,6 @@ class Record:
         """
     def load_data(self, /, path_data: str) -> SurveyData:
         """
-        
         Load respondent data and return `SurveyData`, updating `href` and `data_format`.
         Invalid Unicode sequences become `�` (U+FFFD).
         
@@ -1299,7 +1236,6 @@ class Record:
         
         Returns:
             SurveyData: The loaded respondent data.
-        
         """
     @property
     def num_questions(self, /) -> int:
@@ -1313,7 +1249,6 @@ class Record:
         """
     def remove_question(self, /, question_name: str) -> Question |None:
         """
-        
         Remove a question from current record, returns the removed question.
         
         Name matching is case insensitive.
@@ -1323,7 +1258,6 @@ class Record:
         
         Returns:
             Question | None: An independent copy of the removed question, or None if it was not found.
-        
         """
     @property
     def skip(self, /) -> str |None:
@@ -1338,16 +1272,13 @@ class Record:
     def skip(self, /, skip: str |None) -> None: ...
     def to_xml(self, /) -> str:
         """
-        
         Create a Record instance.
         
         Returns:
             str: The Triple-S XML representation.
-        
         """
     def validate_data(self, /, path: str) -> None:
         """
-        
         Validate an `.asc` or `.csv` file without changing metadata or loading data.
         Invalid Unicode sequences become `�` (U+FFFD).
         Use `load_data(path)` to load respondent data.
@@ -1357,7 +1288,6 @@ class Record:
         
         Returns:
             None: None if validation succeeds.
-        
         """
 
 @final
@@ -1388,7 +1318,6 @@ class Response:
     def __getitem__(self, index: Any, /) -> Any: ...
     def __new__(cls, /, range: "DataRange" = None, values: "list[Code]" = None) -> Response:
         """
-        
         Create response codes with an optional range.
         
         Keyword Args:
@@ -1397,12 +1326,10 @@ class Response:
         
         Returns:
             Response: The constructed Response instance.
-        
         """
     def __repr__(self, /) -> str: ...
     def add_value(self, /, value: Code) -> None:
         """
-        
         Append a code, rejecting duplicate values and different Polars data types.
         
         Args:
@@ -1410,12 +1337,10 @@ class Response:
         
         Returns:
             None: This method updates or validates the existing object in place.
-        
         """
     @staticmethod
     def from_dict(content: dict) -> Response:
         """
-        
         create new instance from dictionary with the following keys:
         
         'range' (dict|DataRange|None, *optional*):
@@ -1429,11 +1354,9 @@ class Response:
         
         Returns:
             Response: The constructed Response instance.
-        
         """
     def get_value(self, /, value: "str|int|float") -> Code |None:
         """
-        
         get [ `Code` ] inside `self.values` with `code.value` given.
         
         Returns `None` if the input `code` was not found.
@@ -1443,7 +1366,6 @@ class Response:
         
         Returns:
             Code | None: The matching code, or None if it does not exist.
-        
         """
     @property
     def range(self, /) -> DataRange |None:
@@ -1458,7 +1380,6 @@ class Response:
     def response_label(self, /) -> dict: ...
     def set_value(self, /, value: Code) -> None:
         """
-        
         Update or append a code, rejecting different Polars data types.
         Will overwrite existing code if they share the same 'code' attribute.
         
@@ -1467,7 +1388,6 @@ class Response:
         
         Returns:
             None: This method updates or validates the existing object in place.
-        
         """
     @property
     def values(self, /) -> tuple:
@@ -1549,9 +1469,6 @@ class Spread:
     def __eq__(self, other: object, /) -> bool: ...
     def __new__(cls, /, num_subfields: int, subfield_width: int |None = None) -> Spread:
         """
-        
-        
-        
         Args:
             num_subfields (int): Number of response subfields.
         
@@ -1573,7 +1490,6 @@ class Spread:
     @staticmethod
     def from_dict(value: dict) -> Spread:
         """
-        
         Creates new instance from dictionary with the following keys:
         
         'num_subfields' (int): number of subfields.
@@ -1584,7 +1500,6 @@ class Spread:
         
         Returns:
             Spread: The constructed Spread instance.
-        
         """
     @property
     def num_subfields(self, /) -> int:
@@ -1623,7 +1538,6 @@ class Survey:
         """
     def __new__(cls, /, datamap: "Datamap", data: "SurveyData" = None) -> Survey:
         """
-        
         Creates new `Survey` instance
         
         Args:
@@ -1634,7 +1548,6 @@ class Survey:
         
         Returns:
             Survey: The constructed Survey instance.
-        
         """
     def __repr__(self, /) -> str: ...
     @property
@@ -1671,12 +1584,10 @@ class Survey:
         """
     def has_data(self, /) -> bool:
         """
-        
         Check if data loaded or not
         
         Returns:
             bool: Whether respondent data is loaded.
-        
         """
     @property
     def info(self, /) -> SurveyInfo:
@@ -1685,21 +1596,17 @@ class Survey:
         """
     def iter_questions(self, /) -> Any:
         """
-        
         Iterate over the survey questions and their response data.
         
         Returns:
             Iterator[QuestionData]: An iterator over question data in survey order.
-        
         """
     def iter_rows(self, /) -> Any:
         """
-        
         Iter each individual respondant data
         
         Returns:
             Iterator[dict[str, object]]: An iterator over respondent rows.
-        
         """
     @property
     def name(self, /) -> str |None:
@@ -1739,27 +1646,22 @@ class SurveyData:
     def __repr__(self, /) -> str: ...
     def describe(self, /) -> Any:
         """
-        
         Get a brief overview of each column of data, equivalent of `self.to_polars().describe()`
         
         Returns:
             polars.DataFrame: Summary statistics for the data columns.
-        
         """
     @staticmethod
     def empty() -> SurveyData:
         """
-        
         Create new empty [`SurveyData`] instance
         
         Returns:
             SurveyData: The constructed SurveyData instance.
-        
         """
     @staticmethod
     def from_polars(frame: Incomplete) -> SurveyData:
         """
-        
         Create new [`SurveyData`] instance from `polars.DataFrame`
         
         Args:
@@ -1767,16 +1669,13 @@ class SurveyData:
         
         Returns:
             SurveyData: The constructed SurveyData instance.
-        
         """
     def has_data(self, /) -> bool:
         """
-        
         Check if data loaded or not
         
         Returns:
             bool: Whether respondent data is loaded.
-        
         """
     @property
     def num_response(self, /) -> int: ...
@@ -1787,21 +1686,17 @@ class SurveyData:
         """
     def to_pandas(self, /) -> Any:
         """
-        
         Export loaded data as a pandas DataFrame
         
         Returns:
             pandas.DataFrame: The respondent data in pandas format.
-        
         """
     def to_polars(self, /) -> Any:
         """
-        
         Export data as polars DataFrame
         
         Returns:
             polars.DataFrame: The respondent data in Polars format.
-        
         """
 
 @final
@@ -1829,7 +1724,6 @@ class SurveyInfo:
     """
     def __new__(cls, /, version: "str | float", name: "str | None" = None, title: "str | None" = None, date: "str | None" = None, time: "str | None" = None, origin: "str | None" = None, user: "str | None" = None, style: "str | None" = None, language_options: "list[str] | None" = None, mode_options: "list[Mode | str | None] | None" = None, standard: "str | None" = None) -> SurveyInfo:
         """
-        
         Create datamap metadata for a Triple-S version given as a string or
         float.
         
@@ -1870,7 +1764,6 @@ class SurveyInfo:
     @staticmethod
     def from_dict(content: dict) -> SurveyInfo:
         """
-        
         Create survey metadata from a dictionary. `version` is required;
         other metadata fields are optional and default to `None` or an empty
         options list.
@@ -1880,7 +1773,6 @@ class SurveyInfo:
         
         Returns:
             SurveyInfo: The constructed SurveyInfo instance.
-        
         """
     @property
     def language_options(self, /) -> tuple:
@@ -1947,7 +1839,6 @@ class SurveyInfo:
     def title(self, /, title: str |None) -> None: ...
     def to_dict(self, /) -> "dict[str, str]":
         """
-        
         Export contents to a dictionary.
         
         Returns:
@@ -2011,7 +1902,6 @@ class Text:
     def __eq__(self, other: object, /) -> bool: ...
     def __new__(cls, /, value: str, variants: Sequence[Variant] |None = None) -> Text:
         """
-        
         Create default text with an optional list of variants.
         
         Args:
@@ -2035,7 +1925,6 @@ class Text:
     def __repr__(self, /) -> str: ...
     def add_variant(self, /, variant: Any, mode: str |None = None, language: str |None = None) -> None:
         """
-        
         Append a text variant.
         
         Args:
@@ -2054,7 +1943,6 @@ class Text:
     @staticmethod
     def from_dict(content: dict) -> Text:
         """
-        
         Create a new [`Text`] instance from a dictionary with the following
         keys:
         
@@ -2068,11 +1956,9 @@ class Text:
         
         Returns:
             Text: The constructed Text instance.
-        
         """
     def remove_variant(self, /, index: int) -> Variant:
         """
-        
         Remove a text variant by index.
         
         Args:
@@ -2080,11 +1966,9 @@ class Text:
         
         Returns:
             Variant: The removed text variant.
-        
         """
     def to_dict(self, /) -> dict:
         """
-        
         Convert contents of current isntance to a dictionary.
         
         Instance with same content can later be constructed again via `from_dict` method.
@@ -2147,12 +2031,10 @@ class Usage:
     @staticmethod
     def available_options() -> list[str]:
         """
-        
         List the available Usage values.
         
         Returns:
             list[str]: Accepted string values for this enumeration.
-        
         """
 
 @final
@@ -2208,7 +2090,6 @@ class Variant:
     def __hash__(self, /) -> int: ...
     def __new__(cls, /, value: "str", mode: "'analysis'|'interview'|Mode|None" = None, language: "str|None" = None) -> Variant:
         """
-        
         Create a text variant.
         
         Mode and language default to `None`.
@@ -2239,17 +2120,14 @@ class Variant:
     def __repr__(self, /) -> str: ...
     def copy(self, /) -> Variant:
         """
-        
         makes deepcopy of the current instance.
         
         Returns:
             Variant: An independent deep copy of this instance.
-        
         """
     @staticmethod
     def from_dict(content: dict) -> Variant:
         """
-        
         Create new `Variant` instance from dictionary with the following keys:
         
         - 'value' (str): content of the text variant
@@ -2305,7 +2183,6 @@ class Variant:
     def mode(self, /, mode: str |None) -> None: ...
     def to_dict(self, /) -> dict:
         """
-        
         Convert to dictionary
         
         Returns:
@@ -2362,12 +2239,10 @@ class Version:
     @staticmethod
     def available_options() -> list[str]:
         """
-        
         List the available Version values.
         
         Returns:
             list[str]: Accepted string values for this enumeration.
-        
         """
 
 def read_datamap(path_datamap: "str") -> Datamap:

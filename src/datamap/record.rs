@@ -22,14 +22,14 @@ use quick_xml::Writer;
 use rayon::prelude::*;
 use strum::{EnumIter, EnumString};
 
-use super::{ArcLock, Question};
 #[cfg(feature = "pyo3")]
 use crate::utils::{extract_indicies, get_type_name, normalize_py_index, py_value_error};
 use crate::{
     SurveyData,
+    Question,
     error::{self, InvalidArg},
     prelude::{DeepCopy, Flag},
-    utils::{TextReader, lock_it_up},
+    utils::{ArcLock, TextReader, lock_it_up},
 };
 
 const BATCH_SIZE: usize = 500; // no. rows when writing to paquet cache

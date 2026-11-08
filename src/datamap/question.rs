@@ -2861,7 +2861,9 @@ impl QuestionType {
 
 #[cfg(test)]
 mod test {
+    use crate::datamap::{Variant, datamap::test::normalize_xml};
     use strum::IntoEnumIterator;
+    use super::*;
 
     #[test]
     fn test_qtype_from_str() {
@@ -2874,8 +2876,6 @@ mod test {
         }
     }
 
-    use super::*;
-    use crate::datamap::{Variant, test::normalize_xml};
 
     fn new_empty_question() -> Question {
         Question::new(
