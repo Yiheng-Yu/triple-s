@@ -1,5 +1,5 @@
 use polars::prelude::*;
-use triple_s::{Survey, SurveyData, Value, config::ResponseDisplay, read_triple_s};
+use triple_s::{Survey, SurveyData, config::ResponseDisplay, read_triple_s};
 
 const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
 const PATH_DATAFILE_V2_0: &str = "tests/sss-examples/sss-2.0/example1.asc";
@@ -62,7 +62,7 @@ fn test_value_display_label_not_found() {
     question
         .datamap_mut()
         .response_mut()
-        .with_value_write(0, |item| *item.value_mut() = Value::UnSigned(55));
+        .with_value_write(0, |item| *item.value_mut() = AnyValue::UInt32(55));
 
     survey.config_mut().response_display = ResponseDisplay::Label;
     match question.to_series() {

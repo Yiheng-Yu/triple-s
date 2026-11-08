@@ -6,7 +6,8 @@ use parking_lot::RwLockReadGuard;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    IntoPyObjectExt, exceptions,
+    IntoPyObjectExt,
+    exceptions,
     prelude::*,
     types::{PyDict, PyTuple},
 };
@@ -20,18 +21,29 @@ use crate::{
     error::InternalError,
     prelude::*,
     utils::{
-        anyvalue_to_python, convert_date, convert_time, normalize_py_index, polars_to_pandas,
+        anyvalue_to_python,
+        convert_date,
+        convert_time,
+        normalize_py_index,
+        polars_to_pandas,
     },
 };
 use crate::{
     QuestionType,
     config::ResponseDisplay,
     data::{config::Config, survey_data::SurveyData},
-    datamap::{Question, Text, Value},
+    datamap::{Question, Text},
     utils::ArcLock,
 };
 
 /// Data for a single question.
+#[cfg_attr(
+    all(feature = "pyo3", not(doc)),
+    doc = r###"
+Raises:
+    NotImplementedError: Direct construction is not supported. Obtain question data from a Survey instance.
+"###
+)]
 #[cfg_attr(
     feature = "pyo3",
     pyclass(module = "triple_s", name = "QuestionData", from_py_object)
@@ -81,7 +93,8 @@ impl QuestionData {
     ///
     /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
     /// method will not mutate the caller.
-    pub fn response_label(&self) -> HashMap<Value, Text> {
+    #[allow(clippy::mutable_key_type)]  // can only be string, float, or int
+    pub fn response_label(&self) -> HashMap<AnyValue<'static>, Text> {
         self.question.response_label()
     }
 
@@ -162,6 +175,7 @@ impl QuestionData {
 
         // append data label
         let (keys, labels) = self.get_datalabel_key_value()?;
+        let keys = keys.cast(series.dtype())?;
         let height = labels.len();
         let response_label = DataFrame::new(height, vec![keys.into(), labels.into()])?;
 
@@ -177,11 +191,8 @@ impl QuestionData {
     }
 
     fn get_datalabel_key_value(&self) -> PolarsResult<(Series, Series)> {
-        let (keys, values): (Vec<AnyValue<'_>>, Vec<String>) = self
-            .response_label()
-            .into_iter()
-            .map(|(key, val)| (AnyValue::from(key), val.value()))
-            .unzip();
+        let (keys, values): (Vec<AnyValue<'_>>, Vec<String>) =
+            self.response_label().into_iter().map(|(key, val)| (key, val.value())).unzip();
         let keys = Series::from_any_values(self.name().into(), &keys, true)?;
         let labels = Series::new("label".into(), values);
         Ok((keys, labels))
@@ -198,10 +209,9 @@ impl QuestionData {
             Some(DataTypeExpr::Literal(DataType::String)),
         )]);
 
-        query.collect()
-            .map_err(|err| {
-                Self::map_missing_label_error(err, &self.name(), &keys)
-            })?
+        query
+            .collect()
+            .map_err(|err| Self::map_missing_label_error(err, &self.name(), &keys))?
             .into_columns()
             .into_iter()
             .next()
@@ -209,9 +219,13 @@ impl QuestionData {
                 format!("Unable to find column '{}' in `SurveyData`", self.name()).into(),
             ))
     }
-    
+
     #[inline]
-    fn map_missing_label_error(err: PolarsError, question_name: &str, unique_keys: &Series) -> PolarsError {
+    fn map_missing_label_error(
+        err: PolarsError,
+        question_name: &str,
+        unique_keys: &Series,
+    ) -> PolarsError {
         match &err {
             PolarsError::ExprContext { error, expr } if expr.contains(".replace_strict") => {
                 if expr.contains(").replace_strict") {
@@ -224,7 +238,7 @@ impl QuestionData {
                     err
                 }
             }
-            _ => err
+            _ => err,
         }
     }
 
@@ -240,6 +254,10 @@ impl QuestionData {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl QuestionData {
+    /// Create a QuestionData instance.
+    ///
+    /// Raises:
+    ///     NotImplementedError: Direct construction is not supported. Obtain question data from a Survey instance.
     #[new]
     fn py_new() -> PyResult<Self> {
         Err(exceptions::PyNotImplementedError::new_err(
@@ -283,8 +301,8 @@ impl QuestionData {
     ///
     /// Note:
     ///
-    /// *Modifying the datamp would also modify the datamap in the survey that the
-    /// current instance being a part of.*
+    ///     *Modifying the datamp would also modify the datamap in the survey that the
+    ///     current instance being a part of.*
     #[getter(datamap)]
     fn py_get_datamap(&self) -> Question {
         self.question.clone()
@@ -353,12 +371,12 @@ impl QuestionData {
     ///
     /// Note:
     ///
-    /// All DataFrame operations are performed internally using Rust Polars,
-    /// regardless of the selected output format.
+    ///     All DataFrame operations are performed internally using Rust Polars,
+    ///     regardless of the selected output format.
     ///
-    /// When `"pandas"` is selected, the resulting Polars DataFrame is converted
-    /// to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the
-    /// computation-heavy stuff are already handled on the Rust side.
+    ///     When `"pandas"` is selected, the resulting Polars DataFrame is converted
+    ///     to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the
+    ///     computation-heavy stuff are already handled on the Rust side.
     #[getter(dataframe_format)]
     fn py_get_dataframe_format(&self) -> String {
         self.config().py_dataframe_format.to_string()
@@ -437,22 +455,22 @@ impl QuestionData {
     /// This function basically calls ``poalrs.Series.value_counts`` under the hood, apart from multi-choice
     /// where the choice for each respondant is counted individually.
     ///
-    /// Kwargs:
-    ///     count_nan (bool, *optional*):
-    ///         Toogle on/ off for counting Null values.
+    /// Keyword Args:
+    ///     count_nan (bool, *optional*): Toogle on/ off for counting Null values.
     ///         Note: multi-choice entries of an empty list (`[]`) will also count as `null`.
     ///         Default `False`
-    ///     
-    ///     foramt ('polars' | 'pandas' |DataFrameFormat, *optional*):
-    ///         Select what kind of dataframe to output:
+    ///     format ('polars' | 'pandas' |DataFrameFormat, *optional*): Select what kind of dataframe to output:
     ///         'polars' | DataFrameFormat.Polars: polars.DataFrame
     ///         'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
     ///
     ///         Default:
-    ///             consistent with the survey current instance created from.        
+    ///             consistent with the survey current instance created from.
     ///
     /// Returns:
-    ///     polars.DataFrame | pandas.DataFrame
+    ///     polars.DataFrame | pandas.DataFrame: Value counts with response labels.
+    ///
+    /// Note:
+    ///     The current implementation excludes null values when count_nan is True.
     #[pyo3(
         name = "value_counts", 
         signature=(
@@ -481,6 +499,9 @@ impl QuestionData {
     }
 
     /// Return the answers as a polars Series.
+    ///
+    /// Returns:
+    ///     polars.Series: The respondent data in Polars format.
     #[pyo3(name = "to_polars")]
     fn py_to_polars(&self) -> PyResult<pyo3_polars::PySeries> {
         self.to_series()
@@ -489,6 +510,9 @@ impl QuestionData {
     }
 
     /// Export the answers as a pandas Series object.
+    ///
+    /// Returns:
+    ///     pandas.Series: The respondent data in pandas format.
     #[pyo3(name = "to_pandas")]
     pub fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let frame = self.py_to_polars()?.into_bound_py_any(py)?;
@@ -498,6 +522,9 @@ impl QuestionData {
     }
 
     /// Export the answers as a list.
+    ///
+    /// Returns:
+    ///     list: The response values in row order.
     #[pyo3(name = "to_list")]
     pub fn py_to_list<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let frame = self.py_to_polars()?.into_bound_py_any(py)?;

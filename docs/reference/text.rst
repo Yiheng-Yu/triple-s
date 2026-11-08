@@ -1,6 +1,8 @@
 Text and variants
 =================
 
+.. currentmodule:: triple_s
+
 Text
 ----
 

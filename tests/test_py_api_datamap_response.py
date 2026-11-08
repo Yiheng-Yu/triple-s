@@ -1,5 +1,5 @@
 import pytest
-from triple_s import Response, Code, Value, DataRange
+from triple_s import Response, Code, DataRange
 
 
 @pytest.fixture

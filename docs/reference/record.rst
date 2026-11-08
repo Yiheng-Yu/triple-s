@@ -1,6 +1,8 @@
 Record
 ======
 
+.. currentmodule:: triple_s
+
 .. autoclass:: triple_s.Record
 
 Attributes

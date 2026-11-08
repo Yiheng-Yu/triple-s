@@ -1,6 +1,8 @@
 SurveyData
 ==========
 
+.. currentmodule:: triple_s
+
 .. autoclass:: triple_s.SurveyData
 
 Attributes

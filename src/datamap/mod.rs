@@ -12,7 +12,7 @@ use pyo3::{exceptions, prelude::*, types::PyDict};
 pub use question::{CodeFormat, Location, Question, QuestionType, Spread, Usage};
 use quick_xml::{Writer, events::BytesText};
 pub use record::{DataFormat, Record};
-pub use response::{Code, Response, Value};
+pub use response::{Code, Response};
 pub use survey_info::{SurveyInfo, Version};
 pub use text::{Text, Variant};
 
@@ -223,20 +223,28 @@ impl Datamap {
 impl Datamap {
     /// Create a datamap from a dictionary that contains keys 'survey_info' and 'record':
     ///
-    /// Example: Creating new empty :py:class:`Datamap` from dictionary:
+    /// Args:
+    ///     content (dict): Fields used to construct the Datamap instance, as described above.
     ///
-    /// ```python
-    /// 
-    /// from triple_s import Datamap, SurveyInfo, Record
+    /// Returns:
+    ///     Datamap: The constructed Datamap instance.
     ///
-    /// survey_info = SurveyInfo(version=1.2)  # must contain sss version
-    /// record = Record.empty()
+    /// Examples:
     ///
-    /// datamap = Datamap.from_dict({
-    ///     'survey_info': survey_info,
-    ///     'record': record
-    /// })
-    /// ```
+    ///     Creating new empty :py:class:`Datamap` from dictionary:
+    ///
+    ///     .. code-block:: python
+    ///
+    ///
+    ///         from triple_s import Datamap, SurveyInfo, Record
+    ///
+    ///         survey_info = SurveyInfo(version=1.2)  # must contain sss version
+    ///         record = Record.empty()
+    ///
+    ///         datamap = Datamap.from_dict({
+    ///             'survey_info': survey_info,
+    ///             'record': record
+    ///         })
     #[staticmethod]
     #[pyo3(name = "from_dict")]
     fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
@@ -282,6 +290,12 @@ impl Datamap {
     }
 
     /// get question by question name, returns `None` if question name not exist.
+    ///
+    /// Args:
+    ///     question_name (str): Name of the question; matching is case insensitive.
+    ///
+    /// Returns:
+    ///     Question | None: The matching question, or None if it does not exist.
     #[pyo3(name="get", signature=(question_name:"str"))]
     fn py_get(&self, question_name: &str) -> Option<Question> {
         self.record.py_get(question_name)
@@ -363,12 +377,18 @@ impl Datamap {
     }
 
     /// export content of datamap to triple-s classic string.
+    ///
+    /// Returns:
+    ///     str: The Triple-S Classic representation.
     #[pyo3(name = "to_classic")]
     fn py_to_classic(&self) -> PyResult<String> {
         self.to_classic().map_err(py_value_error)
     }
 
     /// Serialises the survey as a complete Triple-S XML `<sss>` document.
+    ///
+    /// Returns:
+    ///     str: The Triple-S XML representation.
     #[pyo3(name = "to_xml")]
     fn py_to_xml(&self) -> PyResult<String> {
         self.to_xml().map_err(py_value_error)
@@ -378,6 +398,12 @@ impl Datamap {
     /// Invalid Unicode sequences become `�` (U+FFFD).
     /// Returns `SurveyData` and updates the record's `href` and `data_format`.
     /// The returned data is not stored on the datamap.
+    ///
+    /// Args:
+    ///     path (str): Path to an .asc or .csv respondent data file.
+    ///
+    /// Returns:
+    ///     SurveyData: The loaded respondent data.
     #[pyo3(name="load_data", signature=(path:"str"))]
     fn py_load_data(&mut self, path: &str) -> PyResult<SurveyData> {
         self.record_mut().load_data(path).map_err(py_value_error)

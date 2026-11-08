@@ -1,6 +1,8 @@
 Survey
 ======
 
+.. currentmodule:: triple_s
+
 .. autoclass:: triple_s.Survey
 
 Use :func:`triple_s.read_triple_s` to read a datamap and optional respondent

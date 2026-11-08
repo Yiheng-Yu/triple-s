@@ -12,6 +12,7 @@ use crate::utils::get_type_name;
 
 /// General configurations
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct Config {
     /// Specifies the DataFrame library used for Python outputs
     ///
@@ -22,14 +23,6 @@ pub struct Config {
     pub response_display: ResponseDisplay,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            py_dataframe_format: DataFrameFormat::default(),
-            response_display: ResponseDisplay::default(),
-        }
-    }
-}
 
 /// Specifies the default DataFrame library used for Python output, default `Polars`.
 ///
@@ -76,15 +69,37 @@ impl Flag for DataFrameFormat {
     }
 }
 
-/// Controls whether choice responses are represented by their values or labels.
-///
-/// Members:
-/// `Value`:
-///     display code value (the `code` attribute of a `<value>` tag).
-///     i.e., [1, 1, 2, ...]
-/// `Label`:
-///     display choice text (content of a `<value>` tag).
-///     i.e., ["London", "London", "Scotland", ...]
+#[cfg_attr(
+    any(not(feature = "pyo3"), doc),
+    doc = r###"
+Controls whether choice responses are represented by their values or labels.
+
+Members:
+`Value`:
+    display code value (the `code` attribute of a `<value>` tag).
+    i.e., [1, 1, 2, ...]
+`Label`:
+    display choice text (content of a `<value>` tag).
+    i.e., ["London", "London", "Scotland", ...]
+"###
+)]
+#[cfg_attr(
+    all(feature = "pyo3", not(doc)),
+    doc = r###"
+Controls whether choice responses are represented by their values or labels.
+
+Notes:
+    Members:
+
+    ``Value``:
+        display code value (the `code` attribute of a `<value>` tag).
+        i.e., [1, 1, 2, ...]
+
+    ``Label``:
+        display choice text (content of a `<value>` tag).
+        i.e., ["London", "London", "Scotland", ...]
+"###
+)]
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Default, Debug, Clone, EnumString, EnumIter, PartialEq, Eq)]
 pub enum ResponseDisplay {

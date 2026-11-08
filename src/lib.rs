@@ -153,7 +153,7 @@ mod datamap;
 mod survey;
 
 pub mod error;
-pub use data::{analysis, config};
+pub use data::config;
 
 mod prelude;
 mod utils;
@@ -176,7 +176,7 @@ pub use datamap::{
     },
     read::{read_datamap, read_from_reader, read_from_string},
     record::{self, DataFormat, Record},
-    response::{self, Code, DataRange, Response, Value},
+    response::{self, Code, DataRange, Response},
     survey_info::{self, SurveyInfo, Version},
     text::{self, Mode, Text, Variant},
 };
@@ -233,7 +233,7 @@ mod triple_s {
         Datamap,
         question::{CodeFormat, Location, Question, QuestionType, Spread, Usage},
         record::{DataFormat, Record},
-        response::{Code, DataRange, Response, Value},
+        response::{Code, DataRange, Response},
         survey_info::{SurveyInfo, Version},
         text::{Mode, Text, Variant},
     };
@@ -243,20 +243,33 @@ mod triple_s {
     pub use crate::survey::Survey;
     use crate::{datamap::read::read_from_reader, read_triple_s};
     #[pymodule]
-    pub mod analysis {
-        #[pymodule_export]
-        pub use crate::analysis::ToplineTable;
-    }
-    #[pymodule]
     pub mod config {
         #[pymodule_export]
         pub use crate::config::{DataFrameFormat, ResponseDisplay};
     }
 
-    /// Read triple-s datamap
-    ///
-    /// Args:
-    ///     path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
+    #[cfg_attr(
+        any(not(feature = "pyo3"), doc),
+        doc = r###"
+Read triple-s datamap
+
+Args:
+    path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
+"###
+    )]
+    #[cfg_attr(
+        all(feature = "pyo3", not(doc)),
+        doc = r###"
+Read triple-s datamap
+
+Args:
+    path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
+
+Returns:
+    Datamap: The parsed survey definition, without respondent data.
+
+"###
+    )]
     #[pyfunction(name="read_datamap", signature=(path_datamap: "str"))]
     pub fn py_read_datamap(py: Python<'_>, path_datamap: &str) -> PyResult<Datamap> {
         let input = std::fs::File::open(path_datamap)?;
@@ -269,17 +282,37 @@ mod triple_s {
         Ok(survey)
     }
 
-    /// Read triple-s datamap, and load data afterwards.
-    ///
-    /// Args:
-    ///     path_datamap (str):
-    ///         path to the triple-s datamap file, supports both classic and xml format.     
-    ///     path_data (str, *optional*):
-    ///         path to the `.asc` or `.csv` data file.
-    ///
-    /// Returns:
-    ///     [`Survey`] containing `datamap` and `data`. If `path_data` is omitted,
-    ///     `has_data()` returns `False`.
+    #[cfg_attr(
+        any(not(feature = "pyo3"), doc),
+        doc = r###"
+Read triple-s datamap, and load data afterwards.
+
+Args:
+    path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
+    path_data (str, *optional*): path to the `.asc` or `.csv` data file.
+
+Returns:
+    [`Survey`] containing `datamap` and `data`. If `path_data` is omitted,
+    `has_data()` returns `False`.
+"###
+    )]
+    #[cfg_attr(
+        all(feature = "pyo3", not(doc)),
+        doc = r###"
+Read triple-s datamap, and load data afterwards.
+
+Args:
+    path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
+
+Keyword Args:
+    path_data (str, *optional*): path to the `.asc` or `.csv` data file.
+
+Returns:
+    Survey: [`Survey`] containing `datamap` and `data`. If `path_data` is omitted,
+        `has_data()` returns `False`.
+
+"###
+    )]
     #[pyfunction(
         name="read_triple_s", 
         signature=(
@@ -298,7 +331,6 @@ mod triple_s {
 
         // Set submodules
         let modules = bound.py().import("sys")?.getattr("modules")?;
-        modules.set_item("triple_s.analysis", bound.getattr("analysis")?)?; // analysis
         modules.set_item("triple_s.config", bound.getattr("config")?)?; // config
 
         Ok(())

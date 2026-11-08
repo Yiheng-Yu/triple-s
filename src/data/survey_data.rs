@@ -327,6 +327,9 @@ impl SurveyData {
     }
 
     /// Create new empty [`SurveyData`] instance
+    ///
+    /// Returns:
+    ///     SurveyData: The constructed SurveyData instance.
     #[pyo3(name = "empty")]
     #[staticmethod]
     fn py_empty() -> Self {
@@ -334,6 +337,12 @@ impl SurveyData {
     }
 
     /// Create new [`SurveyData`] instance from `polars.DataFrame`
+    ///
+    /// Args:
+    ///     frame (polars.DataFrame): Respondent data, with one column per question.
+    ///
+    /// Returns:
+    ///     SurveyData: The constructed SurveyData instance.
     #[pyo3(name = "from_polars")]
     #[staticmethod]
     fn py_from_polars(frame: PyDataFrame) -> Self {
@@ -344,6 +353,9 @@ impl SurveyData {
     }
 
     /// Export data as polars DataFrame
+    ///
+    /// Returns:
+    ///     polars.DataFrame: The respondent data in Polars format.
     #[pyo3(name = "to_polars")]
     pub fn py_to_polars<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let frame =
@@ -352,6 +364,9 @@ impl SurveyData {
     }
 
     /// Export loaded data as a pandas DataFrame
+    ///
+    /// Returns:
+    ///     pandas.DataFrame: The respondent data in pandas format.
     #[pyo3(name = "to_pandas")]
     pub fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let df = self.to_polars().map_err(PyPolarsErr::Polars)?;
@@ -359,6 +374,9 @@ impl SurveyData {
     }
 
     /// Get a brief overview of each column of data, equivalent of `self.to_polars().describe()`
+    ///
+    /// Returns:
+    ///     polars.DataFrame: Summary statistics for the data columns.
     #[pyo3(name = "describe")]
     pub fn py_describe<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let frame = self.py_to_polars(py)?;
@@ -366,6 +384,9 @@ impl SurveyData {
     }
 
     /// Check if data loaded or not
+    ///
+    /// Returns:
+    ///     bool: Whether respondent data is loaded.
     #[pyo3(name = "has_data")]
     fn py_has_data(&self) -> bool {
         self.has_data()

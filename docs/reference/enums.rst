@@ -1,6 +1,8 @@
 Enum flags
 ==========
 
+.. currentmodule:: triple_s
+
 Version
 -------
 
@@ -147,30 +149,8 @@ ResponseDisplay
 Attributes
 ^^^^^^^^^^
 
-.. autoattribute:: ResponseDisplay.Value
+.. autoattribute:: triple_s.config.ResponseDisplay.Value
    :annotation: -> ResponseDisplay
 
-.. autoattribute:: ResponseDisplay.Label
+.. autoattribute:: triple_s.config.ResponseDisplay.Label
    :annotation: -> ResponseDisplay
-
-****
-
-Value
------
-
-.. autoclass:: triple_s.Value
-
-Attributes
-^^^^^^^^^^
-
-.. autoattribute:: Value.UnSigned
-   :annotation: -> type[Value.UnSigned]
-
-.. autoattribute:: Value.Signed
-   :annotation: -> type[Value.Signed]
-
-.. autoattribute:: Value.Float
-   :annotation: -> type[Value.Float]
-
-.. autoattribute:: Value.String
-   :annotation: -> type[Value.String]

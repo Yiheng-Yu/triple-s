@@ -1,6 +1,8 @@
 Datamap
 =======
 
+.. currentmodule:: triple_s
+
 .. autoclass:: triple_s.Datamap
 
 Attributes

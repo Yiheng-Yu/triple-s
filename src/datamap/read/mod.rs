@@ -13,6 +13,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use log::warn;
+use polars::prelude::AnyValue;
 use quick_xml::reader::Reader as XmlReader;
 use rayon::prelude::*;
 
@@ -30,9 +31,9 @@ use crate::{
         Spread,
         Text,
         Usage,
-        Value,
         Variant,
         Version,
+        response::AnyValueExt,
     },
     error::{
         self,
@@ -584,8 +585,8 @@ impl QuestionBuilder {
                 if let Some(size) = response.size {
                     let width = output.location().width()?;
                     let range = DataRange::new(
-                        Value::UnSigned(1),
-                        Value::UnSigned(size.saturating_add(1)),
+                        AnyValue::UInt32(1),
+                        AnyValue::UInt32(size.saturating_add(1)),
                     )?;
                     let response = Response::new(Some(range), Vec::new());
                     *output.response_mut() = response;
@@ -737,15 +738,15 @@ impl ResponseBuilder {
             let from = match kind {
                 ValueKind::Signed => {
                     let value = from.parse::<i32>()?;
-                    Value::Signed(value)
+                    AnyValue::Int32(value)
                 }
                 ValueKind::UnSigned => {
                     let value = from.parse::<u32>()?;
-                    Value::UnSigned(value)
+                    AnyValue::UInt32(value)
                 }
                 ValueKind::Float => {
                     let value = from.parse::<f64>()?;
-                    Value::Float(value)
+                    AnyValue::Float64(value)
                 }
                 _ => todo!(),
             };
@@ -777,15 +778,15 @@ impl ResponseBuilder {
             ))?;
 
         let value = match format {
-            ValueKind::String => Value::String(raw.value.to_string()),
+            ValueKind::String => AnyValue::StringOwned(raw.value.as_ref().into()),
             ValueKind::UnSigned => {
-                Value::UnSigned(raw.value.parse().context("Invalid unsigned code")?)
+                AnyValue::UInt32(raw.value.parse().context("Invalid unsigned code")?)
             }
             ValueKind::Signed => {
-                Value::Signed(raw.value.parse().context("Invalid signed code")?)
+                AnyValue::Int32(raw.value.parse().context("Invalid signed code")?)
             }
             ValueKind::Float => {
-                Value::Float(raw.value.parse().context("Invalid floating-point code")?)
+                AnyValue::Float64(raw.value.parse().context("Invalid floating-point code")?)
             }
         };
         let instance = Code {

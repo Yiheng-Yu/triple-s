@@ -49,7 +49,6 @@ PYTHON_API_CLASSES = {
     "SurveyData",
     "Text",
     "Usage",
-    "Value",
     "Variant",
     "Version",
 }
@@ -104,10 +103,6 @@ def prepare_docstring(app, what, name, obj, options, lines):
                 result.extend(["", heading[1], "^" * len(heading[1]), ""])
             else:
                 result.append(line)
-    # The Question constructor's Args block uses unindented fields.
-    if name == "triple_s.Question" and "Args:" in result:
-        start = result.index("Args:") + 1
-        result[start:] = ["    " + line if line else "" for line in result[start:]]
     lines[:] = result
 
 

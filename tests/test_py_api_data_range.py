@@ -13,10 +13,9 @@ def test_data_range_compare():
     b = DataRange.signed(2, 3)
     c = DataRange.unsigned(2, 3)
 
-    with pytest.raises(TypeError):
-        assert a == b
-        assert a == c
-        assert b == c
+    assert a != b
+    assert a != c
+    assert b == c
 
 
 def test_set_data_range_unsigned():

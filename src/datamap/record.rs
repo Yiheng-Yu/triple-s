@@ -544,6 +544,10 @@ impl Record {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Record {
+    /// Create a Record instance.
+    ///
+    /// Returns:
+    ///     str: The Triple-S XML representation.
     #[pyo3(name = "to_xml")]
     fn py_to_xml(&self) -> PyResult<String> {
         self.to_xml().map_err(py_value_error)
@@ -651,6 +655,12 @@ impl Record {
     /// Get a question by name, returning `None` if it doesn't exist.
     ///
     /// Name matching is not case sensitive.
+    ///
+    /// Args:
+    ///     question_name (str): Name of the question; matching is case insensitive.
+    ///
+    /// Returns:
+    ///     Question | None: The matching question, or None if it does not exist.
     #[pyo3(name="get", signature=(question_name:"str"))]
     pub fn py_get(&self, question_name: &str) -> Option<Question> {
         self.find_question(question_name).map(|item| item.read().clone())
@@ -658,6 +668,12 @@ impl Record {
 
     /// Load respondent data and return `SurveyData`, updating `href` and `data_format`.
     /// Invalid Unicode sequences become `�` (U+FFFD).
+    ///
+    /// Args:
+    ///     path_data (str | None): Path to the respondent data file.
+    ///
+    /// Returns:
+    ///     SurveyData: The loaded respondent data.
     #[pyo3(name = "load_data")]
     fn py_load_data(&mut self, path_data: &str) -> PyResult<SurveyData> {
         self.load_data(path_data)
@@ -734,6 +750,12 @@ impl Record {
     /// Add a question to the current [ `Record` ] instance
     ///
     /// Would overwrite existing item if question with the same name already exists.
+    ///
+    /// Args:
+    ///     question (Question): Question to append to the record.
+    ///
+    /// Returns:
+    ///     None: This method updates or validates the existing object in place.
     #[pyo3(name = "add_question")]
     fn py_add_question(&mut self, question: Question) -> PyResult<()> {
         let deepcopy = question.deepcopy();
@@ -744,6 +766,12 @@ impl Record {
     /// Remove a question from current record, returns the removed question.
     ///
     /// Name matching is case insensitive.
+    ///
+    /// Args:
+    ///     question_name (str): Name of the question; matching is case insensitive.
+    ///
+    /// Returns:
+    ///     Question | None: An independent copy of the removed question, or None if it was not found.
     #[pyo3(name = "remove_question")]
     fn py_remove_question(&mut self, question_name: &str) -> PyResult<Option<Question>> {
         let deepcopy = self.remove_question(question_name).map(|item| item.read().deepcopy());
@@ -766,6 +794,12 @@ impl Record {
     ///     list of [`Question`] instance or dictionaries to pass to
     ///     Question.from_dict,
     ///     Default to be an empty list (`[]`)
+    ///
+    /// Args:
+    ///     content (dict): Fields used to construct the Record instance, as described above.
+    ///
+    /// Returns:
+    ///     Record: The constructed Record instance.
     #[pyo3(name = "from_dict")]
     #[staticmethod]
     #[allow(unused_variables)]
@@ -844,15 +878,18 @@ impl Record {
 
     /// Creates a new empty [`Record`] instance.
     ///
-    /// Example:
+    /// Returns:
+    ///     Record: The constructed Record instance.
     ///
-    /// ```python
-    /// 
-    /// from triple_s import Record
+    /// Examples:
     ///
-    /// record = Record.empty()
-    /// assert len(record) == 0
-    /// ```
+    ///     .. code-block:: python
+    ///
+    ///
+    ///         from triple_s import Record
+    ///
+    ///         record = Record.empty()
+    ///         assert len(record) == 0
     #[staticmethod]
     #[pyo3(name = "empty")]
     fn py_empty() -> Self {
@@ -862,6 +899,12 @@ impl Record {
     /// Validate an `.asc` or `.csv` file without changing metadata or loading data.
     /// Invalid Unicode sequences become `�` (U+FFFD).
     /// Use `load_data(path)` to load respondent data.
+    ///
+    /// Args:
+    ///     path (str): Path to an .asc or .csv respondent data file.
+    ///
+    /// Returns:
+    ///     None: None if validation succeeds.
     #[pyo3(name = "validate_data")]
     fn py_validate_data(&self, path: &str) -> PyResult<()> {
         self.validate_data(path).map_err(py_value_error)

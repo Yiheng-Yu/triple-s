@@ -1,6 +1,8 @@
 Questions and responses
 =======================
 
+.. currentmodule:: triple_s
+
 Question
 --------
 

@@ -1,5 +1,5 @@
 # modules
-from .triple_s import analysis, config
+from .triple_s import config
 
 # functions
 from .triple_s import read_datamap, read_triple_s
@@ -27,7 +27,6 @@ from .triple_s import (
     SurveyInfo,
     Text,
     Usage,
-    Value,
     Variant,
     Version,
 )
@@ -40,7 +39,6 @@ __all__ = [
     "Datamap",
     "Location",
     "MissingKeyError",
-    # "NotSameSurvey",
     "Mode",
     "NoDataError",
     "Question",
@@ -54,10 +52,8 @@ __all__ = [
     "SurveyInfo",
     "Text",
     "Usage",
-    "Value",
     "Variant",
     "Version",
-    "analysis",
     "config",
     "read_datamap",
     "read_triple_s",

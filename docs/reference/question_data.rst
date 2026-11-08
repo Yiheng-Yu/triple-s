@@ -1,6 +1,8 @@
 QuestionData
 ============
 
+.. currentmodule:: triple_s
+
 .. autoclass:: triple_s.QuestionData
 
 Attributes
@@ -18,7 +20,7 @@ Attributes
 .. autoattribute:: QuestionData.range
    :annotation: -> triple_s.DataRange | None
 
-.. autoattribute:: QuestionData.data
+.. autoattribute:: QuestionData.datamap
    :annotation: -> triple_s.Question
 
 .. autoattribute:: QuestionData.data

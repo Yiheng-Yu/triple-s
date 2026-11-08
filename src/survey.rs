@@ -24,6 +24,19 @@ use crate::{
 #[cfg_attr(any(not(feature = "pyo3"), doc), doc = include_str!("./doc/survey_rs.md"))]
 #[cfg_attr(all(feature = "pyo3", not(doc)), doc = include_str!("./doc/survey_py.md"))]
 #[cfg_attr(
+    all(feature = "pyo3", not(doc)),
+    doc = r###"
+Args:
+    datamap (Datamap): Survey definition used to interpret the respondent data.
+
+Keyword Args:
+    data (SurveyData | None): Respondent data. None creates a survey without loaded data. Defaults to None.
+
+Returns:
+    Survey: The constructed Survey instance.
+"###
+)]
+#[cfg_attr(
     feature = "pyo3",
     pyclass(module = "triple_s", name = "Survey", skip_from_py_object)
 )]
@@ -144,6 +157,15 @@ impl Survey {
 #[pymethods]
 impl Survey {
     /// Creates new `Survey` instance
+    ///
+    /// Args:
+    ///     datamap (Datamap): Survey definition used to interpret the respondent data.
+    ///
+    /// Keyword Args:
+    ///     data (SurveyData | None): Respondent data. None creates a survey without loaded data. Defaults to None.
+    ///
+    /// Returns:
+    ///     Survey: The constructed Survey instance.
     #[pyo3(signature=(datamap: "Datamap", data: "SurveyData"=None))]
     #[new]
     fn py_new(datamap: Datamap, data: Option<SurveyData>) -> Self {
@@ -226,10 +248,17 @@ impl Survey {
     }
 
     /// Iter each individual respondant data
+    ///
+    /// Returns:
+    ///     Iterator[dict[str, object]]: An iterator over respondent rows.
     fn iter_rows(&self, py: Python<'_>) -> PyResult<Py<crate::data::ResponseIterator>> {
         self.data().__iter__(py)
     }
 
+    /// Iterate over the survey questions and their response data.
+    ///
+    /// Returns:
+    ///     Iterator[QuestionData]: An iterator over question data in survey order.
     fn iter_questions(&self, py: Python<'_>) -> PyResult<Py<QuestionDataIterator>> {
         let pointer = Arc::new(self.clone()); // clones a shallow copy
         let iterator = QuestionDataIterator {
@@ -299,12 +328,12 @@ impl Survey {
     ///
     /// Note:
     ///
-    /// All DataFrame operations are performed internally using Rust Polars,
-    /// regardless of the selected output format.
+    ///     All DataFrame operations are performed internally using Rust Polars,
+    ///     regardless of the selected output format.
     ///
-    /// When `"pandas"` is selected, the resulting Polars DataFrame is converted
-    /// to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the
-    /// computation-heavy stuff are already handled on the Rust side.
+    ///     When `"pandas"` is selected, the resulting Polars DataFrame is converted
+    ///     to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the
+    ///     computation-heavy stuff are already handled on the Rust side.
     #[getter(dataframe_format)]
     fn py_get_dataframe_format(&self) -> String {
         self.config().py_dataframe_format.to_string()
@@ -331,6 +360,9 @@ impl Survey {
     }
 
     /// Check if data loaded or not
+    ///
+    /// Returns:
+    ///     bool: Whether respondent data is loaded.
     #[pyo3(name = "has_data")]
     fn py_has_data(&self) -> bool {
         self.has_data()

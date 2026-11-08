@@ -17,7 +17,7 @@ use strum::{AsRefStr, EnumIter, EnumString};
 
 use crate::{
     EventLog,
-    datamap::{Code, Response, Text, Value},
+    datamap::{Code, Response, Text},
     error::{self, DataReadError, InternalError, InvalidArg, RangeError},
     prelude::{DeepCopy, *},
     utils::{ArcLock, lock_it_up},
@@ -501,7 +501,7 @@ impl Question {
     ///
     /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
     /// method will not mutate the caller.
-    pub fn response_label(&self) -> HashMap<Value, Text> {
+    pub fn response_label(&self) -> HashMap<AnyValue<'static>, Text> {
         self.response()
             .values()
             .iter()
@@ -522,7 +522,8 @@ impl Question {
     /// # Example
     ///
     /// ```rust
-    /// use triple_s::{Code, QuestionOptions, QuestionType, Text, Value};
+    /// use polars::prelude::AnyValue;
+    /// use triple_s::{Code, QuestionOptions, QuestionType, Text};
     ///
     /// let mut question = QuestionOptions::new("Q1")
     ///     .with_question_type(QuestionType::Single)
@@ -531,7 +532,7 @@ impl Question {
     ///     .finish()?;
     /// assert_eq!(question.response().len(), 1);
     ///
-    /// question.try_add_value(Value::UnSigned(2), Some("Nah"), Some("Q1=2"), Some(1.0))?;
+    /// question.try_add_value(AnyValue::UInt32(2), Some("Nah"), Some("Q1=2"), Some(1.0))?;
     /// assert_eq!(question.response().len(), 2);
     /// assert_eq!(
     ///     question.response().values()[1].read().score().clone(),
@@ -542,7 +543,7 @@ impl Question {
     /// ```
     pub fn try_add_value(
         &mut self,
-        value: Value,
+        value: AnyValue<'static>,
         label: Option<&str>,
         filter: Option<&str>,
         score: Option<f64>,
@@ -563,7 +564,8 @@ impl Question {
     /// # Example
     ///
     /// ```rust
-    /// use triple_s::{Code, QuestionOptions, QuestionType, Text, Value};
+    /// use polars::prelude::AnyValue;
+    /// use triple_s::{Code, QuestionOptions, QuestionType, Text};
     ///
     /// let mut question = QuestionOptions::new("Q1")
     ///     .with_question_type(QuestionType::Single)
@@ -572,7 +574,7 @@ impl Question {
     ///     .finish()?;
     /// assert_eq!(question.response().len(), 1);
     ///
-    /// question.set_value(Value::UnSigned(1), Some("Nah"), Some("Q1=2"), Some(1.0))?;
+    /// question.set_value(AnyValue::UInt32(1), Some("Nah"), Some("Q1=2"), Some(1.0))?;
     /// assert_eq!(question.response().len(), 1);
     /// assert_eq!(
     ///     question.response().values()[0].read().score().clone(),
@@ -583,7 +585,7 @@ impl Question {
     /// ```
     pub fn set_value(
         &mut self,
-        value: Value,
+        value: AnyValue<'static>,
         label: Option<&str>,
         filter: Option<&str>,
         score: Option<f64>,
@@ -957,7 +959,7 @@ impl Question {
             .map(|item| {
                 let value = item.read().value().clone();
                 match value {
-                    Value::UnSigned(value) => Ok(value),
+                    AnyValue::UInt32(value) => Ok(value),
                     _ => Err(error::TypeMismatch::new(format!(
                         "Expect `unsignede integer` value type, got: `{:?}`",
                         value
@@ -1149,13 +1151,13 @@ impl Question {
                 output.push_str("TYPE CHARACTER\n");
                 if let Some(size_range) = self.response.range().as_ref() {
                     match size_range.end().clone() {
-                        Value::UnSigned(end) => {
+                        AnyValue::UInt32(end) => {
                             let size_string = format!("SIZE {}\n", end.saturating_sub(1));
                             output.push_str(&size_string);
                         }
                         _ => {
                             let error = error::InternalError::new(format!(
-                                "Unexpected `Value` variant find in question [{}]: '{:?}'",
+                                "Unexpected `AnyValue` variant find in question [{}]: '{:?}'",
                                 self.name(),
                                 size_range.end().clone()
                             ));
@@ -1316,13 +1318,28 @@ impl Question {
     /// Accepts a type name or a `QuestionType` flag; optional metadata defaults
     /// to `None`.
     ///
-    /// # Examples
+    /// Args:
+    ///     name (str): Question name.
+    ///     question_type (QuestionType | str | None): Question type flag or name, or None for no response values.
     ///
-    /// ```python
-    /// from triple_s import Question
+    /// Keyword Args:
+    ///     label (str | None): Text label. None uses an empty label. Defaults to None.
+    ///     filter (str | None): Response filter expression, or None for no filter. Defaults to None.
+    ///     format (str | None): Code format: "numeric", "literal", or None. Defaults to None.
+    ///     usage (str | None): Variable role: "serial", "weight", or None. Defaults to None.
+    ///     location (Location | None): Fixed-width data location. None uses Location(0, 0). Defaults to None.
+    ///     spread (Spread | None): Multiple-response subfield layout, or None for no spread. Defaults to None.
     ///
-    /// question = Question("Q1", "single")
-    /// ```
+    /// Returns:
+    ///     Question: The constructed Question instance.
+    ///
+    /// Examples:
+    ///
+    ///     .. code-block:: python
+    ///
+    ///         from triple_s import Question
+    ///
+    ///         question = Question("Q1", "single")
     #[new]
     #[pyo3(signature=(
         name:"str", 
@@ -1425,6 +1442,9 @@ impl Question {
 
     /// Creates an independent deep copy of this question.
     /// Changes to the copy do not affect the original.
+    ///
+    /// Returns:
+    ///     Question: An independent deep copy of this instance.
     fn copy(&self) -> Self {
         self.deepcopy()
     }
@@ -1564,16 +1584,23 @@ impl Question {
 
     /// Updates data location of the current question.
     ///
-    /// Example:
+    /// Keyword Args:
+    ///     start (int | None): Starting position. None leaves this bound unchanged. Defaults to None.
+    ///     finish (int | None): Finishing position. None leaves this bound unchanged. Defaults to None.
     ///
-    /// ```python
-    /// from triple_s import Question
+    /// Returns:
+    ///     None: This method updates or validates the existing object in place.
     ///
-    /// question = Question("Q1", "single")
-    /// print("Before update: ", question.location)
-    /// question.set_location(start=0, finish=30)
-    /// print("After update: ", question.location)
-    /// ```
+    /// Examples:
+    ///
+    ///     .. code-block:: python
+    ///
+    ///         from triple_s import Question
+    ///
+    ///         question = Question("Q1", "single")
+    ///         print("Before update: ", question.location)
+    ///         question.set_location(start=0, finish=30)
+    ///         print("After update: ", question.location)
     #[pyo3(name="set_location", signature=(start:"int"=None, finish:"int"=None))]
     fn py_update_location(&mut self, start: Option<u32>, finish: Option<u32>) -> PyResult<()> {
         if let Some(start) = start {
@@ -1595,11 +1622,13 @@ impl Question {
     /// multi-choice reponses, more information can be found in the help
     /// documentation of `Spread` class:
     ///
-    /// ```python
-    /// from triple_s import Spread
+    /// Examples:
     ///
-    /// help(Spread)
-    /// ```
+    ///     .. code-block:: python
+    ///
+    ///         from triple_s import Spread
+    ///
+    ///         help(Spread)
     #[getter(spread)]
     fn py_get_spread(&self) -> PyResult<Option<Spread>> {
         Ok(self.spread.as_ref().map(|item| item.clone()))
@@ -1613,15 +1642,17 @@ impl Question {
     ///
     /// 'literal:
     /// Introduced since SSS 2.0, basically something like:
-    // ```xml
-    /// <variable ident="11" type="single" format="literal">
-    ///     <values>
-    ///         <value code="A">Within 3 months</value>
-    ///         <value code="B">Between 3 months and 1 year</value>
-    ///         <value code="C">More than 1 years time</value>
-    ///     </values>
-    /// </variable>
-    /// ```
+    /// Examples:
+    ///
+    ///     .. code-block:: xml
+    ///
+    ///         <variable ident="11" type="single" format="literal">
+    ///             <values>
+    ///                 <value code="A">Within 3 months</value>
+    ///                 <value code="B">Between 3 months and 1 year</value>
+    ///                 <value code="C">More than 1 years time</value>
+    ///             </values>
+    ///         </variable>
     #[getter(format)]
     fn py_get_format(&self) -> PyResult<Option<String>> {
         Ok(self.get_format_name())
@@ -1684,41 +1715,51 @@ impl Question {
     /// format automatically. Raises `ValueError` if the fragment cannot be
     /// parsed into a question.
     ///
-    /// ```python
-    /// from triple_s import Question
+    /// Args:
+    ///     question_fragment (str): Triple-S Classic or XML variable definition.
     ///
-    /// original = r"""
-    ///    VARIABLE 10
-    ///    NAME "WEBSITE"
-    ///    LABEL "Test label"
-    ///    TYPE CHARACTER
-    ///    POSITION 1042 TO 1241
-    ///    SIZE 200
-    ///    END VARIABLE
-    ///    """
-    /// question = Question.from_string(original)
-    /// print(question)
-    /// ```
+    /// Returns:
+    ///     Question: The parsed question definition.
     ///
-    /// # Example: read from triple-s xml
-    /// ```python
-    /// from triple_s import Question
+    /// Examples:
     ///
-    /// original = r"""
-    ///     <variable ident="8" type="multiple">
-    ///         <name>Q5</name>
-    ///         <label>Two favourite attractions visited</label>
-    ///         <position start="62" finish="63" />
-    ///         <spread subfields="2" />
-    ///         <values>
-    ///             <value code="1">Sherwood Forest</value>
-    ///         </values>
-    ///     </variable>
-    /// """
+    ///     .. code-block:: python
     ///
-    /// question = Question.from_string(original)
-    /// print(question)
-    /// ```
+    ///         from triple_s import Question
+    ///
+    ///         original = r"""
+    ///            VARIABLE 10
+    ///            NAME "WEBSITE"
+    ///            LABEL "Test label"
+    ///            TYPE CHARACTER
+    ///            POSITION 1042 TO 1241
+    ///            SIZE 200
+    ///            END VARIABLE
+    ///            """
+    ///         question = Question.from_string(original)
+    ///         print(question)
+    ///
+    ///
+    ///     read from triple-s xml
+    ///
+    ///     .. code-block:: python
+    ///
+    ///         from triple_s import Question
+    ///
+    ///         original = r"""
+    ///             <variable ident="8" type="multiple">
+    ///                 <name>Q5</name>
+    ///                 <label>Two favourite attractions visited</label>
+    ///                 <position start="62" finish="63" />
+    ///                 <spread subfields="2" />
+    ///                 <values>
+    ///                     <value code="1">Sherwood Forest</value>
+    ///                 </values>
+    ///             </variable>
+    ///         """
+    ///
+    ///         question = Question.from_string(original)
+    ///         print(question)
     #[staticmethod]
     #[pyo3(name="from_string", signature=(question_fragment:"str"))]
     fn py_from_string(question_fragment: String) -> PyResult<Self> {
@@ -1727,12 +1768,18 @@ impl Question {
     }
 
     /// Serialises the question as a Triple-S classic `VARIABLE` block.
+    ///
+    /// Returns:
+    ///     str: The Triple-S Classic representation.
     #[pyo3(name = "to_classic")]
     fn py_to_classic(&self) -> PyResult<String> {
         self.to_classic().map_err(py_value_error)
     }
 
     /// Serialises the question as a Triple-S XML `<variable>` element.
+    ///
+    /// Returns:
+    ///     str: The Triple-S XML representation.
     #[pyo3(name = "to_xml")]
     fn py_to_xml(&self) -> PyResult<String> {
         self.to_xml().map_err(py_value_error)
@@ -1771,8 +1818,14 @@ impl Question {
     ///     List of possible responses for the question.
     ///
     ///     Accepts :py:class:`Response` instance or dictionary to pass to :py:meth:`Response.from_dict`,
-    ///     
+    ///
     ///     Would default to the default response values according to each question type if left unset
+    ///
+    /// Args:
+    ///     content (dict): Fields used to construct the Question instance, as described above.
+    ///
+    /// Returns:
+    ///     Question: The constructed Question instance.
     #[pyo3(name = "from_dict")]
     #[staticmethod]
     fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
@@ -1893,7 +1946,7 @@ impl Question {
                 let response = match instance.question_type().clone() {
                     QuestionType::None => response,
                     QuestionType::Multiple => response
-                        .cast::<u32>()
+                        .cast(&DataType::UInt32)
                         .with_context(|| {
                             format!("When trying to process question '{}'", instance.name())
                         })
@@ -1903,7 +1956,7 @@ impl Question {
 
                     QuestionType::Single => match instance.format().as_ref() {
                         Some(CodeFormat::Literal) => response
-                            .cast::<String>()
+                            .cast(&DataType::String)
                             .with_context(|| {
                                 format!(
                                     "When trying to process question '{}'",
@@ -1914,7 +1967,7 @@ impl Question {
                                 exceptions::PyValueError::new_err(format!("{:?}", err))
                             })?,
                         _ => response
-                            .cast::<u32>()
+                            .cast(&DataType::UInt32)
                             .with_context(|| {
                                 format!(
                                     "When trying to process question '{}'",
@@ -1926,7 +1979,7 @@ impl Question {
                             })?,
                     },
                     QuestionType::Logical => response
-                        .cast::<u32>()
+                        .cast(&DataType::UInt32)
                         .with_context(|| {
                             format!("When trying to process question '{}'", instance.name())
                         })
@@ -1934,7 +1987,7 @@ impl Question {
                             exceptions::PyValueError::new_err(format!("{:?}", err))
                         })?,
                     QuestionType::Quantity => response
-                        .cast::<f64>()
+                        .cast(&DataType::Float64)
                         .with_context(|| {
                             format!("When trying to process question '{}'", instance.name())
                         })
@@ -1942,7 +1995,7 @@ impl Question {
                             exceptions::PyValueError::new_err(format!("{:?}", err))
                         })?,
                     QuestionType::Date => response
-                        .cast::<u32>()
+                        .cast(&DataType::UInt32)
                         .with_context(|| {
                             format!("When trying to process question '{}'", instance.name())
                         })
@@ -1950,7 +2003,7 @@ impl Question {
                             exceptions::PyValueError::new_err(format!("{:?}", err))
                         })?,
                     QuestionType::Time => response
-                        .cast::<u32>()
+                        .cast(&DataType::UInt32)
                         .with_context(|| {
                             format!("When trying to process question '{}'", instance.name())
                         })
@@ -1979,6 +2032,19 @@ impl Question {
 
 /// Defines the part of the data record that is allocated to holding the value
 /// of the variable.
+#[cfg_attr(
+    all(feature = "pyo3", not(doc)),
+    doc = r###"
+Args:
+    start (int): Starting position, using Triple-S 1-based indexing.
+
+Keyword Args:
+    finish (int | None): Inclusive finishing position. None uses start. Defaults to None.
+
+Returns:
+    Location: The constructed Location instance.
+"###
+)]
 #[cfg_attr(
     feature = "pyo3",
     pyclass(module = "triple_s", name = "Location", from_py_object)
@@ -2154,14 +2220,23 @@ impl Location {
 impl Location {
     /// Raises `ValueError` if `finish` is less than `start`.
     ///
-    /// # Examples
+    /// Args:
+    ///     start (int): Starting position, using Triple-S 1-based indexing.
     ///
-    /// ```python
-    /// from triple_s import Location
+    /// Keyword Args:
+    ///     finish (int | None): Inclusive finishing position. None uses start. Defaults to None.
     ///
-    /// location = Location(1, 20)
-    /// single_column = Location(1)
-    /// ```
+    /// Returns:
+    ///     Location: The constructed Location instance.
+    ///
+    /// Examples:
+    ///
+    ///     .. code-block:: python
+    ///
+    ///         from triple_s import Location
+    ///
+    ///         location = Location(1, 20)
+    ///         single_column = Location(1)
     #[new]
     #[pyo3(signature=(start:"int", finish:"int"=None))]
     fn py_new(start: u32, finish: Option<u32>) -> PyResult<Self> {
@@ -2211,6 +2286,12 @@ impl Location {
     ///
     /// 'start' (int): start of a data location
     /// 'finish' (int, *optional*): end of a data location
+    ///
+    /// Args:
+    ///     value (dict): Fields used to construct the Location instance, as described above.
+    ///
+    /// Returns:
+    ///     Location: The constructed Location instance.
     #[staticmethod]
     #[pyo3(name = "from_dict")]
     fn py_from_dict(value: Bound<'_, PyDict>) -> PyResult<Self> {
@@ -2231,58 +2312,132 @@ impl Location {
     // }
 }
 
-/// Controls how multiple-choice responses are stored: the optional `<spread>`
-/// element in Triple-S XML or `SPREAD` line in Triple-S Classic.
-///
-/// Without spread (default)
-/// ------------------------------
-///
-/// When spread is absent (None), each character in the question's data field
-/// represents a category: 1 means selected and 0 means not selected.
-///
-/// Positions start at 1 and correspond directly to category codes:
-///
-/// - Category codes: 1, 2, 3, 4, 5
-/// - Selection flags: 1, 0, 1, 0, 0 (stored as "10100")
-/// - Selected codes: [1, 3]
-///
-/// With spread
-/// --------------
-///
-/// When spread is present, the data contains consecutive slots called
-/// subfields. The subfield count specifies the number of slots; width
-/// specifies the number of characters in each slot.
-///
-/// Width can be omitted for fixed-width (.asc) data when equal-width slots
-/// exactly fill the question's field. It is then calculated as the field
-/// width divided by the subfield count. Width is required for CSV data.
-///
-/// Examples
-/// --------
-///
-/// Two subfields, each one character wide:
-///
-/// - Raw data: "13"
-/// - Split: "1" | "3"
-/// - Selected codes: [1, 3]
-///
-/// One subfield, two characters wide:
-///
-/// - Raw data: "13"
-/// - Split: "13"
-/// - Selected codes: `[13]`
-///
-/// Two subfields, each two characters wide. Zero marks an unused slot:
-///
-/// - Raw data: "1300"
-/// - Split: "13" | "00"
-/// - Selected codes: `[13]`
-///
-/// Three subfields, each three characters wide:
-///
-/// - Raw data: "001042999"
-/// - Split: "001" | "042" | "999"
-/// - Selected codes: [1, 42, 999]
+#[cfg_attr(
+    any(not(feature = "pyo3"), doc),
+    doc = r###"
+Controls how multiple-choice responses are stored: the optional `<spread>`
+element in Triple-S XML or `SPREAD` line in Triple-S Classic.
+
+Without spread (default)
+------------------------------
+
+When spread is absent (None), each character in the question's data field
+represents a category: 1 means selected and 0 means not selected.
+
+Positions start at 1 and correspond directly to category codes:
+
+- Category codes: 1, 2, 3, 4, 5
+- Selection flags: 1, 0, 1, 0, 0 (stored as "10100")
+- Selected codes: [1, 3]
+
+With spread
+--------------
+
+When spread is present, the data contains consecutive slots called
+subfields. The subfield count specifies the number of slots; width
+specifies the number of characters in each slot.
+
+Width can be omitted for fixed-width (.asc) data when equal-width slots
+exactly fill the question's field. It is then calculated as the field
+width divided by the subfield count. Width is required for CSV data.
+
+Examples
+--------
+
+Two subfields, each one character wide:
+
+- Raw data: "13"
+- Split: "1" | "3"
+- Selected codes: [1, 3]
+
+One subfield, two characters wide:
+
+- Raw data: "13"
+- Split: "13"
+- Selected codes: `[13]`
+
+Two subfields, each two characters wide. Zero marks an unused slot:
+
+- Raw data: "1300"
+- Split: "13" | "00"
+- Selected codes: `[13]`
+
+Three subfields, each three characters wide:
+
+- Raw data: "001042999"
+- Split: "001" | "042" | "999"
+- Selected codes: [1, 42, 999]
+"###
+)]
+#[cfg_attr(
+    all(feature = "pyo3", not(doc)),
+    doc = r###"
+Controls how multiple-choice responses are stored: the optional `<spread>`
+element in Triple-S XML or `SPREAD` line in Triple-S Classic.
+
+Without spread (default)
+------------------------------
+
+When spread is absent (None), each character in the question's data field
+represents a category: 1 means selected and 0 means not selected.
+
+Positions start at 1 and correspond directly to category codes:
+
+- Category codes: 1, 2, 3, 4, 5
+- Selection flags: 1, 0, 1, 0, 0 (stored as "10100")
+- Selected codes: [1, 3]
+
+With spread
+--------------
+
+When spread is present, the data contains consecutive slots called
+subfields. The subfield count specifies the number of slots; width
+specifies the number of characters in each slot.
+
+Width can be omitted for fixed-width (.asc) data when equal-width slots
+exactly fill the question's field. It is then calculated as the field
+width divided by the subfield count. Width is required for CSV data.
+
+Examples:
+
+    Two subfields, each one character wide:
+
+    - Raw data: "13"
+    - Split: "1" | "3"
+    - Selected codes: [1, 3]
+
+    One subfield, two characters wide:
+
+    - Raw data: "13"
+    - Split: "13"
+    - Selected codes: `[13]`
+
+    Two subfields, each two characters wide. Zero marks an unused slot:
+
+    - Raw data: "1300"
+    - Split: "13" | "00"
+    - Selected codes: `[13]`
+
+    Three subfields, each three characters wide:
+
+    - Raw data: "001042999"
+    - Split: "001" | "042" | "999"
+    - Selected codes: [1, 42, 999]
+"###
+)]
+#[cfg_attr(
+    all(feature = "pyo3", not(doc)),
+    doc = r###"
+Args:
+    num_subfields (int): Number of response subfields.
+
+Keyword Args:
+    subfield_width (int | None): Width of each subfield, or None to leave it unspecified. Defaults to None.
+
+Returns:
+    Spread: The constructed Spread instance.
+"###
+)]
 #[cfg_attr(
     feature = "pyo3",
     pyclass(module = "triple_s", name = "Spread", from_py_object)
@@ -2392,14 +2547,23 @@ impl Spread {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Spread {
-    /// # Examples
+    /// Args:
+    ///     num_subfields (int): Number of response subfields.
     ///
-    /// ```python
-    /// from triple_s import Spread
+    /// Keyword Args:
+    ///     subfield_width (int | None): Width of each subfield, or None to leave it unspecified. Defaults to None.
     ///
-    /// spread = Spread(2, subfield_width=1)
-    /// without_width = Spread(2)
-    /// ```
+    /// Returns:
+    ///     Spread: The constructed Spread instance.
+    ///
+    /// Examples:
+    ///
+    ///     .. code-block:: python
+    ///
+    ///         from triple_s import Spread
+    ///
+    ///         spread = Spread(2, subfield_width=1)
+    ///         without_width = Spread(2)
     #[new]
     #[pyo3(signature=(num_subfields, subfield_width=None))]
     fn py_new(num_subfields: u32, subfield_width: Option<u32>) -> PyResult<Self> {
@@ -2449,6 +2613,12 @@ impl Spread {
     ///
     /// 'num_subfields' (int): number of subfields.
     /// 'subfield_width' (int, *optional*): width of each subfield.
+    ///
+    /// Args:
+    ///     value (dict): Fields used to construct the Spread instance, as described above.
+    ///
+    /// Returns:
+    ///     Spread: The constructed Spread instance.
     #[staticmethod]
     #[pyo3(name = "from_dict")]
     fn py_from_dict(value: Bound<'_, PyDict>) -> PyResult<Self> {
@@ -2465,23 +2635,50 @@ impl Spread {
     }
 }
 
-/// Flag for indicating the data type of `code` field in a `<value>` node. Only
-/// used for `Single` type of questions.
-///
-/// Unsigned:
-/// The default. Code value being u32, `format` attribute `numeric`
-///
-/// Literal:
-/// Introduced since SSS 2.0, basically something like:
-///
-/// ```xml
-/// <variable ident="11" type="single" format="literal">
-///     <values>
-///         <value code="B">Between 3 months and 1 year</value>
-///         <value code="C">More than 1 years time</value>
-///     </values>
-/// </variable>
-/// ```
+#[cfg_attr(
+    any(not(feature = "pyo3"), doc),
+    doc = r###"
+Flag for indicating the data type of `code` field in a `<value>` node. Only
+used for `Single` type of questions.
+
+Unsigned:
+The default. Code value being u32, `format` attribute `numeric`
+
+Literal:
+Introduced since SSS 2.0, basically something like:
+
+```xml
+<variable ident="11" type="single" format="literal">
+    <values>
+        <value code="B">Between 3 months and 1 year</value>
+        <value code="C">More than 1 years time</value>
+    </values>
+</variable>
+```
+"###
+)]
+#[cfg_attr(
+    all(feature = "pyo3", not(doc)),
+    doc = r###"
+Flag for indicating the data type of `code` field in a `<value>` node. Only
+used for `Single` type of questions.
+
+Unsigned:
+The default. Code value being u32, `format` attribute `numeric`
+
+Literal:
+Introduced since SSS 2.0, basically something like:
+
+.. code-block:: xml
+
+    <variable ident="11" type="single" format="literal">
+        <values>
+            <value code="B">Between 3 months and 1 year</value>
+            <value code="C">More than 1 years time</value>
+        </values>
+    </variable>
+"###
+)]
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Debug, Clone, EnumString, EnumIter, Default, PartialEq)]
 pub enum CodeFormat {
@@ -2490,19 +2687,42 @@ pub enum CodeFormat {
     #[default]
     #[strum(serialize = "numeric")]
     UnSigned,
-    /// Single response question with `format='literal'`, introduced since SSS
-    /// 2.0. Literal response codes are strings and do not support a value
-    /// range. An example would be:
-    ///
-    /// ```xml
-    /// <variable ident="11" type="single" format="literal">
-    ///     <values>
-    ///         <value code="A">Within 3 months</value>
-    ///         <value code="B">Between 3 months and 1 year</value>
-    ///         <value code="C">More than 1 years time</value>
-    ///     </values>
-    /// </variable>
-    /// ```
+    #[cfg_attr(
+        any(not(feature = "pyo3"), doc),
+        doc = r###"
+Single response question with `format='literal'`, introduced since SSS
+2.0. Literal response codes are strings and do not support a value
+range. An example would be:
+
+```xml
+<variable ident="11" type="single" format="literal">
+    <values>
+        <value code="A">Within 3 months</value>
+        <value code="B">Between 3 months and 1 year</value>
+        <value code="C">More than 1 years time</value>
+    </values>
+</variable>
+```
+"###
+    )]
+    #[cfg_attr(
+        all(feature = "pyo3", not(doc)),
+        doc = r###"
+Single response question with `format='literal'`, introduced since SSS
+2.0. Literal response codes are strings and do not support a value
+range. An example would be:
+
+.. code-block:: xml
+
+    <variable ident="11" type="single" format="literal">
+        <values>
+            <value code="A">Within 3 months</value>
+            <value code="B">Between 3 months and 1 year</value>
+            <value code="C">More than 1 years time</value>
+        </values>
+    </variable>
+"###
+    )]
     #[strum(serialize = "literal")]
     Literal,
 }
@@ -2564,6 +2784,10 @@ impl PyEnum for Usage {}
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Usage {
+    /// List the available Usage values.
+    ///
+    /// Returns:
+    ///     list[str]: Accepted string values for this enumeration.
     #[pyo3(name = "available_options")]
     #[staticmethod]
     fn py_available_options() -> Vec<String> {
@@ -2624,6 +2848,10 @@ impl PyEnum for QuestionType {}
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl QuestionType {
+    /// List the available QuestionType values.
+    ///
+    /// Returns:
+    ///     list[str]: Accepted string values for this enumeration.
     #[pyo3(name = "available_options")]
     #[staticmethod]
     fn py_available_options() -> Vec<String> {
@@ -2775,7 +3003,9 @@ mod test {
     #[test]
     fn test_question_add_code_success() {
         let mut question = new_filled_question();
-        question.try_add_value(Value::UnSigned(3), Some("ok"), None, Some(1.5)).unwrap();
+        question
+            .try_add_value(AnyValue::UInt32(3), Some("ok"), None, Some(1.5))
+            .unwrap();
 
         assert_eq!(
             question.response().values()[0].read().score().clone(),

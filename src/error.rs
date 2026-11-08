@@ -5,7 +5,7 @@
 use std::{error::Error, fmt, sync::Arc};
 
 #[cfg(feature = "pyo3")]
-use pyo3::{PyErr, create_exception, exceptions, types::PyAnyMethods};
+use pyo3::{create_exception, exceptions, types::PyAnyMethods};
 use strum::IntoStaticStr;
 
 #[cfg(feature = "pyo3")]
@@ -436,8 +436,6 @@ impl fmt::Display for RangeError {
 }
 
 /// Error raised when trying to convert one enum variant to another
-///
-/// Used mostly in Value.cast()
 #[derive(Debug)]
 pub enum TypeConvertionError {
     /// (source, target, value)
