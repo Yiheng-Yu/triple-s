@@ -52,7 +52,7 @@ PYTHON_API_CLASSES = {
     "Variant",
     "Version",
 }
-PYTHON_API_FUNCTIONS = {"read_datamap", "read_triple_s"}
+PYTHON_API_FUNCTIONS = {"read_datamap", "read_triple_s", "read_data"}
 
 
 def rustdoc_link(match):

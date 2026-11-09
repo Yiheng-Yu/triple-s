@@ -182,7 +182,7 @@ impl SurveyData {
     }
 
     /// create new instance from cache
-    pub(crate) fn from_cache(cache: TempPath, schema: Option<Arc<Schema>>) -> Result<Self> {
+    pub(crate) fn from_cache(cache: TempPath, schema: Option<Arc<Schema>>) -> PolarsResult<Self> {
         let args = ScanArgsParquet {
             schema,
             ..Default::default()

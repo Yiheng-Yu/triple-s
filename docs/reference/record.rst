@@ -41,7 +41,6 @@ Methods
 -------------
 
 .. automethod:: Record.get(question_name) -> Question | None
-.. automethod:: Record.load_data(path_data) -> SurveyData
 .. automethod:: Record.validate_data(path) -> None
 .. automethod:: Record.from_dict(content) -> Record
 .. automethod:: Record.to_xml() -> str

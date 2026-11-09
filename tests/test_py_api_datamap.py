@@ -2,6 +2,7 @@ import warnings
 
 import pytest
 from triple_s import (
+    read_data,
     Datamap,
     Question,
     Survey,
@@ -42,12 +43,13 @@ def test_read_data(path_sss, path_data):
 
 
 def test_load_asc_file(datamap):
-    data = datamap.load_data(PATH_ASC)
+    href = datamap.record.href
+    data = read_data(datamap, PATH_ASC)
     assert isinstance(data, SurveyData)
     assert data.has_data()
     assert data.num_response == 3
     assert data.to_polars().shape == (3, 12)
-    assert datamap.record.href == PATH_ASC
+    assert datamap.record.href == href
 
 
 def test_datamap_iter(datamap):

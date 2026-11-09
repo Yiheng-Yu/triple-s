@@ -3,7 +3,7 @@ from datetime import date, time
 
 import pandas as pd
 import pytest
-from triple_s import NoDataError, SurveyData, read_datamap
+from triple_s import read_data, NoDataError, SurveyData, read_datamap
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def test_to_pandas_without_loaded_data():
 
 
 def test_loaded_data_to_pandas(datamap):
-    data = datamap.load_data("tests/sss-examples/sss-2.0/example1.asc")
+    data = read_data(datamap, "tests/sss-examples/sss-2.0/example1.asc")
     result = data.to_pandas()
 
     assert isinstance(result, pd.DataFrame)

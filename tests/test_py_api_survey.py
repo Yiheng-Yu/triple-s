@@ -2,7 +2,7 @@ import polars
 import pandas
 
 import pytest
-from triple_s import NoDataError, read_triple_s
+from triple_s import read_data, NoDataError, read_triple_s
 
 PATH_SSS_EXAMPLE_1 = "tests/sss-examples/sss-2.0/example1.sss"
 PATH_ASC = "tests/sss-examples/sss-2.0/example1.asc"
@@ -141,7 +141,7 @@ def test_survey_without_data():
     with pytest.raises(NoDataError):
         survey.data.to_polars()
 
-    data = survey.datamap.load_data(PATH_ASC)
+    data = read_data(survey.datamap, PATH_ASC)
     assert data.has_data()
     assert not survey.has_data()
 

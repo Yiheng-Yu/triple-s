@@ -50,18 +50,19 @@ Examples:
 
     Load and export survey data
 
-    :func:`Datamap.load_data()`/ :func:`Record.load_data()`:
+    :func:`triple_s.read_data`:
 
     *Loading and validation support UTF-8 and BOM-marked UTF-16; invalid sequences become ``�`` (U+FFFD), each occupying one fixed-width position.*
 
     .. code-block:: python
 
-       data = datamap.load_data("survey.asc")
+       from triple_s import read_data
+
+       data = read_data(datamap, "survey.asc")
        df = data.to_polars()
        pandas_df = data.to_pandas()
 
-    Loading returns a :class:`triple_s.SurveyData` instance,
-    it updates the datamap record's ``href`` to to the path of the data file, as well as ``data_format`` to the type of data file.
+    Loading returns a :class:`triple_s.SurveyData` instance.
 
     *To read the definition and respondent data together, use :func:`triple_s.read_triple_s`:*
 

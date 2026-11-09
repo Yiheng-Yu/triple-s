@@ -19,7 +19,6 @@ use crate::{
 
 #[cfg(feature = "pyo3")]
 use crate::{
-    data::SurveyData,
     datamap::record::RecordIterator,
     utils::{get_type_name, py_value_error},
 };
@@ -396,20 +395,7 @@ impl Datamap {
         self.to_xml().map_err(py_value_error)
     }
 
-    /// Load an `.asc` or `.csv` file using the record's skip setting.
-    /// Invalid Unicode sequences become `�` (U+FFFD).
-    /// Returns `SurveyData` and updates the record's `href` and `data_format`.
-    /// The returned data is not stored on the datamap.
-    ///
-    /// Args:
-    ///     path (str): Path to an .asc or .csv respondent data file.
-    ///
-    /// Returns:
-    ///     SurveyData: The loaded respondent data.
-    #[pyo3(name="load_data", signature=(path:"str"))]
-    fn py_load_data(&mut self, path: &str) -> PyResult<SurveyData> {
-        self.record_mut().load_data(path).map_err(py_value_error)
-    }
+
 }
 
 #[cfg(test)]
@@ -520,9 +506,7 @@ pub mod test {
         const PATH_ASC: &str = "tests/sss-examples/sss-2.0/example1.asc";
         const PATH_SSS: &str = "tests/sss-examples/sss-2.0/example1.sss";
 
-        let mut survey = crate::read_datamap(PATH_SSS).unwrap();
-        let record = survey.record_mut();
-
-        record.load_data(PATH_ASC).unwrap();
+        let survey = crate::read_datamap(PATH_SSS).unwrap();
+        crate::read_data(&survey, PATH_ASC).unwrap();
     }
 }

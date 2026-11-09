@@ -6,7 +6,7 @@ import warnings
 import pandas as pd
 import pytest
 
-from triple_s import read_datamap
+from triple_s import read_data, read_datamap
 
 
 @pytest.fixture
@@ -17,7 +17,7 @@ def datamap():
 
 
 def test_load_csv_example(datamap):
-    data = datamap.load_data("tests/sss-examples/sss-2.0/example2.csv")
+    data = read_data(datamap, "tests/sss-examples/sss-2.0/example2.csv")
     result = data.to_pandas()
     assert result.shape == (3, 12)
     assert result["RESPONDENT_ID"].tolist() == [520001, 520002, 520003]
@@ -61,7 +61,7 @@ def test_csv_quoting_and_skip(tmp_path, datamap, skip):
         warnings.simplefilter("ignore")
         datamap = read_datamap(str(datamap_path))
 
-    data = datamap.record.load_data(str(path))
+    data = read_data(datamap, str(path))
     result = data.to_pandas()
     assert result.shape == (1, 12)
     assert result["Q3.a"].iloc[0] == row[6]
@@ -73,7 +73,7 @@ def test_csv_missing_field_reports_question(tmp_path, datamap):
     path.write_text("header\n520001,20050504\n")
     href = datamap.record.href
     with pytest.raises(ValueError, match="Q1.b.*field 3"):
-        datamap.load_data(str(path))
+        read_data(datamap, str(path))
     assert datamap.record.href == href
 
 
@@ -82,7 +82,7 @@ def test_csv_invalid_value_reports_record_and_question(tmp_path, datamap):
     path = tmp_path / "invalid.csv"
     path.write_text(data.replace("20050504", "invalid"))
     with pytest.raises(ValueError):
-        datamap.load_data(str(path))
+        read_data(datamap, str(path))
 
 
 @pytest.mark.parametrize("skip", ["-1", "invalid"])
@@ -94,4 +94,4 @@ def test_invalid_skip_is_reported(tmp_path, skip):
         warnings.simplefilter("ignore")
         datamap = read_datamap(str(path))
     with pytest.raises(ValueError, match="skip must be a non-negative integer"):
-        datamap.load_data("tests/sss-examples/sss-2.0/example2.csv")
+        read_data(datamap, "tests/sss-examples/sss-2.0/example2.csv")
