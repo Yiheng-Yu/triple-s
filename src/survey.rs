@@ -260,7 +260,7 @@ impl Survey {
     }
 
     /// Iterate each response row by row, same as `iter_rows()`
-    fn __iter__(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {\
+    fn __iter__(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {
         todo!("response_labels() method!!")
         // let df = self.data().lazy()?
         //     .clone();
