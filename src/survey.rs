@@ -10,10 +10,7 @@ use pyo3_polars::error::PyPolarsErr;
 
 #[cfg(feature = "pyo3")]
 use crate::{
-    SurveyInfo,
-    config::{DataFrameFormat, ResponseDisplay},
-    prelude::*,
-    utils::{anyvalue_to_python, get_type_name},
+    SurveyInfo, config::{DataFrameFormat, ResponseDisplay}, data::ResponseIterator, prelude::*, utils::{anyvalue_to_python, get_type_name},
 };
 use crate::{
     data::{QuestionData, SurveyData, config::Config},
@@ -106,6 +103,26 @@ impl Survey {
     /// Mutable view of survey configuration options
     pub fn config_mut(&mut self) -> RwLockWriteGuard<'_, Config> {
         self.config.write()
+    }
+
+
+    pub(crate) fn response_labels(&self) {
+        let responses = self.datamap()
+            .record()
+            .content()
+            .clone()
+            .into_iter()
+            .flat_map(|question| {
+                let question = question.read();
+                let name = question.name().to_owned();
+                question
+                    .response_label_iterator()
+                    .map(move |(key, value)| {
+                        (name.clone(), key, value.value())
+                    })
+            });
+
+        todo!()
     }
 }
 
@@ -243,15 +260,19 @@ impl Survey {
     }
 
     /// Iterate each response row by row, same as `iter_rows()`
-    fn __iter__(&self, py: Python<'_>) -> PyResult<Py<crate::data::ResponseIterator>> {
-        self.data().__iter__(py)
+    fn __iter__(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {\
+        todo!("response_labels() method!!")
+        // let df = self.data().lazy()?
+        //     .clone();
+
+        // self.data().__iter__(py)
     }
 
     /// Iter each individual respondant data
     ///
     /// Returns:
     ///     Iterator[dict[str, object]]: An iterator over respondent rows.
-    fn iter_rows(&self, py: Python<'_>) -> PyResult<Py<crate::data::ResponseIterator>> {
+    fn iter_rows(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {
         self.data().__iter__(py)
     }
 
@@ -334,6 +355,7 @@ impl Survey {
     ///     When `"pandas"` is selected, the resulting Polars DataFrame is converted
     ///     to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the
     ///     computation-heavy stuff are already handled on the Rust side.
+    /// 
     #[getter(dataframe_format)]
     fn py_get_dataframe_format(&self) -> String {
         self.config().py_dataframe_format.to_string()

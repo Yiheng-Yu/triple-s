@@ -502,14 +502,20 @@ impl Question {
     /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
     /// method will not mutate the caller.
     pub fn response_label(&self) -> HashMap<AnyValue<'static>, Text> {
+        self.response_label_iterator()
+            .collect()
+    }
+
+    #[inline]
+    pub(crate) fn response_label_iterator(&self) -> impl Iterator<Item = (AnyValue<'static>, Text)> + use<> {
         self.response()
             .values()
-            .iter()
+            .clone()
+            .into_iter()
             .map(|item| {
                 let item = item.read();
-                (item.value().clone(), item.label().deepcopy())
+                (item.value().clone().into_static(), item.label().deepcopy())
             })
-            .collect()
     }
 }
 
