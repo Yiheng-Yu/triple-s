@@ -281,6 +281,13 @@ impl SurveyData {
         info.push(("num_response", num_response));
         Ok(info)
     }
+
+    #[cfg(feature = "pyo3")]
+    #[inline]
+    pub(crate) fn create_data_entry_iterator(&self) -> PyResult<DataEntryIterator> {
+        let df = self.lazy()?.clone().collect().map_err(PyPolarsErr::Polars)?;
+        Ok(DataEntryIterator { df, index: 0 })
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -324,9 +331,9 @@ impl SurveyData {
         Ok(format!("SurveyData({{\n  {}\n}})", formatted))
     }
 
-    pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {
-        let df = self.lazy()?.clone().collect().map_err(PyPolarsErr::Polars)?;
-        Py::new(py, ResponseIterator { df, index: 0 })
+    pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<Py<DataEntryIterator>> {
+        let iterator = self.create_data_entry_iterator()?;
+        Py::new(py, iterator)
     }
 
     /// Create new empty [`SurveyData`] instance
@@ -406,28 +413,40 @@ impl std::fmt::Debug for SurveyData {
 /// Iterates through individual responses of a question
 #[cfg(feature = "pyo3")]
 #[pyclass]
-pub(crate) struct ResponseIterator {
+pub(crate) struct DataEntryIterator {
     pub df: DataFrame,
     pub index: usize,
 }
 
+impl DataEntryIterator {
+    pub fn get_row<'a>(
+        &'a self,
+        index: usize,
+    ) -> impl Iterator<Item = PolarsResult<(&'a str, AnyValue<'a>)>> + 'a {
+        self.df.columns().iter().map(move |column| {
+            let value = column.get(index)?;
+            Ok((column.name().as_str(), value))
+        })
+    }
+}
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl ResponseIterator {
+impl DataEntryIterator {
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
-    fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+    pub fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
         if self.index >= self.df.height() {
             return Ok(None);
         }
 
         let dict = PyDict::new(py);
-
-        for column in self.df.columns() {
-            let value = column.get(self.index).map_err(PyPolarsErr::Polars)?;
-            dict.set_item(column.name().as_str(), anyvalue_to_python(py, value)?)?;
+        for row_result in self.get_row(self.index) {
+            let (colname, coldata) = row_result.map_err(PyPolarsErr::Polars)?;
+            let py_value = anyvalue_to_python(py, coldata)?;
+            dict.set_item(colname, py_value)?
         }
 
         self.index += 1;

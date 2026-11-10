@@ -1,10 +1,15 @@
 #[cfg(feature = "pyo3")]
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use polars::{frame::row::Row, prelude::*};
 #[cfg(feature = "pyo3")]
-use pyo3::{IntoPyObjectExt, exceptions, prelude::*, types::PyDict};
+use pyo3::{
+    IntoPyObjectExt,
+    exceptions,
+    prelude::*,
+    types::{PyDict, PyList},
+};
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use rayon::prelude::*;
@@ -13,7 +18,7 @@ use rayon::prelude::*;
 use crate::{
     SurveyInfo,
     config::{DataFrameFormat, ResponseDisplay},
-    data::ResponseIterator,
+    data::DataEntryIterator,
     prelude::*,
     utils::{anyvalue_to_python, get_type_name, polars_to_pandas},
 };
@@ -266,7 +271,7 @@ impl Survey {
                     Ok(col(colname.clone()).list().eval(element().replace_strict(
                         lit(old),
                         lit(new),
-                        Some(col(colname)),
+                        Some(element()),
                         Some(DataTypeExpr::Literal(DataType::String)),
                     )))
                 }
@@ -369,10 +374,40 @@ impl Survey {
     /// Iterate each response row by row, same as `iter_rows()`
     fn __iter__(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {
         match self.config().response_display {
-            ResponseDisplay::Value => self.data().__iter__(py),
+            ResponseDisplay::Value => {
+                let iterator = ResponseIterator {
+                    data_iterator: self.data.create_data_entry_iterator(),
+                    show_label: false,
+                    label_lookup: HashMap::new(),
+                };
+                Py::new(py, iterator)
+            }
+
             ResponseDisplay::Label => {
-                let df = self.to_labelled_dataframe().map_err(PyPolarsErr::Polars)?;
-                Py::new(py, ResponseIterator { df, index: 0 })
+                let label_lookup = self
+                    .datamap()
+                    .record()
+                    .content()
+                    .clone()
+                    .into_par_iter()
+                    .flat_map_iter(|question| {
+                        let question = question.read();
+                        let name = question.name();
+                        let question_lookup = question
+                            .response_label_iterator()
+                            .collect::<HashMap<AnyValue<'static>, PlSmallStr>>()(
+                            name,
+                            question_lookup,
+                        );
+                    })
+                    .collect::<HashMap<String, _>>();
+                let iterator = ResponseIterator {
+                    data_iterator: self.data.create_data_entry_iterator(),
+                    show_label: true,
+                    label_lookup: label_lookup,
+                };
+
+                Py::new(py, iterator)
             }
         }
     }
@@ -381,7 +416,7 @@ impl Survey {
     ///
     /// Returns:
     ///     Iterator[dict[str, object]]: An iterator over respondent rows.
-    fn iter_rows(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {
+    fn iter_rows(&self, py: Python<'_>) -> PyResult<Py<DataEntryIterator>> {
         self.data().__iter__(py)
     }
 
@@ -602,6 +637,89 @@ impl QuestionDataIterator {
     }
 }
 
+// // // ---------- Helpers -----------
+/// Iterates through individual responses throughout the survey
+#[cfg(feature = "pyo3")]
+#[pyclass]
+struct ResponseIterator {
+    data_iterator: DataEntryIterator,
+    show_label: bool,
+    /// {question_name: {respons_code: response_label}}
+    label_lookup: HashMap<String, HashMap<AnyValue<'static>, PlSmallStr>>,
+}
+
+impl ResponseIterator {
+    #[inline]
+    fn index(&self) -> usize {
+        self.data_iterator.index
+    }
+
+    #[inline]
+    fn advance(&mut self) {
+        self.data_iterator.index += 1;
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ResponseIterator {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+        if !self.show_label {
+            return self.data_iterator.__next__(py);
+        };
+
+        let current_index = self.index();
+
+        if current_index >= self.data_iterator.df.height() {
+            return Ok(None);
+        };
+
+        let dict = PyDict::new(py);
+        for row_result in self.data_iterator.get_row(current_index) {
+            let (colname, value) = row_result.map_err(PyPolarsErr::Polars)?;
+            match &value {
+                AnyValue::List(inner) if inner.dtype() == &DataType::UInt32 => {
+                    if let Some(question_label) = self.label_lookup.get(colname) {
+                        let inner_data = inner
+                            .iter()
+                            .map(|entry| {
+                                let labelled = question_label
+                                    .get(&entry)
+                                    .map(|label| AnyValue::StringOwned(label.clone()))
+                                    .unwrap_or(entry);
+                                anyvalue_to_python(py, labelled)
+                            })
+                            .collect::<PyResult<Vec<Bound<'py, PyAny>>>>()?;
+                        let pyvalue = PyList::new(py, inner_data)?;
+                        dict.set_item(colname, pyvalue.into_any())?;
+                    } else {
+                        let pyvalue = anyvalue_to_python(py, value)?;
+                        dict.set_item(colname, pyvalue.into_any())?;
+                    }
+                }
+                _ => {
+                    let value = self
+                        .label_lookup
+                        .get(colname)
+                        .map(|lookup| lookup.get(&value))
+                        .flatten()
+                        .map(|item| AnyValue::StringOwned(item.clone()))
+                        .unwrap_or(value);
+                    let pyvalue = anyvalue_to_python(py, value)?;
+                    dict.set_item(colname.to_string(), pyvalue.into_any())?;
+                }
+            }
+        }
+
+        self.advance();
+        Ok(Some(dict.into_any()))
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -617,15 +735,12 @@ mod test {
     #[test]
     fn test_response_label_dataframe() {
         let survey = get_survey_struct();
-        let labels = survey.response_labels().unwrap();
-        println!("Dataframe read:");
-        println!("{:?}", labels)
+        let _ = survey.response_labels().unwrap();
     }
 
     #[test]
     fn test_export_to_labelled_polars_dataframe() {
         let survey = get_survey_struct();
-        let df = survey.to_labelled_dataframe().unwrap();
-        println!("{:?}", df)
+        let _ = survey.to_labelled_dataframe().unwrap();
     }
 }
