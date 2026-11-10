@@ -580,7 +580,8 @@ impl ColumnIterator {
             return Ok(None);
         }
 
-        let value = self.column.get(self.index).map_err(PyPolarsErr::Polars)?;
+        // __next__ checks the index against the column length immediately above.
+        let value = unsafe { self.column.get_unchecked(self.index) };
 
         self.index += 1;
         anyvalue_to_python(py, value).map(Some) // bound already checked

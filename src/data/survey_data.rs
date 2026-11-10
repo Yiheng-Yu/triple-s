@@ -7,8 +7,9 @@ use anyhow::Result;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
+    IntoPyObjectExt,
     prelude::*,
-    types::{PyDict, PyString},
+    types::{PyDict, PyIterator, PyString},
 };
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
@@ -423,6 +424,7 @@ pub(crate) struct DataEntryIterator {
     pub df: DataFrame,
     pub index: usize,
     pub names: Vec<Py<PyString>>,
+    rows: Option<Py<PyIterator>>,
 }
 
 #[cfg(feature = "pyo3")]
@@ -437,13 +439,41 @@ impl DataEntryIterator {
             df,
             index: 0,
             names,
+            rows: None,
         }
     }
 
+    fn python_rows<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyIterator>> {
+        if self.rows.is_none() {
+            let dataframe = PyDataFrame(self.df.clone()).into_bound_py_any(py)?;
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("named", true)?;
+            let rows = dataframe.call_method("iter_rows", (), Some(&kwargs))?;
+            self.rows = Some(PyIterator::from_object(&rows)?.unbind());
+        }
+
+        Ok(self.rows.as_ref().unwrap().bind(py).clone())
+    }
+
     pub fn get_row<'py>(&self, py: Python<'py>, index: usize) -> PyResult<Bound<'py, PyDict>> {
+        if index >= self.df.height()
+            && let Some(column) = self.df.columns().first()
+        {
+            column.get(index).map_err(PyPolarsErr::Polars)?;
+        }
+
+        self.get_row_unchecked(py, index)
+    }
+
+    fn get_row_unchecked<'py>(
+        &self,
+        py: Python<'py>,
+        index: usize,
+    ) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
         for (column, name) in self.df.columns().iter().zip(&self.names) {
-            let value = column.get(index).map_err(PyPolarsErr::Polars)?;
+            // Iterator bounds checks and get_row's row-level check guarantee valid column indices.
+            let value = unsafe { column.get_unchecked(index) };
             dict.set_item(name.bind(py), anyvalue_to_python(py, value)?)?;
         }
         Ok(dict)
@@ -462,10 +492,9 @@ impl DataEntryIterator {
             return Ok(None);
         }
 
-        let dict = self.get_row(py, self.index)?;
-
+        let row = self.python_rows(py)?.next().transpose()?;
         self.index += 1;
-        Ok(Some(dict.into_any()))
+        Ok(row)
     }
 }
 

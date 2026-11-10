@@ -235,60 +235,60 @@ impl Survey {
         self.datamap().get_response_label_hashmap()
     }
 
-    fn to_labelled_dataframe(&self) -> PolarsResult<DataFrame> {
-        // convert response value to response label
-        let df = self.data().lazy()?.clone().collect()?;
-        let data_label = self.response_labels()?.lazy();
+    // fn to_labelled_dataframe(&self) -> PolarsResult<DataFrame> {
+    //     // convert response value to response label
+    //     let df = self.data().lazy()?.clone().collect()?;
+    //     let data_label = self.response_labels()?.lazy();
 
-        let schema = df.schema().clone();
-        let query = schema
-            .iter()
-            .map(|(colname, dtype)| {
-                let colname = colname.clone();
-                let (dtype, is_multi) = match dtype {
-                    DataType::List(inner) if inner.as_ref() == &DataType::UInt32 => {
-                        (DataType::UInt32, true)
-                    }
-                    _ => (dtype.clone(), false),
-                };
-                let resposne_mapping = data_label
-                    .clone()
-                    .filter(col("question_name").eq(lit(colname.to_string())))
-                    .with_column(col("response").cast(dtype))
-                    .collect()?;
+    //     let schema = df.schema().clone();
+    //     let query = schema
+    //         .iter()
+    //         .map(|(colname, dtype)| {
+    //             let colname = colname.clone();
+    //             let (dtype, is_multi) = match dtype {
+    //                 DataType::List(inner) if inner.as_ref() == &DataType::UInt32 => {
+    //                     (DataType::UInt32, true)
+    //                 }
+    //                 _ => (dtype.clone(), false),
+    //             };
+    //             let resposne_mapping = data_label
+    //                 .clone()
+    //                 .filter(col("question_name").eq(lit(colname.to_string())))
+    //                 .with_column(col("response").cast(dtype))
+    //                 .collect()?;
 
-                let old = resposne_mapping.column("response")?.implode()?.into_series();
+    //             let old = resposne_mapping.column("response")?.implode()?.into_series();
 
-                // return as-is if no mathcing was found
-                if old.is_empty() {
-                    return Ok(col(colname));
-                }
+    //             // return as-is if no mathcing was found
+    //             if old.is_empty() {
+    //                 return Ok(col(colname));
+    //             }
 
-                let new = resposne_mapping.column("label")?.implode()?.into_series();
-                if new.is_empty() {
-                    return Ok(col(colname));
-                }
+    //             let new = resposne_mapping.column("label")?.implode()?.into_series();
+    //             if new.is_empty() {
+    //                 return Ok(col(colname));
+    //             }
 
-                if !is_multi {
-                    Ok(col(colname.clone()).replace_strict(
-                        lit(old),
-                        lit(new),
-                        Some(col(colname)),
-                        Some(DataTypeExpr::Literal(DataType::String)),
-                    ))
-                } else {
-                    Ok(col(colname.clone()).list().eval(element().replace_strict(
-                        lit(old),
-                        lit(new),
-                        Some(element()),
-                        Some(DataTypeExpr::Literal(DataType::String)),
-                    )))
-                }
-            })
-            .collect::<PolarsResult<Vec<Expr>>>()?;
+    //             if !is_multi {
+    //                 Ok(col(colname.clone()).replace_strict(
+    //                     lit(old),
+    //                     lit(new),
+    //                     Some(col(colname)),
+    //                     Some(DataTypeExpr::Literal(DataType::String)),
+    //                 ))
+    //             } else {
+    //                 Ok(col(colname.clone()).list().eval(element().replace_strict(
+    //                     lit(old),
+    //                     lit(new),
+    //                     Some(element()),
+    //                     Some(DataTypeExpr::Literal(DataType::String)),
+    //                 )))
+    //             }
+    //         })
+    //         .collect::<PolarsResult<Vec<Expr>>>()?;
 
-        df.lazy().select(query).collect()
-    }
+    //     df.lazy().select(query).collect()
+    // }
 
     #[cfg(feature = "pyo3")]
     #[inline]
@@ -678,6 +678,20 @@ impl ResponseIterator {
         if self.label_lookup.is_empty() {
             return self.data_iterator.get_row(py, row_index);
         }
+        if row_index >= self.data_iterator.df.height()
+            && let Some(column) = self.data_iterator.df.columns().first()
+        {
+            column.get(row_index).map_err(PyPolarsErr::Polars)?;
+        }
+
+        self.get_row_unchecked(py, row_index)
+    }
+
+    fn get_row_unchecked<'py>(
+        &self,
+        py: Python<'py>,
+        row_index: usize,
+    ) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
         for ((column, name), lookup) in self
             .data_iterator
@@ -687,24 +701,27 @@ impl ResponseIterator {
             .zip(&self.data_iterator.names)
             .zip(&self.label_lookup)
         {
-            let value = column.get(row_index).map_err(PyPolarsErr::Polars)?;
-            let py_value = match &value {
-                AnyValue::List(inner)
-                    if inner.dtype() == &DataType::UInt32 && !lookup.is_empty() =>
-                {
-                    let values = inner
-                        .iter()
-                        .map(|entry| match lookup.get(&entry) {
-                            Some(label) => Ok(label.bind(py).clone().into_any()),
-                            None => anyvalue_to_python(py, entry),
-                        })
-                        .collect::<PyResult<Vec<_>>>()?;
-                    PyList::new(py, values)?.into_any()
+            // Iterator bounds checks and get_row's row-level check guarantee valid column indices.
+            let value = unsafe { column.get_unchecked(row_index) };
+            let py_value = if lookup.is_empty() {
+                anyvalue_to_python(py, value)?
+            } else {
+                match &value {
+                    AnyValue::List(inner) if inner.dtype() == &DataType::UInt32 => {
+                        let values = inner
+                            .iter()
+                            .map(|entry| match lookup.get(&entry) {
+                                Some(label) => Ok(label.bind(py).clone().into_any()),
+                                None => anyvalue_to_python(py, entry),
+                            })
+                            .collect::<PyResult<Vec<_>>>()?;
+                        PyList::new(py, values)?.into_any()
+                    }
+                    _ => match lookup.get(&value) {
+                        Some(label) => label.bind(py).clone().into_any(),
+                        None => anyvalue_to_python(py, value)?,
+                    },
                 }
-                _ => match lookup.get(&value) {
-                    Some(label) => label.bind(py).clone().into_any(),
-                    None => anyvalue_to_python(py, value)?,
-                },
             };
             dict.set_item(name.bind(py), py_value)?;
         }
@@ -728,7 +745,7 @@ impl ResponseIterator {
         if current_index >= self.data_iterator.df.height() {
             return Ok(None);
         };
-        let row_data = self.get_row(py, current_index)?;
+        let row_data = self.get_row_unchecked(py, current_index)?;
 
         self.data_iterator.index += 1;
         Ok(Some(row_data.into_any()))
@@ -753,9 +770,9 @@ mod test {
         let _ = survey.response_labels().unwrap();
     }
 
-    #[test]
-    fn test_export_to_labelled_polars_dataframe() {
-        let survey = get_survey_struct();
-        let _ = survey.to_labelled_dataframe().unwrap();
-    }
+    // #[test]
+    // fn test_export_to_labelled_polars_dataframe() {
+    //     let survey = get_survey_struct();
+    //     let _ = survey.to_labelled_dataframe().unwrap();
+    // }
 }
