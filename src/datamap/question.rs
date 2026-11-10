@@ -842,11 +842,7 @@ impl Question {
     /// Parse an extracted fixed-width field or decoded CSV field.
     pub(crate) fn parse_question_value<'a>(&self, data: &'a str) -> Result<AnyValue<'a>> {
         let question_type = self.question_type();
-        let data = if *question_type == QuestionType::Character {
-            data
-        } else {
-            data.trim()
-        };
+        let data = data.trim();
         Ok(match *question_type {
             QuestionType::Character => AnyValue::String(data),
             QuestionType::None => {
