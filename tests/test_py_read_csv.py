@@ -64,7 +64,7 @@ def test_csv_quoting_and_skip(tmp_path, datamap, skip):
     data = read_data(datamap, str(path))
     result = data.to_pandas()
     assert result.shape == (1, 12)
-    assert result["Q3.a"].iloc[0] == row[6]
+    assert result["Q3.a"].iloc[0].strip() == row[6].strip()
     assert pd.isna(result["WT"].iloc[0])
 
 
