@@ -2,7 +2,7 @@
 from .triple_s import config
 
 # functions
-from .triple_s import read_datamap, read_triple_s
+from .triple_s import read_datamap, read_triple_s, read_data
 
 # Class objects
 from .triple_s import (

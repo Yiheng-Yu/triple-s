@@ -21,8 +21,6 @@ use crate::{
     DataRange,
     datamap::{
         Code,
-        CodeFormat,
-        DataFormat,
         Datamap,
         Location,
         Question,
@@ -32,8 +30,10 @@ use crate::{
         Text,
         Usage,
         Variant,
-        Version,
+        question::CodeFormat,
+        record::DataFormat,
         response::AnyValueExt,
+        survey_info::Version,
     },
     error::{
         self,
@@ -278,23 +278,22 @@ impl SurveyBuilder {
 
         if let Some(record) = self.attributes.remove("record") {
             if self.is_classic {
-                *output.record.ident_mut() = record
+                *output.record_mut().ident_mut() = record
                     .value
                     .and_then(|value| value.chars().next())
                     .ok_or(MissingValueError::new("survey", "record"))?;
             } else {
-                *output.record.ident_mut() = record
+                *output.record_mut().ident_mut() = record
                     .attributes
                     .get("ident")
                     .and_then(|value| value.chars().next())
                     .ok_or(MissingAttributeError::new("record", "ident"))?;
 
-                *output.record.skip_mut() =
+                *output.record_mut().skip_mut() =
                     record.attributes.get("skip").map(ToString::to_string);
-                *output.record.href_mut() =
+                *output.record_mut().href_mut() =
                     record.attributes.get("href").map(ToString::to_string);
-
-                *output.record.data_format_mut() = record
+                *output.record_mut().data_format_mut() = record
                     .attributes
                     .get("format")
                     .map(|value| DataFormat::from_str(value))
@@ -335,10 +334,10 @@ impl SurveyBuilder {
             .collect::<Result<Vec<(Question, Vec<Warning>)>>>()?;
 
         for (question, warnings) in results {
-            output.record.content_mut().push(lock_it_up(question));
+            output.record_mut().content_mut().push(lock_it_up(question));
             log.push_warnings(warnings);
         }
-        output.record.content_mut().shrink_to_fit();
+        output.record_mut().content_mut().shrink_to_fit();
         Ok((output, log))
     }
 }

@@ -59,15 +59,9 @@ Metadata
 Access survey metadata through :py:attr:`Datamap.info`:
 
 .. code-block:: python
-
-   info = datamap.info
-   print(info)
-
-Returns:
-
-.. code-block:: python
-   :class: code-output
-
+   
+   >>> info = datamap.info
+   >>> print(info)
    SurveyInfo(
       version=Version.V2_0,
       name='SP5201-1',

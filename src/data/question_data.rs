@@ -93,7 +93,7 @@ impl QuestionData {
     ///
     /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
     /// method will not mutate the caller.
-    #[allow(clippy::mutable_key_type)]  // can only be string, float, or int
+    #[allow(clippy::mutable_key_type)] // can only be string, float, or int
     pub fn response_label(&self) -> HashMap<AnyValue<'static>, Text> {
         self.question.response_label()
     }
@@ -127,6 +127,7 @@ impl QuestionData {
             ResponseDisplay::Value => self.to_value_column(),
             ResponseDisplay::Label => match self.question_type() {
                 QuestionType::Single => self.to_labelled_column_single_choice(),
+                QuestionType::Multiple => self.to_labelled_column_multi_choice(),
                 _ => self.to_value_column(),
             },
         }
@@ -208,6 +209,32 @@ impl QuestionData {
             None,
             Some(DataTypeExpr::Literal(DataType::String)),
         )]);
+
+        query
+            .collect()
+            .map_err(|err| Self::map_missing_label_error(err, &self.name(), &keys))?
+            .into_columns()
+            .into_iter()
+            .next()
+            .ok_or(PolarsError::ColumnNotFound(
+                format!("Unable to find column '{}' in `SurveyData`", self.name()).into(),
+            ))
+    }
+
+    fn to_labelled_column_multi_choice(&self) -> PolarsResult<Column> {
+        let (keys, labels) = self.get_datalabel_key_value()?;
+        let question_name = self.name();
+
+        let query = col(&question_name)
+            .list()
+            .eval(element().replace_strict(
+                lit(keys.clone()),
+                lit(labels),
+                None,
+                Some(DataTypeExpr::Literal(DataType::String)),
+            ))
+            .alias(&question_name);
+        let query = self.lazy()?.select([query]);
 
         query
             .collect()

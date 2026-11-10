@@ -32,4 +32,3 @@ Methods
 .. automethod:: Datamap.from_dict(content) -> Datamap
 .. automethod:: Datamap.to_classic() -> str
 .. automethod:: Datamap.to_xml() -> str
-.. automethod:: Datamap.load_data(path) -> SurveyData

@@ -502,14 +502,17 @@ impl Question {
     /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
     /// method will not mutate the caller.
     pub fn response_label(&self) -> HashMap<AnyValue<'static>, Text> {
-        self.response()
-            .values()
-            .iter()
-            .map(|item| {
-                let item = item.read();
-                (item.value().clone(), item.label().deepcopy())
-            })
-            .collect()
+        self.response_label_iterator().collect()
+    }
+
+    #[inline]
+    pub(crate) fn response_label_iterator(
+        &self,
+    ) -> impl Iterator<Item = (AnyValue<'static>, Text)> + use<> {
+        self.response().values().clone().into_iter().map(|item| {
+            let item = item.read();
+            (item.value().clone().into_static(), item.label().deepcopy())
+        })
     }
 }
 
@@ -839,11 +842,7 @@ impl Question {
     /// Parse an extracted fixed-width field or decoded CSV field.
     pub(crate) fn parse_question_value<'a>(&self, data: &'a str) -> Result<AnyValue<'a>> {
         let question_type = self.question_type();
-        let data = if *question_type == QuestionType::Character {
-            data
-        } else {
-            data.trim()
-        };
+        let data = data.trim();
         Ok(match *question_type {
             QuestionType::Character => AnyValue::String(data),
             QuestionType::None => {
@@ -2863,6 +2862,9 @@ impl QuestionType {
 mod test {
     use strum::IntoEnumIterator;
 
+    use super::*;
+    use crate::datamap::{Variant, datamap::test::normalize_xml};
+
     #[test]
     fn test_qtype_from_str() {
         for original in QuestionType::iter() {
@@ -2873,9 +2875,6 @@ mod test {
             }
         }
     }
-
-    use super::*;
-    use crate::datamap::{Variant, test::normalize_xml};
 
     fn new_empty_question() -> Question {
         Question::new(

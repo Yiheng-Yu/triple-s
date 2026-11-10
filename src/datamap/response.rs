@@ -1958,7 +1958,7 @@ impl Eq for DataRange {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::datamap::test::normalize_xml;
+    use crate::datamap::datamap::test::normalize_xml;
 
     #[test]
     fn test_value_float_parse_like() {

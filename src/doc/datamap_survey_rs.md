@@ -34,7 +34,7 @@ guards before requesting write access to the same metadata.
 loading respondent data, even when the record references a data file.
 
 ```no_run
-use triple_s::read_datamap;
+use triple_s::{read_datamap, read_data};
 
 let datamap = read_datamap("survey.sss")?;
 if let Some(question) = datamap.get("Q1") {
@@ -50,7 +50,7 @@ Use [`Datamap::record`] to access the full record.
 
 # Load and export respondent data
 
-Call [`Record::load_data`] through [`Datamap::record_mut`]. The extension
+Call [`read_data`]. The extension
 selects fixed-width (`.asc`) or CSV (`.csv`) parsing, using the record's
 question definitions. CSV fields use question locations.
 
@@ -58,16 +58,15 @@ Data loading and validation support UTF-8 and BOM-marked UTF-16. Invalid
 sequences become `�` (U+FFFD), each occupying one fixed-width position.
 
 ```no_run
-use triple_s::read_datamap;
+use triple_s::{read_datamap, read_data};
 
 let mut datamap = read_datamap("survey.sss")?;
-let data = datamap.record_mut().load_data("survey.asc")?;
+let data = read_data(&datamap, "survey.asc")?;
 let frame = data.to_polars()?;
 # Ok::<(), anyhow::Error>(())
 ```
 
-Loading returns a [`SurveyData`] backed by a temporary Parquet cache
-and updates the record's `href` and `data_format`.
+Loading returns a [`SurveyData`] backed by a temporary Parquet cache.
 
 To read both files into a survey, use [`read_triple_s`] instead.
 

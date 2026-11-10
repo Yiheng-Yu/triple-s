@@ -2,7 +2,7 @@ Question
 
 A question definition, represented by `<variable>` in Triple-S XML.
 
-Respondent data is returned by `Datamap.load_data()` or `Record.load_data()`.
+Respondent data is returned by `read_data()`.
 Use the returned `SurveyData.to_polars()` or `SurveyData.to_pandas()` to export it.
 
 Args:

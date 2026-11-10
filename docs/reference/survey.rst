@@ -30,9 +30,11 @@ Attributes
 .. autoattribute:: Survey.response_display
    :annotation: -> str
 
+
 Methods
 -------
-
+.. autoattribute:: Survey.response_labels
+   :annotation: -> polars.DataFrame | pandas.DataFrame
 .. automethod:: Survey.has_data() -> bool
 .. automethod:: Survey.iter_rows() -> Generator[dict[str, Any]]
 .. automethod:: Survey.iter_questions() -> Generator[QuestionData]

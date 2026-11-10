@@ -92,3 +92,4 @@ build_rs_cov.profraw
 tarpaulin-report.html
 /.maturing
 /.maturing/_rust_locations.json
+.ruff_cache
