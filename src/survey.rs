@@ -280,6 +280,46 @@ impl Survey {
 
         df.lazy().select(query).collect()
     }
+
+    #[cfg(feature="pyo3")]
+    #[inline]
+    fn create_response_iterator(&self) -> PyResult<ResponseIterator> {
+        let data_iterator = self.data().create_data_entry_iterator()?;
+        match self.config().response_display {
+            ResponseDisplay::Value => {
+                Ok(ResponseIterator {
+                    data_iterator: data_iterator,
+                    show_label: false,
+                    label_lookup: HashMap::new(),
+                })
+            }
+
+            ResponseDisplay::Label => {
+                let label_lookup = self
+                    .datamap()
+                    .record()
+                    .content()
+                    .clone()
+                    .into_par_iter()
+                    .map(|question| {
+                        let question = question.read();
+                        let name = question.name();
+                        let question_lookup = question
+                            .response_label_iterator()
+                            .into_iter()
+                            .map(|(key, value)| (key, PlSmallStr::from_string(value.value())))
+                            .collect::<HashMap<_, _>>();
+                        (name, question_lookup)
+                    })
+                    .collect::<HashMap<String, _>>();
+                Ok(ResponseIterator {
+                    data_iterator: data_iterator,
+                    show_label: true,
+                    label_lookup: label_lookup,
+                })
+            }
+        }
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -343,7 +383,10 @@ impl Survey {
 
     fn __getitem__<'py>(&self, index: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         let py = index.py();
+
+        // Read individual row
         if let Ok(index) = index.extract::<i64>() {
+
             let df = self
                 .data()
                 .lazy()?
@@ -359,12 +402,15 @@ impl Survey {
                 dict.set_item(name.as_str(), pyvalue)?;
             }
             Ok(dict.into_any())
+        
+        // get data for specific question
         } else if let Ok(question_name) = index.extract::<&str>() {
             let view = self
                 .get_question_data(question_name)
                 .ok_or_else(|| exceptions::PyKeyError::new_err(question_name.to_owned()))?;
-
             Ok(Py::new(py, view)?.into_bound(py).into_any())
+
+        // Error
         } else {
             let type_name = get_type_name(&index)?;
             Err(exceptions::PyTypeError::new_err(type_name))
@@ -373,44 +419,8 @@ impl Survey {
 
     /// Iterate each response row by row, same as `iter_rows()`
     fn __iter__(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {
-        let data_iterator = self.data().create_data_entry_iterator()?;
-        match self.config().response_display {
-            ResponseDisplay::Value => {
-                let iterator = ResponseIterator {
-                    data_iterator: data_iterator,
-                    show_label: false,
-                    label_lookup: HashMap::new(),
-                };
-                Py::new(py, iterator)
-            }
-
-            ResponseDisplay::Label => {
-                let label_lookup = self
-                    .datamap()
-                    .record()
-                    .content()
-                    .clone()
-                    .into_par_iter()
-                    .map(|question| {
-                        let question = question.read();
-                        let name = question.name();
-                        let question_lookup = question
-                            .response_label_iterator()
-                            .into_iter()
-                            .map(|(key, value)| (key, PlSmallStr::from_string(value.value())))
-                            .collect::<HashMap<_, _>>();
-                        (name, question_lookup)
-                    })
-                    .collect::<HashMap<String, _>>();
-                let iterator = ResponseIterator {
-                    data_iterator: data_iterator,
-                    show_label: true,
-                    label_lookup: label_lookup,
-                };
-
-                Py::new(py, iterator)
-            }
-        }
+        let response_iterator = self.create_response_iterator()?;
+        Py::new(py, response_iterator)
     }
 
     /// Iter each individual respondant data
@@ -638,7 +648,7 @@ impl QuestionDataIterator {
     }
 }
 
-// // // ---------- Helpers -----------
+// ---------- Helpers -----------
 /// Iterates through individual responses throughout the survey
 #[cfg(feature = "pyo3")]
 #[pyclass]
@@ -675,7 +685,6 @@ impl ResponseIterator {
         };
 
         let current_index = self.index();
-
         if current_index >= self.data_iterator.df.height() {
             return Ok(None);
         };
