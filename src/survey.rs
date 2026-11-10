@@ -373,10 +373,11 @@ impl Survey {
 
     /// Iterate each response row by row, same as `iter_rows()`
     fn __iter__(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {
+        let data_iterator = self.data().create_data_entry_iterator()?;
         match self.config().response_display {
             ResponseDisplay::Value => {
                 let iterator = ResponseIterator {
-                    data_iterator: self.data.create_data_entry_iterator(),
+                    data_iterator: data_iterator,
                     show_label: false,
                     label_lookup: HashMap::new(),
                 };
@@ -390,19 +391,19 @@ impl Survey {
                     .content()
                     .clone()
                     .into_par_iter()
-                    .flat_map_iter(|question| {
+                    .map(|question| {
                         let question = question.read();
                         let name = question.name();
                         let question_lookup = question
                             .response_label_iterator()
-                            .collect::<HashMap<AnyValue<'static>, PlSmallStr>>()(
-                            name,
-                            question_lookup,
-                        );
+                            .into_iter()
+                            .map(|(key, value)| (key, PlSmallStr::from_string(value.value())))
+                            .collect::<HashMap<_, _>>();
+                        (name, question_lookup)
                     })
                     .collect::<HashMap<String, _>>();
                 let iterator = ResponseIterator {
-                    data_iterator: self.data.create_data_entry_iterator(),
+                    data_iterator: data_iterator,
                     show_label: true,
                     label_lookup: label_lookup,
                 };
@@ -648,6 +649,7 @@ struct ResponseIterator {
     label_lookup: HashMap<String, HashMap<AnyValue<'static>, PlSmallStr>>,
 }
 
+#[cfg(feature = "pyo3")]
 impl ResponseIterator {
     #[inline]
     fn index(&self) -> usize {

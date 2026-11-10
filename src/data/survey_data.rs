@@ -418,6 +418,7 @@ pub(crate) struct DataEntryIterator {
     pub index: usize,
 }
 
+#[cfg(feature = "pyo3")]
 impl DataEntryIterator {
     pub fn get_row<'a>(
         &'a self,
