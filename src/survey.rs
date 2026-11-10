@@ -1,14 +1,15 @@
+use std::collections::HashMap;
+
 #[cfg(feature = "pyo3")]
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use polars::{frame::row::Row, prelude::*};
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    IntoPyObjectExt,
-    exceptions,
+    IntoPyObjectExt, exceptions,
     prelude::*,
-    types::{PyDict, PyList},
+    types::{PyDict, PyList, PyString},
 };
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
@@ -226,6 +227,14 @@ impl Survey {
         ))
     }
 
+    /// Returns a hashmap of:
+    ///     {question_name: {respons_code: response_label}}
+    pub fn get_response_label_hashmap(
+        &self,
+    ) -> HashMap<String, HashMap<AnyValue<'static>, PlSmallStr>> {
+        self.datamap().get_response_label_hashmap()
+    }
+
     fn to_labelled_dataframe(&self) -> PolarsResult<DataFrame> {
         // convert response value to response label
         let df = self.data().lazy()?.clone().collect()?;
@@ -278,46 +287,56 @@ impl Survey {
             })
             .collect::<PolarsResult<Vec<Expr>>>()?;
 
-        // IDEA: ADD A NEW COLUMN OF FLAGS INDICATING IF REPLACE_STRICT WAS SUCCESS OR FAIL (???) NOT SURE IF POSSIBLE
-        // THEN I CAN CAST STRING BACL TO THE ORIGINAL VALUES DEPENDING ON IF REPLACE_STRICT SUCCEED OR FAILED
         df.lazy().select(query).collect()
     }
 
     #[cfg(feature = "pyo3")]
     #[inline]
-    fn create_response_iterator(&self) -> PyResult<ResponseIterator> {
-        let data_iterator = self.data().create_data_entry_iterator()?;
-        match self.config().response_display {
-            ResponseDisplay::Value => Ok(ResponseIterator {
-                data_iterator: data_iterator,
-                show_label: false,
-                label_lookup: HashMap::new(),
-            }),
+    fn create_response_iterator(&self, py: Python<'_>) -> PyResult<ResponseIterator> {
+        let df = self.data().lazy()?.clone().collect().map_err(PyPolarsErr::Polars)?;
+        Ok(self.response_iterator_from_dataframe(py, df))
+    }
 
+    #[cfg(feature = "pyo3")]
+    fn response_iterator_from_dataframe(
+        &self,
+        py: Python<'_>,
+        df: DataFrame,
+    ) -> ResponseIterator {
+        let label_lookup = match self.config().response_display {
+            ResponseDisplay::Value => Vec::new(),
             ResponseDisplay::Label => {
-                let label_lookup = self
+                let mut labels = self
                     .datamap()
                     .record()
                     .content()
-                    .clone()
-                    .into_par_iter()
+                    .iter()
                     .map(|question| {
                         let question = question.read();
-                        let name = question.name();
-                        let question_lookup = question
-                            .response_label_iterator()
-                            .into_iter()
-                            .map(|(key, value)| (key, PlSmallStr::from_string(value.value())))
+                        let lookup = question
+                            .response()
+                            .values()
+                            .iter()
+                            .map(|response| {
+                                let response = response.read();
+                                (
+                                    response.value().clone().into_static(),
+                                    PyString::new(py, &response.label().value()).unbind(),
+                                )
+                            })
                             .collect::<HashMap<_, _>>();
-                        (name, question_lookup)
+                        (question.name(), lookup)
                     })
-                    .collect::<HashMap<String, _>>();
-                Ok(ResponseIterator {
-                    data_iterator: data_iterator,
-                    show_label: true,
-                    label_lookup: label_lookup,
-                })
+                    .collect::<HashMap<_, _>>();
+                df.columns()
+                    .iter()
+                    .map(|column| labels.remove(column.name().as_str()).unwrap_or_default())
+                    .collect()
             }
+        };
+        ResponseIterator {
+            data_iterator: DataEntryIterator::new(py, df),
+            label_lookup,
         }
     }
 }
@@ -393,15 +412,10 @@ impl Survey {
                 .slice(index, 1)
                 .collect()
                 .map_err(PyPolarsErr::Polars)?;
-            let row = df.get_row(0).map_err(PyPolarsErr::Polars)?;
 
-            // TODO: LET THIS RETURN DATA LABEL INSTEAD OF DATA
-            let dict = PyDict::new(py);
-            for (name, value) in df.get_column_names().iter().zip(row.0) {
-                let pyvalue = anyvalue_to_python(py, value)?;
-                dict.set_item(name.as_str(), pyvalue)?;
-            }
-            Ok(dict.into_any())
+            let iterator = self.response_iterator_from_dataframe(py, df);
+            let result = iterator.get_row(py, 0)?;
+            Ok(result.into_any())
 
         // get data for specific question
         } else if let Ok(question_name) = index.extract::<&str>() {
@@ -419,16 +433,16 @@ impl Survey {
 
     /// Iterate each response row by row, same as `iter_rows()`
     fn __iter__(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {
-        let response_iterator = self.create_response_iterator()?;
-        Py::new(py, response_iterator)
+        self.iter_rows(py)
     }
 
     /// Iter each individual respondant data
     ///
     /// Returns:
     ///     Iterator[dict[str, object]]: An iterator over respondent rows.
-    fn iter_rows(&self, py: Python<'_>) -> PyResult<Py<DataEntryIterator>> {
-        self.data().__iter__(py)
+    fn iter_rows(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {
+        let response_iterator = self.create_response_iterator(py)?;
+        Py::new(py, response_iterator)
     }
 
     /// Iterate over the survey questions and their response data.
@@ -654,59 +668,45 @@ impl QuestionDataIterator {
 #[pyclass]
 struct ResponseIterator {
     data_iterator: DataEntryIterator,
-    show_label: bool,
-    /// {question_name: {respons_code: response_label}}
-    label_lookup: HashMap<String, HashMap<AnyValue<'static>, PlSmallStr>>,
+    // Aligned with dataframe columns; Python strings are shared across rows.
+    label_lookup: Vec<HashMap<AnyValue<'static>, Py<PyString>>>,
 }
 
 #[cfg(feature = "pyo3")]
 impl ResponseIterator {
-    #[inline]
-    fn index(&self) -> usize {
-        self.data_iterator.index
-    }
-
-    #[inline]
-    fn advance(&mut self) {
-        self.data_iterator.index += 1;
-    }
-
     fn get_row<'py>(&self, py: Python<'py>, row_index: usize) -> PyResult<Bound<'py, PyDict>> {
+        if self.label_lookup.is_empty() {
+            return self.data_iterator.get_row(py, row_index);
+        }
         let dict = PyDict::new(py);
-        for row_result in self.data_iterator.get_row(row_index) {
-            let (colname, value) = row_result.map_err(PyPolarsErr::Polars)?;
-            match &value {
-                AnyValue::List(inner) if inner.dtype() == &DataType::UInt32 => {
-                    if let Some(question_label) = self.label_lookup.get(colname) {
-                        let inner_data = inner
-                            .iter()
-                            .map(|entry| {
-                                let labelled = question_label
-                                    .get(&entry)
-                                    .map(|label| AnyValue::StringOwned(label.clone()))
-                                    .unwrap_or(entry);
-                                anyvalue_to_python(py, labelled)
-                            })
-                            .collect::<PyResult<Vec<Bound<'py, PyAny>>>>()?;
-                        let pyvalue = PyList::new(py, inner_data)?;
-                        dict.set_item(colname, pyvalue.into_any())?;
-                    } else {
-                        let pyvalue = anyvalue_to_python(py, value)?;
-                        dict.set_item(colname, pyvalue.into_any())?;
-                    }
+        for ((column, name), lookup) in self
+            .data_iterator
+            .df
+            .columns()
+            .iter()
+            .zip(&self.data_iterator.names)
+            .zip(&self.label_lookup)
+        {
+            let value = column.get(row_index).map_err(PyPolarsErr::Polars)?;
+            let py_value = match &value {
+                AnyValue::List(inner)
+                    if inner.dtype() == &DataType::UInt32 && !lookup.is_empty() =>
+                {
+                    let values = inner
+                        .iter()
+                        .map(|entry| match lookup.get(&entry) {
+                            Some(label) => Ok(label.bind(py).clone().into_any()),
+                            None => anyvalue_to_python(py, entry),
+                        })
+                        .collect::<PyResult<Vec<_>>>()?;
+                    PyList::new(py, values)?.into_any()
                 }
-                _ => {
-                    let value = self
-                        .label_lookup
-                        .get(colname)
-                        .map(|lookup| lookup.get(&value))
-                        .flatten()
-                        .map(|item| AnyValue::StringOwned(item.clone()))
-                        .unwrap_or(value);
-                    let pyvalue = anyvalue_to_python(py, value)?;
-                    dict.set_item(colname.to_string(), pyvalue.into_any())?;
-                }
-            }
+                _ => match lookup.get(&value) {
+                    Some(label) => label.bind(py).clone().into_any(),
+                    None => anyvalue_to_python(py, value)?,
+                },
+            };
+            dict.set_item(name.bind(py), py_value)?;
         }
         Ok(dict)
     }
@@ -720,17 +720,17 @@ impl ResponseIterator {
     }
 
     fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
-        if !self.show_label {
+        if self.label_lookup.is_empty() {
             return self.data_iterator.__next__(py);
         };
 
-        let current_index = self.index();
+        let current_index = self.data_iterator.index;
         if current_index >= self.data_iterator.df.height() {
             return Ok(None);
         };
         let row_data = self.get_row(py, current_index)?;
 
-        self.advance();
+        self.data_iterator.index += 1;
         Ok(Some(row_data.into_any()))
     }
 }

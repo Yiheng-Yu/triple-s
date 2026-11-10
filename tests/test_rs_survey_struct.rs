@@ -4,8 +4,15 @@ use triple_s::{Survey, SurveyData, config::ResponseDisplay, read_triple_s};
 const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
 const PATH_DATAFILE_V2_0: &str = "tests/sss-examples/sss-2.0/example1.asc";
 
+const PATH_STACK_OVERFLOW_DATAMAP: &str = "tests/sss-examples/sss-2.0/stackoverflow_2026.sss";
+const PATH_STACK_OVERFLOW_DATA: &str = "tests/sss-examples/sss-2.0/stackoverflow_2026.csv";
+
 fn get_survey_struct() -> Survey {
     read_triple_s(PATH_DATAMAP_V2_0, Some(PATH_DATAFILE_V2_0)).unwrap()
+}
+
+fn read_stack_overflow() -> Survey {
+    read_triple_s(PATH_STACK_OVERFLOW_DATAMAP, Some(PATH_STACK_OVERFLOW_DATA)).unwrap()
 }
 
 #[test]
@@ -75,4 +82,9 @@ fn test_value_display_label_not_found() {
             panic!("Wrong type of error raised:\n {:?}", error)
         }
     }
+}
+
+#[test]
+fn test_read_stack_overflow_survey() {
+    let _ = read_stack_overflow();
 }

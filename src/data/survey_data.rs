@@ -6,7 +6,10 @@ use std::{
 use anyhow::Result;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::{prelude::*, types::PyDict};
+use pyo3::{
+    prelude::*,
+    types::{PyDict, PyString},
+};
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use tempfile::TempPath;
@@ -284,9 +287,12 @@ impl SurveyData {
 
     #[cfg(feature = "pyo3")]
     #[inline]
-    pub(crate) fn create_data_entry_iterator(&self) -> PyResult<DataEntryIterator> {
+    pub(crate) fn create_data_entry_iterator(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<DataEntryIterator> {
         let df = self.lazy()?.clone().collect().map_err(PyPolarsErr::Polars)?;
-        Ok(DataEntryIterator { df, index: 0 })
+        Ok(DataEntryIterator::new(py, df))
     }
 }
 
@@ -332,7 +338,7 @@ impl SurveyData {
     }
 
     pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<Py<DataEntryIterator>> {
-        let iterator = self.create_data_entry_iterator()?;
+        let iterator = self.create_data_entry_iterator(py)?;
         Py::new(py, iterator)
     }
 
@@ -416,18 +422,31 @@ impl std::fmt::Debug for SurveyData {
 pub(crate) struct DataEntryIterator {
     pub df: DataFrame,
     pub index: usize,
+    pub names: Vec<Py<PyString>>,
 }
 
 #[cfg(feature = "pyo3")]
 impl DataEntryIterator {
-    pub fn get_row<'a>(
-        &'a self,
-        index: usize,
-    ) -> impl Iterator<Item = PolarsResult<(&'a str, AnyValue<'a>)>> + 'a {
-        self.df.columns().iter().map(move |column| {
-            let value = column.get(index)?;
-            Ok((column.name().as_str(), value))
-        })
+    pub fn new(py: Python<'_>, df: DataFrame) -> Self {
+        let names = df
+            .columns()
+            .iter()
+            .map(|column| PyString::new(py, column.name().as_str()).unbind())
+            .collect();
+        Self {
+            df,
+            index: 0,
+            names,
+        }
+    }
+
+    pub fn get_row<'py>(&self, py: Python<'py>, index: usize) -> PyResult<Bound<'py, PyDict>> {
+        let dict = PyDict::new(py);
+        for (column, name) in self.df.columns().iter().zip(&self.names) {
+            let value = column.get(index).map_err(PyPolarsErr::Polars)?;
+            dict.set_item(name.bind(py), anyvalue_to_python(py, value)?)?;
+        }
+        Ok(dict)
     }
 }
 
@@ -443,12 +462,7 @@ impl DataEntryIterator {
             return Ok(None);
         }
 
-        let dict = PyDict::new(py);
-        for row_result in self.get_row(self.index) {
-            let (colname, coldata) = row_result.map_err(PyPolarsErr::Polars)?;
-            let py_value = anyvalue_to_python(py, coldata)?;
-            dict.set_item(colname, py_value)?
-        }
+        let dict = self.get_row(py, self.index)?;
 
         self.index += 1;
         Ok(Some(dict.into_any()))
