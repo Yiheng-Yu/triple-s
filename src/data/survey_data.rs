@@ -182,7 +182,10 @@ impl SurveyData {
     }
 
     /// create new instance from cache
-    pub(crate) fn from_cache(cache: TempPath, schema: Option<Arc<Schema>>) -> PolarsResult<Self> {
+    pub(crate) fn from_cache(
+        cache: TempPath,
+        schema: Option<Arc<Schema>>,
+    ) -> PolarsResult<Self> {
         let args = ScanArgsParquet {
             schema,
             ..Default::default()
@@ -404,8 +407,8 @@ impl std::fmt::Debug for SurveyData {
 #[cfg(feature = "pyo3")]
 #[pyclass]
 pub(crate) struct ResponseIterator {
-    df: DataFrame,
-    index: usize,
+    pub df: DataFrame,
+    pub index: usize,
 }
 
 #[cfg(feature = "pyo3")]

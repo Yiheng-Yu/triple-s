@@ -9,19 +9,19 @@ pub mod text;
 use std::{fs::File, path::Path};
 
 pub use datamap::Datamap;
+use polars::{frame::row::Row, prelude::*};
 pub use question::{Location, Question, QuestionType, Spread, Usage};
 pub use record::DataFormat;
 pub use response::{Code, Response};
+use tempfile::NamedTempFile;
 pub use text::{Text, Variant};
 
 use crate::data::SurveyData;
-use polars::{frame::row::Row, prelude::*};
-use tempfile::NamedTempFile;
 
 const BATCH_SIZE: usize = 500; // no. rows when writing to paquet cache
 
 /// Reads .asc or .csv datafile with datamap provided.
-/// 
+///
 /// Supports both UTF-8 and BOM-marked UTF-16LE/BE encodings.
 /// Invalid sequences become `�` (U+FFFD), each occupying one fixed-width position.
 /// Returns [`SurveyData`].
@@ -31,7 +31,7 @@ const BATCH_SIZE: usize = 500; // no. rows when writing to paquet cache
 /// used later. Keep the returned [`SurveyData`] alive while using its cache.
 ///
 /// ```no_run
-/// use triple_s::{read_datamap, read_data};
+/// use triple_s::{read_data, read_datamap};
 ///
 /// // Load a survey with no data
 /// let datamap = read_datamap("path/to/datamap.sss")?;

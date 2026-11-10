@@ -502,20 +502,17 @@ impl Question {
     /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
     /// method will not mutate the caller.
     pub fn response_label(&self) -> HashMap<AnyValue<'static>, Text> {
-        self.response_label_iterator()
-            .collect()
+        self.response_label_iterator().collect()
     }
 
     #[inline]
-    pub(crate) fn response_label_iterator(&self) -> impl Iterator<Item = (AnyValue<'static>, Text)> + use<> {
-        self.response()
-            .values()
-            .clone()
-            .into_iter()
-            .map(|item| {
-                let item = item.read();
-                (item.value().clone().into_static(), item.label().deepcopy())
-            })
+    pub(crate) fn response_label_iterator(
+        &self,
+    ) -> impl Iterator<Item = (AnyValue<'static>, Text)> + use<> {
+        self.response().values().clone().into_iter().map(|item| {
+            let item = item.read();
+            (item.value().clone().into_static(), item.label().deepcopy())
+        })
     }
 }
 
@@ -2867,9 +2864,10 @@ impl QuestionType {
 
 #[cfg(test)]
 mod test {
-    use crate::datamap::{Variant, datamap::test::normalize_xml};
     use strum::IntoEnumIterator;
+
     use super::*;
+    use crate::datamap::{Variant, datamap::test::normalize_xml};
 
     #[test]
     fn test_qtype_from_str() {
@@ -2881,7 +2879,6 @@ mod test {
             }
         }
     }
-
 
     fn new_empty_question() -> Question {
         Question::new(

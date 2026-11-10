@@ -6,7 +6,8 @@ use parking_lot::RwLockReadGuard;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    IntoPyObjectExt, exceptions,
+    IntoPyObjectExt,
+    exceptions,
     prelude::*,
     types::{PyDict, PyTuple},
 };
@@ -20,7 +21,11 @@ use crate::{
     error::InternalError,
     prelude::*,
     utils::{
-        anyvalue_to_python, convert_date, convert_time, normalize_py_index, polars_to_pandas,
+        anyvalue_to_python,
+        convert_date,
+        convert_time,
+        normalize_py_index,
+        polars_to_pandas,
     },
 };
 use crate::{

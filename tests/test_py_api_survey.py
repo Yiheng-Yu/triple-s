@@ -1,4 +1,5 @@
 import polars
+import polars as pl
 import pandas
 
 import pytest
@@ -149,8 +150,6 @@ def test_survey_without_data():
 def test_value_counts(survey):
     for question in survey.iter_questions():
         summary = question.value_counts()
-        print(summary)
-
 
 def test_set_dataframe_format_config_success(survey):
     assert survey.dataframe_format == 'polars'   # the default
@@ -185,6 +184,7 @@ def test_set_flag_toggle_response_display_success(survey):
         assert question.response_display == 'value'
         
     survey.response_display = "label"
+    assert survey.response_display == "label"
     for question in survey.iter_questions():
         assert question.response_display == 'label'
         
@@ -198,3 +198,19 @@ def test_set_flag_toggle_response_display_fail(survey):
     with pytest.raises(ValueError):
         survey.response_display = ""
         survey.response_display = "pppppppolars"
+
+
+def test_print_each_response_as_label(survey):
+    survey.response_display = "label"
+    assert survey.response_display == "label"
+    print()
+    try:
+        for response in survey:
+            assert isinstance(response, dict)
+            print(response)
+    except Exception as e:
+        with pl.Config(tbl_cols=15, tbl_rows=10):
+            print(survey.data.to_polars())
+        for val in survey.datamap["Q4"].response:
+            print(val) 
+        raise e

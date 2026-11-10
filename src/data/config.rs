@@ -11,8 +11,7 @@ use crate::prelude::*;
 use crate::utils::get_type_name;
 
 /// General configurations
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Config {
     /// Specifies the DataFrame library used for Python outputs
     ///
@@ -22,7 +21,6 @@ pub struct Config {
     /// Controls whether choice responses are represented by their values or labels.
     pub response_display: ResponseDisplay,
 }
-
 
 /// Specifies the default DataFrame library used for Python output, default `Polars`.
 ///

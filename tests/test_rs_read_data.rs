@@ -1,5 +1,13 @@
 use polars::prelude::AnyValue;
-use triple_s::{QuestionOptions, QuestionType, Datamap, Survey, read_datamap, read_triple_s, read_data};
+use triple_s::{
+    Datamap,
+    QuestionOptions,
+    QuestionType,
+    Survey,
+    read_data,
+    read_datamap,
+    read_triple_s,
+};
 
 const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
 const PATH_DATAFILE_V2_0: &str = "tests/sss-examples/sss-2.0/example1.asc";
@@ -27,7 +35,7 @@ fn test_create_parquet() {
 fn test_csv_and_fixed_examples_load_equivalent_responses() {
     let csv = read_datamap("tests/sss-examples/sss-2.0/example2.sss").unwrap();
     let csv_data = read_data(&csv, "tests/sss-examples/sss-2.0/example2.csv").unwrap();
-    
+
     let fixed = read_datamap("tests/sss-examples/sss-2.0/example1.sss").unwrap();
     let fixed_data = read_data(&fixed, "tests/sss-examples/sss-2.0/example1.asc").unwrap();
 

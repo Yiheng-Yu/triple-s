@@ -21,8 +21,6 @@ use crate::{
     DataRange,
     datamap::{
         Code,
-        question::CodeFormat,
-        record::DataFormat,
         Datamap,
         Location,
         Question,
@@ -32,8 +30,10 @@ use crate::{
         Text,
         Usage,
         Variant,
-        survey_info::Version,
+        question::CodeFormat,
+        record::DataFormat,
         response::AnyValueExt,
+        survey_info::Version,
     },
     error::{
         self,

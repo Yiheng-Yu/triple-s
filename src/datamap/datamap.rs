@@ -1,29 +1,20 @@
-#[cfg(feature = "pyo3")]
-use pyo3::{exceptions, prelude::*, types::PyDict};
-
 use anyhow::Result;
 use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
+#[cfg(feature = "pyo3")]
+use pyo3::{exceptions, prelude::*, types::PyDict};
 use quick_xml::{Writer, events::BytesText};
-use crate::{
-    datamap::{
-        survey_info::{
-            SurveyInfo,
-            Version,
-        },
-        record::Record,
-        question::{
-            Question,
-        },
-    }
-};
 
 #[cfg(feature = "pyo3")]
 use crate::{
     datamap::record::RecordIterator,
     utils::{get_type_name, py_value_error},
 };
-
 use crate::{
+    datamap::{
+        question::Question,
+        record::Record,
+        survey_info::{SurveyInfo, Version},
+    },
     prelude::Flag,
     utils::{ArcLock, lock_it_up},
 };
@@ -394,16 +385,14 @@ impl Datamap {
     fn py_to_xml(&self) -> PyResult<String> {
         self.to_xml().map_err(py_value_error)
     }
-
-
 }
 
 #[cfg(test)]
 pub mod test {
     use quick_xml::{Reader, events::Event};
-    use crate::{DataFormat, Mode, QuestionType, read_from_string};
 
     use super::*;
+    use crate::{DataFormat, Mode, QuestionType, read_from_string};
 
     pub fn normalize_xml(xml: &str) -> Vec<String> {
         let mut reader = Reader::from_str(xml);

@@ -49,7 +49,7 @@
 //! You can also read survey data with path provided
 //!
 //! ```no_run
-//! use triple_s::{read_datamap, read_data};
+//! use triple_s::{read_data, read_datamap};
 //!
 //! let path = "path/to/the/datamap.sss";
 //! let mut datamap = read_datamap(path)?;
@@ -160,7 +160,6 @@ use std::path::Path;
 use anyhow::Result;
 pub use data::{QuestionData, SurveyData};
 pub use datamap::{
-    read_data,
     Datamap,
     question::{
         self,
@@ -173,6 +172,7 @@ pub use datamap::{
         Usage,
     },
     read::{read_datamap, read_from_reader, read_from_string},
+    read_data,
     record::{self, DataFormat, Record},
     response::{self, Code, DataRange, Response},
     survey_info::{self, SurveyInfo, Version},
@@ -269,15 +269,14 @@ mod triple_s {
         Ok(survey)
     }
 
-
     /// Read triple-s datamap, and load data afterwards.
     ///
     /// Args:
     ///     path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
-    /// 
+    ///
     /// Keyword Args:
     ///     path_data (str, *optional*): path to the `.asc` or `.csv` data file.
-    /// 
+    ///
     /// Returns:
     ///     Survey: [`Survey`] containing `datamap` and `data`. If `path_data` is omitted,
     ///         `has_data()` returns `False`.
@@ -293,7 +292,7 @@ mod triple_s {
     }
 
     /// Reads .asc or .csv datafile with datamap provided.
-    /// 
+    ///
     /// Args:
     ///     datamap (Datamap): datamap used to read the data.
     ///     path_data (str): path to the .csv or .asc data file.
