@@ -770,16 +770,31 @@ impl Question {
     /// Locate data from one entire row based on current data range for csv width (.asc) data
     pub(crate) fn locate_data_csv<'a>(&self, row: &'a csv::StringRecord) -> Result<&'a str> {
         let position: usize = *self.location().start() as usize;
-        let col_location = position.checked_sub(1).ok_or_else(|| {
+        let column_index = position.checked_sub(1).ok_or_else(|| {
             InternalError::new(format!("Integer underflow for position: {}", position))
         })?;
 
-        row.get(col_location).ok_or_else(|| {
+        self.locate_data_csv_at(row, column_index)
+    }
+
+    pub(crate) fn csv_column_index(&self) -> Result<usize> {
+        let position: usize = *self.location().start() as usize;
+        position.checked_sub(1).ok_or_else(|| {
+            InternalError::new(format!("Integer underflow for position: {}", position)).into()
+        })
+    }
+
+    pub(crate) fn locate_data_csv_at<'a>(
+        &self,
+        row: &'a csv::StringRecord,
+        column_index: usize,
+    ) -> Result<&'a str> {
+        row.get(column_index).ok_or_else(|| {
             InvalidArg::new(format!(
                 "Has total of {} fields; question '{}' requires field {}",
                 row.len(),
                 self.name(),
-                position,
+                column_index + 1,
             ))
             .into()
         })
@@ -841,9 +856,23 @@ impl Question {
 
     /// Parse an extracted fixed-width field or decoded CSV field.
     pub(crate) fn parse_question_value<'a>(&self, data: &'a str) -> Result<AnyValue<'a>> {
-        let question_type = self.question_type();
+        let question_type = self.question_type().clone();
+        let format = if question_type == QuestionType::Single {
+            self.format().clone()
+        } else {
+            None
+        };
+        self.parse_question_value_with_metadata(data, &question_type, format.as_ref())
+    }
+
+    pub(crate) fn parse_question_value_with_metadata<'a>(
+        &self,
+        data: &'a str,
+        question_type: &QuestionType,
+        format: Option<&CodeFormat>,
+    ) -> Result<AnyValue<'a>> {
         let data = data.trim();
-        Ok(match *question_type {
+        Ok(match question_type {
             QuestionType::Character => AnyValue::String(data),
             QuestionType::None => {
                 return Err(DataReadError(
@@ -876,8 +905,7 @@ impl Question {
                 )
             }
             QuestionType::Single => {
-                if self.format().as_ref().is_some_and(|format| *format == CodeFormat::Literal)
-                {
+                if format.is_some_and(|format| *format == CodeFormat::Literal) {
                     AnyValue::String(data)
                 } else {
                     AnyValue::UInt32(data.parse()?)

@@ -450,9 +450,8 @@ impl Survey {
     /// Returns:
     ///     Iterator[QuestionData]: An iterator over question data in survey order.
     fn iter_questions(&self, py: Python<'_>) -> PyResult<Py<QuestionDataIterator>> {
-        let pointer = Arc::new(self.clone()); // clones a shallow copy
         let iterator = QuestionDataIterator {
-            survey: pointer,
+            survey: Arc::new(self.clone()),
             index: 0,
         };
 
@@ -642,20 +641,18 @@ impl QuestionDataIterator {
     }
 
     fn __next__(&mut self) -> PyResult<Option<QuestionData>> {
-        let questions = self.survey.question_names();
-        if self.index >= questions.len() {
-            return Ok(None);
+        let question = {
+            let questions = self.survey.datamap.record().content();
+            let Some(question) = questions.get(self.index) else {
+                return Ok(None);
+            };
+            question.read().clone()
         };
-
-        let target = questions
-            .get(self.index)
-            .ok_or(exceptions::PyIndexError::new_err(self.index))? // unlikely,,
-            .clone();
-
-        let instance = self
-            .survey
-            .get_question_data(&target)
-            .ok_or(exceptions::PyKeyError::new_err(target))?; // unlikely,,
+        let instance = QuestionData::new(
+            Arc::clone(&self.survey.data),
+            question,
+            Arc::clone(&self.survey.config),
+        );
 
         self.index += 1;
         Ok(Some(instance))

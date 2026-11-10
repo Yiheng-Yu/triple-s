@@ -166,7 +166,7 @@ impl QuestionData {
             series
         };
 
-        let df = series.value_counts(true, true, "count".into(), false)?.sort(
+        let mut df = series.value_counts(true, true, "count".into(), false)?.sort(
             [self.name()],
             SortMultipleOptions::default()
                 .with_nulls_last(true)
@@ -177,13 +177,22 @@ impl QuestionData {
         // append data label
         let (keys, labels) = self.get_datalabel_key_value()?;
         let keys = keys.cast(series.dtype())?;
-        let height = labels.len();
-        let response_label = DataFrame::new(height, vec![keys.into(), labels.into()])?;
-
-        df.lazy()
-            .left_join(response_label.lazy(), col(self.name()), col(self.name()))
-            .select([col(self.name()), col("label"), col("count")])
-            .collect()
+        let label_by_key = keys
+            .iter()
+            .zip(labels.str()?.iter())
+            .filter_map(|(key, label)| {
+                label.map(|label| (key.into_static(), label.to_owned()))
+            })
+            .collect::<HashMap<_, _>>();
+        let question_name = self.name();
+        let labels = df
+            .column(&question_name)?
+            .as_materialized_series()
+            .iter()
+            .map(|value| label_by_key.get(&value).cloned())
+            .collect::<Vec<_>>();
+        df.insert_column(1, Series::new("label".into(), labels).into())?;
+        Ok(df)
     }
 
     /// Checks if `other` is comes from the same [`Survey`] as `self`.
