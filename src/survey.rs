@@ -278,21 +278,21 @@ impl Survey {
             })
             .collect::<PolarsResult<Vec<Expr>>>()?;
 
+        // IDEA: ADD A NEW COLUMN OF FLAGS INDICATING IF REPLACE_STRICT WAS SUCCESS OR FAIL (???) NOT SURE IF POSSIBLE
+        // THEN I CAN CAST STRING BACL TO THE ORIGINAL VALUES DEPENDING ON IF REPLACE_STRICT SUCCEED OR FAILED
         df.lazy().select(query).collect()
     }
 
-    #[cfg(feature="pyo3")]
+    #[cfg(feature = "pyo3")]
     #[inline]
     fn create_response_iterator(&self) -> PyResult<ResponseIterator> {
         let data_iterator = self.data().create_data_entry_iterator()?;
         match self.config().response_display {
-            ResponseDisplay::Value => {
-                Ok(ResponseIterator {
-                    data_iterator: data_iterator,
-                    show_label: false,
-                    label_lookup: HashMap::new(),
-                })
-            }
+            ResponseDisplay::Value => Ok(ResponseIterator {
+                data_iterator: data_iterator,
+                show_label: false,
+                label_lookup: HashMap::new(),
+            }),
 
             ResponseDisplay::Label => {
                 let label_lookup = self
@@ -386,7 +386,6 @@ impl Survey {
 
         // Read individual row
         if let Ok(index) = index.extract::<i64>() {
-
             let df = self
                 .data()
                 .lazy()?
@@ -396,13 +395,14 @@ impl Survey {
                 .map_err(PyPolarsErr::Polars)?;
             let row = df.get_row(0).map_err(PyPolarsErr::Polars)?;
 
+            // TODO: LET THIS RETURN DATA LABEL INSTEAD OF DATA
             let dict = PyDict::new(py);
             for (name, value) in df.get_column_names().iter().zip(row.0) {
                 let pyvalue = anyvalue_to_python(py, value)?;
                 dict.set_item(name.as_str(), pyvalue)?;
             }
             Ok(dict.into_any())
-        
+
         // get data for specific question
         } else if let Ok(question_name) = index.extract::<&str>() {
             let view = self
@@ -670,27 +670,10 @@ impl ResponseIterator {
     fn advance(&mut self) {
         self.data_iterator.index += 1;
     }
-}
 
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl ResponseIterator {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-        slf
-    }
-
-    fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
-        if !self.show_label {
-            return self.data_iterator.__next__(py);
-        };
-
-        let current_index = self.index();
-        if current_index >= self.data_iterator.df.height() {
-            return Ok(None);
-        };
-
+    fn get_row<'py>(&self, py: Python<'py>, row_index: usize) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
-        for row_result in self.data_iterator.get_row(current_index) {
+        for row_result in self.data_iterator.get_row(row_index) {
             let (colname, value) = row_result.map_err(PyPolarsErr::Polars)?;
             match &value {
                 AnyValue::List(inner) if inner.dtype() == &DataType::UInt32 => {
@@ -725,9 +708,30 @@ impl ResponseIterator {
                 }
             }
         }
+        Ok(dict)
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ResponseIterator {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+        if !self.show_label {
+            return self.data_iterator.__next__(py);
+        };
+
+        let current_index = self.index();
+        if current_index >= self.data_iterator.df.height() {
+            return Ok(None);
+        };
+        let row_data = self.get_row(py, current_index)?;
 
         self.advance();
-        Ok(Some(dict.into_any()))
+        Ok(Some(row_data.into_any()))
     }
 }
 
