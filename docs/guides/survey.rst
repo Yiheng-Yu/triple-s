@@ -14,7 +14,6 @@ Load a survey with :func:`read_triple_s`:
 .. code-block:: python
 
    from triple_s import read_triple_s
-
    survey = read_triple_s(
       "path/to/survey.sss",
       path_data="path/to/data.asc"  # optional
@@ -41,12 +40,7 @@ Use a zero-based index to read one respondent's answers:
 
 .. code-block:: python
 
-   respondent_1 = survey[0]
-
-Example output:
-
-.. code-block:: python
-   :class: code-output
+   >>> survey[0]
 
    {'RESPONDENT_ID': 520001.0, 'Q1.a': datetime.date(2005, 5, 4), 'Q1.b': datetime.time(11, 20), 'Q2': 0, 'Q3': [1, 3, 5, 9], 'Q3.a': 'Nottingham Goose Fair         ', 'Q4': 2, 'Q5': [1, 5], 'Q6': 25.0, 'Q7': 1, 'Q8': 'A', 'WT': 1.131}
 

@@ -1,6 +1,8 @@
 Survey
 ======
 
+.. currentmodule:: triple_s
+
 .. autoclass:: triple_s.Survey
 
 Use :func:`triple_s.read_triple_s` to read a datamap and optional respondent
@@ -10,19 +12,29 @@ view updates the survey. ``title`` is also writable.
 Attributes
 ----------
 
-.. autoattribute:: triple_s.Survey.datamap
+.. autoattribute:: Survey.datamap
    :annotation: -> Datamap
 
-.. autoattribute:: triple_s.Survey.info
+.. autoattribute:: Survey.info
    :annotation: -> SurveyInfo
 
-.. autoattribute:: triple_s.Survey.title
+.. autoattribute:: Survey.title
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.Survey.data
+.. autoattribute:: Survey.data
    :annotation: -> SurveyData
+
+.. autoattribute:: Survey.dataframe_format
+   :annotation: -> str
+
+.. autoattribute:: Survey.response_display
+   :annotation: -> str
+
 
 Methods
 -------
-
-.. automethod:: triple_s.Survey.has_data() -> bool
+.. autoattribute:: Survey.response_label_map
+   :annotation: -> polars.DataFrame | pandas.DataFrame
+.. automethod:: Survey.has_data() -> bool
+.. automethod:: Survey.iter_rows() -> Generator[dict[str, Any]]
+.. automethod:: Survey.iter_questions() -> Generator[QuestionData]

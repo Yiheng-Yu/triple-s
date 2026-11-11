@@ -10,7 +10,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
-use polars::{frame::row::Row, prelude::*};
+use polars::frame::row::Row;
 #[cfg(feature = "pyo3")]
 use pyo3::{
     IntoPyObjectExt,
@@ -22,17 +22,14 @@ use quick_xml::Writer;
 use rayon::prelude::*;
 use strum::{EnumIter, EnumString};
 
-use super::{ArcLock, Question};
 #[cfg(feature = "pyo3")]
 use crate::utils::{extract_indicies, get_type_name, normalize_py_index, py_value_error};
 use crate::{
-    SurveyData,
+    Question,
     error::{self, InvalidArg},
     prelude::{DeepCopy, Flag},
-    utils::{TextReader, lock_it_up},
+    utils::{ArcLock, TextReader, lock_it_up},
 };
-
-const BATCH_SIZE: usize = 500; // no. rows when writing to paquet cache
 
 /// Flags that collects all allowed values of `format` attribute of a `<record>`
 /// element. This is used to indicate types of the data the current datamap file
@@ -76,7 +73,8 @@ impl DeepCopy for DataFormat {
 }
 
 impl DataFormat {
-    fn from_path(path: &Path) -> Result<Self> {
+    /// Create new instance from path given
+    pub(crate) fn from_path(path: &Path) -> Result<Self, InvalidArg> {
         match path.extension().and_then(|extension| extension.to_str()) {
             Some("asc") => Ok(Self::Fixed),
             Some("csv") => Ok(Self::Csv),
@@ -287,70 +285,7 @@ impl Record {
 ///
 /// ---
 impl Record {
-    /// Load respondent data from an `.asc` (fixed-width) or `.csv` file.
-    /// Supports both UTF-8 and BOM-marked UTF-16LE/BE encodings.
-    /// Invalid sequences become `�` (U+FFFD), each occupying one fixed-width position.
-    /// Returns [`SurveyData`] and updates `href` and `data_format` on success.
-    /// The returned data is not stored in the record.
-    ///
-    /// This `load_data` function will stream data into a temporary parquet cache file (`.parquet`) to be
-    /// used later. Keep the returned [`SurveyData`] alive while using its cache.
-    ///
-    /// ```no_run
-    /// use triple_s::read_triple_s;
-    ///
-    /// // Load a survey with no data
-    /// let mut survey = read_triple_s("path/to/datamap.sss", None::<&str>)?;
-    ///
-    /// // then load the data later
-    /// let mut record = survey.datamap_mut().record_mut();
-    /// let survey_data = record.load_data("new/data/path.asc")?; // loads data
-    ///
-    /// let df = survey_data.to_polars()?; // get data as polars dataframe
-    /// println!("{:?}", df);
-    ///
-    /// # Ok::<(), anyhow::Error>(())
-    /// ```
-    pub fn load_data(&mut self, path_data: impl AsRef<Path>) -> Result<SurveyData> {
-        let path_data = path_data.as_ref();
-        let data_format = DataFormat::from_path(path_data)?;
-        let (parquet_file, cache) =
-            tempfile::NamedTempFile::with_suffix(".parquet")?.into_parts();
-
-        let schema =
-            Schema::from_iter(self.content().iter().map(|item| item.read().polars_field()));
-        let mut writer = ParquetWriter::new(parquet_file).batched(&schema)?;
-        let mut batch_buffer = Vec::new();
-        for row in self.scan_data_file(path_data, &data_format)? {
-            batch_buffer.push(row.with_context(|| {
-                format!("When trying to load data from '{}'", path_data.display())
-            })?);
-            if batch_buffer.len() == BATCH_SIZE {
-                Self::write_batch(&mut writer, &schema, &mut batch_buffer)?;
-            }
-        }
-        Self::write_batch(&mut writer, &schema, &mut batch_buffer)?;
-        writer.finish()?;
-
-        *self.href_mut() = Some(path_data.to_string_lossy().to_string());
-        *self.data_format_mut() = Some(data_format);
-
-        SurveyData::from_cache(cache, Some(Arc::new(schema)))
-    }
-
-    #[inline]
-    fn write_batch(
-        writer: &mut polars::io::parquet::write::BatchedWriter<File>,
-        schema: &Schema,
-        batch_buffer: &mut Vec<Row<'static>>,
-    ) -> Result<()> {
-        let df = DataFrame::from_rows_and_schema(batch_buffer, schema)?;
-        writer.write_batch(&df)?;
-        batch_buffer.clear();
-        Ok(())
-    }
-
-    fn scan_data_file(
+    pub(crate) fn scan_data_file(
         &self,
         path_data: &Path,
         data_format: &DataFormat,
@@ -376,25 +311,40 @@ impl Record {
             }
         }
 
+        let questions = self
+            .content()
+            .iter()
+            .map(|question| question.read().clone())
+            .collect::<Vec<_>>();
+        let parsers = questions
+            .iter()
+            .map(|question| (question.question_type().clone(), question.format().clone()))
+            .collect::<Vec<_>>();
+
         // then do iteration
         match data_format {
             DataFormat::Fixed => {
-                let width = self
-                    .content()
+                let width = questions
                     .iter()
-                    .map(|question| *question.read().location().finish() as usize)
+                    .map(|question| *question.location().finish() as usize)
                     .max()
                     .context("Cannot determine record width: no questions")?;
                 Ok(Box::new(std::iter::from_fn(
                     move || match Self::read_one_record(&mut reader, width) {
                         Ok(row) if row.is_empty() => None,
                         Ok(row) => Some(
-                            self.content()
+                            questions
                                 .iter()
-                                .map(|question| {
-                                    let question = question.read();
+                                .zip(&parsers)
+                                .map(|(question, (question_type, format))| {
                                     let field = question.locate_data_asc(&row)?;
-                                    Ok(question.parse_question_value(field)?.into_static())
+                                    Ok(question
+                                        .parse_question_value_with_metadata(
+                                            field,
+                                            question_type,
+                                            format.as_ref(),
+                                        )?
+                                        .into_static())
                                 })
                                 .collect::<Result<Vec<_>>>()
                                 .map(Row),
@@ -404,6 +354,10 @@ impl Record {
                 )))
             }
             DataFormat::Csv => {
+                let csv_columns = questions
+                    .iter()
+                    .map(Question::csv_column_index)
+                    .collect::<Result<Vec<_>>>()?;
                 let rows = csv::ReaderBuilder::new()
                     .has_headers(false)
                     .flexible(true)
@@ -414,18 +368,26 @@ impl Record {
                         let row = row.with_context(|| {
                             format!("When reading CSV record {}", index + 1)
                         })?;
-                        self.content()
+                        questions
                             .iter()
-                            .map(|question| {
-                                let question = question.read();
-                                let field =
-                                    question.locate_data_csv(&row).with_context(|| {
-                                        format!(
-                                            "When trying to extract data for question `{}`",
-                                            question.name()
-                                        )
-                                    })?;
-                                Ok(question.parse_question_value(field)?.into_static())
+                            .zip(&parsers)
+                            .zip(&csv_columns)
+                            .map(|((question, (question_type, format)), column_index)| {
+                                let field = question
+                                    .locate_data_csv_at(&row, *column_index)
+                                    .with_context(|| {
+                                    format!(
+                                        "When trying to extract data for question `{}`",
+                                        question.name()
+                                    )
+                                })?;
+                                Ok(question
+                                    .parse_question_value_with_metadata(
+                                        field,
+                                        question_type,
+                                        format.as_ref(),
+                                    )?
+                                    .into_static())
                             })
                             .collect::<Result<Vec<_>>>()
                             .map(Row)
@@ -436,11 +398,9 @@ impl Record {
     }
 
     /// Validate an `.asc` or `.csv` file against the record's questions and skip setting.
-    /// Invalid Unicode sequences become `�` (U+FFFD), as in [`Record::load_data`].
+    /// Invalid Unicode sequences become `�` (U+FFFD).
     ///
     /// This method simply validates data file and would not alter any existing fields.
-    ///
-    /// To modify current instance, use [`Record::load_data`] method instead.
     pub fn validate_data(&self, path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
         let data_format = DataFormat::from_path(path)?;
@@ -544,6 +504,10 @@ impl Record {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Record {
+    /// Create a Record instance.
+    ///
+    /// Returns:
+    ///     str: The Triple-S XML representation.
     #[pyo3(name = "to_xml")]
     fn py_to_xml(&self) -> PyResult<String> {
         self.to_xml().map_err(py_value_error)
@@ -612,7 +576,7 @@ impl Record {
     /// (Optional) path to the data file the current datamap ties to.
     ///
     /// This corresponds to the href attribute of a <record> element.
-    /// Setting it edits metadata only; use `load_data(path)` to load respondent data.
+    /// Setting it edits metadata only; use `read_data(datamap, path)` to load respondent data.
     #[getter(href)]
     fn py_get_href(&self) -> PyResult<Option<String>> {
         Ok(self.href().clone())
@@ -651,17 +615,15 @@ impl Record {
     /// Get a question by name, returning `None` if it doesn't exist.
     ///
     /// Name matching is not case sensitive.
+    ///
+    /// Args:
+    ///     question_name (str): Name of the question; matching is case insensitive.
+    ///
+    /// Returns:
+    ///     Question | None: The matching question, or None if it does not exist.
     #[pyo3(name="get", signature=(question_name:"str"))]
     pub fn py_get(&self, question_name: &str) -> Option<Question> {
         self.find_question(question_name).map(|item| item.read().clone())
-    }
-
-    /// Load respondent data and return `SurveyData`, updating `href` and `data_format`.
-    /// Invalid Unicode sequences become `�` (U+FFFD).
-    #[pyo3(name = "load_data")]
-    fn py_load_data(&mut self, path_data: &str) -> PyResult<SurveyData> {
-        self.load_data(path_data)
-            .map_err(|err| exceptions::PyRuntimeError::new_err(format!("{:#?}", err)))
     }
 
     /// List of question names in the record
@@ -734,6 +696,12 @@ impl Record {
     /// Add a question to the current [ `Record` ] instance
     ///
     /// Would overwrite existing item if question with the same name already exists.
+    ///
+    /// Args:
+    ///     question (Question): Question to append to the record.
+    ///
+    /// Returns:
+    ///     None: This method updates or validates the existing object in place.
     #[pyo3(name = "add_question")]
     fn py_add_question(&mut self, question: Question) -> PyResult<()> {
         let deepcopy = question.deepcopy();
@@ -744,6 +712,12 @@ impl Record {
     /// Remove a question from current record, returns the removed question.
     ///
     /// Name matching is case insensitive.
+    ///
+    /// Args:
+    ///     question_name (str): Name of the question; matching is case insensitive.
+    ///
+    /// Returns:
+    ///     Question | None: An independent copy of the removed question, or None if it was not found.
     #[pyo3(name = "remove_question")]
     fn py_remove_question(&mut self, question_name: &str) -> PyResult<Option<Question>> {
         let deepcopy = self.remove_question(question_name).map(|item| item.read().deepcopy());
@@ -766,6 +740,12 @@ impl Record {
     ///     list of [`Question`] instance or dictionaries to pass to
     ///     Question.from_dict,
     ///     Default to be an empty list (`[]`)
+    ///
+    /// Args:
+    ///     content (dict): Fields used to construct the Record instance, as described above.
+    ///
+    /// Returns:
+    ///     Record: The constructed Record instance.
     #[pyo3(name = "from_dict")]
     #[staticmethod]
     #[allow(unused_variables)]
@@ -844,15 +824,18 @@ impl Record {
 
     /// Creates a new empty [`Record`] instance.
     ///
-    /// Example:
+    /// Returns:
+    ///     Record: The constructed Record instance.
     ///
-    /// ```python
-    /// 
-    /// from triple_s import Record
+    /// Examples:
     ///
-    /// record = Record.empty()
-    /// assert len(record) == 0
-    /// ```
+    ///     .. code-block:: python
+    ///
+    ///
+    ///         from triple_s import Record
+    ///
+    ///         record = Record.empty()
+    ///         assert len(record) == 0
     #[staticmethod]
     #[pyo3(name = "empty")]
     fn py_empty() -> Self {
@@ -861,7 +844,13 @@ impl Record {
 
     /// Validate an `.asc` or `.csv` file without changing metadata or loading data.
     /// Invalid Unicode sequences become `�` (U+FFFD).
-    /// Use `load_data(path)` to load respondent data.
+    /// Use `read_data(datamap, path)` to load respondent data.
+    ///
+    /// Args:
+    ///     path (str): Path to an .asc or .csv respondent data file.
+    ///
+    /// Returns:
+    ///     None: None if validation succeeds.
     #[pyo3(name = "validate_data")]
     fn py_validate_data(&self, path: &str) -> PyResult<()> {
         self.validate_data(path).map_err(py_value_error)

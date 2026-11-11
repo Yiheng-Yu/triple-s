@@ -1,6 +1,8 @@
 Questions and responses
 =======================
 
+.. currentmodule:: triple_s
+
 Question
 --------
 
@@ -8,48 +10,48 @@ Question
 Attributes
 ^^^^^^^^^^
 
-.. autoattribute:: triple_s.Question.type
+.. autoattribute:: Question.type
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.Question.location
+.. autoattribute:: Question.location
    :annotation: -> Location
 
-.. autoattribute:: triple_s.Question.label
+.. autoattribute:: Question.label
    :annotation: -> Text
 
-.. autoattribute:: triple_s.Question.spread
+.. autoattribute:: Question.spread
    :annotation: -> Spread | None
 
-.. autoattribute:: triple_s.Question.format
+.. autoattribute:: Question.format
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.Question.usage
+.. autoattribute:: Question.usage
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.Question.filter
+.. autoattribute:: Question.filter
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.Question.response
+.. autoattribute:: Question.response
    :annotation: -> Response
 
-.. autoattribute:: triple_s.Question.name
+.. autoattribute:: Question.name
    :annotation: -> str
 
 
 Properties
 ^^^^^^^^^^^
-.. :py:property:: triple_s.Question.data_label
+.. :py:property:: triple_s.Question.response_label
       :type: -> Dict[str | int | float, Text]
 
 Methods
 ^^^^^^^
 
-.. automethod:: triple_s.Question.copy() -> Question
-.. automethod:: triple_s.Question.set_location(start=None, finish=None) -> None
-.. automethod:: triple_s.Question.from_string(question_fragment) -> Question
-.. automethod:: triple_s.Question.from_dict(content) -> Question
-.. automethod:: triple_s.Question.to_classic() -> str
-.. automethod:: triple_s.Question.to_xml() -> str
+.. automethod:: Question.copy() -> Question
+.. automethod:: Question.set_location(start=None, finish=None) -> None
+.. automethod:: Question.from_string(question_fragment) -> Question
+.. automethod:: Question.from_dict(content) -> Question
+.. automethod:: Question.to_classic() -> str
+.. automethod:: Question.to_xml() -> str
 
 ****
 
@@ -61,15 +63,15 @@ Location
 Attributes
 ^^^^^^^^^^
 
-.. autoattribute:: triple_s.Location.start
+.. autoattribute:: Location.start
    :annotation: -> int
 
-.. autoattribute:: triple_s.Location.finish
+.. autoattribute:: Location.finish
    :annotation: -> int
 
 Methods
 ^^^^^^^
-.. automethod:: triple_s.Location.from_dict(value) -> Location
+.. automethod:: Location.from_dict(value) -> Location
 
 ****
 
@@ -81,15 +83,15 @@ Spread
 Attributes
 ^^^^^^^^^^
 
-.. autoattribute:: triple_s.Spread.subfield_width
+.. autoattribute:: Spread.subfield_width
    :annotation: -> int | None
 
-.. autoattribute:: triple_s.Spread.num_subfields
+.. autoattribute:: Spread.num_subfields
    :annotation: -> int
 
 Methods
 ^^^^^^^
-.. automethod:: triple_s.Spread.from_dict(value) -> Spread
+.. automethod:: Spread.from_dict(value) -> Spread
 
 ****
 
@@ -101,19 +103,19 @@ Response
 Attributes
 ^^^^^^^^^^
 
-.. autoattribute:: triple_s.Response.range
+.. autoattribute:: Response.range
    :annotation: -> DataRange | None
 
-.. autoattribute:: triple_s.Response.values
+.. autoattribute:: Response.values
    :annotation: -> tuple[Code, ...]
 
 Methods
 ^^^^^^^
 
-.. automethod:: triple_s.Response.get_value(value) -> Code | None
-.. automethod:: triple_s.Response.add_value(value) -> None
-.. automethod:: triple_s.Response.set_value(value) -> None
-.. automethod:: triple_s.Response.from_dict(content) -> Response
+.. automethod:: Response.get_value(value) -> Code | None
+.. automethod:: Response.add_value(value) -> None
+.. automethod:: Response.set_value(value) -> None
+.. automethod:: Response.from_dict(content) -> Response
 
 ****
 
@@ -125,19 +127,19 @@ DataRange
 Attributes
 ^^^^^^^^^^
 
-.. autoattribute:: triple_s.DataRange.end
+.. autoattribute:: DataRange.end
    :annotation: -> int | float
 
-.. autoattribute:: triple_s.DataRange.start
+.. autoattribute:: DataRange.start
    :annotation: -> int | float
 
 Methods
 ^^^^^^^
 
-.. automethod:: triple_s.DataRange.unsigned(start, end) -> DataRange
-.. automethod:: triple_s.DataRange.signed(start, end) -> DataRange
-.. automethod:: triple_s.DataRange.float(start, end) -> DataRange
-.. automethod:: triple_s.DataRange.from_dict(content) -> DataRange
+.. automethod:: DataRange.unsigned(start, end) -> DataRange
+.. automethod:: DataRange.signed(start, end) -> DataRange
+.. automethod:: DataRange.float(start, end) -> DataRange
+.. automethod:: DataRange.from_dict(content) -> DataRange
 
 ****
 
@@ -149,16 +151,16 @@ Code
 Attributes
 ^^^^^^^^^^
 
-.. autoattribute:: triple_s.Code.label
+.. autoattribute:: Code.label
    :annotation: -> Text
 
-.. autoattribute:: triple_s.Code.value
+.. autoattribute:: Code.value
    :annotation: -> int | float | str
 
-.. autoattribute:: triple_s.Code.score
+.. autoattribute:: Code.score
    :annotation: -> float | None
 
-.. autoattribute:: triple_s.Code.filter
+.. autoattribute:: Code.filter
    :annotation: -> str | None
 
 Methods
@@ -167,11 +169,11 @@ Methods
 Creating new instance with various data types:
 *********************************************************
 
-.. automethod:: triple_s.Code.unsigned(value, label=None, filter=None, score=None) -> Code
-.. automethod:: triple_s.Code.string(value, label=None, filter=None, score=None) -> Code
-.. automethod:: triple_s.Code.float(value, label=None, filter=None, score=None) -> Code
-.. automethod:: triple_s.Code.signed(value, label=None, filter=None, score=None) -> Code
+.. automethod:: Code.unsigned(value, label=None, filter=None, score=None) -> Code
+.. automethod:: Code.string(value, label=None, filter=None, score=None) -> Code
+.. automethod:: Code.float(value, label=None, filter=None, score=None) -> Code
+.. automethod:: Code.signed(value, label=None, filter=None, score=None) -> Code
 
 Creating new instance from dictionary:
 *********************************************************
-.. automethod:: triple_s.Code.from_dict(content) -> Code
+.. automethod:: Code.from_dict(content) -> Code

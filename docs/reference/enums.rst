@@ -1,6 +1,8 @@
 Enum flags
 ==========
 
+.. currentmodule:: triple_s
+
 Version
 -------
 
@@ -9,24 +11,25 @@ Version
 Attributes
 ^^^^^^^^^^
 
-.. autoattribute:: triple_s.Version.V1_0
+.. autoattribute:: Version.V1_0
    :annotation: -> Version
 
-.. autoattribute:: triple_s.Version.V1_1
+.. autoattribute:: Version.V1_1
    :annotation: -> Version
 
-.. autoattribute:: triple_s.Version.V1_2
+.. autoattribute:: Version.V1_2
    :annotation: -> Version
 
-.. autoattribute:: triple_s.Version.V2_0
+.. autoattribute:: Version.V2_0
    :annotation: -> Version
 
-.. autoattribute:: triple_s.Version.V3_0
+.. autoattribute:: Version.V3_0
    :annotation: -> Version
 
 Methods
 ^^^^^^^
-.. automethod:: triple_s.Version.available_options() -> list[str]
+
+.. automethod:: Version.available_options() -> list[str]
 
 ****
 
@@ -38,33 +41,33 @@ QuestionType
 Attributes
 ^^^^^^^^^^
 
-.. autoattribute:: triple_s.QuestionType.None
+.. autoattribute:: QuestionType.None
    :annotation: -> QuestionType
 
-.. autoattribute:: triple_s.QuestionType.Single
+.. autoattribute:: QuestionType.Single
    :annotation: -> QuestionType
 
-.. autoattribute:: triple_s.QuestionType.Multiple
+.. autoattribute:: QuestionType.Multiple
    :annotation: -> QuestionType
 
-.. autoattribute:: triple_s.QuestionType.Logical
+.. autoattribute:: QuestionType.Logical
    :annotation: -> QuestionType
 
-.. autoattribute:: triple_s.QuestionType.Quantity
+.. autoattribute:: QuestionType.Quantity
    :annotation: -> QuestionType
 
-.. autoattribute:: triple_s.QuestionType.Character
+.. autoattribute:: QuestionType.Character
    :annotation: -> QuestionType
 
-.. autoattribute:: triple_s.QuestionType.Date
+.. autoattribute:: QuestionType.Date
    :annotation: -> QuestionType
 
-.. autoattribute:: triple_s.QuestionType.Time
+.. autoattribute:: QuestionType.Time
    :annotation: -> QuestionType
 
 Methods
 ^^^^^^^
-.. automethod:: triple_s.QuestionType.available_options() -> list[str]
+.. automethod:: QuestionType.available_options() -> list[str]
 
 ****
 
@@ -76,10 +79,10 @@ CodeFormat
 Attributes
 ^^^^^^^^^^
 
-.. autoattribute:: triple_s.CodeFormat.UnSigned
+.. autoattribute:: CodeFormat.UnSigned
    :annotation: -> CodeFormat
 
-.. autoattribute:: triple_s.CodeFormat.Literal
+.. autoattribute:: CodeFormat.Literal
    :annotation: -> CodeFormat
 
 ****
@@ -92,10 +95,10 @@ DataFormat
 Attributes
 ^^^^^^^^^^
 
-.. autoattribute:: triple_s.DataFormat.Csv
+.. autoattribute:: DataFormat.Csv
    :annotation: -> DataFormat
 
-.. autoattribute:: triple_s.DataFormat.Fixed
+.. autoattribute:: DataFormat.Fixed
    :annotation: -> DataFormat
 
 ****
@@ -108,18 +111,18 @@ Usage
 Attributes
 ^^^^^^^^^^
 
-.. autoattribute:: triple_s.Usage.Null
+.. autoattribute:: Usage.Null
    :annotation: -> Usage
 
-.. autoattribute:: triple_s.Usage.Serial
+.. autoattribute:: Usage.Serial
    :annotation: -> Usage
 
-.. autoattribute:: triple_s.Usage.Weight
+.. autoattribute:: Usage.Weight
    :annotation: -> Usage
 
 Methods
 ^^^^^^^
-.. automethod:: triple_s.Usage.available_options() -> list[str]
+.. automethod:: Usage.available_options() -> list[str]
 
 ****
 
@@ -131,30 +134,24 @@ Mode
 Attributes
 ^^^^^^^^^^
 
-.. autoattribute:: triple_s.Mode.Analysis
+.. autoattribute:: Mode.Analysis
    :annotation: -> Mode
 
-.. autoattribute:: triple_s.Mode.Interview
+.. autoattribute:: Mode.Interview
    :annotation: -> Mode
 
 ****
 
-Value
------
+ResponseDisplay
+---------------
 
-.. autoclass:: triple_s.Value
+.. autoclass:: triple_s.config.ResponseDisplay
 
 Attributes
 ^^^^^^^^^^
 
-.. autoattribute:: triple_s.Value.UnSigned
-   :annotation: -> type[Value.UnSigned]
+.. autoattribute:: triple_s.config.ResponseDisplay.Value
+   :annotation: -> ResponseDisplay
 
-.. autoattribute:: triple_s.Value.Signed
-   :annotation: -> type[Value.Signed]
-
-.. autoattribute:: triple_s.Value.Float
-   :annotation: -> type[Value.Float]
-
-.. autoattribute:: triple_s.Value.String
-   :annotation: -> type[Value.String]
+.. autoattribute:: triple_s.config.ResponseDisplay.Label
+   :annotation: -> ResponseDisplay

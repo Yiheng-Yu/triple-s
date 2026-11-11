@@ -49,16 +49,13 @@
 //! You can also read survey data with path provided
 //!
 //! ```no_run
-//! use triple_s::read_datamap;
+//! use triple_s::{read_data, read_datamap};
 //!
 //! let path = "path/to/the/datamap.sss";
 //! let mut datamap = read_datamap(path)?;
 //!
 //! let path_data = "path/to/datafile.asc";
-//! let data = datamap
-//!     .record_mut()
-//!     // `load_data()` sets the `href` field of `record`
-//!     .load_data(path_data)?;
+//! let data = read_data(&datamap, path_data)?;
 //!
 //! # Ok::<(), anyhow::Error>(())
 //! ```
@@ -153,7 +150,7 @@ mod datamap;
 mod survey;
 
 pub mod error;
-// pub use data::config;
+pub use data::config;
 
 mod prelude;
 mod utils;
@@ -175,8 +172,9 @@ pub use datamap::{
         Usage,
     },
     read::{read_datamap, read_from_reader, read_from_string},
+    read_data,
     record::{self, DataFormat, Record},
-    response::{self, Code, DataRange, Response, Value},
+    response::{self, Code, DataRange, Response},
     survey_info::{self, SurveyInfo, Version},
     text::{self, Mode, Text, Variant},
 };
@@ -211,7 +209,11 @@ pub fn read_triple_s(
         None => SurveyData::default(), // an empty SurveyData instance
         Some(path_data) => {
             log::info!("Loading data..");
-            datamap.record_mut().load_data(path_data)?
+            let path_data = path_data.as_ref();
+            let data = read_data(&datamap, path_data)?;
+            *datamap.record_mut().href_mut() = Some(path_data.to_string_lossy().into_owned());
+            *datamap.record_mut().data_format_mut() = Some(DataFormat::from_path(path_data)?);
+            data
         }
     };
     let survey = Survey::new(datamap, data);
@@ -233,7 +235,7 @@ mod triple_s {
         Datamap,
         question::{CodeFormat, Location, Question, QuestionType, Spread, Usage},
         record::{DataFormat, Record},
-        response::{Code, DataRange, Response, Value},
+        response::{Code, DataRange, Response},
         survey_info::{SurveyInfo, Version},
         text::{Mode, Text, Variant},
     };
@@ -242,17 +244,19 @@ mod triple_s {
     #[pymodule_export]
     pub use crate::survey::Survey;
     use crate::{datamap::read::read_from_reader, read_triple_s};
-
-    // #[pymodule]
-    // pub mod config {
-    //     #[pymodule_export]
-    //     pub use crate::config::TableKind;
-    // }
+    #[pymodule]
+    pub mod config {
+        #[pymodule_export]
+        pub use crate::config::{DataFrameFormat, ResponseDisplay};
+    }
 
     /// Read triple-s datamap
     ///
     /// Args:
     ///     path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
+    ///
+    /// Returns:
+    ///     Datamap: The parsed survey definition, without respondent data.
     #[pyfunction(name="read_datamap", signature=(path_datamap: "str"))]
     pub fn py_read_datamap(py: Python<'_>, path_datamap: &str) -> PyResult<Datamap> {
         let input = std::fs::File::open(path_datamap)?;
@@ -268,14 +272,14 @@ mod triple_s {
     /// Read triple-s datamap, and load data afterwards.
     ///
     /// Args:
-    ///     path_datamap (str):
-    ///         path to the triple-s datamap file, supports both classic and xml format.     
-    ///     path_data (str, *optional*):
-    ///         path to the `.asc` or `.csv` data file.
+    ///     path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
+    ///
+    /// Keyword Args:
+    ///     path_data (str, *optional*): path to the `.asc` or `.csv` data file.
     ///
     /// Returns:
-    ///     [`Survey`] containing `datamap` and `data`. If `path_data` is omitted,
-    ///     `has_data()` returns `False`.
+    ///     Survey: [`Survey`] containing `datamap` and `data`. If `path_data` is omitted,
+    ///         `has_data()` returns `False`.
     #[pyfunction(
         name="read_triple_s", 
         signature=(
@@ -287,9 +291,34 @@ mod triple_s {
         read_triple_s(path_datamap, path_data).map_err(|err| err.into())
     }
 
+    /// Reads .asc or .csv datafile with datamap provided.
+    ///
+    /// Args:
+    ///     datamap (Datamap): datamap used to read the data.
+    ///     path_data (str): path to the .csv or .asc data file.
+    ///
+    /// Returns:
+    ///     SurveyData: The loaded respondent data.
+    #[pyfunction(
+        name="read_data",
+        signature=(
+            datamap: "Datamap",
+            path_data: "str"
+        )
+    )]
+    pub fn py_read_data(datamap: Datamap, path_data: &str) -> PyResult<SurveyData> {
+        crate::datamap::read_data(&datamap, path_data)
+            .map_err(|err| crate::utils::py_value_error(err.into()))
+    }
+
     #[pymodule_init]
-    fn init(_m: &Bound<'_, PyModule>) -> PyResult<()> {
+    fn init(bound: &Bound<'_, PyModule>) -> PyResult<()> {
+        // init python logger
         pyo3_log::init();
+
+        // Set submodules
+        let modules = bound.py().import("sys")?.getattr("modules")?;
+        modules.set_item("triple_s.config", bound.getattr("config")?)?; // config
 
         Ok(())
     }

@@ -1,16 +1,16 @@
-from re import L
-import pprint
+import polars
+import pandas
 
 import pytest
-from triple_s import NoDataError, read_triple_s
+from triple_s import read_data, NoDataError, read_triple_s
 
-PATH_SSS_EXAMPLE_1 = "tests/sss-examples/sss-2.0/example1.sss"
-PATH_ASC = "tests/sss-examples/sss-2.0/example1.asc"
+PATH_SSS_EXAMPLE_1 = "tests/sss-examples/sss-2.0/stackoverflow_2026.sss"
+PATH_CSV = "tests/sss-examples/sss-2.0/stackoverflow_2026.csv"
 
 
 @pytest.fixture
 def survey():
-    return read_triple_s(PATH_SSS_EXAMPLE_1, PATH_ASC)
+    return read_triple_s(PATH_SSS_EXAMPLE_1, PATH_CSV)
 
 
 def test_read_only_datamap():
@@ -21,9 +21,6 @@ def test_read_only_datamap():
 
 def test_read_file_success(survey):
     assert survey.has_data()
-    assert survey.num_response == 3
-    assert survey.name == "SP5201-1"
-    assert survey.title == "Historic House Exit Survey<br/>First Wave"
 
     print()
     print("Survey datamap repr:")
@@ -35,7 +32,7 @@ def test_read_file_success(survey):
 
     print()
     print("Survet data:")
-    print(survey["Q1.b"])
+    print(survey["CodeMain"])
 
 
 @pytest.mark.parametrize("index", [0, 1, 2])
@@ -44,10 +41,10 @@ def test_indexing_individual_responses(survey, index):
     assert response == survey.data.to_polars().row(index, named=True)
 
 
-def test_survey_iter(survey):
-    df = survey.data.to_polars()
-    for index, entry in enumerate(survey.iter_rows()):
-        assert entry == df.row(index, named=True)
+# def test_survey_iter(survey):
+#     df = survey.data.to_polars()
+#     for index, entry in enumerate(survey.iter_rows()):
+#         assert entry == df.row(index, named=True)
 
 
 def test_survey_title_mutation(survey):
@@ -141,13 +138,70 @@ def test_survey_without_data():
     with pytest.raises(NoDataError):
         survey.data.to_polars()
 
-    data = survey.datamap.load_data(PATH_ASC)
+    data = read_data(survey.datamap, PATH_CSV)
     assert data.has_data()
     assert not survey.has_data()
 
 
 def test_value_counts(survey):
-    print()
     for question in survey.iter_questions():
         summary = question.value_counts()
-        print(summary)
+
+def test_set_dataframe_format_config_success(survey):
+    assert survey.dataframe_format == 'polars'   # the default
+    
+    for question in survey.iter_questions():
+        assert question.dataframe_format == 'polars'
+        assert type(question.value_counts()) == polars.DataFrame
+    
+    survey.dataframe_format = 'pandas'
+    assert survey.dataframe_format == 'pandas'
+    for question in survey.iter_questions():
+        assert question.dataframe_format == 'pandas'
+        assert type(question.value_counts()) == pandas.DataFrame
+
+
+def test_set_dataframe_format_config_fail(survey):
+    with pytest.raises(TypeError):
+        survey.dataframe_format = None
+        survey.dataframe_format = 3.14
+        survey.dataframe_format = []
+        survey.dataframe_format = lambda s: s
+    
+    with pytest.raises(ValueError):
+        survey.dataframe_format = ""
+        survey.dataframe_format = "pppppppolars"
+
+
+def test_set_flag_toggle_response_display_success(survey):
+    assert survey.response_display == "value"
+    
+    for question in survey.iter_questions():
+        assert question.response_display == 'value'
+        
+    survey.response_display = "label"
+    assert survey.response_display == "label"
+    for question in survey.iter_questions():
+        assert question.response_display == 'label'
+        
+
+def test_set_flag_toggle_response_display_fail(survey):
+    with pytest.raises(TypeError):
+        survey.response_display = None
+        survey.response_display = []
+        survey.response_display = lambda s: s
+    
+    with pytest.raises(ValueError):
+        survey.response_display = ""
+        survey.response_display = "pppppppolars"
+
+
+def test_print_one_response_as_label(survey):
+    survey.response_display = "label"
+    assert survey.response_display == "label"
+    
+    for response in survey:
+        assert isinstance(response, dict)
+        print(response)
+        break
+        

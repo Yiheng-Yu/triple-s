@@ -1,10 +1,18 @@
-use triple_s::{Survey, read_triple_s};
+use polars::prelude::*;
+use triple_s::{Survey, SurveyData, config::ResponseDisplay, read_triple_s};
 
 const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
 const PATH_DATAFILE_V2_0: &str = "tests/sss-examples/sss-2.0/example1.asc";
 
+const PATH_STACK_OVERFLOW_DATAMAP: &str = "tests/sss-examples/sss-2.0/stackoverflow_2026.sss";
+const PATH_STACK_OVERFLOW_DATA: &str = "tests/sss-examples/sss-2.0/stackoverflow_2026.csv";
+
 fn get_survey_struct() -> Survey {
     read_triple_s(PATH_DATAMAP_V2_0, Some(PATH_DATAFILE_V2_0)).unwrap()
+}
+
+fn read_stack_overflow() -> Survey {
+    read_triple_s(PATH_STACK_OVERFLOW_DATAMAP, Some(PATH_STACK_OVERFLOW_DATA)).unwrap()
 }
 
 #[test]
@@ -21,8 +29,7 @@ fn test_survey_read_success() {
 }
 
 #[test]
-fn question_view_shares_replacement_and_owns_cache() {
-    use triple_s::SurveyData;
+fn test_question_view_shares_replacement_and_owns_cache() {
     let survey = get_survey_struct();
     let view = survey.get_question_data("Q2").unwrap();
     let replacement = survey.data().to_polars().unwrap().reverse();
@@ -40,4 +47,44 @@ fn question_view_shares_replacement_and_owns_cache() {
     );
     drop(view);
     assert!(!std::path::Path::new(&cache_path).exists());
+}
+
+#[test]
+fn test_value_display_success() {
+    let mut survey = get_survey_struct();
+    let question = survey.get_question_data("Q2").unwrap();
+    let series_value = question.to_series().unwrap();
+    assert_eq!(series_value.dtype(), &DataType::UInt32);
+
+    survey.config_mut().response_display = ResponseDisplay::Label;
+    assert_eq!(question.config().response_display, ResponseDisplay::Label);
+    let series_label = question.to_series().unwrap();
+    assert_eq!(series_label.dtype(), &DataType::String)
+}
+
+#[test]
+fn test_value_display_label_not_found() {
+    let mut survey = get_survey_struct();
+    let mut question = survey.get_question_data("Q2").unwrap();
+    question
+        .datamap_mut()
+        .response_mut()
+        .with_value_write(0, |item| *item.value_mut() = AnyValue::UInt32(55));
+
+    survey.config_mut().response_display = ResponseDisplay::Label;
+    match question.to_series() {
+        Ok(_) => panic!("Error not raised"),
+        // correct error
+        Err(PolarsError::ComputeError(message)) => {
+            assert!(message.contains("contains response values with no matching label"));
+        }
+        Err(error) => {
+            panic!("Wrong type of error raised:\n {:?}", error)
+        }
+    }
+}
+
+#[test]
+fn test_read_stack_overflow_survey() {
+    let _ = read_stack_overflow();
 }

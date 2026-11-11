@@ -13,3 +13,9 @@ Read survey datamap
 
 .. autofunction:: triple_s.read_datamap(path_datamap) -> Datamap
 
+****
+
+Read survey data
+--------------------------
+
+.. autofunction:: triple_s.read_data(path_datamap) -> SurveyData

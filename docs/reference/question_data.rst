@@ -1,34 +1,39 @@
 QuestionData
 ============
 
+.. currentmodule:: triple_s
+
 .. autoclass:: triple_s.QuestionData
 
 Attributes
 ----------
 
-.. autoattribute:: triple_s.QuestionData.name
+.. autoattribute:: QuestionData.name
    :annotation: -> str
 
-.. autoattribute:: triple_s.QuestionData.type
+.. autoattribute:: QuestionData.type
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.QuestionData.label
+.. autoattribute:: QuestionData.label
    :annotation: -> triple_s.Text
 
-.. autoattribute:: triple_s.QuestionData.range
+.. autoattribute:: QuestionData.range
    :annotation: -> triple_s.DataRange | None
 
-.. autoattribute:: triple_s.QuestionData.data
+.. autoattribute:: QuestionData.datamap
    :annotation: -> triple_s.Question
 
-.. autoattribute:: triple_s.QuestionData.data
+.. autoattribute:: QuestionData.data
    :annotation: -> tuple
 
    A copy of the answers as a tuple, with ``None`` for missing values.
 
+.. autoattribute:: QuestionData.response_display
+   :annotation: -> str
+
 Properties
 -------------------
-.. :py:property:: triple_s.QuestionData.data_label
+.. :py:property:: triple_s.QuestionData.response_label
    :annotation: Dict[str | int | float, Text]
 
 Iteration and indexing
@@ -41,6 +46,6 @@ column taken when iteration starts.
 Methods
 -------
 
-.. automethod:: triple_s.QuestionData.to_polars() -> polars.Series
-.. automethod:: triple_s.QuestionData.to_pandas() -> pandas.Series
-.. automethod:: triple_s.QuestionData.to_list() -> List[Any]
+.. automethod:: QuestionData.to_polars() -> polars.Series
+.. automethod:: QuestionData.to_pandas() -> pandas.Series
+.. automethod:: QuestionData.to_list() -> List[Any]

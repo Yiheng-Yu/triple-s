@@ -68,6 +68,10 @@ impl PyEnum for Version {}
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Version {
+    /// List the available Version values.
+    ///
+    /// Returns:
+    ///     list[str]: Accepted string values for this enumeration.
     #[pyo3(name = "available_options")]
     #[staticmethod]
     fn py_available_options() -> Vec<String> {
@@ -76,6 +80,28 @@ impl Version {
 }
 
 /// meta information about the datamap entity.
+#[cfg_attr(
+    all(feature = "pyo3", not(doc)),
+    doc = r###"
+Args:
+    version (str | float): Triple-S version, such as "2.0" or 2.0.
+
+Keyword Args:
+    name (str | None): Survey name. None leaves this field unset. Defaults to None.
+    title (str | None): Survey title. None leaves this field unset. Defaults to None.
+    date (str | None): Survey date. None leaves this field unset. Defaults to None.
+    time (str | None): Survey time. None leaves this field unset. Defaults to None.
+    origin (str | None): Software or system that produced the survey. None leaves this field unset. Defaults to None.
+    user (str | None): Survey user or organisation. None leaves this field unset. Defaults to None.
+    style (str | None): Survey style. None leaves this field unset. Defaults to None.
+    language_options (list[str] | None): Language tags available in the survey. None uses an empty list. Defaults to None.
+    mode_options (list[Mode | str | None] | None): Text modes available in the survey. None uses an empty list. Defaults to None.
+    standard (str | None): Survey standard identifier. None leaves this field unset. Defaults to None.
+
+Returns:
+    SurveyInfo: The constructed SurveyInfo instance.
+"###
+)]
 #[cfg_attr(
     feature = "pyo3",
     pyclass(
@@ -490,13 +516,31 @@ impl SurveyInfo {
     /// Create datamap metadata for a Triple-S version given as a string or
     /// float.
     ///
-    /// # Examples
+    /// Args:
+    ///     version (str | float): Triple-S version, such as "2.0" or 2.0.
     ///
-    /// ```python
-    /// from triple_s import SurveyInfo
+    /// Keyword Args:
+    ///     name (str | None): Survey name. None leaves this field unset. Defaults to None.
+    ///     title (str | None): Survey title. None leaves this field unset. Defaults to None.
+    ///     date (str | None): Survey date. None leaves this field unset. Defaults to None.
+    ///     time (str | None): Survey time. None leaves this field unset. Defaults to None.
+    ///     origin (str | None): Software or system that produced the survey. None leaves this field unset. Defaults to None.
+    ///     user (str | None): Survey user or organisation. None leaves this field unset. Defaults to None.
+    ///     style (str | None): Survey style. None leaves this field unset. Defaults to None.
+    ///     language_options (list[str] | None): Language tags available in the survey. None uses an empty list. Defaults to None.
+    ///     mode_options (list[Mode | str | None] | None): Text modes available in the survey. None uses an empty list. Defaults to None.
+    ///     standard (str | None): Survey standard identifier. None leaves this field unset. Defaults to None.
     ///
-    /// meta = SurveyInfo("2.0", language_options=["en-GB"], mode_options=["analysis"])
-    /// ```
+    /// Returns:
+    ///     SurveyInfo: The constructed SurveyInfo instance.
+    ///
+    /// Examples:
+    ///
+    ///     .. code-block:: python
+    ///
+    ///         from triple_s import SurveyInfo
+    ///
+    ///         meta = SurveyInfo("2.0", language_options=["en-GB"], mode_options=["analysis"])
     #[new]
     #[pyo3(signature = (
         version: "str | float",
@@ -558,6 +602,12 @@ impl SurveyInfo {
     /// Create survey metadata from a dictionary. `version` is required;
     /// other metadata fields are optional and default to `None` or an empty
     /// options list.
+    ///
+    /// Args:
+    ///     content (dict): Fields used to construct the SurveyInfo instance, as described above.
+    ///
+    /// Returns:
+    ///     SurveyInfo: The constructed SurveyInfo instance.
     #[staticmethod]
     #[pyo3(name = "from_dict")]
     pub(crate) fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
@@ -651,27 +701,30 @@ impl SurveyInfo {
 
     /// Export contents to a dictionary.
     ///
-    /// Example:
+    /// Returns:
+    ///     dict: The object fields as a dictionary.
     ///
-    /// ```python
-    /// from triple_s import SurveyInfo
+    /// Examples:
     ///
-    /// info = SurveyInfo(
-    ///     version=Version.V2_0,
-    ///     name='SP5201-1',
-    ///     title='Historic House Exit Survey<br/>First Wave',
-    ///     date='14 April 2005',
-    ///     time='16:00',
-    ///     origin='SurveyProg v1.3.05',
-    ///     user='User Site',
-    ///     style=None,
-    ///     language_options=(),
-    ///     mode_options=(),
-    ///     standard=None,
-    /// )
+    ///     .. code-block:: python
     ///
-    /// print(info.to_dict())
-    /// ```
+    ///         from triple_s import SurveyInfo
+    ///
+    ///         info = SurveyInfo(
+    ///             version=Version.V2_0,
+    ///             name='SP5201-1',
+    ///             title='Historic House Exit Survey<br/>First Wave',
+    ///             date='14 April 2005',
+    ///             time='16:00',
+    ///             origin='SurveyProg v1.3.05',
+    ///             user='User Site',
+    ///             style=None,
+    ///             language_options=(),
+    ///             mode_options=(),
+    ///             standard=None,
+    ///         )
+    ///
+    ///         print(info.to_dict())
     #[pyo3(signature = () -> "dict[str, str]")]
     fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
         let dict = PyDict::new(py);

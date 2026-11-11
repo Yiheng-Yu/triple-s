@@ -1,3 +1,10 @@
+# modules
+from .triple_s import config
+
+# functions
+from .triple_s import read_datamap, read_triple_s, read_data
+
+# Class objects
 from .triple_s import (
     Code,
     CodeFormat,
@@ -6,6 +13,7 @@ from .triple_s import (
     DataRange,
     Location,
     MissingKeyError,
+    # NotSameSurvey,
     Mode,
     NoDataError,
     Question,
@@ -19,11 +27,8 @@ from .triple_s import (
     SurveyInfo,
     Text,
     Usage,
-    Value,
     Variant,
     Version,
-    read_datamap,
-    read_triple_s,
 )
 
 __all__ = [
@@ -47,9 +52,9 @@ __all__ = [
     "SurveyInfo",
     "Text",
     "Usage",
-    "Value",
     "Variant",
     "Version",
+    "config",
     "read_datamap",
     "read_triple_s",
 ]

@@ -1,24 +1,43 @@
+#[cfg(feature = "pyo3")]
 use std::sync::Arc;
+use std::collections::HashMap;
 
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::{exceptions, prelude::*, types::PyDict};
+use pyo3::{
+    IntoPyObjectExt,
+    exceptions,
+    prelude::*,
+};
 #[cfg(feature = "pyo3")]
-use pyo3_polars::error::PyPolarsErr;
+use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 
 #[cfg(feature = "pyo3")]
 use crate::{
-    SurveyInfo,
-    utils::{anyvalue_to_python, get_type_name},
+    SurveyInfo, config::{DataFrameFormat, ResponseDisplay}, prelude::*, utils::{get_type_name, normalize_py_index, polars_to_pandas},
 };
 use crate::{
-    data::{QuestionData, SurveyData},
+    data::{QuestionData, SurveyData, config::Config},
     datamap::Datamap,
     utils::{ArcLock, lock_it_up},
 };
 
-/// Triple-s survey.
+#[cfg_attr(any(not(feature = "pyo3"), doc), doc = include_str!("./doc/survey_rs.md"))]
+#[cfg_attr(all(feature = "pyo3", not(doc)), doc = include_str!("./doc/survey_py.md"))]
+#[cfg_attr(
+    all(feature = "pyo3", not(doc)),
+    doc = r###"
+Args:
+    datamap (Datamap): Survey definition used to interpret the respondent data.
+
+Keyword Args:
+    data (SurveyData | None): Respondent data. None creates a survey without loaded data. Defaults to None.
+
+Returns:
+    Survey: The constructed Survey instance.
+"###
+)]
 #[cfg_attr(
     feature = "pyo3",
     pyclass(module = "triple_s", name = "Survey", skip_from_py_object)
@@ -27,6 +46,7 @@ use crate::{
 pub struct Survey {
     datamap: Datamap,
     data: ArcLock<SurveyData>,
+    config: ArcLock<Config>,
 }
 
 /// Fields
@@ -79,6 +99,79 @@ impl Survey {
     pub fn question_names(&self) -> Vec<String> {
         self.datamap().question_names()
     }
+
+    /// Configuration options
+    pub fn config(&self) -> RwLockReadGuard<'_, Config> {
+        self.config.read()
+    }
+
+    /// Mutable view of survey configuration options
+    pub fn config_mut(&mut self) -> RwLockWriteGuard<'_, Config> {
+        self.config.write()
+    }
+
+    /// Creates a dataframe collating response labels for all questions in the survey.
+    /// Very handy for look up some values.
+    ///
+    /// This method will return dataframe with the following columns:
+    ///
+    /// |column|dtype|
+    /// |--|--|
+    /// |`question_name`|String|
+    /// |`response`|String|
+    /// |`label`|String|
+    ///
+    /// Note:
+    ///
+    /// Polars only supports dataframe with *single data type*, hence all response values needs to
+    /// be converted to string beforehand. You can convert them back to the correct type later.
+    ///
+    /// An example output may look like:
+    ///
+    /// ```bash
+    /// shape: (26, 3)
+    /// ┌───────────────┬──────────┬─────────────────────────────────┐
+    /// │ question_name ┆ response ┆ label                           │
+    /// │ ---           ┆ ---      ┆ ---                             │
+    /// │ str           ┆ str      ┆ str                             │
+    /// ╞═══════════════╪══════════╪═════════════════════════════════╡
+    /// │ Q2            ┆ 0        ┆ No, this is the first visit     │
+    /// │ Q2            ┆ 1        ┆ I have visited before within t… │
+    /// │ Q2            ┆ 2        ┆ I visited before that           │
+    /// │ Q3            ┆ 1        ┆ Sherwood � Forest               │
+    /// │ Q3            ┆ 2        ┆ Nottingham � Castle             │
+    /// │ …             ┆ …        ┆ …                               │
+    /// │ Q6            ┆ 500.0    ┆ 500 or more                     │
+    /// │ Q6            ┆ 999.0    ┆ Not stated                      │
+    /// │ Q8            ┆ "A"      ┆ Within 3 months                 │
+    /// │ Q8            ┆ "B"      ┆ Between 3 months and 1 year     │
+    /// │ Q8            ┆ "C"      ┆ More than 1 years time          │
+    /// └───────────────┴──────────┴─────────────────────────────────┘
+    /// ```
+    pub fn response_label_map(&self) -> PolarsResult<DataFrame> {
+        let maps = self.datamap.response_label_map();
+
+        let capacity: usize = maps.values().map(|m| m.len()).sum();
+        let mut names = StringChunkedBuilder::new("question_name".into(), capacity);
+        let mut responses = StringChunkedBuilder::new("response".into(), capacity);
+        let mut labels = StringChunkedBuilder::new("label".into(), capacity);
+
+        for (name, map) in maps {
+            for (code, value) in map {
+                names.append_value(name.as_str());
+                responses.append_value(code.to_string());
+
+                let guard = value.read();
+                labels.append_value(guard.as_str());
+            }
+        }
+
+        DataFrame::new_infer_height(vec![
+            names.finish().into_column(),
+            responses.finish().into_column(),
+            labels.finish().into_column(),
+        ])
+    }
 }
 
 impl Survey {
@@ -87,6 +180,7 @@ impl Survey {
         Self {
             datamap,
             data: lock_it_up(data),
+            config: lock_it_up(Config::default()),
         }
     }
 
@@ -116,15 +210,87 @@ impl Survey {
     /// Gets a shared [`QuestionData`] view, or `None` if the question name doesn't exist.
     pub fn get_question_data(&self, name: &str) -> Option<QuestionData> {
         let question = self.datamap.get(name)?.clone();
-
-        Some(QuestionData::new(Arc::clone(&self.data), question))
+        Some(QuestionData::new(
+            Arc::clone(&self.data),
+            question,
+            Arc::clone(&self.config),
+        ))
     }
+
+    /// Get data for specific row
+    ///
+    /// Args:
+    ///
+    /// `response_label`:
+    ///     Set `true` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`), set `false` to show values instead (`[1, 1, 2, ...]`).
+    pub fn get_row(&self, row_index: usize, response_label: bool) -> PolarsResult<DataFrame> {
+        let data = self.data().get_row(row_index)?;
+
+        if !response_label {
+            Ok(data)
+        } else {
+            let label_lookup = self.datamap().response_label_map();
+            let query = Self::label_response_values(data.schema().clone(), &label_lookup)?;
+            data.lazy().select(query).collect()
+        }
+    }
+
+    fn label_response_values(
+        schema: SchemaRef,
+        label_lookup: &HashMap<PlSmallStr, HashMap<AnyValue<'static>, ArcLock<String>>>,
+    ) -> PolarsResult<Vec<Expr>> {
+        schema
+            .iter()
+            .map(|(colname, dtype)| {
+                let Some(value_map) = label_lookup.get(colname) else {
+                    return Ok(col(colname.clone()));
+                };
+
+                let (old, new): (Vec<AnyValue<'static>>, Vec<String>) = value_map
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone().read().to_string()))
+                    .unzip();
+
+                let old = Series::from_any_values("key".into(), &old, true)?;
+                let new = Series::new("value".into(), new);
+
+                let expr = match dtype {
+                    DataType::List(_) => {
+                        col(colname.clone()).list().eval(element().replace_strict(
+                            lit(old),
+                            lit(new),
+                            Some(element()),
+                            None::<DataType>,
+                        ))
+                    }
+                    _ => col(colname.clone()).replace_strict(
+                        lit(old),
+                        lit(new),
+                        Some(col(colname.clone())),
+                        None::<DataType>,
+                    ),
+                };
+
+                Ok(expr)
+            })
+            .collect()
+    }
+
 }
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Survey {
     /// Creates new `Survey` instance
+    ///
+    /// Args:
+    ///     datamap (Datamap): Survey definition used to interpret the respondent data.
+    ///
+    /// Keyword Args:
+    ///     data (SurveyData | None): Respondent data. None creates a survey without loaded data. Defaults to None.
+    ///
+    /// Returns:
+    ///     Survey: The constructed Survey instance.
     #[pyo3(signature=(datamap: "Datamap", data: "SurveyData"=None))]
     #[new]
     fn py_new(datamap: Datamap, data: Option<SurveyData>) -> Self {
@@ -135,75 +301,102 @@ impl Survey {
     fn __repr__(&self) -> PyResult<String> {
         let mut content = Vec::new();
 
+        // name of the survey
         let name = self.py_get_name().unwrap_or("None".to_string());
         content.push(("name", format!("{:?}", name)));
 
+        // title of the survey
         let title = self.py_get_title().unwrap_or("None".to_string());
         content.push(("title", format!("{:?}", title)));
 
+        // list of survey questions
         let data = self.data();
-        let question_repr = if data.has_data() {
+        let mut question_repr = if data.has_data() {
             data.py_repr_content().map_err(PyPolarsErr::Polars)?
         } else {
             let mut q_repr = self.datamap().py_question_repr();
             q_repr.push(("num_response", "0".to_string()));
             q_repr
         };
+        content.append(&mut question_repr);
 
+        // Config: dataframe library
+        let dataframe_format = self.config().py_dataframe_format.to_string();
+        content.push(("dataframe_format", format!("{:?}", dataframe_format)));
+
+        // Config: return label or value
+        let response_display = self.config().response_display.to_string();
+        content.push(("response_display", format!("{:?}", response_display)));
+
+        // formatting
         let value = content
             .into_iter()
-            .chain(question_repr.into_iter())
             .map(|(fieldname, value)| format!("{}: {}", fieldname, value))
             .collect::<Vec<String>>()
             .join("\n  ");
         Ok(format!("Survey({{\n  {}\n}})", value))
     }
 
-    fn __getitem__<'py>(&self, index: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        let py = index.py();
-        if let Ok(index) = index.extract::<i64>() {
-            let df = self
-                .data()
-                .lazy()?
-                .clone()
-                .slice(index, 1)
-                .collect()
-                .map_err(PyPolarsErr::Polars)?;
-            let row = df.get_row(0).map_err(PyPolarsErr::Polars)?;
+    fn __getitem__<'py>(&self, py: Python<'py>, index: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+        // Read individual row
+        if let Ok(index) = index.extract::<isize>() {
+            let height = self.num_response().map_err(PyPolarsErr::Polars)?;
+            let row_index = normalize_py_index(index, height)
+                .ok_or(exceptions::PyIndexError::new_err(index))?;
 
-            let dict = PyDict::new(py);
-            for (name, value) in df.get_column_names().iter().zip(row.0) {
-                let pyvalue = anyvalue_to_python(py, value)?;
-                dict.set_item(name.as_str(), pyvalue)?;
-            }
-            Ok(dict.into_any())
+            let show_resp_label = self.config().show_response_label();
+            let row = self.get_row(row_index, show_resp_label).map_err(PyPolarsErr::Polars)?;
+
+            PyDataFrame(row).into_bound_py_any(py)?
+                .call_method("to_dicts", (), None)?  // convert to list of dictionaries
+                .call_method("__getitem__", (0, ).into_pyobject(py)?, None) // take the first row
+
+        // get data for specific question
         } else if let Ok(question_name) = index.extract::<&str>() {
             let view = self
                 .get_question_data(question_name)
                 .ok_or_else(|| exceptions::PyKeyError::new_err(question_name.to_owned()))?;
-
             Ok(Py::new(py, view)?.into_bound(py).into_any())
+
+        // Error
         } else {
             let type_name = get_type_name(&index)?;
             Err(exceptions::PyTypeError::new_err(type_name))
         }
     }
 
-    fn __iter__(&self) -> PyResult<()> {
-        Err(exceptions::PyNotImplementedError::new_err(
-            "`Survey.__iter__` not implemented. Explicitly call `iter_rows()` or `iter_questions()` to iter over a survey!",
-        ))
+    /// Iterate each response row by row, same as `iter_rows()`
+    fn __iter__(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {
+        self.iter_rows(py)
     }
 
     /// Iter each individual respondant data
-    fn iter_rows(&self, py: Python<'_>) -> PyResult<Py<crate::data::ResponseIterator>> {
-        self.data().__iter__(py)
+    ///
+    /// Returns:
+    ///     Iterator[dict[str, object]]: An iterator over respondent rows.
+    fn iter_rows(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {
+        let mut lazy = self.data().lazy()?.clone();
+
+        let label_query = if self.config().show_response_label() {
+            let label_lookup = self.datamap().response_label_map();
+            let schema = lazy.collect_schema().map_err(PyPolarsErr::Polars)?;
+            Self::label_response_values(schema, &label_lookup).map_err(PyPolarsErr::Polars)?
+        } else {
+            self.question_names().into_iter().map(col).collect()
+        };
+
+        let n_rows = self.num_response().map_err(PyPolarsErr::Polars)? as i64;
+        let iterator = ResponseIterator::new(lazy, n_rows, label_query);
+        Py::new(py, iterator)
     }
 
+    /// Iterate over the survey questions and their response data.
+    ///
+    /// Returns:
+    ///     Iterator[QuestionData]: An iterator over question data in survey order.
     fn iter_questions(&self, py: Python<'_>) -> PyResult<Py<QuestionDataIterator>> {
-        let pointer = Arc::new(self.clone()); // clones a shallow copy
         let iterator = QuestionDataIterator {
-            survey: pointer,
+            survey: Arc::new(self.clone()),
             index: 0,
         };
 
@@ -258,12 +451,119 @@ impl Survey {
         self.datamap.info().clone()
     }
 
+    /// Total number of responses
     #[getter(num_response)]
     fn py_get_num_response(&self) -> PyResult<usize> {
         self.num_response().map_err(|err| PyPolarsErr::Polars(err).into())
     }
 
+    /// Default DataFrame library used when returning results to Python.
+    /// Supported values are `"pandas"` and `"polars"`, default `"polars"`
+    ///
+    /// Note:
+    ///
+    ///     All DataFrame operations are performed internally using Rust Polars,
+    ///     regardless of the selected output format.
+    ///
+    ///     When `"pandas"` is selected, the resulting Polars DataFrame is converted
+    ///     to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the
+    ///     computation-heavy stuff are already handled on the Rust side.
+    #[getter(dataframe_format)]
+    fn py_get_dataframe_format(&self) -> String {
+        self.config().py_dataframe_format.to_string()
+    }
+
+    #[setter(dataframe_format)]
+    fn py_set_dataframe_format(&mut self, value: Bound<'_, PyAny>) -> PyResult<()> {
+        self.config_mut().py_dataframe_format = DataFrameFormat::from_py_any(value)?;
+        Ok(())
+    }
+
+    /// Controls whether choice responses are represented by their values or labels; can be 'value' or 'label'.
+    ///
+    /// Default 'value'
+    #[getter(response_display)]
+    fn py_get_response_display(&self) -> String {
+        self.config().response_display.to_string()
+    }
+
+    #[setter(response_display)]
+    fn py_set_response_display(&mut self, value: Bound<'_, PyAny>) -> PyResult<()> {
+        self.config_mut().response_display = ResponseDisplay::from_py_any(value)?;
+        Ok(())
+    }
+
+    /// Creates a dataframe collating response labels for all questions in the survey.
+    /// Very handy for look up some values.
+    ///
+    /// This method will return dataframe with the following columns:
+    ///
+    /// =============== ===============
+    /// column          dtype
+    /// =============== ===============
+    /// `question_name` String
+    /// `response`      String
+    /// `label`         String
+    /// =============== ===============
+    ///
+    /// Note:
+    ///
+    ///     Polars only supports dataframe with *single data type*, hence all response values needs to
+    ///     be converted to string beforehand. You can convert them back to the correct type later.
+    ///
+    /// .. code:: bash
+    ///
+    /// shape: (26, 3)
+    /// ┌───────────────┬──────────┬─────────────────────────────────┐
+    /// │ question_name ┆ response ┆ label                           │
+    /// │ ---           ┆ ---      ┆ ---                             │
+    /// │ str           ┆ str      ┆ str                             │
+    /// ╞═══════════════╪══════════╪═════════════════════════════════╡
+    /// │ Q2            ┆ 0        ┆ No, this is the first visit     │
+    /// │ Q2            ┆ 1        ┆ I have visited before within t… │
+    /// │ Q2            ┆ 2        ┆ I visited before that           │
+    /// │ Q3            ┆ 1        ┆ Sherwood � Forest               │
+    /// │ Q3            ┆ 2        ┆ Nottingham � Castle             │
+    /// │ …             ┆ …        ┆ …                               │
+    /// │ Q6            ┆ 500.0    ┆ 500 or more                     │
+    /// │ Q6            ┆ 999.0    ┆ Not stated                      │
+    /// │ Q8            ┆ "A"      ┆ Within 3 months                 │
+    /// │ Q8            ┆ "B"      ┆ Between 3 months and 1 year     │
+    /// │ Q8            ┆ "C"      ┆ More than 1 years time          │
+    /// └───────────────┴──────────┴─────────────────────────────────┘
+    ///
+    /// Keyword Args:
+    ///     format ('polars' | 'pandas' |DataFrameFormat, *optional*): Select what kind of dataframe to output:
+    ///         'polars' | DataFrameFormat.Polars: polars.DataFrame
+    ///         'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
+    ///
+    ///         Default:
+    ///             consistent with the survey.dataframe_format
+    /// Returns:
+    ///     polars.DataFrame | pandas.DataFrame: Value counts with response labels.
+    fn py_get_response_label_map<'py>(
+        &self,
+        py: Python<'py>,
+        format: Option<Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let polars_frame =
+            self.response_label_map().map_err(|err| PyPolarsErr::Polars(err))?;
+
+        let format = format
+            .map(|value| DataFrameFormat::from_py_any(value))
+            .transpose()?
+            .unwrap_or(self.config.read().py_dataframe_format.clone());
+
+        match format {
+            DataFrameFormat::Polars => PyDataFrame(polars_frame).into_bound_py_any(py),
+            DataFrameFormat::Pandas => polars_to_pandas(polars_frame, py),
+        }
+    }
+
     /// Check if data loaded or not
+    ///
+    /// Returns:
+    ///     bool: Whether respondent data is loaded.
     #[pyo3(name = "has_data")]
     fn py_has_data(&self) -> bool {
         self.has_data()
@@ -287,22 +587,175 @@ impl QuestionDataIterator {
     }
 
     fn __next__(&mut self) -> PyResult<Option<QuestionData>> {
-        let questions = self.survey.question_names();
-        if self.index >= questions.len() {
-            return Ok(None);
+        let question = {
+            let questions = self.survey.datamap.record().content();
+            let Some(question) = questions.get(self.index) else {
+                return Ok(None);
+            };
+            question.read().clone()
         };
-
-        let target = questions
-            .get(self.index)
-            .ok_or(exceptions::PyIndexError::new_err(self.index))? // unlikely,,
-            .clone();
-
-        let instance = self
-            .survey
-            .get_question_data(&target)
-            .ok_or(exceptions::PyKeyError::new_err(target))?; // unlikely,,
+        let instance = QuestionData::new(
+            Arc::clone(&self.survey.data),
+            question,
+            Arc::clone(&self.survey.config),
+        );
 
         self.index += 1;
         Ok(Some(instance))
+    }
+}
+
+// ---------- Helpers -----------
+// /// Iterates through individual responses throughout the survey
+#[cfg(feature = "pyo3")]
+#[pyclass]
+struct ResponseIterator {
+    lazy: LazyFrame,
+    n_rows: i64,
+    index: i64,
+    label_query: Vec<Expr>
+}
+
+#[cfg(feature="pyo3")]
+impl ResponseIterator {
+    pub fn new(lazy: LazyFrame, n_rows: i64, label_query: Vec<Expr>) -> Self {
+        Self { lazy, n_rows, index: 0, label_query }
+    }
+
+    fn get_row(&self, index: i64) -> PolarsResult<DataFrame> {
+        self.lazy.clone()
+            .slice(index, 1)
+            .select(&self.label_query)
+            .collect()
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ResponseIterator {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+        if self.index >= self.n_rows {
+            return Ok(None)
+        };
+
+        let row = self.get_row(self.index).map_err(PyPolarsErr::Polars)?;
+        let row = PyDataFrame(row).into_bound_py_any(py)?;
+        let row = row.call_method("to_dicts", (), None)?  // convert to list of dictionaries
+            .call_method("__getitem__", (0,).into_pyobject(py)?, None)?;  // take the first row
+
+        self.index += 1;
+        Ok(Some(row))
+    }
+}
+
+// /// Iterates through individual responses throughout the survey
+// #[cfg(feature = "pyo3")]
+// #[pyclass]
+// struct ResponseIterator {
+//     data_iterator: DataEntryIterator,
+//     // Aligned with dataframe columns; Python strings are shared across rows.
+//     label_lookup: Vec<HashMap<AnyValue<'static>, Py<PyString>>>,
+// }
+
+// #[cfg(feature = "pyo3")]
+// impl ResponseIterator {
+//     fn get_row<'py>(&self, py: Python<'py>, row_index: usize) -> PyResult<Bound<'py, PyDict>> {
+//         if self.label_lookup.is_empty() {
+//             return self.data_iterator.get_row(py, row_index);
+//         }
+//         if row_index >= self.data_iterator.df.height()
+//             && let Some(column) = self.data_iterator.df.columns().first()
+//         {
+//             column.get(row_index).map_err(PyPolarsErr::Polars)?;
+//         }
+
+//         self.get_row_unchecked(py, row_index)
+//     }
+
+//     fn get_row_unchecked<'py>(
+//         &self,
+//         py: Python<'py>,
+//         row_index: usize,
+//     ) -> PyResult<Bound<'py, PyDict>> {
+//         let dict = PyDict::new(py);
+//         for ((column, name), lookup) in self
+//             .data_iterator
+//             .df
+//             .columns()
+//             .iter()
+//             .zip(&self.data_iterator.names)
+//             .zip(&self.label_lookup)
+//         {
+//             // Iterator bounds checks and get_row's row-level check guarantee valid column indices.
+//             let value = unsafe { column.get_unchecked(row_index) };
+//             let py_value = if lookup.is_empty() {
+//                 anyvalue_to_python(py, value)?
+//             } else {
+//                 match &value {
+//                     AnyValue::List(inner) if inner.dtype() == &DataType::UInt32 => {
+//                         let values = inner
+//                             .iter()
+//                             .map(|entry| match lookup.get(&entry) {
+//                                 Some(label) => Ok(label.bind(py).clone().into_any()),
+//                                 None => anyvalue_to_python(py, entry),
+//                             })
+//                             .collect::<PyResult<Vec<_>>>()?;
+//                         PyList::new(py, values)?.into_any()
+//                     }
+//                     _ => match lookup.get(&value) {
+//                         Some(label) => label.bind(py).clone().into_any(),
+//                         None => anyvalue_to_python(py, value)?,
+//                     },
+//                 }
+//             };
+//             dict.set_item(name.bind(py), py_value)?;
+//         }
+//         Ok(dict)
+//     }
+// }
+
+// #[cfg(feature = "pyo3")]
+// #[pymethods]
+// impl ResponseIterator {
+//     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+//         slf
+//     }
+
+//     fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+//         if self.label_lookup.is_empty() {
+//             return self.data_iterator.__next__(py);
+//         };
+
+//         let current_index = self.data_iterator.index;
+//         if current_index >= self.data_iterator.df.height() {
+//             return Ok(None);
+//         };
+//         let row_data = self.get_row_unchecked(py, current_index)?;
+
+//         self.data_iterator.index += 1;
+//         Ok(Some(row_data.into_any()))
+//     }
+// }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::read_triple_s;
+
+    const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
+    const PATH_DATAFILE_V2_0: &str = "tests/sss-examples/sss-2.0/example1.asc";
+
+    fn get_survey_struct() -> Survey {
+        read_triple_s(PATH_DATAMAP_V2_0, Some(PATH_DATAFILE_V2_0)).unwrap()
+    }
+
+    #[test]
+    fn test_response_label_dataframe() {
+        let survey = get_survey_struct();
+        let _ = survey.response_label_map().unwrap();
     }
 }

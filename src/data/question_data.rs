@@ -2,10 +2,12 @@ use std::collections::HashMap;
 
 #[cfg(feature = "pyo3")]
 use chrono::{NaiveDate, NaiveTime};
+use parking_lot::RwLockReadGuard;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
     IntoPyObjectExt,
+    exceptions,
     prelude::*,
     types::{PyDict, PyTuple},
 };
@@ -15,31 +17,47 @@ use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 #[cfg(feature = "pyo3")]
 use crate::{
     DataRange,
+    config::DataFrameFormat,
     error::InternalError,
     prelude::*,
-    utils::{anyvalue_to_python, convert_date, convert_time, normalize_py_index},
+    utils::{
+        anyvalue_to_python,
+        convert_date,
+        convert_time,
+        normalize_py_index,
+        polars_to_pandas,
+    },
 };
 use crate::{
     QuestionType,
-    data::SurveyData,
-    datamap::{Question, Text, Value},
+    config::ResponseDisplay,
+    data::{config::Config, survey_data::SurveyData},
+    datamap::{Question, Text},
     utils::ArcLock,
 };
 
 /// Data for a single question.
 #[cfg_attr(
+    all(feature = "pyo3", not(doc)),
+    doc = r###"
+Raises:
+    NotImplementedError: Direct construction is not supported. Obtain question data from a Survey instance.
+"###
+)]
+#[cfg_attr(
     feature = "pyo3",
-    pyclass(module = "triple_s", name = "QuestionData", skip_from_py_object)
+    pyclass(module = "triple_s", name = "QuestionData", from_py_object)
 )]
 #[derive(Clone)]
 pub struct QuestionData {
     data: ArcLock<SurveyData>,
+    config: ArcLock<Config>,
     question: Question,
 }
 
-/// Fields
-///
 /// ---
+///
+/// # Fields
 impl QuestionData {
     /// name of the question
     #[inline]
@@ -59,12 +77,30 @@ impl QuestionData {
         Ok(self.data.read().lazy()?.clone().select([col(self.name())]))
     }
 
+    /// Get datamap for the current question
+    #[inline]
+    pub fn datamap(&self) -> &Question {
+        &self.question
+    }
+
+    /// Get mutable view of the datamap for the current question
+    #[inline]
+    pub fn datamap_mut(&mut self) -> &mut Question {
+        &mut self.question
+    }
+
     /// Get the lookup table for items in the [`Question::Response()::values()`] field, as: { [`Code::value`]: [`Code::label()`] }
     ///
     /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
     /// method will not mutate the caller.
-    pub fn data_label(&self) -> HashMap<Value, Text> {
-        self.question.data_label()
+    #[allow(clippy::mutable_key_type)] // can only be string, float, or int
+    pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
+        self.question.response_label_map()
+    }
+
+    /// Configuration options
+    pub fn config(&self) -> RwLockReadGuard<'_, Config> {
+        self.config.read()
     }
 }
 
@@ -73,18 +109,28 @@ impl QuestionData {
 /// ---
 impl QuestionData {
     /// Create new [`QuestionData`] instance
-    pub(crate) fn new(data: ArcLock<SurveyData>, question: Question) -> Self {
-        Self { data, question }
+    pub(crate) fn new(
+        data: ArcLock<SurveyData>,
+        question: Question,
+        config: ArcLock<Config>,
+    ) -> Self {
+        Self {
+            data,
+            question,
+            config,
+        }
     }
 
     /// Export contents to a polars [`Column`]
-    #[inline]
     pub fn to_column(&self) -> PolarsResult<Column> {
-        self.lazy()?.collect()?.into_columns().into_iter().next().ok_or(
-            PolarsError::ColumnNotFound(
-                format!("Unable to find column '{}' in `SurveyData`", self.name()).into(),
-            ),
-        )
+        match self.config().response_display {
+            ResponseDisplay::Value => self.to_value_column(),
+            ResponseDisplay::Label => match self.question_type() {
+                QuestionType::Single => self.to_labelled_column_single_choice(),
+                QuestionType::Multiple => self.to_labelled_column_multi_choice(),
+                _ => self.to_value_column(),
+            },
+        }
     }
 
     /// Export contents to a polars [`Series`]
@@ -102,56 +148,174 @@ impl QuestionData {
     /// - `count_nan` (`bool`):
     ///     - Toogle on/ off for counting Null values, note that multi-choices entries of an empty list (`[]`) will also count as `null`
     pub fn value_counts(&self, count_nan: bool) -> PolarsResult<DataFrame> {
-        // Get raw value counts
-        let series = match self.question_type() {
-            QuestionType::Multiple => {
-                let config = ExplodeOptions {
-                    empty_as_null: true,
-                    keep_nulls: true, // cell with value `null` gets exploded into `null`
+        let question_name = self.name();
+        let multiple = self.question_type() == QuestionType::Multiple;
+        let cached_counts =
+            self.data.read().cached_value_counts(&question_name, count_nan, multiple);
+        let mut df = match cached_counts {
+            Some(counts) => counts,
+            None => {
+                let series = if multiple {
+                    let config = ExplodeOptions {
+                        empty_as_null: true,
+                        keep_nulls: true, // cell with value `null` gets exploded into `null`
+                    };
+                    self.to_value_column()?.explode(config)?.take_materialized_series()
+                } else {
+                    self.to_value_column()?.take_materialized_series()
                 };
-                self.to_column()?.explode(config)?.take_materialized_series()
+
+                let series = if count_nan {
+                    series.drop_nulls()
+                } else {
+                    series
+                };
+
+                let counts = series.value_counts(true, true, "count".into(), false)?.sort(
+                    [&question_name],
+                    SortMultipleOptions::default()
+                        .with_nulls_last(true)
+                        .with_maintain_order(false)
+                        .with_order_descending(false),
+                )?;
+                self.data.read().cache_value_counts(
+                    &question_name,
+                    count_nan,
+                    multiple,
+                    counts.clone(),
+                );
+                counts
             }
-            _ => self.to_series()?,
         };
-
-        let series = if count_nan {
-            series.drop_nulls()
-        } else {
-            series
-        };
-
-        let df = series.value_counts(true, true, "count".into(), false)?.sort(
-            [self.name()],
-            SortMultipleOptions::default()
-                .with_nulls_last(true)
-                .with_maintain_order(false)
-                .with_order_descending(false),
-        )?;
 
         // append data label
-        let (keys, values): (Vec<AnyValue<'_>>, Vec<String>) = self
-            .data_label()
-            .into_iter()
-            .map(|(key, val)| (AnyValue::from(key), val.value()))
-            .unzip();
+        let (keys, labels) = self.get_datalabel_key_value()?;
+        let keys = keys.cast(df.column(&question_name)?.dtype())?;
+        let label_by_key = keys
+            .iter()
+            .zip(labels.str()?.iter())
+            .filter_map(|(key, label)| {
+                label.map(|label| (key.into_static(), label.to_owned()))
+            })
+            .collect::<HashMap<_, _>>();
+        let labels = df
+            .column(&question_name)?
+            .as_materialized_series()
+            .iter()
+            .map(|value| label_by_key.get(&value).cloned())
+            .collect::<Vec<_>>();
+        df.insert_column(1, Series::new("label".into(), labels).into())?;
+        Ok(df)
+    }
 
-        let keys_dtype = df.column(self.name().as_str())?.dtype().clone();
-        let keys = Column::new(self.name().into(), keys).cast(&keys_dtype)?;
+    /// Checks if `other` is comes from the same [`Survey`] as `self`.
+    pub fn is_same_survey(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.data, &other.data)
+    }
 
-        let labels = Column::new("label".into(), values);
-        let height = labels.len();
-        let data_label = DataFrame::new(height, vec![keys, labels])?;
+    fn get_datalabel_key_value(&self) -> PolarsResult<(Series, Series)> {
+        let (keys, values): (Vec<AnyValue<'_>>, Vec<String>) =
+            self.response_label_map().into_iter().map(|(key, val)| 
+                (key, val.read().clone())
+            ).unzip();
+        let keys = Series::from_any_values(self.name().into(), &keys, true)?;
+        let labels = Series::new("label".into(), values);
+        Ok((keys, labels))
+    }
 
-        df.lazy()
-            .left_join(data_label.lazy(), col(self.name()), col(self.name()))
-            .select([col(self.name()), col("label"), col("count")])
+    /// Convert single quesiton labels -> values
+    fn to_labelled_column_single_choice(&self) -> PolarsResult<Column> {
+        let (keys, labels) = self.get_datalabel_key_value()?;
+        let question_name = self.name();
+        let query = self.lazy()?.select([col(&question_name).replace_strict(
+            lit(keys.clone()),
+            lit(labels),
+            None,
+            Some(DataTypeExpr::Literal(DataType::String)),
+        )]);
+
+        query
             .collect()
+            .map_err(|err| Self::map_missing_label_error(err, &self.name(), &keys))?
+            .into_columns()
+            .into_iter()
+            .next()
+            .ok_or(PolarsError::ColumnNotFound(
+                format!("Unable to find column '{}' in `SurveyData`", self.name()).into(),
+            ))
+    }
+
+    fn to_labelled_column_multi_choice(&self) -> PolarsResult<Column> {
+        let (keys, labels) = self.get_datalabel_key_value()?;
+        let question_name = self.name();
+
+        let query = col(&question_name)
+            .list()
+            .eval(element().replace_strict(
+                lit(keys.clone()),
+                lit(labels),
+                None,
+                Some(DataTypeExpr::Literal(DataType::String)),
+            ))
+            .alias(&question_name);
+        let query = self.lazy()?.select([query]);
+
+        query
+            .collect()
+            .map_err(|err| Self::map_missing_label_error(err, &self.name(), &keys))?
+            .into_columns()
+            .into_iter()
+            .next()
+            .ok_or(PolarsError::ColumnNotFound(
+                format!("Unable to find column '{}' in `SurveyData`", self.name()).into(),
+            ))
+    }
+
+    #[inline]
+    fn map_missing_label_error(
+        err: PolarsError,
+        question_name: &str,
+        unique_keys: &Series,
+    ) -> PolarsError {
+        match &err {
+            PolarsError::ExprContext { error, expr } if expr.contains(".replace_strict") => {
+                if expr.contains(").replace_strict") {
+                    PolarsError::ComputeError(format!(
+                        "Question '{}' contains response values with no matching label, expect to be one of: {}",
+                        question_name,
+                        unique_keys.fmt_list()
+                    ).into())
+                } else {
+                    err
+                }
+            }
+            _ => err,
+        }
+    }
+
+    fn to_value_column(&self) -> PolarsResult<Column> {
+        self.lazy()?.collect()?.into_columns().into_iter().next().ok_or(
+            PolarsError::ColumnNotFound(
+                format!("Unable to find column '{}' in `SurveyData`", self.name()).into(),
+            ),
+        )
     }
 }
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl QuestionData {
+    /// Create a QuestionData instance.
+    ///
+    /// Raises:
+    ///     NotImplementedError: Direct construction is not supported. Obtain question data from a Survey instance.
+    #[new]
+    fn py_new() -> PyResult<Self> {
+        Err(exceptions::PyNotImplementedError::new_err(
+            "Not implemented yet!",
+        ))
+    }
+
     /// Name of the question
     #[getter(name)]
     fn py_get_name(&self) -> String {
@@ -188,8 +352,8 @@ impl QuestionData {
     ///
     /// Note:
     ///
-    /// *Modifying the datamp would also modify the datamap in the survey that the
-    /// current instance being a part of.*
+    ///     *Modifying the datamp would also modify the datamap in the survey that the
+    ///     current instance being a part of.*
     #[getter(datamap)]
     fn py_get_datamap(&self) -> Question {
         self.question.clone()
@@ -248,9 +412,31 @@ impl QuestionData {
     ///
     /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
     /// method will not mutate the caller.
-    #[getter(data_label)]
-    fn py_get_data_label<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        self.question.response().py_get_data_label(py)
+    #[getter(response_label)]
+    fn py_get_response_label<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        self.question.response().py_get_response_label(py)
+    }
+
+    /// Default DataFrame library used when returning results to Python.
+    /// Supported values are `"pandas"` and `"polars"`, default `"polars"`
+    ///
+    /// Note:
+    ///
+    ///     All DataFrame operations are performed internally using Rust Polars,
+    ///     regardless of the selected output format.
+    ///
+    ///     When `"pandas"` is selected, the resulting Polars DataFrame is converted
+    ///     to pandas using `to_pandas()`. This may take a bit longer but shouldn't be too much, since majorities of the
+    ///     computation-heavy stuff are already handled on the Rust side.
+    #[getter(dataframe_format)]
+    fn py_get_dataframe_format(&self) -> String {
+        self.config().py_dataframe_format.to_string()
+    }
+
+    /// Controls whether choice responses are represented by their values or labels.
+    #[getter(response_display)]
+    fn py_get_response_display(&self) -> String {
+        self.config().response_display.to_string()
     }
 
     fn __repr__(&self) -> PyResult<String> {
@@ -320,21 +506,53 @@ impl QuestionData {
     /// This function basically calls ``poalrs.Series.value_counts`` under the hood, apart from multi-choice
     /// where the choice for each respondant is counted individually.
     ///
-    /// Args:
-    ///     count_nan (`bool`, *optional*):
-    ///         Toogle on/ off for counting Null values, note that multi-choices entries of an empty list (`[]`) will also count as `null`.
-    ///         Default ``False``
+    /// Keyword Args:
+    ///     count_nan (bool, *optional*): Toogle on/ off for counting Null values.
+    ///         Note: multi-choice entries of an empty list (`[]`) will also count as `null`.
+    ///         Default `False`
+    ///     format ('polars' | 'pandas' |DataFrameFormat, *optional*): Select what kind of dataframe to output:
+    ///         'polars' | DataFrameFormat.Polars: polars.DataFrame
+    ///         'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
+    ///
+    ///         Default:
+    ///             consistent with the survey current instance created from.
     ///
     /// Returns:
-    ///     ``polars.DataFrame`` of the value counts
-    #[pyo3(name = "value_counts", signature=(count_nan:"bool" = None))]
-    fn py_value_counts(&self, count_nan: Option<bool>) -> PyResult<PyDataFrame> {
+    ///     polars.DataFrame | pandas.DataFrame: Value counts with response labels.
+    ///
+    /// Note:
+    ///     The current implementation excludes null values when count_nan is True.
+    #[pyo3(
+        name = "value_counts", 
+        signature=(
+            count_nan:"bool" = None,
+            format: "'polars'|'pandas'|DataFrameFormat" = None
+        )
+    )]
+    fn py_value_counts<'py>(
+        &self,
+        py: Python<'py>,
+        count_nan: Option<bool>,
+        format: Option<Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let count_nan = count_nan.unwrap_or(false);
         let result = self.value_counts(count_nan).map_err(PyPolarsErr::Polars)?;
-        Ok(PyDataFrame(result))
+
+        // prep output
+        let format = format
+            .map(|value| DataFrameFormat::from_py_any(value))
+            .transpose()?
+            .unwrap_or(self.config.read().py_dataframe_format.clone());
+        match format {
+            DataFrameFormat::Polars => PyDataFrame(result).into_bound_py_any(py),
+            DataFrameFormat::Pandas => polars_to_pandas(result, py),
+        }
     }
 
     /// Return the answers as a polars Series.
+    ///
+    /// Returns:
+    ///     polars.Series: The respondent data in Polars format.
     #[pyo3(name = "to_polars")]
     fn py_to_polars(&self) -> PyResult<pyo3_polars::PySeries> {
         self.to_series()
@@ -343,6 +561,9 @@ impl QuestionData {
     }
 
     /// Export the answers as a pandas Series object.
+    ///
+    /// Returns:
+    ///     pandas.Series: The respondent data in pandas format.
     #[pyo3(name = "to_pandas")]
     pub fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let frame = self.py_to_polars()?.into_bound_py_any(py)?;
@@ -352,6 +573,9 @@ impl QuestionData {
     }
 
     /// Export the answers as a list.
+    ///
+    /// Returns:
+    ///     list: The response values in row order.
     #[pyo3(name = "to_list")]
     pub fn py_to_list<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let frame = self.py_to_polars()?.into_bound_py_any(py)?;
@@ -380,9 +604,35 @@ impl ColumnIterator {
             return Ok(None);
         }
 
-        let value = self.column.get(self.index).map_err(PyPolarsErr::Polars)?;
+        // __next__ checks the index against the column length immediately above.
+        let value = unsafe { self.column.get_unchecked(self.index) };
 
         self.index += 1;
         anyvalue_to_python(py, value).map(Some) // bound already checked
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{Survey, read_triple_s};
+
+    const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
+    const PATH_DATAFILE_V2_0: &str = "tests/sss-examples/sss-2.0/example1.asc";
+
+    fn get_test_survey() -> Survey {
+        read_triple_s(PATH_DATAMAP_V2_0, Some(PATH_DATAFILE_V2_0)).unwrap()
+    }
+
+    #[test]
+    fn test_is_same_survey() {
+        let survey = get_test_survey();
+        let questions = survey.question_names();
+        let q1 = survey.get_question_data(&questions[0]).unwrap();
+        let q2 = survey.get_question_data(&questions[1]).unwrap();
+        assert!(q1.is_same_survey(&q2));
+        assert!(q2.is_same_survey(&q1));
+
+        assert!(q1.is_same_survey(&q1));
+        assert!(q2.is_same_survey(&q2));
     }
 }

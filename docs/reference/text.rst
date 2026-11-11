@@ -1,6 +1,8 @@
 Text and variants
 =================
 
+.. currentmodule:: triple_s
+
 Text
 ----
 
@@ -9,19 +11,19 @@ Text
 Attributes
 ^^^^^^^^^^
 
-.. autoattribute:: triple_s.Text.value
+.. autoattribute:: Text.value
    :annotation: -> str
 
-.. autoattribute:: triple_s.Text.variants
+.. autoattribute:: Text.variants
    :annotation: -> tuple[Variant, ...]
 
 Methods
 ^^^^^^^
 
-.. automethod:: triple_s.Text.add_variant(variant, mode=None, language=None) -> None
-.. automethod:: triple_s.Text.remove_variant(index) -> Variant
-.. automethod:: triple_s.Text.from_dict(content) -> Text
-.. automethod:: triple_s.Text.to_dict() -> Dict[str, str|List[Dict[str, str]]]
+.. automethod:: Text.add_variant(variant, mode=None, language=None) -> None
+.. automethod:: Text.remove_variant(index) -> Variant
+.. automethod:: Text.from_dict(content) -> Text
+.. automethod:: Text.to_dict() -> Dict[str, str|List[Dict[str, str]]]
 
 Variant
 -------
@@ -31,18 +33,18 @@ Variant
 Attributes
 ^^^^^^^^^^
 
-.. autoattribute:: triple_s.Variant.language
+.. autoattribute:: Variant.language
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.Variant.value
+.. autoattribute:: Variant.value
    :annotation: -> str
 
-.. autoattribute:: triple_s.Variant.mode
+.. autoattribute:: Variant.mode
    :annotation: -> str | None
 
 Methods
 ^^^^^^^
 
-.. automethod:: triple_s.Variant.copy() -> Variant
-.. automethod:: triple_s.Variant.from_dict(content) -> Variant
-.. automethod:: triple_s.Variant.to_dict() -> Dict[str, str] 
+.. automethod:: Variant.copy() -> Variant
+.. automethod:: Variant.from_dict(content) -> Variant
+.. automethod:: Variant.to_dict() -> Dict[str, str] 

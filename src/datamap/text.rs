@@ -50,7 +50,9 @@ use anyhow::{Context, Result};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    exceptions::{self, PyTypeError, PyValueError}, prelude::*, types::{PyDict, PyList, PyString, PyTuple},
+    exceptions::{self, PyTypeError, PyValueError},
+    prelude::*,
+    types::{PyDict, PyList, PyString, PyTuple},
 };
 use quick_xml::{
     events::{BytesText, Event},
@@ -69,7 +71,8 @@ use crate::{
     utils::{get_type_name, normalize_py_index, py_value_error, single_quote},
 };
 
-#[doc = include_str!("../doc/mode.md")]
+#[cfg_attr(any(not(feature = "pyo3"), doc), doc = include_str!("../doc/mode.md"))]
+#[cfg_attr(all(feature = "pyo3", not(doc)), doc = include_str!("../doc/mode_py.rst"))]
 #[allow(missing_docs)]
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
 #[derive(Debug, PartialEq, Hash, Clone, EnumString, Eq, EnumIter)]
@@ -102,6 +105,19 @@ impl PyEnum for Mode {}
 
 /// `Text` represents a default text value together with zero or more
 /// specialised [`Variant`] values.
+#[cfg_attr(
+    all(feature = "pyo3", not(doc)),
+    doc = r###"
+Args:
+    value (str): Text content.
+
+Keyword Args:
+    variants (list[Variant] | None): Text variants. None creates an empty list. Defaults to None.
+
+Returns:
+    Text: The constructed Text instance.
+"###
+)]
 #[cfg_attr(
     feature = "pyo3",
     pyclass(name = "Text", module = "triple_s", from_py_object)
@@ -313,8 +329,11 @@ impl Text {
     ///
     /// # Example: Conditionally return text variant
     ///
-    /// ```
-    /// use triple_s::{Mode, Text, Variant};
+    /// ```rust
+    /// use triple_s::{
+    ///     DeepCopy,
+    ///     text::{Mode, Text, Variant},
+    /// };
     ///
     /// // Create a instance with 3 variants
     /// let variant_1 = Variant::new("Variant 1", Some("interview"), Some("en-us"))?;
@@ -322,9 +341,9 @@ impl Text {
     /// let variant_3 = Variant::new("Variant 3", Some("analysis"), Some("en-us"))?;
     ///
     /// let mut text = Text::new("Main text");
-    /// text.add_variant(variant_1)?;
-    /// text.add_variant(variant_2)?;
-    /// text.add_variant(variant_3)?;
+    /// text.add_variant(variant_1.deepcopy())?;
+    /// text.add_variant(variant_2.deepcopy())?;
+    /// text.add_variant(variant_3.deepcopy())?;
     ///
     /// // Get the main text
     /// let main_text = text.display(None, None)?;
@@ -343,7 +362,7 @@ impl Text {
     /// assert_eq!(var_3_got, variant_3.value());
     ///
     /// // Raises error if the nominated variant was not found
-    /// assert!(text.display(Some(Mode::Interview), Some("tr")).is_err())
+    /// assert!(text.display(Some(Mode::Interview), Some("tr")).is_err());
     ///
     /// # Ok::<(), anyhow::Error>(())
     /// ```
@@ -458,14 +477,23 @@ impl DeepCopy for Text {
 impl Text {
     /// Create default text with an optional list of variants.
     ///
-    /// # Examples
+    /// Args:
+    ///     value (str): Text content.
     ///
-    /// ```python
-    /// from triple_s import Text, Variant
+    /// Keyword Args:
+    ///     variants (list[Variant] | None): Text variants. None creates an empty list. Defaults to None.
     ///
-    /// variant = Variant("original", mode="analysis", language="en-GB")
-    /// text = Text("original", variants=[variant])
-    /// ```
+    /// Returns:
+    ///     Text: The constructed Text instance.
+    ///
+    /// Examples:
+    ///
+    ///     .. code-block:: python
+    ///
+    ///         from triple_s import Text, Variant
+    ///
+    ///         variant = Variant("original", mode="analysis", language="en-GB")
+    ///         text = Text("original", variants=[variant])
     #[new]
     #[pyo3(signature = (value, variants=None))]
     fn py_new(value: String, variants: Option<Vec<Variant>>) -> PyResult<Self> {
@@ -481,6 +509,12 @@ impl Text {
     /// - 'variants' (list[dict[str, str] | Variant], optional): A list of text
     ///   variants. Each item may be either an existing [`Variant`] instance or
     ///   a dictionary used to construct a [`Variant`] via Variant.from_dict.
+    ///
+    /// Args:
+    ///     content (dict): Fields used to construct the Text instance, as described above.
+    ///
+    /// Returns:
+    ///     Text: The constructed Text instance.
     #[pyo3(name = "from_dict")]
     #[staticmethod]
     pub(crate) fn py_from_dict(content: &Bound<'_, PyDict>) -> PyResult<Self> {
@@ -531,26 +565,28 @@ impl Text {
     ///
     /// Instance with same content can later be constructed again via `from_dict` method.
     ///
-    /// Example
-    /// ----------
+    /// Returns:
+    ///     dict: The object fields as a dictionary.
     ///
-    /// ```python
-    /// from triple_s import Text
+    /// Examples:
     ///
-    /// data = dict(
-    ///     value = "Text value",
-    ///     variants = [
-    ///         dict(value="variant 1", mode="analysis"),
-    ///         dict(value="variant 2", mode="analysis", language="tr")
-    ///     ]
-    /// )
+    ///     .. code-block:: python
     ///
-    /// original = Text.from_dict(data)
-    /// converted = original.to_dict()
+    ///         from triple_s import Text
     ///
-    /// new_instance = Text.from_dict(converted)
-    /// assert new_instance == original
-    /// ```
+    ///         data = dict(
+    ///             value = "Text value",
+    ///             variants = [
+    ///                 dict(value="variant 1", mode="analysis"),
+    ///                 dict(value="variant 2", mode="analysis", language="tr")
+    ///             ]
+    ///         )
+    ///
+    ///         original = Text.from_dict(data)
+    ///         converted = original.to_dict()
+    ///
+    ///         new_instance = Text.from_dict(converted)
+    ///         assert new_instance == original
     #[pyo3(name = "to_dict")]
     pub(crate) fn py_to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
@@ -625,6 +661,20 @@ impl Text {
         self.set_variants(variants).map_err(py_value_error)
     }
 
+    /// Append a text variant.
+    ///
+    /// Args:
+    ///     variant (Variant | str): Existing variant or text used to construct a variant.
+    ///
+    /// Keyword Args:
+    ///     mode (str | None): Mode for a string variant: "analysis" or "interview". Ignored for an existing Variant. Defaults to None.
+    ///     language (str | None): Language tag for the text variant, or None for no language. Defaults to None.
+    ///
+    /// Returns:
+    ///     None: This method updates or validates the existing object in place.
+    ///
+    /// Note:
+    ///     mode and language are used only when variant is a string.
     #[pyo3(name = "add_variant", signature = (variant, mode=None, language=None))]
     fn py_add_variant(
         &mut self,
@@ -647,6 +697,13 @@ impl Text {
         self.add_variant(variant).map_err(py_value_error)
     }
 
+    /// Remove a text variant by index.
+    ///
+    /// Args:
+    ///     index (int): Variant index. Negative indices count from the end.
+    ///
+    /// Returns:
+    ///     Variant: The removed text variant.
     #[pyo3(name = "remove_variant")]
     fn py_remove_variant(&mut self, index: isize) -> PyResult<Variant> {
         let index = normalize_py_index(index, self.variants.read().len())
@@ -655,26 +712,75 @@ impl Text {
     }
 }
 
-/// Introduced since sss 2.0 onwards.
-///
-/// Official documentation:
-///
-/// ```text
-/// The text for a survey <title>, variable <label> or values
-/// <value> element may contain any number of specialised text elements.
-/// ```
-///
-/// Example sss xml 2.0 text, note that one entry can contain both `label` and
-/// `language` attribute
-/// ```xml
-/// <label>Age
-///     <text xml:lang="en-GB" mode="interview">How old are you?</text>
-///     <text xml:lang="fr" mode="interview">Quel est votre âge?</text>
-///     <text xml:lang="en-GB" mode="analysis">Age of respondent</text>
-///     <text xml:lang="fr" mode="analysis">Âge de répondant</text>
-/// </label>
-/// ```
-/// `clone()` shares fields; `deepcopy()` creates independent fields.
+#[cfg_attr(
+    any(not(feature = "pyo3"), doc),
+    doc = r###"
+Introduced since sss 2.0 onwards.
+
+Official documentation:
+
+```text
+The text for a survey <title>, variable <label> or values
+<value> element may contain any number of specialised text elements.
+```
+
+Example sss xml 2.0 text, note that one entry can contain both `label` and
+`language` attribute
+```xml
+<label>Age
+    <text xml:lang="en-GB" mode="interview">How old are you?</text>
+    <text xml:lang="fr" mode="interview">Quel est votre âge?</text>
+    <text xml:lang="en-GB" mode="analysis">Age of respondent</text>
+    <text xml:lang="fr" mode="analysis">Âge de répondant</text>
+</label>
+```
+`clone()` shares fields; `deepcopy()` creates independent fields.
+"###
+)]
+#[cfg_attr(
+    all(feature = "pyo3", not(doc)),
+    doc = r###"
+Introduced since sss 2.0 onwards.
+
+Official documentation:
+
+.. code-block:: text
+
+    The text for a survey <title>, variable <label> or values
+    <value> element may contain any number of specialised text elements.
+
+Example sss xml 2.0 text, note that one entry can contain both `label` and
+`language` attribute
+
+.. code-block:: xml
+
+    <label>Age
+        <text xml:lang="en-GB" mode="interview">How old are you?</text>
+        <text xml:lang="fr" mode="interview">Quel est votre âge?</text>
+        <text xml:lang="en-GB" mode="analysis">Age of respondent</text>
+        <text xml:lang="fr" mode="analysis">Âge de répondant</text>
+    </label>
+
+`clone()` shares fields; `deepcopy()` creates independent fields.
+"###
+)]
+#[cfg_attr(
+    all(feature = "pyo3", not(doc)),
+    doc = r###"
+Args:
+    value (str): Text content.
+
+Keyword Args:
+    mode (Mode | str | None): Text mode: "analysis", "interview", or None. Defaults to None.
+    language (str | None): Language tag for the text variant, or None for no language. Defaults to None.
+
+Returns:
+    Variant: The constructed Variant instance.
+
+Note:
+    At least one of mode or language must be supplied.
+"###
+)]
 #[cfg_attr(
     feature = "pyo3",
     pyclass(name = "Variant", module = "triple_s", from_py_object)
@@ -734,7 +840,8 @@ impl Variant {
 
     /// Returns a mutable `value` field for updating it.
     ///
-    /// # Example
+    /// # Example: Update `value` field
+    ///
     /// ```rust
     /// use triple_s::text::Variant;
     ///
@@ -747,14 +854,16 @@ impl Variant {
         self.value.write()
     }
 
-    #[doc = include_str!("../doc/mode.md")]
+    #[cfg_attr(any(not(feature = "pyo3"), doc), doc = include_str!("../doc/mode.md"))]
+    #[cfg_attr(all(feature = "pyo3", not(doc)), doc = include_str!("../doc/mode_py.rst"))]
     pub fn mode(&self) -> Option<Mode> {
         self.mode.read().clone()
     }
 
     /// Returns a mutable `mode` field for updating it.
     ///
-    /// # Example
+    /// # Example: Update `mode` field
+    ///
     /// ```rust
     /// use triple_s::text::{Mode, Variant};
     ///
@@ -777,7 +886,8 @@ impl Variant {
     /// Direct updates bypass language tag validation. Use
     /// [`Self::set_language`] to validate the new language tag.
     ///
-    /// # Example
+    /// # Example: Update `language` field
+    ///
     /// ```rust
     /// use triple_s::text::Variant;
     ///
@@ -826,6 +936,8 @@ impl Variant {
 
     /// check if `other` has same variant as `self`.
     /// very handy.
+    ///
+    /// # Example: comparing variants types
     ///
     /// ```rust
     /// use triple_s::Variant;
@@ -889,13 +1001,28 @@ impl Variant {
     ///
     /// Mode and language default to `None`.
     ///
-    /// # Examples
+    /// Args:
+    ///     value (str): Text content.
     ///
-    /// ```python
-    /// from triple_s import Variant
+    /// Keyword Args:
+    ///     mode (Mode | str | None): Text mode: "analysis", "interview", or None. Defaults to None.
+    ///     language (str | None): Language tag for the text variant, or None for no language. Defaults to None.
     ///
-    /// variant = Variant("original", mode="analysis", language="en-GB")
-    /// ```
+    /// Returns:
+    ///     Variant: The constructed Variant instance.
+    ///
+    /// Note:
+    ///     At least one of mode or language must be supplied.
+    ///
+    /// Examples:
+    ///
+    ///     Creating new text variant
+    ///
+    ///     .. code-block:: python
+    ///
+    ///         from triple_s import Variant
+    ///
+    ///         variant = Variant("original", mode="analysis", language="en-GB")
     #[new]
     #[pyo3(signature = (value:"str", mode:"'analysis'|'interview'|Mode|None"=None, language:"str|None"=None))]
     fn py_new(
@@ -950,7 +1077,10 @@ impl Variant {
 
     fn __repr__(&self) -> String {
         let value = self.value();
-        let mode = self.mode().map(|item| format!("{:?}", item.to_string())).unwrap_or("None".into());
+        let mode = self
+            .mode()
+            .map(|item| format!("{:?}", item.to_string()))
+            .unwrap_or("None".into());
         let language = self.language().map(|s| format!("{:?}", s)).unwrap_or("None".into());
         format!("Variant(value={value}, mode={mode}, language={language})")
     }
@@ -975,7 +1105,18 @@ impl Variant {
         *self.value_mut() = value;
     }
 
-    #[doc = include_str!("../doc/mode.md")]
+    /// Introduced in SSS Xml 2.0.
+    /// Official documentation:
+    /// Text modes, available from Triple-S XML 2.0:
+    ///
+    /// .. code-block:: text
+    ///
+    ///     (Optional) The use of specialised texts for interviewing and/or analysis within the
+    ///     specification must be signalled by a modes="mode_identifier_list"
+    ///     attribute on the initial <sss> element.
+    ///     Two explicit modes are available: “interview” and “analysis”. In the absence of
+    ///     a mode specification, the appropriate text is assumed to be used in both
+    ///     modes.
     #[getter(mode)]
     fn py_get_mode(&self) -> Option<String> {
         self.mode().map(|mode| mode.to_string())
@@ -998,6 +1139,9 @@ impl Variant {
     }
 
     /// makes deepcopy of the current instance.
+    ///
+    /// Returns:
+    ///     Variant: An independent deep copy of this instance.
     fn copy(&self) -> Self {
         self.deepcopy()
     }
@@ -1013,14 +1157,22 @@ impl Variant {
     ///
     /// Note that one of the `mode`, `language` key must present.
     ///
-    /// Example: Creating new variant from dictionary:
+    /// Args:
+    ///     content (dict): Fields used to construct the Variant instance, as described above.
     ///
-    /// ```python
-    /// from triple_s import Variant
+    /// Returns:
+    ///     Variant: The constructed Variant instance.
     ///
-    /// value = {"value": "test text", "mode": "analysis", "language": "en-GB"}
-    /// variant = Variant.from_dict(value)
-    /// ```
+    /// Examples:
+    ///
+    ///     Creating new variant from dictionary:
+    ///
+    ///     .. code-block:: python
+    ///
+    ///         from triple_s import Variant
+    ///
+    ///         value = {"value": "test text", "mode": "analysis", "language": "en-GB"}
+    ///         variant = Variant.from_dict(value)
     #[pyo3(name = "from_dict")]
     #[staticmethod]
     fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
@@ -1080,22 +1232,24 @@ impl Variant {
 
     /// Convert to dictionary
     ///
-    /// Example
-    /// ----------
+    /// Returns:
+    ///     dict: The object fields as a dictionary.
     ///
-    /// ```python
-    /// from triple_s import Variant
+    /// Examples:
     ///
-    /// content = dict(
-    ///     value = "test value",
-    ///     mode = "interview",
-    ///     language = "tr"
-    /// )
-    /// variant = Variant.from_dict(content)
+    ///     .. code-block:: python
     ///
-    /// output = variant.to_dict()
-    /// print(output)  # {'value': 'test value', 'mode': 'interview', 'language': 'tr'}
-    /// ```
+    ///         from triple_s import Variant
+    ///
+    ///         content = dict(
+    ///             value = "test value",
+    ///             mode = "interview",
+    ///             language = "tr"
+    ///         )
+    ///         variant = Variant.from_dict(content)
+    ///
+    ///         output = variant.to_dict()
+    ///         print(output)  # {'value': 'test value', 'mode': 'interview', 'language': 'tr'}
     #[pyo3(name = "to_dict")]
     pub(crate) fn py_to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let output = PyDict::new(py);
@@ -1112,6 +1266,7 @@ impl Variant {
         } else {
             output.set_item("language", py.None())?;
         }
+
         Ok(output)
     }
 }
@@ -1119,7 +1274,7 @@ impl Variant {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::datamap::test::normalize_xml;
+    use crate::datamap::datamap::test::normalize_xml;
 
     #[test]
     fn test_variant_equal() {

@@ -1,26 +1,43 @@
 use polars::prelude::AnyValue;
-use triple_s::{QuestionOptions, QuestionType, Record, read_datamap};
+use triple_s::{
+    Datamap,
+    QuestionOptions,
+    QuestionType,
+    Survey,
+    read_data,
+    read_datamap,
+    read_triple_s,
+};
 
 const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
 const PATH_DATAFILE_V2_0: &str = "tests/sss-examples/sss-2.0/example1.asc";
 
+fn get_example_1() -> Survey {
+    read_triple_s(PATH_DATAMAP_V2_0, Some(PATH_DATAFILE_V2_0)).unwrap()
+}
+
+#[test]
+fn test_read_survey() {
+    let survey = get_example_1();
+    assert!(survey.has_data());
+    assert_eq!(survey.num_response().unwrap(), 3);
+}
+
 #[test]
 fn test_create_parquet() {
     let datamap = read_datamap(PATH_DATAMAP_V2_0).unwrap();
-    let mut record = datamap.record().clone();
-    let data = record.load_data(PATH_DATAFILE_V2_0).unwrap();
+    let data = read_data(&datamap, PATH_DATAFILE_V2_0).unwrap();
     let df = data.to_polars().unwrap();
     println!("{:?}", df)
 }
 
 #[test]
-fn csv_and_fixed_examples_load_equivalent_responses() {
-    let mut csv = read_datamap("tests/sss-examples/sss-2.0/example2.sss").unwrap();
-    let csv_data =
-        csv.record_mut().load_data("tests/sss-examples/sss-2.0/example2.csv").unwrap();
-    let mut fixed = read_datamap("tests/sss-examples/sss-2.0/example1.sss").unwrap();
-    let fixed_data =
-        fixed.record_mut().load_data("tests/sss-examples/sss-2.0/example1.asc").unwrap();
+fn test_csv_and_fixed_examples_load_equivalent_responses() {
+    let csv = read_datamap("tests/sss-examples/sss-2.0/example2.sss").unwrap();
+    let csv_data = read_data(&csv, "tests/sss-examples/sss-2.0/example2.csv").unwrap();
+
+    let fixed = read_datamap("tests/sss-examples/sss-2.0/example1.sss").unwrap();
+    let fixed_data = read_data(&fixed, "tests/sss-examples/sss-2.0/example1.asc").unwrap();
 
     let csv = csv_data.to_polars().unwrap();
     let fixed = fixed_data.to_polars().unwrap();
@@ -43,7 +60,7 @@ fn csv_and_fixed_examples_load_equivalent_responses() {
 }
 
 #[test]
-fn invalid_utf8_is_replaced_in_fixed_and_csv_data() {
+fn test_invalid_utf8_is_replaced_in_fixed_and_csv_data() {
     use std::io::Write;
 
     for (example, extension) in [(1, "asc"), (2, "csv")] {
@@ -59,7 +76,7 @@ fn invalid_utf8_is_replaced_in_fixed_and_csv_data() {
 
         let record = datamap.record_mut();
         record.validate_data(file.path()).unwrap();
-        let data = record.load_data(file.path()).unwrap();
+        let data = read_data(&datamap, file.path()).unwrap();
         let frame = data.to_polars().unwrap();
         assert_eq!(frame.height(), 3);
         assert_eq!(
@@ -74,7 +91,7 @@ fn invalid_utf8_is_replaced_in_fixed_and_csv_data() {
 }
 
 #[test]
-fn malformed_utf8_at_field_boundaries_and_eof_is_replaced() {
+fn test_malformed_utf8_at_field_boundaries_and_eof_is_replaced() {
     use std::{io::Write, sync::Arc};
 
     for (bytes, expected) in [
@@ -88,14 +105,15 @@ fn malformed_utf8_at_field_boundaries_and_eof_is_replaced() {
                 .with_location(1, Some(expected.chars().count() as u32))
                 .finish()
                 .unwrap();
-            let mut record = Record::default();
+            let mut datamap = Datamap::empty();
+            let record = datamap.record_mut();
             record.content_mut().push(Arc::new(parking_lot::RwLock::new(question)));
             let mut file =
                 tempfile::Builder::new().suffix(&format!(".{extension}")).tempfile().unwrap();
             file.write_all(bytes).unwrap();
 
             record.validate_data(file.path()).unwrap();
-            let data = record.load_data(file.path()).unwrap();
+            let data = read_data(&datamap, file.path()).unwrap();
             let frame = data.to_polars().unwrap();
             assert_eq!(frame.shape(), (1, 1));
             assert_eq!(
@@ -104,9 +122,10 @@ fn malformed_utf8_at_field_boundaries_and_eof_is_replaced() {
                 "{extension}: {bytes:?}"
             );
 
+            let record = datamap.record_mut();
             record.content()[0].write().set_question_type(QuestionType::Quantity).unwrap();
             assert!(record.validate_data(file.path()).is_err());
-            assert!(record.load_data(file.path()).is_err());
+            assert!(read_data(&datamap, file.path()).is_err());
         }
     }
 }

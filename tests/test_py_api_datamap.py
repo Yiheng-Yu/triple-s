@@ -2,6 +2,7 @@ import warnings
 
 import pytest
 from triple_s import (
+    read_data,
     Datamap,
     Question,
     Survey,
@@ -42,12 +43,13 @@ def test_read_data(path_sss, path_data):
 
 
 def test_load_asc_file(datamap):
-    data = datamap.load_data(PATH_ASC)
+    href = datamap.record.href
+    data = read_data(datamap, PATH_ASC)
     assert isinstance(data, SurveyData)
     assert data.has_data()
     assert data.num_response == 3
     assert data.to_polars().shape == (3, 12)
-    assert datamap.record.href == PATH_ASC
+    assert datamap.record.href == href
 
 
 def test_datamap_iter(datamap):
@@ -86,7 +88,7 @@ def test_get_empty_datamap():
         assert container.get("") is None
 
 
-def test_question_data_labels():
+def test_question_response_label_map():
     labels = [
         dict(value=1, label="item 1"),
         dict(value=2, label="item 2"),
@@ -103,9 +105,9 @@ def test_question_data_labels():
         )
     )
 
-    data_label = question.data_label
-    assert data_label[1] == Text("item 1")
-    assert data_label[2] == Text("item 2")
-    assert data_label[3] == Text("item 3")
-    assert data_label[4] == Text("item 4")
-    assert data_label[5] == Text("item 5")
+    response_label = question.response_label
+    assert response_label[1] == Text("item 1")
+    assert response_label[2] == Text("item 2")
+    assert response_label[3] == Text("item 3")
+    assert response_label[4] == Text("item 4")
+    assert response_label[5] == Text("item 5")

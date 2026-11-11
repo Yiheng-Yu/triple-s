@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from triple_s import Location, Question, Record, SurveyData, read_datamap
+from triple_s import read_data, Datamap, Location, Question, Record, SurveyData, read_datamap
 
 
 @pytest.mark.parametrize("example, extension", [(1, "asc"), (2, "csv")])
@@ -19,10 +19,10 @@ def test_validate_then_load_data(example, extension):
     assert record.href == href
     assert record.data_format == data_format
 
-    data = record.load_data(f"{base}.{extension}")
+    data = read_data(datamap, f"{base}.{extension}")
     assert isinstance(data, SurveyData)
     assert data.has_data()
-    assert record.href == f"{base}.{extension}"
+    assert datamap.record.href == href
     assert data.to_polars().height == 3
 
 
@@ -40,7 +40,7 @@ def test_invalid_utf8_is_replaced(tmp_path, example, extension):
     )
 
     assert datamap.record.validate_data(str(path)) is None
-    data = datamap.load_data(str(path))
+    data = read_data(datamap, str(path))
     frame = data.to_polars()
     assert frame.height == 3
     assert frame["Q3.a"][0].rstrip() == "�ottingham Goose Fair"
@@ -71,7 +71,7 @@ def test_valid_unicode_encodings_are_preserved(
     path.write_bytes(bom + "Café—😀\n".encode(encoding))
 
     assert text_record.validate_data(str(path)) is None
-    data = text_record.load_data(str(path))
+    data = read_data(Datamap.from_dict({"record": text_record}), str(path))
     assert data.to_polars()["TEXT"].to_list() == ["Café—😀"]
 
 
@@ -82,7 +82,7 @@ def test_fixed_width_replacement_preserves_records_and_truncated_eof(
     path.write_bytes(b"\x96ab\xff\x80c\n" + "Café—😀\r\n".encode() + b"abcde\xe2\x82")
 
     assert text_record.validate_data(str(path)) is None
-    data = text_record.load_data(str(path))
+    data = read_data(Datamap.from_dict({"record": text_record}), str(path))
     assert data.to_polars()["TEXT"].to_list() == ["�ab��c", "Café—😀", "abcde�"]
 
 
@@ -91,7 +91,7 @@ def test_csv_replacement_preserves_quoting_and_multiline_fields(tmp_path, text_r
     path.write_bytes(b'"\x96say, ""hi""\nsecond\xff",7\r\n')
 
     assert text_record.validate_data(str(path)) is None
-    data = text_record.load_data(str(path))
+    data = read_data(Datamap.from_dict({"record": text_record}), str(path))
     assert data.to_polars()["TEXT"].to_list() == ['�say, "hi"\nsecond�']
 
 
@@ -105,5 +105,5 @@ def test_replacement_does_not_accept_invalid_numeric_values(tmp_path, extension)
 
     with pytest.raises(ValueError, match="invalid float literal"):
         record.validate_data(str(path))
-    with pytest.raises(RuntimeError, match="ParseFloatError"):
-        record.load_data(str(path))
+    with pytest.raises(ValueError, match="invalid float literal"):
+        read_data(Datamap.from_dict({"record": record}), str(path))

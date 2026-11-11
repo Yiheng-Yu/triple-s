@@ -1,19 +1,25 @@
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use anyhow::Result;
+use parking_lot::Mutex;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::{prelude::*, types::PyDict};
+use pyo3::{
+    IntoPyObjectExt,
+    prelude::*,
+    types::{PyDict, PyIterator, PyString},
+};
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use tempfile::TempPath;
 
 use crate::error::{InvalidArg, NoDataError};
 #[cfg(feature = "pyo3")]
-use crate::utils::{anyvalue_to_python, polars_to_pandas};
+use crate::utils::polars_to_pandas;
 
 /// The backing file and its cleanup policy.
 #[derive(Debug)]
@@ -46,6 +52,8 @@ pub struct SurveyData {
 
     /// Cache that the `frame` sink into
     cache: Option<Arc<CacheDir>>,
+
+    value_counts_cache: Arc<Mutex<HashMap<(String, bool, bool), DataFrame>>>,
 }
 
 impl Clone for SurveyData {
@@ -56,6 +64,7 @@ impl Clone for SurveyData {
                 Self {
                     frame: Some(new),
                     cache: self.cache.clone(),
+                    value_counts_cache: Arc::clone(&self.value_counts_cache),
                 }
             }
             None => Self::default(),
@@ -151,6 +160,7 @@ impl SurveyData {
         Ok(Self {
             frame: Some(lazyframe),
             cache: Some(Arc::new(cache)),
+            value_counts_cache: Arc::default(),
         })
     }
 
@@ -173,6 +183,7 @@ impl SurveyData {
         Ok(Self {
             frame: Some(frame),
             cache: Some(Arc::new(CacheDir::Temporary(cache))),
+            value_counts_cache: Arc::default(),
         })
     }
 
@@ -182,7 +193,10 @@ impl SurveyData {
     }
 
     /// create new instance from cache
-    pub(crate) fn from_cache(cache: TempPath, schema: Option<Arc<Schema>>) -> Result<Self> {
+    pub(crate) fn from_cache(
+        cache: TempPath,
+        schema: Option<Arc<Schema>>,
+    ) -> PolarsResult<Self> {
         let args = ScanArgsParquet {
             schema,
             ..Default::default()
@@ -194,6 +208,7 @@ impl SurveyData {
         Ok(Self {
             frame: Some(frame),
             cache: Some(Arc::new(CacheDir::Temporary(cache))),
+            value_counts_cache: Arc::default(),
         })
     }
 
@@ -203,6 +218,38 @@ impl SurveyData {
             .map_err(|err| PolarsError::NoData(err.to_string().into()))?
             .clone()
             .collect()
+    }
+
+    pub(crate) fn cached_value_counts(
+        &self,
+        question: &str,
+        count_nan: bool,
+        multiple: bool,
+    ) -> Option<DataFrame> {
+        if matches!(self.cache.as_deref(), Some(CacheDir::Persistent(_))) {
+            return None;
+        }
+
+        self.value_counts_cache
+            .lock()
+            .get(&(question.to_owned(), count_nan, multiple))
+            .cloned()
+    }
+
+    pub(crate) fn cache_value_counts(
+        &self,
+        question: &str,
+        count_nan: bool,
+        multiple: bool,
+        counts: DataFrame,
+    ) {
+        if matches!(self.cache.as_deref(), Some(CacheDir::Persistent(_))) {
+            return;
+        }
+
+        self.value_counts_cache
+            .lock()
+            .insert((question.to_owned(), count_nan, multiple), counts);
     }
 
     /// Dump cached data to parquet datafile
@@ -256,6 +303,11 @@ impl SurveyData {
         }
     }
 
+    /// Get specific row in a survey
+    pub fn get_row(&self, row_index: usize) -> PolarsResult<DataFrame> {
+        self.lazy()?.clone().slice(row_index as i64, 1).collect()
+    }
+
     /// Used by Survey::__repr__
     #[cfg(feature = "pyo3")]
     pub(crate) fn py_repr_content(&self) -> PolarsResult<Vec<(&str, String)>> {
@@ -277,6 +329,16 @@ impl SurveyData {
         let num_response = self.num_response()?.to_string();
         info.push(("num_response", num_response));
         Ok(info)
+    }
+
+    #[cfg(feature = "pyo3")]
+    #[inline]
+    pub(crate) fn create_data_entry_iterator(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<DataEntryIterator> {
+        let df = self.lazy()?.clone().collect().map_err(PyPolarsErr::Polars)?;
+        Ok(DataEntryIterator::new(py, df))
     }
 }
 
@@ -321,13 +383,15 @@ impl SurveyData {
         Ok(format!("SurveyData({{\n  {}\n}})", formatted))
     }
 
-    pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {
-        let df = self.lazy()?.clone().collect().map_err(PyPolarsErr::Polars)?;
-
-        Py::new(py, ResponseIterator { df, index: 0 })
+    pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<Py<DataEntryIterator>> {
+        let iterator = self.create_data_entry_iterator(py)?;
+        Py::new(py, iterator)
     }
 
     /// Create new empty [`SurveyData`] instance
+    ///
+    /// Returns:
+    ///     SurveyData: The constructed SurveyData instance.
     #[pyo3(name = "empty")]
     #[staticmethod]
     fn py_empty() -> Self {
@@ -335,16 +399,26 @@ impl SurveyData {
     }
 
     /// Create new [`SurveyData`] instance from `polars.DataFrame`
+    ///
+    /// Args:
+    ///     frame (polars.DataFrame): Respondent data, with one column per question.
+    ///
+    /// Returns:
+    ///     SurveyData: The constructed SurveyData instance.
     #[pyo3(name = "from_polars")]
     #[staticmethod]
     fn py_from_polars(frame: PyDataFrame) -> Self {
         Self {
             frame: Some(frame.0.lazy()),
             cache: None,
+            value_counts_cache: Arc::default(),
         }
     }
 
     /// Export data as polars DataFrame
+    ///
+    /// Returns:
+    ///     polars.DataFrame: The respondent data in Polars format.
     #[pyo3(name = "to_polars")]
     pub fn py_to_polars<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let frame =
@@ -353,6 +427,9 @@ impl SurveyData {
     }
 
     /// Export loaded data as a pandas DataFrame
+    ///
+    /// Returns:
+    ///     pandas.DataFrame: The respondent data in pandas format.
     #[pyo3(name = "to_pandas")]
     pub fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let df = self.to_polars().map_err(PyPolarsErr::Polars)?;
@@ -360,6 +437,9 @@ impl SurveyData {
     }
 
     /// Get a brief overview of each column of data, equivalent of `self.to_polars().describe()`
+    ///
+    /// Returns:
+    ///     polars.DataFrame: Summary statistics for the data columns.
     #[pyo3(name = "describe")]
     pub fn py_describe<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let frame = self.py_to_polars(py)?;
@@ -367,6 +447,9 @@ impl SurveyData {
     }
 
     /// Check if data loaded or not
+    ///
+    /// Returns:
+    ///     bool: Whether respondent data is loaded.
     #[pyo3(name = "has_data")]
     fn py_has_data(&self) -> bool {
         self.has_data()
@@ -383,32 +466,57 @@ impl std::fmt::Debug for SurveyData {
 /// Iterates through individual responses of a question
 #[cfg(feature = "pyo3")]
 #[pyclass]
-pub(crate) struct ResponseIterator {
-    df: DataFrame,
-    index: usize,
+pub(crate) struct DataEntryIterator {
+    pub df: DataFrame,
+    pub index: usize,
+    pub names: Vec<Py<PyString>>,
+    rows: Option<Py<PyIterator>>,
+}
+
+#[cfg(feature = "pyo3")]
+impl DataEntryIterator {
+    pub fn new(py: Python<'_>, df: DataFrame) -> Self {
+        let names = df
+            .columns()
+            .iter()
+            .map(|column| PyString::new(py, column.name().as_str()).unbind())
+            .collect();
+        Self {
+            df,
+            index: 0,
+            names,
+            rows: None,
+        }
+    }
+
+    fn python_rows<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyIterator>> {
+        if self.rows.is_none() {
+            let dataframe = PyDataFrame(self.df.clone()).into_bound_py_any(py)?;
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("named", true)?;
+            let rows = dataframe.call_method("iter_rows", (), Some(&kwargs))?;
+            self.rows = Some(PyIterator::from_object(&rows)?.unbind());
+        }
+
+        Ok(self.rows.as_ref().unwrap().bind(py).clone())
+    }
 }
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl ResponseIterator {
+impl DataEntryIterator {
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
-    fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+    pub fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
         if self.index >= self.df.height() {
             return Ok(None);
         }
 
-        let dict = PyDict::new(py);
-
-        for column in self.df.columns() {
-            let value = column.get(self.index).map_err(PyPolarsErr::Polars)?;
-            dict.set_item(column.name().as_str(), anyvalue_to_python(py, value)?)?;
-        }
-
+        let row = self.python_rows(py)?.next().transpose()?;
         self.index += 1;
-        Ok(Some(dict.into_any()))
+        Ok(row)
     }
 }
 
@@ -437,7 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn persistent_source_survives_drop_and_cache_replacement() -> Result<()> {
+    fn test_persistent_source_survives_drop_and_cache_replacement() -> Result<()> {
         let dir = tempfile::tempdir()?;
         let source = dir.path().join("source.parquet");
         let destination = dir.path().join("cache.parquet");
@@ -457,7 +565,7 @@ mod tests {
     }
 
     #[test]
-    fn failed_set_cache_preserves_files_and_removes_staging_file() -> Result<()> {
+    fn test_failed_set_cache_preserves_files_and_removes_staging_file() -> Result<()> {
         let dir = tempfile::tempdir()?;
         let destination = dir.path().join("existing.parquet");
         std::fs::write(&destination, b"keep me")?;

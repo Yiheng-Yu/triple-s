@@ -1,24 +1,26 @@
 Record
 ======
 
+.. currentmodule:: triple_s
+
 .. autoclass:: triple_s.Record
 
 Attributes
 ----------------
 
-.. autoattribute:: triple_s.Record.data_format
+.. autoattribute:: Record.data_format
    :annotation: -> DataFormat | None
 
-.. autoattribute:: triple_s.Record.content
+.. autoattribute:: Record.content
    :annotation: -> tuple[Question, ...]
 
-.. autoattribute:: triple_s.Record.href
+.. autoattribute:: Record.href
    :annotation: -> str | None
 
-.. autoattribute:: triple_s.Record.ident
+.. autoattribute:: Record.ident
    :annotation: -> str
 
-.. autoattribute:: triple_s.Record.skip
+.. autoattribute:: Record.skip
    :annotation: -> str | None
 
 Properties
@@ -32,14 +34,13 @@ Properties
 .. py:property:: triple_s.Record.num_questions
    :type: int
 
-.. py:property:: triple_s.Record.data_label
+.. py:property:: triple_s.Record.response_label
    :type: Dict[int | float | str, Text]
 
 Methods
 -------------
 
-.. automethod:: triple_s.Record.get(question_name) -> Question | None
-.. automethod:: triple_s.Record.load_data(path_data) -> SurveyData
-.. automethod:: triple_s.Record.validate_data(path) -> None
-.. automethod:: triple_s.Record.from_dict(content) -> Record
-.. automethod:: triple_s.Record.to_xml() -> str
+.. automethod:: Record.get(question_name) -> Question | None
+.. automethod:: Record.validate_data(path) -> None
+.. automethod:: Record.from_dict(content) -> Record
+.. automethod:: Record.to_xml() -> str

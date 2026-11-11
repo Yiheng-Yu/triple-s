@@ -1,10 +1,6 @@
 #![doc = include_str!("../doc/rs_response.md")]
 
-use std::{
-    cmp::Ordering,
-    collections::HashMap,
-    hash::{Hash, Hasher},
-};
+use std::{cmp::Ordering, collections::HashMap};
 
 use anyhow::{Context, Result};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
@@ -21,23 +17,28 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{
     datamap::{QuestionType, Text},
-    error::{
-        self,
-        InvalidArg,
-        MissingAttributeError,
-        TypeConvertionError,
-        UnsupportedFeature,
-    },
+    error::{self, InvalidArg, MissingAttributeError, UnsupportedFeature},
     prelude::DeepCopy,
     utils::{ArcLock, lock_it_up},
 };
 #[cfg(feature = "pyo3")]
 use crate::{
     error::missing_key_err,
-    utils::{extract_indicies, get_type_name, normalize_py_index},
+    utils::{anyvalue_to_python, extract_indicies, get_type_name, normalize_py_index},
 };
 
 #[doc = include_str!("../doc/rs_response.md")]
+#[cfg_attr(
+    all(feature = "pyo3", not(doc)),
+    doc = r###"
+Keyword Args:
+    range (DataRange | None): Allowed response range, or None for no range. Defaults to None.
+    values (list[Code] | None): Response codes. None creates an empty list. Defaults to None.
+
+Returns:
+    Response: The constructed Response instance.
+"###
+)]
 #[cfg_attr(
     feature = "pyo3",
     pyclass(name = "Response", module = "triple_s", from_py_object)
@@ -110,14 +111,44 @@ impl Response {
 
     /// Get the lookup table for items in the [`Response::values()`] field, as: { [`Code::value`]: [`Code::label()`] }
     ///
-    /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
-    /// method will not mutate the caller.
-    pub fn data_label(&self) -> HashMap<Value, Text> {
+    /// This method returns a Arc<RwLock<String>> for the code label text, this means mutating
+    /// code label elsewhere will the hashmap returned from this function.
+    ///
+    /// # Example: Shared mutation of response label mapping
+    ///
+    /// ```rust
+    /// use triple_s::{Code, Response};
+    ///
+    /// let original = Response::new(None, vec![Code::new_unsigned(3, "Before", None, None)]);
+    ///
+    /// // Get first copy
+    /// let label_map_1 = original.response_label_map();
+    /// let label_copy_1 = label_map_1.get(&AnyValue::UInt32(3)).ok_or("Key not found")?;
+    ///
+    /// // Get second copy
+    /// let mut label_map_2 = original.response_label_map();
+    /// let mut label_copy_2 = label_map_2.get_mut(&AnyValue::UInt32(3)).ok_or("Key not found")?;
+    ///
+    /// // Value of the first and second copy are the same
+    /// assert_eq!(label_copy_1.read().as_str(), "Before");
+    /// assert_eq!(label_copy_2.read().as_str(), "Before");
+    ///
+    /// // Updating value of the second copy...
+    /// *label_copy_2.write() = "After".into();
+    ///
+    /// // And the value for the first copy also changed.
+    /// assert_eq!(label_copy_1.read().as_str(), "After");
+    ///
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
         self.values()
             .iter()
-            .map(|item| {
-                let item = item.read();
-                (item.value().clone(), item.label().deepcopy())
+            .map(|code| {
+                let code = code.read();
+                let code_value = code.value();
+                let code_label = code.label().value.clone();
+                (code_value, code_label)
             })
             .collect()
     }
@@ -132,9 +163,10 @@ impl Response {
     /// # Example:
     ///
     /// ```
-    /// use triple_s::response::{Code, DataRange, Response, Value};
+    /// use polars::prelude::AnyValue;
+    /// use triple_s::response::{Code, DataRange, Response};
     ///
-    /// let data_range = DataRange::new(Value::UnSigned(1), Value::UnSigned(2))?;
+    /// let data_range = DataRange::new(AnyValue::UInt32(1), AnyValue::UInt32(2))?;
     ///
     /// let response = Response::new(
     ///     Some(data_range),
@@ -203,7 +235,7 @@ impl Response {
         if self.values.read().iter().any(|item| item.read().value() == key) {
             return Err(InvalidArg::new(format!(
                 "Cannot append item '{}' because an item with same 'code' attribute already exists. Use 'set_value' to overwrite existing entry.",
-                key.to_string()
+                key.to_text()
             )));
         }
         self.values.write().push(lock_it_up(value));
@@ -259,25 +291,24 @@ impl Response {
         Ok(())
     }
 
-    /// Cast the `Value` variants in this response's `range` and `values` to
-    /// `T`.
+    /// Cast the `AnyValue` variants in this response's `range` and `values` to
+    /// `dtype`.
     ///
     /// Returns a copy of this response with the range bounds and each code's
-    /// value converted to `T`. Other code fields, such as labels and scores,
+    /// value converted to `dtype`. Other code fields, such as labels and scores,
     /// are preserved.
     ///
-    /// Returns an error if any value cannot be converted to `T`.
-    pub fn cast<T>(&self) -> Result<Self>
-    where T: TryFrom<Value, Error = TypeConvertionError> + Into<Value> {
+    /// Returns an error if any value cannot be converted to `dtype`.
+    pub fn cast(&self, dtype: &DataType) -> Result<Self> {
         let range =
-            self.range().as_ref().map(|range| range.cast::<T>()).transpose().with_context(
+            self.range().as_ref().map(|range| range.cast(dtype)).transpose().with_context(
                 || "When tryin to conver data type for `range` field.".to_string(),
             )?;
 
         let values = self
             .values()
             .iter()
-            .map(|item| item.read().cast::<T>())
+            .map(|item| item.read().cast(dtype))
             .collect::<Result<Vec<Code>>>()?;
 
         Ok(Self::new(range, values))
@@ -388,8 +419,8 @@ impl Response {
     ) -> Result<(), std::io::Error> {
         writer
             .create_element("range")
-            .with_attribute(("from", range.start().to_string().as_str()))
-            .with_attribute(("to", range.end().to_string().as_str()))
+            .with_attribute(("from", range.start().to_text().as_str()))
+            .with_attribute(("to", range.end().to_text().as_str()))
             .write_empty()?;
         Ok(())
     }
@@ -399,10 +430,10 @@ impl Response {
         writer: &mut Writer<W>,
     ) -> Result<()> {
         let size_value = match range.end().clone() {
-            Value::UnSigned(val) => val.saturating_sub(1),
+            AnyValue::UInt32(val) => val.saturating_sub(1),
             _ => {
                 return Err(error::InternalError::new(format!(
-                    "Expecting `Value::UnSigned, got: {:?}",
+                    "Expecting `AnyValue::UInt32, got: {:?}",
                     range.end
                 ))
                 .into());
@@ -489,12 +520,12 @@ impl Response {
 
     #[inline]
     pub(crate) fn validate_code_variant(
-        sample: &Value,
-        incoming: &Value,
+        sample: &AnyValue<'static>,
+        incoming: &AnyValue<'static>,
     ) -> Result<(), InvalidArg> {
-        if !sample.is_same_variant(incoming) {
+        if sample.dtype() != incoming.dtype() {
             Err(InvalidArg::new(format!(
-                "Code value must have the same Value variant as existing codes; got {incoming:?}, existing {sample:?}"
+                "Code value must have the same Polars data type as existing codes; got {incoming:?}, existing {sample:?}"
             )))
         } else {
             Ok(())
@@ -505,6 +536,14 @@ impl Response {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Response {
+    /// Create response codes with an optional range.
+    ///
+    /// Keyword Args:
+    ///     range (DataRange | None): Allowed response range, or None for no range. Defaults to None.
+    ///     values (list[Code] | None): Response codes. None creates an empty list. Defaults to None.
+    ///
+    /// Returns:
+    ///     Response: The constructed Response instance.
     #[new]
     #[pyo3(signature=(range:"DataRange"=None, values:"list[Code]"=None))]
     fn py_new(range: Option<DataRange>, values: Option<Vec<Code>>) -> Self {
@@ -618,17 +657,18 @@ impl Response {
         )
     }
 
-    #[getter(data_label)]
-    pub(crate) fn py_get_data_label<'py>(
+    /// Dictionary of { code_value: code_label }
+    #[getter(response_label)]
+    pub(crate) fn py_get_response_label<'py>(
         &self,
         py: Python<'py>,
     ) -> PyResult<Bound<'py, PyDict>> {
         let output = PyDict::new(py);
 
-        // iter through instead of calling self.data_label() because HashMap is not ordered
+        // iter through instead of calling self.response_label() because HashMap is not ordered
         for code in self.values().iter() {
             let code = code.read();
-            let value = code.value().convert_to_py_any(py);
+            let value = anyvalue_to_python(py, code.value())?;
             let text = code.label().deepcopy();
             output.set_item(value, text)?;
         }
@@ -639,6 +679,12 @@ impl Response {
     /// get [ `Code` ] inside `self.values` with `code.value` given.
     ///
     /// Returns `None` if the input `code` was not found.
+    ///
+    /// Args:
+    ///     value (str | int | float): Code value to look up.
+    ///
+    /// Returns:
+    ///     Code | None: The matching code, or None if it does not exist.
     #[pyo3(name = "get_value", signature = (value: "str|int|float"))]
     fn py_get_value<'py>(&self, value: &Bound<'py, PyAny>) -> PyResult<Option<Code>> {
         if !value.is_instance_of::<PyString>()
@@ -652,7 +698,7 @@ impl Response {
 
         for item in self.values.read().iter() {
             let item = item.read();
-            let stored = item.value().to_py_any(value.py());
+            let stored = anyvalue_to_python(value.py(), item.value())?;
 
             if stored.eq(value)? {
                 return Ok(Some(item.clone()));
@@ -662,15 +708,27 @@ impl Response {
         Ok(None)
     }
 
-    /// Append a code, rejecting duplicate values and different Value variants.
+    /// Append a code, rejecting duplicate values and different Polars data types.
+    ///
+    /// Args:
+    ///     value (Code): Response code to insert or update.
+    ///
+    /// Returns:
+    ///     None: This method updates or validates the existing object in place.
     #[pyo3(name = "add_value")]
     fn py_add_value(&mut self, value: Code) -> PyResult<()> {
         self.add_value(value)
             .map_err(|err| exceptions::PyValueError::new_err(format!("{err:?}")))
     }
 
-    /// Update or append a code, rejecting different Value variants.
+    /// Update or append a code, rejecting different Polars data types.
     /// Will overwrite existing code if they share the same 'code' attribute.
+    ///
+    /// Args:
+    ///     value (Code): Response code to insert or update.
+    ///
+    /// Returns:
+    ///     None: This method updates or validates the existing object in place.
     #[pyo3(name = "set_value")]
     fn py_set_value(&mut self, value: Code) -> PyResult<()> {
         self.set_value(value)
@@ -684,6 +742,12 @@ impl Response {
     ///
     /// 'values' (list[Code|dict]):
     ///     list of code values or dictionary to to `Code.from_dict`
+    ///
+    /// Args:
+    ///     content (dict): Fields used to construct the Response instance, as described above.
+    ///
+    /// Returns:
+    ///     Response: The constructed Response instance.
     #[staticmethod]
     #[pyo3(name = "from_dict")]
     pub(crate) fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
@@ -704,13 +768,26 @@ impl Response {
 
 /// Corresponds to the `<value>` tag of a triple-s xml.
 #[cfg_attr(
+    all(feature = "pyo3", not(doc)),
+    doc = r###"
+Args:
+    value (str | int | float): Response code value.
+    label (str | None): Text label. None uses an empty label.
+    filter (str | None): Response filter expression, or None for no filter.
+    score (float | None): Score for statistical calculations, or None for no score.
+
+Raises:
+    NotImplementedError: Direct construction is not supported. Use Code.unsigned, Code.signed, Code.float, or Code.string.
+"###
+)]
+#[cfg_attr(
     feature = "pyo3",
     pyclass(name = "Code", module = "triple_s", from_py_object)
 )]
 #[derive(Debug)]
 pub struct Code {
     /// code value, this can be String, Float or u32
-    pub(crate) value: ArcLock<Value>,
+    pub(crate) value: ArcLock<AnyValue<'static>>,
     /// text label
     pub(crate) label: ArcLock<Text>,
     /// Response filter.
@@ -765,10 +842,11 @@ impl Code {
     ///
     /// # Example
     /// ```rust
-    /// use triple_s::response::{Code, Value};
+    /// use polars::prelude::AnyValue;
+    /// use triple_s::response::Code;
     ///
     /// let code = Code::new_literal("A", "Tea & coffee", None, None);
-    /// assert_eq!(code.value(), Value::String("A".into()))
+    /// assert_eq!(code.value(), AnyValue::StringOwned("A".into()))
     /// ```
     ///
     /// Note that mutating the item returned from `code()` method does would not
@@ -777,19 +855,20 @@ impl Code {
     ///
     /// # Example
     /// ```rust
-    /// use triple_s::response::{Code, Value};
+    /// use polars::prelude::AnyValue;
+    /// use triple_s::response::Code;
     ///
     /// let mut example = Code::new_literal("A", "Tea & coffee", None, None);
     /// let mut example_code = example.value();
     ///
     /// match &mut example_code {
-    ///     Value::String(item) => *item = "B".to_string(),
+    ///     AnyValue::StringOwned(item) => *item = "B".into(),
     ///     _ => (),
     /// };
-    /// assert_eq!(example_code, Value::String("B".into()));
+    /// assert_eq!(example_code, AnyValue::StringOwned("B".into()));
     /// assert_ne!(example_code, example.value());
     /// ```
-    pub fn value(&self) -> Value {
+    pub fn value(&self) -> AnyValue<'static> {
         self.value.read().clone()
     }
 
@@ -797,15 +876,16 @@ impl Code {
     ///
     /// # Example
     /// ```rust
-    /// use triple_s::response::{Code, Value};
+    /// use polars::prelude::AnyValue;
+    /// use triple_s::response::Code;
     ///
     /// let mut example = Code::new_literal("A", "Tea & coffee", None, None);
     ///
-    /// let new_code = Value::UnSigned(32);
+    /// let new_code = AnyValue::UInt32(32);
     /// *example.value_mut() = new_code.clone();
     /// assert_eq!(example.value(), new_code);
     /// ```
-    pub fn value_mut(&mut self) -> RwLockWriteGuard<'_, Value> {
+    pub fn value_mut(&mut self) -> RwLockWriteGuard<'_, AnyValue<'static>> {
         self.value.write()
     }
 
@@ -849,25 +929,27 @@ impl Code {
     /// # Examples
     ///
     /// ```
-    /// use triple_s::response::{Code, Value};
+    /// use polars::prelude::AnyValue;
+    /// use triple_s::response::Code;
     ///
-    /// let code = Code::new(Value::Signed(-3), "special value", None, Some(0.3));
-    /// assert_eq!(code.value(), Value::Signed(-3));
+    /// let code = Code::new(AnyValue::Int32(-3), "special value", None, Some(0.3));
+    /// assert_eq!(code.value(), AnyValue::Int32(-3));
     /// ```
     ///
     /// adding text variants:
     ///
     /// ```
-    /// use triple_s::{Code, Value, Variant};
+    /// use polars::prelude::AnyValue;
+    /// use triple_s::{Code, Variant};
     ///
-    /// let mut code = Code::new(Value::Signed(-3), "special value", None, Some(0.3));
+    /// let mut code = Code::new(AnyValue::Int32(-3), "special value", None, Some(0.3));
     /// code.label_mut()
     ///     .add_variant(Variant::new("variant", Some("interview"), None)?)?;
     ///
     /// Ok::<_, anyhow::Error>(())
     /// ```
     pub fn new(
-        value: Value,
+        value: AnyValue<'static>,
         label: impl Into<String>,
         filter: Option<&str>,
         score: Option<f64>,
@@ -897,7 +979,7 @@ impl Code {
         score: Option<f64>,
     ) -> Self {
         Self {
-            value: lock_it_up(Value::UnSigned(value)),
+            value: lock_it_up(AnyValue::UInt32(value)),
             label: lock_it_up(Text::new(label)),
             filter: lock_it_up(filter.map(|item| item.into())),
             score: lock_it_up(score),
@@ -921,7 +1003,7 @@ impl Code {
         score: Option<f64>,
     ) -> Self {
         Self {
-            value: lock_it_up(Value::Signed(value)),
+            value: lock_it_up(AnyValue::Int32(value)),
             label: lock_it_up(Text::new(label)),
             filter: lock_it_up(filter.map(|item| item.into())),
             score: lock_it_up(score),
@@ -945,7 +1027,7 @@ impl Code {
         score: Option<f64>,
     ) -> Self {
         Self {
-            value: lock_it_up(Value::Float(value)),
+            value: lock_it_up(AnyValue::Float64(value)),
             label: lock_it_up(Text::new(label)),
             filter: lock_it_up(filter.map(|item| item.into())),
             score: lock_it_up(score),
@@ -969,7 +1051,7 @@ impl Code {
         score: Option<f64>,
     ) -> Self {
         Self {
-            value: lock_it_up(Value::String(value.into())),
+            value: lock_it_up(AnyValue::StringOwned(value.into().into())),
             label: lock_it_up(Text::new(label)),
             filter: lock_it_up(filter.map(|item| item.into())),
             score: lock_it_up(score),
@@ -993,32 +1075,35 @@ impl Code {
     }
 
     /// Convert the current `code` field from one variant to another,
-    /// Please refer to the documentation of [`Value::cast`] for details about
+    /// Please refer to the documentation of [`AnyValue::try_strict_cast`] for details about
     /// type conversion behaviour.
     ///
     /// Example: cast signed -> unsigned
     ///
     /// ```
-    /// use triple_s::{Code, Value};
+    /// use polars::prelude::{AnyValue, DataType};
+    /// use triple_s::Code;
     ///
     /// // create a new [ `Code` ] with signed `code` field:
     /// let code = Code::new_signed(3, "test", None, None);
-    /// assert_eq!(code.value().clone(), Value::Signed(3));
+    /// assert_eq!(code.value().clone(), AnyValue::Int32(3));
     ///
-    /// let unsigned = code.cast::<u32>()?;
-    /// assert_eq!(unsigned.value().clone(), Value::UnSigned(3));
+    /// let unsigned = code.cast(&DataType::UInt32)?;
+    /// assert_eq!(unsigned.value().clone(), AnyValue::UInt32(3));
     ///
     /// # Ok::<(), anyhow::Error>(())
     /// ```
-    pub fn cast<T>(&self) -> Result<Self>
-    where T: TryFrom<Value, Error = TypeConvertionError> + Into<Value> {
+    pub fn cast(&self, dtype: &DataType) -> Result<Self> {
         let mut copy = self.deepcopy();
-        *copy.value_mut() = copy.value().cast::<T>().with_context(|| {
-            format!(
-                "When trying to conver data type for [ `Code` ] instance with 'code' value '{}'",
-                self.value().to_string()
-            )
-        })?;
+        *copy.value_mut() = anyhow::Context::with_context(
+            copy.value().try_strict_cast(dtype).map(AnyValue::into_static),
+            || {
+                format!(
+                    "When trying to conver data type for [ `Code` ] instance with 'code' value '{}'",
+                    self.value().to_text()
+                )
+            },
+        )?;
 
         Ok(copy)
     }
@@ -1037,7 +1122,7 @@ impl Code {
         &self,
         writer: &mut Writer<W>,
     ) -> Result<(), std::io::Error> {
-        let code = self.value().to_string();
+        let code = self.value().to_text();
         let score = self.score().map(|score| score.to_string());
 
         let mut attributes = vec![("code", code.as_str())];
@@ -1051,6 +1136,16 @@ impl Code {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Code {
+    /// Create a Code instance.
+    ///
+    /// Args:
+    ///     value (str | int | float): Response code value.
+    ///     label (str | None): Text label. None uses an empty label.
+    ///     filter (str | None): Response filter expression, or None for no filter.
+    ///     score (float | None): Score for statistical calculations, or None for no score.
+    ///
+    /// Raises:
+    ///     NotImplementedError: Direct construction is not supported. Use Code.unsigned, Code.signed, Code.float, or Code.string.
     #[new]
     #[allow(unused_variables)]
     fn py_new<'py>(
@@ -1073,6 +1168,17 @@ impl Code {
     }
 
     /// Used for questions of type 'Single/ Multiple/ Date/ Time'
+    ///
+    /// Args:
+    ///     value (int): Unsigned 32-bit code value.
+    ///
+    /// Keyword Args:
+    ///     label (str | None): Text label. None uses an empty label. Defaults to None.
+    ///     filter (str | None): Response filter expression, or None for no filter. Defaults to None.
+    ///     score (float | None): Score for statistical calculations, or None for no score. Defaults to None.
+    ///
+    /// Returns:
+    ///     Code: The constructed Code instance.
     #[pyo3(signature=(
         value: "int",
         label: "Option[str]"=None,
@@ -1087,7 +1193,7 @@ impl Code {
         score: Option<f64>,
     ) -> PyResult<Self> {
         Ok(Self::new(
-            Value::UnSigned(value),
+            AnyValue::UInt32(value),
             label.unwrap_or_default(),
             filter,
             score,
@@ -1095,6 +1201,17 @@ impl Code {
     }
 
     /// Used for questions of type 'Single/ Multiple/ Date/ Time'
+    ///
+    /// Args:
+    ///     value (str): Literal code value.
+    ///
+    /// Keyword Args:
+    ///     label (str | None): Text label. None uses an empty label. Defaults to None.
+    ///     filter (str | None): Response filter expression, or None for no filter. Defaults to None.
+    ///     score (float | None): Score for statistical calculations, or None for no score. Defaults to None.
+    ///
+    /// Returns:
+    ///     Code: The constructed Code instance.
     #[pyo3(signature=(
         value: "str",
         label: "Option[str]"=None,
@@ -1109,13 +1226,25 @@ impl Code {
         score: Option<f64>,
     ) -> PyResult<Self> {
         Ok(Self::new(
-            Value::String(value),
+            AnyValue::StringOwned(value.into()),
             label.unwrap_or_default(),
             filter,
             score,
         ))
     }
 
+    /// Create a code with a floating-point value.
+    ///
+    /// Args:
+    ///     value (float): Floating-point code value.
+    ///
+    /// Keyword Args:
+    ///     label (str | None): Text label. None uses an empty label. Defaults to None.
+    ///     filter (str | None): Response filter expression, or None for no filter. Defaults to None.
+    ///     score (float | None): Score for statistical calculations, or None for no score. Defaults to None.
+    ///
+    /// Returns:
+    ///     Code: The constructed Code instance.
     #[pyo3(signature=(
         value: "float",
         label: "Option[str]"=None,
@@ -1130,13 +1259,25 @@ impl Code {
         score: Option<f64>,
     ) -> PyResult<Self> {
         Ok(Self::new(
-            Value::Float(value),
+            AnyValue::Float64(value),
             label.unwrap_or_default(),
             filter,
             score,
         ))
     }
 
+    /// Create a code with a signed integer value.
+    ///
+    /// Args:
+    ///     value (int): Signed 32-bit code value.
+    ///
+    /// Keyword Args:
+    ///     label (str | None): Text label. None uses an empty label. Defaults to None.
+    ///     filter (str | None): Response filter expression, or None for no filter. Defaults to None.
+    ///     score (float | None): Score for statistical calculations, or None for no score. Defaults to None.
+    ///
+    /// Returns:
+    ///     Code: The constructed Code instance.
     #[pyo3(signature=(
         value: "float",
         label: "Option[str]"=None,
@@ -1151,7 +1292,7 @@ impl Code {
         score: Option<f64>,
     ) -> PyResult<Self> {
         Ok(Self::new(
-            Value::Signed(value),
+            AnyValue::Int32(value),
             label.unwrap_or_default(),
             filter,
             score,
@@ -1164,7 +1305,7 @@ impl Code {
 
     fn __repr__(&self) -> String {
         let mut content = vec![
-            format!("value={}", self.value().to_string()),
+            format!("value={}", self.value().to_text()),
             format!(
                 "label=Text(value='{}', variant=[total: {}])",
                 self.label().value(),
@@ -1213,8 +1354,8 @@ impl Code {
     /// Code value `string` is introduced in triple-s xml 2.0 (via
     /// format='literal' toggle).
     #[getter(value)]
-    fn py_get_value<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
-        self.value.read().to_py_any(py)
+    fn py_get_value<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        anyvalue_to_python(py, self.value.read().clone())
     }
 
     /// Values to be used when computing statistics such as Mean, Standard
@@ -1254,11 +1395,17 @@ impl Code {
     ///
     /// 'score' (float|int|None. *optional*):
     ///     score
+    ///
+    /// Args:
+    ///     content (dict): Fields used to construct the Code instance, as described above.
+    ///
+    /// Returns:
+    ///     Code: The constructed Code instance.
     #[staticmethod]
     #[pyo3(name = "from_dict")]
     fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
         let code = content.get_item("value")?.ok_or(missing_key_err("value"))?;
-        let code = Value::from_py_any(code)?;
+        let code = value_from_python(code)?;
 
         let label = content
             .get_item("label")?
@@ -1286,117 +1433,37 @@ impl Code {
     }
 }
 
-/// Used for recording `code` attribute of triple-s ``<value>``` tag, as well as
-/// `from` `to` of `\<range\>`` tag.
-///
-/// - Unsigned: used in Single/ Multiple/ Quantity question types.
-/// - Signed: used in Quantity/ Date/ Time question types.
-/// - Float: used in Quantity question type.
-/// - String: used in Single question type, introduced from triple-s 2.0 onwards
-///
-/// # Example
-/// ```rust
-/// use triple_s::response::Value;
-///
-/// let value = Value::Float(32.0);
-/// ```
-#[cfg_attr(
-    feature = "pyo3",
-    pyclass(name = "Value", module = "triple_s", from_py_object)
-)]
-#[derive(Debug, Clone)]
-pub enum Value {
-    /// unsigned int (used for single, mutiple, date and time question types)
-    UnSigned(u32),
-    /// signed int (used only for quantity qurstion type)
-    Signed(i32),
-    /// float (used only for quantity qurstion type)
-    Float(f64),
-    /// string (used only for triple-s 2.0 onwards for question type `Single`)
-    String(String),
+pub(crate) trait AnyValueExt: Sized {
+    fn to_text(&self) -> String;
+    fn parse_like(&self, text: &str) -> Result<Self, InvalidArg>;
+    fn to_classic(&self) -> Result<String>;
+    fn validate(&self) -> Result<(), InvalidArg>;
+    fn try_cmp(&self, other: &Self) -> Result<Ordering, InvalidArg>;
 }
 
-impl Value {
-    /// update content of current instance based on incoming `other`,
-    /// raises error if `Self` and `Other` are of different variants.
-    ///
-    /// # Example
-    /// ```rust
-    /// use triple_s::response::Value;
-    ///
-    /// let mut value = Value::Float(32.1);
-    ///
-    /// assert!(value.set_from(Value::Signed(13)).is_err());
-    ///
-    /// value.set_from(Value::Float(2.5))?;
-    /// assert_eq!(value, Value::Float(2.5));
-    /// # Ok::<(), anyhow::Error>(())
-    /// ```
-    pub fn set_from(&mut self, other: Self) -> Result<(), InvalidArg> {
-        match (&mut *self, &other) {
-            (Value::Float(slf), Value::Float(oth)) => {
-                other.validate()?;
-                *slf = *oth;
-                Ok(())
-            }
-            (Value::Signed(slf), Value::Signed(oth)) => {
-                *slf = *oth;
-                Ok(())
-            }
-            (Value::UnSigned(slf), Value::UnSigned(oth)) => {
-                *slf = *oth;
-                Ok(())
-            }
-            (Value::String(slf), Value::String(oth)) => {
-                *slf = oth.clone();
-                Ok(())
-            }
-            _ => Err(InvalidArg::new(format!(
-                "Cannot update value from instances of a different variant! Self: [{:?}], other: [{:?}]",
-                self, other
-            ))),
+impl AnyValueExt for AnyValue<'static> {
+    fn to_text(&self) -> String {
+        match self {
+            Self::Float64(value) => value.to_string(),
+            _ => self.str_value().into_owned(),
         }
     }
 
-    /// Trying to parse string into the same variant of `self`.
-    /// This is mainly used for parsing pairs of <SOME_TAG from=".." to="..">
-    ///
-    /// # Example
-    /// ```rust
-    /// use triple_s::response::Value;
-    ///
-    /// let instance = Value::UnSigned(32);
-    ///
-    /// let float_text = "12.5";
-    /// assert!(instance.parse_like(float_text).is_err());
-    ///
-    /// let string_text = "some text";
-    /// assert!(instance.parse_like(string_text).is_err());
-    ///
-    /// let signed_text = "-3";
-    /// assert!(instance.parse_like(signed_text).is_err());
-    ///
-    /// let unsigned_text = "3";
-    /// assert_eq!(
-    ///     instance.parse_like(unsigned_text).unwrap(),
-    ///     Value::UnSigned(3)
-    /// )
-    /// ```
-    pub fn parse_like(&self, text: &str) -> Result<Self, InvalidArg> {
+    fn parse_like(&self, text: &str) -> Result<Self, InvalidArg> {
         match self {
-            Self::Float(_) => {
+            Self::Float64(_) => {
                 let value = text.parse::<f64>().map_err(|err| {
                     InvalidArg::new(format!(
                         "Failed to parse value '{}' as float decimal: '{}'",
                         text, err
                     ))
                 })?;
-                let instance = Self::Float(value);
+                let instance = Self::Float64(value);
                 instance.validate()?; // value should not be float NaN.
                 Ok(instance)
             }
 
-            Self::Signed(_) => {
+            Self::Int32(_) => {
                 let value = text.parse::<i32>().map_err(|err| {
                     InvalidArg::new(format!(
                         "Failed to parse value '{}' as integer: '{}'",
@@ -1404,67 +1471,42 @@ impl Value {
                     ))
                 })?;
 
-                Ok(Self::Signed(value))
+                Ok(Self::Int32(value))
             }
 
-            Self::UnSigned(_) => {
+            Self::UInt32(_) => {
                 let value = text.parse::<u32>().map_err(|err| {
                     InvalidArg::new(format!(
                         "Failed to parse value '{}' as integer: '{}'",
                         text, err
                     ))
                 })?;
-                Ok(Self::UnSigned(value))
+                Ok(Self::UInt32(value))
             }
 
-            Self::String(_) => Ok(Self::String(text.to_owned())),
+            Self::String(_) | Self::StringOwned(_) => Ok(Self::StringOwned(text.into())),
+            _ => Err(InvalidArg::new("Unsupported code data type")),
         }
     }
 
-    /// Basically calling `to_string()` for the data inside but does not allow
-    /// `String` type, since triple-s classic does not support `code`
-    /// attribute as strings.
-    pub fn to_classic(&self) -> Result<String> {
+    fn to_classic(&self) -> Result<String> {
         match self {
-            Self::UnSigned(value) => Ok(value.to_string()),
-            Self::Signed(value) => Ok(value.to_string()),
-            Self::Float(value) => Ok(value.to_string()),
-            Self::String(_) => {
+            Self::UInt32(value) => Ok(value.to_string()),
+            Self::Int32(value) => Ok(value.to_string()),
+            Self::Float64(value) => Ok(value.to_string()),
+            _ => {
                 Err(UnsupportedFeature::new("SSS Classic", "None numeric code values.").into())
             }
         }
     }
 
-    /// convert the data inside to its string representation.
-    #[allow(clippy::inherent_to_string)]
-    pub(crate) fn to_string(&self) -> String {
+    fn validate(&self) -> Result<(), InvalidArg> {
         match self {
-            Value::Float(item) => item.to_string(),
-            Value::Signed(item) => item.to_string(),
-            Value::UnSigned(item) => item.to_string(),
-            Value::String(item) => item.clone(),
-        }
-    }
-
-    /// check if (self, other) are the same variant
-    pub(crate) fn is_same_variant(&self, other: &Value) -> bool {
-        matches!(
-            (self, other),
-            (Value::Float(_), Value::Float(_))
-                | (Value::Signed(_), Value::Signed(_))
-                | (Value::UnSigned(_), Value::UnSigned(_))
-                | (Value::String(_), Value::String(_))
-        )
-    }
-
-    /// Rasies error if value ws float nan or infinity
-    pub fn validate(&self) -> Result<(), InvalidArg> {
-        match self {
-            Self::Float(value) => {
+            Self::Float64(value) => {
                 if value.is_nan() {
-                    Err(InvalidArg::new("'Value' cannot be float `Nan`!"))
+                    Err(InvalidArg::new("'AnyValue' cannot be float `Nan`!"))
                 } else if value.is_infinite() {
-                    Err(InvalidArg::new("'Value' cannot be infinite!"))
+                    Err(InvalidArg::new("'AnyValue' cannot be infinite!"))
                 } else {
                     Ok(())
                 }
@@ -1473,392 +1515,51 @@ impl Value {
         }
     }
 
-    /// Try to see if `other` was bigger/ smaller/ equal to `self`.
-    /// This method would only compare between pairs of float, signed int or
-    /// unsigned int instances, and would raise error when:
-    /// - comparing between two strings.
-    /// - comparing between float Nan values.
-    /// - comparing between to variants of two different types.
-    ///
-    /// ## Working Example
-    ///
-    /// ```
-    /// use std::cmp::Ordering;
-    ///
-    /// use triple_s::Value;
-    ///
-    /// let a = Value::Float(2.5);
-    /// let b = Value::Float(3.5);
-    ///
-    /// let result = a.try_cmp(&b)?;
-    /// assert_eq!(result, Ordering::Less);
-    ///
-    /// Ok::<(), triple_s::error::InvalidArg>(())
-    /// ```
-    ///
-    /// ## Errors
-    ///
-    /// 1. This method only compares values of the same kind, and will raise
-    ///    error if they were not.
-    ///
-    /// ```
-    /// use triple_s::Value;
-    ///
-    /// let a = Value::UnSigned(2);
-    /// let b = Value::Signed(3);
-    ///
-    /// let result = a.try_cmp(&b);
-    /// assert!(result.is_err());
-    /// ```
-    ///
-    /// 2. This method does not compare between two string variants.
-    ///
-    /// ```
-    /// use triple_s::Value;
-    ///
-    /// let a = Value::String("1".to_string());
-    /// let b = Value::String("2".to_string());
-    ///
-    /// let result = a.try_cmp(&b);
-    /// assert!(result.is_err());
-    /// ```
-    ///
-    /// 3. float Nan would raise error
-    ///
-    /// ```
-    /// use triple_s::Value;
-    ///
-    /// let a = Value::Float(f64::NAN);
-    /// let b = Value::Float(3.2);
-    ///
-    /// let result = a.try_cmp(&b);
-    /// assert!(result.is_err());
-    /// ```
-    pub fn try_cmp(&self, other: &Self) -> Result<Ordering, InvalidArg> {
-        if self.is_same_variant(other) {
+    fn try_cmp(&self, other: &Self) -> Result<Ordering, InvalidArg> {
+        if self.dtype() == other.dtype() {
             match (self, other) {
-                (Self::UnSigned(a), Self::UnSigned(b)) => Ok(a.cmp(b)),
-                (Self::Signed(a), Self::Signed(b)) => Ok(a.cmp(b)),
+                (Self::UInt32(a), Self::UInt32(b)) => Ok(a.cmp(b)),
+                (Self::Int32(a), Self::Int32(b)) => Ok(a.cmp(b)),
 
                 // - checks if any of them were float nan, if so then raises error
                 // - then compares the value behind and returns ordering.
-                (Self::Float(a), Self::Float(b)) => {
+                (Self::Float64(a), Self::Float64(b)) => {
                     self.validate()?;
                     other.validate()?;
                     a.partial_cmp(b).ok_or(InvalidArg::new("Cannot compare float NaN values."))
                 }
 
-                (Self::String(_), Self::String(_)) => Err(InvalidArg::new(
+                (Self::StringOwned(_), Self::StringOwned(_)) => Err(InvalidArg::new(
                     "Cannot compare values between `string` values.",
                 )),
                 _ => Err(InvalidArg::new(format!(
-                    "Can only compare pairs of `Value` instances of the same kind. Got: self: [{:?}] | other: [{:?}]",
+                    "Can only compare pairs of `AnyValue` instances of the same kind. Got: self: [{:?}] | other: [{:?}]",
                     self, other
                 ))),
             }
         } else {
             Err(InvalidArg::new(format!(
-                "Can only compare pairs of `Value` instances of the same kind. Got: self: [{:?}] | other: [{:?}]",
+                "Can only compare pairs of `AnyValue` instances of the same kind. Got: self: [{:?}] | other: [{:?}]",
                 self, other
             )))
-        }
-    }
-
-    /// Convert one variant of `Value` to another.
-    ///
-    /// Currently support these `<T>` types:
-    /// |`<T>`|Output
-    /// |--|--
-    /// `u32`|Value::UnSigned
-    /// `i32`|Value::Signed
-    /// `f64`|Value::Float
-    /// `String`|Value::String
-    ///
-    /// Example usage:
-    ///
-    /// ```rust
-    /// use triple_s::Value;
-    ///
-    /// // Value::Signed -> Value::UnSigned
-    /// let value = Value::Signed(3);
-    /// let unsigned = value.cast::<u32>()?;
-    /// assert_eq!(unsigned, Value::UnSigned(3));
-    ///
-    /// // Value::Signed -> Value::String
-    /// let value = Value::Signed(3);
-    /// let string = value.cast::<String>()?;
-    /// assert_eq!(string, Value::String("3".to_string()));
-    ///
-    /// # Ok::<(), triple_s::error::TypeConvertionError>(())
-    /// ```
-    pub fn cast<T>(&self) -> Result<Self, TypeConvertionError>
-    where T: TryFrom<Self, Error = TypeConvertionError> + Into<Self> {
-        let val = T::try_from(self.clone())?;
-        Ok(val.into())
-    }
-
-    /// maps current instance into corresponding python objects
-    #[cfg(feature = "pyo3")]
-    pub(crate) fn to_py_any<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
-        match self {
-            Value::String(item) => PyString::new(py, item).into_any(),
-            Value::Float(item) => PyFloat::new(py, item.clone()).into_any(),
-            Value::Signed(item) => PyInt::new(py, item).into_any(),
-            Value::UnSigned(item) => PyInt::new(py, item).into_any(),
-        }
-    }
-
-    /// try to create new `Value` instance from `PyAny` with follow logic:
-    ///
-    /// Value -> Value
-    /// integer -> Signed
-    /// float -> Float
-    /// str -> String
-    /// everything else -> PyTypeError
-    #[cfg(feature = "pyo3")]
-    pub(crate) fn from_py_any(value: Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(val) = value.extract::<i32>() {
-            Ok(Self::Signed(val))
-        } else if let Ok(val) = value.extract::<f64>() {
-            Ok(Self::Float(val))
-        } else if let Ok(val) = value.extract::<String>() {
-            Ok(Self::String(val))
-        } else if let Ok(val) = value.extract::<Self>() {
-            Ok(val)
-        } else {
-            let type_name = get_type_name(&value)?;
-            Err(exceptions::PyTypeError::new_err(format!(
-                "Expect to be one of 'str', 'float', or 'int' type, got: '{}'",
-                type_name
-            )))
-        }
-    }
-
-    /// `into_py_any` alreay exists
-    #[cfg(feature = "pyo3")]
-    pub(crate) fn convert_to_py_any<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
-        match self {
-            Value::Float(val) => PyFloat::new(py, val.clone()).into_any(),
-            Value::Signed(val) => PyInt::new(py, val.clone()).into_any(),
-            Value::UnSigned(val) => PyInt::new(py, val.clone()).into_any(),
-            Value::String(val) => PyString::new(py, val.as_str()).into_any(),
         }
     }
 }
 
 #[cfg(feature = "pyo3")]
-impl Value {
-    fn __is_same_type__(&self, other: &Value) -> bool {
-        self.is_same_variant(other)
-    }
-
-    fn __data_type__(&self) -> String {
-        match self {
-            Self::Float(_) => "float".into(),
-            Self::Signed(_) => "signed".into(),
-            Self::UnSigned(_) => "unsigned".into(),
-            Self::String(_) => "string".into(),
-        }
-    }
-
-    fn __eq__(&self, other: &Value) -> PyResult<bool> {
-        if self.is_same_variant(other) {
-            let result = self.try_cmp(other)?;
-            Ok(matches!(result, Ordering::Equal))
-        } else {
-            Err(exceptions::PyTypeError::new_err(format!(
-                "Cannot compare values of different internal types. Tried to compare between: ['{}', '{}']",
-                self.__data_type__(),
-                other.__data_type__()
-            )))
-        }
-    }
-}
-
-impl PartialEq for Value {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Value::UnSigned(self_), Value::UnSigned(other_)) => self_ == other_,
-            (Value::Signed(self_), Value::Signed(other_)) => self_ == other_,
-            (Value::String(self_), Value::String(other_)) => self_ == other_,
-            (Value::Float(self_), Value::Float(other_)) => {
-                self_ == other_ || (self_.is_nan() && other_.is_nan())
-            }
-            _ => false,
-        }
-    }
-}
-
-impl Eq for Value {}
-
-impl Hash for Value {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        match self {
-            Value::UnSigned(value) => {
-                0u8.hash(state);
-                value.hash(state);
-            }
-            Value::Signed(value) => {
-                1u8.hash(state);
-                value.hash(state);
-            }
-            Value::Float(value) => {
-                2u8.hash(state);
-                let bits = if value.is_nan() {
-                    f64::NAN.to_bits()
-                } else if *value == 0.0 {
-                    0.0f64.to_bits()
-                } else {
-                    value.to_bits()
-                };
-                bits.hash(state);
-            }
-            Value::String(value) => {
-                3u8.hash(state);
-                value.hash(state);
-            }
-        }
-    }
-}
-
-impl From<u32> for Value {
-    fn from(value: u32) -> Self {
-        Self::UnSigned(value)
-    }
-}
-
-impl From<i32> for Value {
-    fn from(value: i32) -> Self {
-        Self::Signed(value)
-    }
-}
-
-impl From<f64> for Value {
-    fn from(value: f64) -> Self {
-        Self::Float(value)
-    }
-}
-
-impl From<String> for Value {
-    fn from(value: String) -> Self {
-        Self::String(value)
-    }
-}
-
-impl From<&str> for Value {
-    fn from(value: &str) -> Self {
-        Self::String(value.to_owned())
-    }
-}
-
-impl TryFrom<Value> for u32 {
-    type Error = TypeConvertionError;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::UnSigned(item) => Ok(item),
-            Value::Signed(item) => u32::try_from(item).map_err(|_| {
-                TypeConvertionError::OutOfRange("unsigned integer".into(), item.to_string())
-            }),
-            Value::Float(item) => {
-                if !item.is_finite()
-                    || item.fract() != 0.0
-                    || item < 0.0
-                    || item > u32::MAX as f64
-                {
-                    return Err(TypeConvertionError::OutOfRange(
-                        "float".into(),
-                        item.to_string(),
-                    ));
-                }
-
-                Ok(item as u32)
-            }
-            Value::String(item) => item.parse::<u32>().map_err(|_| {
-                TypeConvertionError::TypeMismatch(
-                    "string".into(),
-                    "unsigned integer".into(),
-                    format!("{:?}", item),
-                )
-            }),
-        }
-    }
-}
-
-impl TryFrom<Value> for i32 {
-    type Error = TypeConvertionError;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::UnSigned(item) => i32::try_from(item).map_err(|_| {
-                TypeConvertionError::OutOfRange("signed integer".into(), item.to_string())
-            }),
-            Value::Signed(item) => Ok(item),
-            Value::Float(item) => {
-                if !item.is_finite()
-                    || item.fract() != 0.0
-                    || item < 0.0
-                    || item > u32::MAX as f64
-                {
-                    return Err(TypeConvertionError::OutOfRange(
-                        "float".into(),
-                        item.to_string(),
-                    ));
-                }
-
-                Ok(item as i32)
-            }
-            Value::String(item) => item.parse::<i32>().map_err(|_| {
-                TypeConvertionError::TypeMismatch(
-                    "string".into(),
-                    "signed integer".into(),
-                    format!("{:?}", item),
-                )
-            }),
-        }
-    }
-}
-
-impl TryFrom<Value> for f64 {
-    type Error = TypeConvertionError;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::UnSigned(item) => Ok(item as f64),
-            Value::Signed(item) => Ok(item as f64),
-            Value::Float(item) => Ok(item),
-            Value::String(item) => item.parse::<f64>().map_err(|_| {
-                TypeConvertionError::TypeMismatch(
-                    "string".into(),
-                    "float".into(),
-                    format!("{:?}", item),
-                )
-            }),
-        }
-    }
-}
-
-impl TryFrom<Value> for String {
-    type Error = TypeConvertionError;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::Signed(item) => Ok(item.to_string()),
-            Value::UnSigned(item) => Ok(item.to_string()),
-            Value::Float(item) => Ok(item.to_string()),
-            Value::String(item) => Ok(item.clone()),
-        }
-    }
-}
-
-impl<'a> From<Value> for AnyValue<'a> {
-    fn from(value: Value) -> Self {
-        match value {
-            Value::Float(val) => Self::Float64(val),
-            Value::Signed(val) => Self::Int32(val),
-            Value::UnSigned(val) => Self::UInt32(val),
-            Value::String(val) => Self::StringOwned(val.into()),
-        }
+fn value_from_python(value: Bound<'_, PyAny>) -> PyResult<AnyValue<'static>> {
+    if let Ok(val) = value.extract::<i32>() {
+        Ok(AnyValue::Int32(val))
+    } else if let Ok(val) = value.extract::<f64>() {
+        Ok(AnyValue::Float64(val))
+    } else if let Ok(val) = value.extract::<String>() {
+        Ok(AnyValue::StringOwned(val.into()))
+    } else {
+        let type_name = get_type_name(&value)?;
+        Err(exceptions::PyTypeError::new_err(format!(
+            "Expect to be one of 'str', 'float', or 'int' type, got: '{}'",
+            type_name
+        )))
     }
 }
 
@@ -1874,13 +1575,24 @@ impl<'a> From<Value> for AnyValue<'a> {
 /// - start: lower bound of the range.
 /// - end: upper bound of the range.
 #[cfg_attr(
+    all(feature = "pyo3", not(doc)),
+    doc = r###"
+Args:
+    start (int): Lower bound of the range.
+    end (int): Upper bound of the range.
+
+Raises:
+    NotImplementedError: Direct construction is not supported. Use DataRange.unsigned, DataRange.signed, or DataRange.float.
+"###
+)]
+#[cfg_attr(
     feature = "pyo3",
     pyclass(name = "DataRange", module = "triple_s", from_py_object)
 )]
 #[derive(Debug)]
 pub struct DataRange {
-    start: ArcLock<Value>,
-    end: ArcLock<Value>,
+    start: ArcLock<AnyValue<'static>>,
+    end: ArcLock<AnyValue<'static>>,
 }
 
 impl DataRange {
@@ -1889,10 +1601,11 @@ impl DataRange {
     /// # Example:
     ///
     /// ```
-    /// use triple_s::{DataRange, Value};
+    /// use polars::prelude::{AnyValue, DataType};
+    /// use triple_s::DataRange;
     ///
-    /// let range = DataRange::new(Value::Signed(-1), Value::Signed(3))?;
-    /// assert_eq!(range.start().clone(), Value::Signed(-1));
+    /// let range = DataRange::new(AnyValue::Int32(-1), AnyValue::Int32(3))?;
+    /// assert_eq!(range.start().clone(), AnyValue::Int32(-1));
     ///
     /// Ok::<(), triple_s::error::InvalidArg>(())
     /// ```
@@ -1901,17 +1614,18 @@ impl DataRange {
     /// type, or if `start` was greater than `end`:
     ///
     /// ```
-    /// use triple_s::{DataRange, Value};
+    /// use polars::prelude::{AnyValue, DataType};
+    /// use triple_s::DataRange;
     ///
     /// // `start` needs to be lower or equal to `end`:
-    /// assert!(DataRange::new(Value::Signed(100), Value::Signed(0)).is_err());
+    /// assert!(DataRange::new(AnyValue::Int32(100), AnyValue::Int32(0)).is_err());
     ///
     /// // cannot create new instance of two different value types:
-    /// assert!(DataRange::new(Value::Float(10.0), Value::Signed(0)).is_err())
+    /// assert!(DataRange::new(AnyValue::Float64(10.0), AnyValue::Int32(0)).is_err())
     ///
     /// // cannot create new instance with `string` value:
     /// ```
-    pub fn new(start: Value, end: Value) -> Result<Self, InvalidArg> {
+    pub fn new(start: AnyValue<'static>, end: AnyValue<'static>) -> Result<Self, InvalidArg> {
         // try_cmp() does three things at once for comparing float values.
         // - checks if any of them were string, and would raise error.
         // - checks if any of them were float nan, if so then raises error
@@ -1934,13 +1648,13 @@ impl DataRange {
     /// \<range\> tag.)
     ///
     /// To update its value, use `set_start()` method.
-    pub fn start(&self) -> RwLockReadGuard<'_, Value> {
+    pub fn start(&self) -> RwLockReadGuard<'_, AnyValue<'static>> {
         self.start.read()
     }
 
     /// A read-only copy of the `end` value (the `to` attribute of the \<range\>
     /// tag.)
-    pub fn end(&self) -> RwLockReadGuard<'_, Value> {
+    pub fn end(&self) -> RwLockReadGuard<'_, AnyValue<'static>> {
         self.end.read()
     }
 
@@ -1949,19 +1663,20 @@ impl DataRange {
     /// # Example
     ///
     /// ```
-    /// use triple_s::{DataRange, Value};
+    /// use polars::prelude::{AnyValue, DataType};
+    /// use triple_s::DataRange;
     ///
-    /// let mut data_range = DataRange::new(Value::Float(-1.5), Value::Float(1.5))?;
+    /// let mut data_range = DataRange::new(AnyValue::Float64(-1.5), AnyValue::Float64(1.5))?;
     ///
-    /// data_range.set_start(Value::Float(1.2))?;
-    /// assert_eq!(data_range.start().clone(), Value::Float(1.2));
+    /// data_range.set_start(AnyValue::Float64(1.2))?;
+    /// assert_eq!(data_range.start().clone(), AnyValue::Float64(1.2));
     ///
     /// // 'start' cannot be larger than 'end'
-    /// assert!(data_range.set_start(Value::Float(3_000.0)).is_err());
+    /// assert!(data_range.set_start(AnyValue::Float64(3_000.0)).is_err());
     ///
     /// Ok::<(), triple_s::error::InvalidArg>(())
     /// ```
-    pub fn set_start(&mut self, new: Value) -> Result<(), InvalidArg> {
+    pub fn set_start(&mut self, new: AnyValue<'static>) -> Result<(), InvalidArg> {
         let ordering = new.try_cmp(&self.end.read())
             .map_err(|_| InvalidArg::new(format!(
                 "Can only update `start` from variants of the same kind. Got: self: [{:?}] | other: [{:?}]",
@@ -1971,8 +1686,8 @@ impl DataRange {
         match ordering {
             Ordering::Greater => Err(InvalidArg::new(format!(
                 "New `start` value ('{}') cannot be greater than current `end` value ('{}')",
-                new.to_string(),
-                self.end.read().to_string()
+                new.to_text(),
+                self.end.read().to_text()
             ))),
             _ => {
                 *self.start.write() = new;
@@ -1986,19 +1701,20 @@ impl DataRange {
     /// # Example:
     ///
     /// ```
-    /// use triple_s::{DataRange, Value};
+    /// use polars::prelude::{AnyValue, DataType};
+    /// use triple_s::DataRange;
     ///
-    /// let mut data_range = DataRange::new(Value::Float(-1.5), Value::Float(1.5))?;
+    /// let mut data_range = DataRange::new(AnyValue::Float64(-1.5), AnyValue::Float64(1.5))?;
     ///
-    /// data_range.set_end(Value::Float(2.2))?;
-    /// assert_eq!(data_range.end().clone(), Value::Float(2.2));
+    /// data_range.set_end(AnyValue::Float64(2.2))?;
+    /// assert_eq!(data_range.end().clone(), AnyValue::Float64(2.2));
     ///
     /// // 'end' cannot be smaller than 'start'
-    /// assert!(data_range.set_end(Value::Float(-300000.0)).is_err());
+    /// assert!(data_range.set_end(AnyValue::Float64(-300000.0)).is_err());
     ///
     /// Ok::<(), triple_s::error::InvalidArg>(())
     /// ```
-    pub fn set_end(&mut self, new: Value) -> Result<(), InvalidArg> {
+    pub fn set_end(&mut self, new: AnyValue<'static>) -> Result<(), InvalidArg> {
         let ordering = new.try_cmp(&self.start.read())
             .map_err(|_| InvalidArg::new(format!(
                 "Can only update `end` from variants of the same kind. Got: self: [{:?}] | other: [{:?}]",
@@ -2008,8 +1724,8 @@ impl DataRange {
         match ordering {
             Ordering::Less => Err(InvalidArg::new(format!(
                 "New `end` value ('{}') cannot be less than current `start` value ('{}')",
-                new.to_string(),
-                self.start.read().to_string()
+                new.to_text(),
+                self.start.read().to_text()
             ))),
             _ => {
                 *self.end.write() = new;
@@ -2020,27 +1736,27 @@ impl DataRange {
 
     /// Cast field `start`, `end` from one variant to another.
     ///
-    /// See [`Value::cast`] documentation for more details about type
+    /// See [`AnyValue::try_strict_cast`] documentation for more details about type
     /// conversions.
     ///
     /// Example:
     ///
     /// ```
-    /// use triple_s::{DataRange, Value};
+    /// use polars::prelude::{AnyValue, DataType};
+    /// use triple_s::DataRange;
     ///
     /// // create a `DataRange` with unsigned `start` and `end` field:
-    /// let unsigned = DataRange::new(Value::UnSigned(0), Value::UnSigned(1))?;
+    /// let unsigned = DataRange::new(AnyValue::UInt32(0), AnyValue::UInt32(1))?;
     ///
     /// // cast to signed integer:
-    /// let signed = unsigned.cast::<i32>()?;
-    /// assert_eq!(signed.end().clone(), Value::Signed(1));
+    /// let signed = unsigned.cast(&DataType::Int32)?;
+    /// assert_eq!(signed.end().clone(), AnyValue::Int32(1));
     ///
     /// # Ok::<(), anyhow::Error>(())
     /// ```
-    pub fn cast<T>(&self) -> Result<Self>
-    where T: TryFrom<Value, Error = TypeConvertionError> + Into<Value> {
-        let start = self.start().cast::<T>()?;
-        let end = self.end().cast::<T>()?;
+    pub fn cast(&self, dtype: &DataType) -> Result<Self> {
+        let start = self.start().try_strict_cast(dtype)?.into_static();
+        let end = self.end().try_strict_cast(dtype)?.into_static();
 
         Ok(Self::new(start, end)?)
     }
@@ -2065,6 +1781,14 @@ impl DataRange {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl DataRange {
+    /// Create a DataRange instance.
+    ///
+    /// Args:
+    ///     start (int): Lower bound of the range.
+    ///     end (int): Upper bound of the range.
+    ///
+    /// Raises:
+    ///     NotImplementedError: Direct construction is not supported. Use DataRange.unsigned, DataRange.signed, or DataRange.float.
     #[new]
     #[allow(unused_variables)]
     fn py_new<'py>(start: &Bound<'py, PyAny>, end: &Bound<'py, PyAny>) -> PyResult<Self> {
@@ -2082,43 +1806,63 @@ impl DataRange {
     fn __repr__(&self) -> String {
         format!(
             "DataRange(start={}, end={})",
-            self.start().to_string(),
-            self.end().to_string(),
+            self.start().to_text(),
+            self.end().to_text(),
         )
     }
 
     fn __eq__(&self, other: &Self) -> PyResult<bool> {
-        Ok((self.start.read().__eq__(&other.start.read())?)
-            & (self.end.read().__eq__(&other.end.read())?))
+        Ok(self == other)
     }
 
     /// creates a new instance with values being exclusively positive integers.
     /// This is used for questions of 'single', 'multiple', and 'date/ time'
     /// types.
+    ///
+    /// Args:
+    ///     start (int): Lower bound of the range.
+    ///     end (int): Upper bound of the range.
+    ///
+    /// Returns:
+    ///     DataRange: The constructed DataRange instance.
     #[staticmethod]
     fn unsigned(start: u32, end: u32) -> PyResult<Self> {
-        Self::new(Value::UnSigned(start), Value::UnSigned(end)).map_err(|err| err.into())
+        Self::new(AnyValue::UInt32(start), AnyValue::UInt32(end)).map_err(|err| err.into())
     }
 
     /// creates a new instance with values being integers that can either be
     /// positive/ negative. This is used for questions of 'quantity' type
     /// only.
+    ///
+    /// Args:
+    ///     start (int): Lower bound of the range.
+    ///     end (int): Upper bound of the range.
+    ///
+    /// Returns:
+    ///     DataRange: The constructed DataRange instance.
     #[staticmethod]
     fn signed(start: i32, end: i32) -> PyResult<Self> {
-        Self::new(Value::Signed(start), Value::Signed(end)).map_err(|err| err.into())
+        Self::new(AnyValue::Int32(start), AnyValue::Int32(end)).map_err(|err| err.into())
     }
 
     /// creates a new instance with values being decimals.
     /// This is used for questions of 'quantity' type only.
+    ///
+    /// Args:
+    ///     start (float): Lower bound of the range.
+    ///     end (float): Upper bound of the range.
+    ///
+    /// Returns:
+    ///     DataRange: The constructed DataRange instance.
     #[staticmethod]
     fn float(start: f64, end: f64) -> PyResult<Self> {
-        Self::new(Value::Float(start), Value::Float(end)).map_err(|err| err.into())
+        Self::new(AnyValue::Float64(start), AnyValue::Float64(end)).map_err(|err| err.into())
     }
 
     /// Start of the data range.
     #[getter(start)]
-    fn py_get_start<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
-        self.start.read().to_py_any(py)
+    fn py_get_start<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        anyvalue_to_python(py, self.start.read().clone())
     }
 
     #[setter(start)]
@@ -2154,8 +1898,8 @@ impl DataRange {
 
     /// End of the `<range>`
     #[getter(end)]
-    fn py_get_end<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
-        self.end.read().to_py_any(py)
+    fn py_get_end<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        anyvalue_to_python(py, self.end.read().clone())
     }
 
     #[setter(end)]
@@ -2193,14 +1937,20 @@ impl DataRange {
     ///
     /// - start (float|int|str): start of a data range
     /// - end (float|int|str): end of a data range
+    ///
+    /// Args:
+    ///     content (dict): Fields used to construct the DataRange instance, as described above.
+    ///
+    /// Returns:
+    ///     DataRange: The constructed DataRange instance.
     #[staticmethod]
     #[pyo3(name = "from_dict")]
     fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
         let start = content.get_item("start")?.ok_or(missing_key_err("start"))?;
-        let start = Value::from_py_any(start)?;
+        let start = value_from_python(start)?;
 
         let end = content.get_item("end")?.ok_or(missing_key_err("end"))?;
-        let end = Value::from_py_any(end)?;
+        let end = value_from_python(end)?;
 
         Self::new(start, end).map_err(|err| err.into())
     }
@@ -2239,16 +1989,16 @@ impl Eq for DataRange {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::datamap::test::normalize_xml;
+    use crate::datamap::datamap::test::normalize_xml;
 
     #[test]
     fn test_value_float_parse_like() {
-        let base = Value::Float(3.5);
+        let base = AnyValue::Float64(3.5);
 
-        assert_eq!(base.parse_like("3.2").unwrap(), Value::Float(3.2));
-        assert_eq!(base.parse_like("-3.2").unwrap(), Value::Float(-3.2));
-        assert_eq!(base.parse_like("3").unwrap(), Value::Float(3.0));
-        assert_eq!(base.parse_like("-3").unwrap(), Value::Float(-3.0));
+        assert_eq!(base.parse_like("3.2").unwrap(), AnyValue::Float64(3.2));
+        assert_eq!(base.parse_like("-3.2").unwrap(), AnyValue::Float64(-3.2));
+        assert_eq!(base.parse_like("3").unwrap(), AnyValue::Float64(3.0));
+        assert_eq!(base.parse_like("-3").unwrap(), AnyValue::Float64(-3.0));
 
         assert!(base.parse_like("Nan").is_err());
         assert!(base.parse_like("inf").is_err());
@@ -2306,7 +2056,7 @@ mod test {
                 r#"<value code="1">label</value>"#,
             ),
             (
-                Code::new(Value::Signed(-3), "special value", None, Some(0.3)),
+                Code::new(AnyValue::Int32(-3), "special value", None, Some(0.3)),
                 r#"<value code="-3" score="0.3">special value</value>"#,
             ),
             (
@@ -2338,7 +2088,7 @@ mod test {
     #[test]
     fn test_write_character_response_success() {
         let response = Response::new(
-            Some(DataRange::new(Value::UnSigned(0), Value::UnSigned(21)).unwrap()),
+            Some(DataRange::new(AnyValue::UInt32(0), AnyValue::UInt32(21)).unwrap()),
             Vec::new(),
         );
         let mut writer = Writer::new(Vec::new());
@@ -2360,7 +2110,7 @@ mod test {
             let ranges = [
                 (None, r#"<values><value code="3">Other</value></values>"#),
                 (
-                    Some(DataRange::new(Value::UnSigned(1), Value::UnSigned(2)).unwrap()),
+                    Some(DataRange::new(AnyValue::UInt32(1), AnyValue::UInt32(2)).unwrap()),
                     r#"<values><range from="1" to="2"/><value code="3">Other</value></values>"#,
                 ),
             ];
@@ -2381,12 +2131,13 @@ mod test {
         let ranges = [
             (
                 QuestionType::Date,
-                DataRange::new(Value::UnSigned(20050101), Value::UnSigned(20051231)).unwrap(),
+                DataRange::new(AnyValue::UInt32(20050101), AnyValue::UInt32(20051231))
+                    .unwrap(),
                 r#"<values><range from="20050101" to="20051231"/></values>"#,
             ),
             (
                 QuestionType::Time,
-                DataRange::new(Value::UnSigned(90000), Value::UnSigned(173000)).unwrap(),
+                DataRange::new(AnyValue::UInt32(90000), AnyValue::UInt32(173000)).unwrap(),
                 r#"<values><range from="90000" to="173000"/></values>"#,
             ),
         ];
@@ -2421,15 +2172,16 @@ mod test {
 
         let ranges = [
             (
-                DataRange::new(Value::Signed(20050101), Value::Signed(20051231)).unwrap(),
+                DataRange::new(AnyValue::Int32(20050101), AnyValue::Int32(20051231)).unwrap(),
                 r#"<values><range from="20050101" to="20051231" /></values>"#,
             ),
             (
-                DataRange::new(Value::UnSigned(20050101), Value::UnSigned(20051231)).unwrap(),
+                DataRange::new(AnyValue::UInt32(20050101), AnyValue::UInt32(20051231))
+                    .unwrap(),
                 r#"<values><range from="20050101" to="20051231" /></values>"#,
             ),
             (
-                DataRange::new(Value::Float(32.21), Value::Float(79.00)).unwrap(),
+                DataRange::new(AnyValue::Float64(32.21), AnyValue::Float64(79.00)).unwrap(),
                 r#"<values><range from="32.21" to="79" /></values>"#,
             ),
         ];
@@ -2447,9 +2199,9 @@ mod test {
     fn test_write_quantity_response_with_special_values_to_xml() {
         const TYPE: QuestionType = QuestionType::Quantity;
         let ranges =
-            [DataRange::new(Value::Signed(20050101), Value::Signed(20051231)).unwrap()];
+            [DataRange::new(AnyValue::Int32(20050101), AnyValue::Int32(20051231)).unwrap()];
         let special_values = vec![Code::new(
-            Value::Signed(-3),
+            AnyValue::Int32(-3),
             "special value",
             None,
             Some(0.3),
@@ -2478,115 +2230,185 @@ mod test {
 
     #[test]
     fn test_value_cast_u32() {
-        assert_eq!(Value::Signed(3).cast::<u32>().unwrap(), Value::UnSigned(3));
         assert_eq!(
-            Value::UnSigned(3).cast::<u32>().unwrap(),
-            Value::UnSigned(3)
+            AnyValue::Int32(3).try_strict_cast(&DataType::UInt32).unwrap(),
+            AnyValue::UInt32(3)
         );
         assert_eq!(
-            Value::String("3".into()).cast::<u32>().unwrap(),
-            Value::UnSigned(3)
+            AnyValue::UInt32(3).try_strict_cast(&DataType::UInt32).unwrap(),
+            AnyValue::UInt32(3)
         );
         assert_eq!(
-            Value::Float(3.000).cast::<u32>().unwrap(),
-            Value::UnSigned(3)
+            AnyValue::StringOwned("3".into()).try_strict_cast(&DataType::UInt32).unwrap(),
+            AnyValue::UInt32(3)
+        );
+        assert_eq!(
+            AnyValue::Float64(3.000).try_strict_cast(&DataType::UInt32).unwrap(),
+            AnyValue::UInt32(3)
         );
 
-        assert!(Value::Signed(-1).cast::<u32>().is_err());
-        assert!(Value::Float(3.0001).cast::<u32>().is_err());
-        assert!(Value::String("".into()).cast::<u32>().is_err());
-        assert!(Value::String("3.00".into()).cast::<u32>().is_err());
-        assert!(Value::String("what".into()).cast::<u32>().is_err());
-        assert!(Value::String("hi".into()).cast::<u32>().is_err());
+        assert!(AnyValue::Int32(-1).try_strict_cast(&DataType::UInt32).is_err());
+        assert_eq!(
+            AnyValue::Float64(3.0001).try_strict_cast(&DataType::UInt32).unwrap(),
+            AnyValue::UInt32(3)
+        );
+        assert!(AnyValue::StringOwned("".into()).try_strict_cast(&DataType::UInt32).is_err());
+        assert_eq!(
+            AnyValue::StringOwned("3.00".into()).try_strict_cast(&DataType::UInt32).unwrap(),
+            AnyValue::UInt32(3)
+        );
+        assert!(
+            AnyValue::StringOwned("what".into()).try_strict_cast(&DataType::UInt32).is_err()
+        );
+        assert!(
+            AnyValue::StringOwned("hi".into()).try_strict_cast(&DataType::UInt32).is_err()
+        );
     }
 
     #[test]
     fn test_value_cast_i32() {
-        assert_eq!(Value::Signed(-3).cast::<i32>().unwrap(), Value::Signed(-3));
-        assert_eq!(Value::Signed(3).cast::<i32>().unwrap(), Value::Signed(3));
-        assert_eq!(Value::UnSigned(3).cast::<i32>().unwrap(), Value::Signed(3));
-        assert_eq!(Value::Float(3.00).cast::<i32>().unwrap(), Value::Signed(3));
         assert_eq!(
-            Value::String("3".into()).cast::<i32>().unwrap(),
-            Value::Signed(3)
+            AnyValue::Int32(-3).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::Int32(-3)
         );
         assert_eq!(
-            Value::String("-3".into()).cast::<i32>().unwrap(),
-            Value::Signed(-3)
+            AnyValue::Int32(3).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::Int32(3)
+        );
+        assert_eq!(
+            AnyValue::UInt32(3).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::Int32(3)
+        );
+        assert_eq!(
+            AnyValue::Float64(3.00).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::Int32(3)
+        );
+        assert_eq!(
+            AnyValue::StringOwned("3".into()).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::Int32(3)
+        );
+        assert_eq!(
+            AnyValue::StringOwned("-3".into()).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::Int32(-3)
         );
 
-        assert!(Value::Float(-3.01).cast::<i32>().is_err());
-        assert!(Value::Float(3.01).cast::<i32>().is_err());
-        assert!(Value::Float(3.01).cast::<i32>().is_err());
-        assert!(Value::String("".into()).cast::<i32>().is_err());
-        assert!(Value::String("3.00".into()).cast::<i32>().is_err());
-        assert!(Value::String("what".into()).cast::<i32>().is_err());
-        assert!(Value::String("hi".into()).cast::<i32>().is_err());
+        assert_eq!(
+            AnyValue::Float64(-3.01).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::Int32(-3)
+        );
+        assert_eq!(
+            AnyValue::Float64(3.01).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::Int32(3)
+        );
+        assert_eq!(
+            AnyValue::Float64(3.01).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::Int32(3)
+        );
+        assert!(AnyValue::StringOwned("".into()).try_strict_cast(&DataType::Int32).is_err());
+        assert_eq!(
+            AnyValue::StringOwned("3.00".into()).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::Int32(3)
+        );
+        assert!(
+            AnyValue::StringOwned("what".into()).try_strict_cast(&DataType::Int32).is_err()
+        );
+        assert!(AnyValue::StringOwned("hi".into()).try_strict_cast(&DataType::Int32).is_err());
     }
 
     #[test]
     fn test_value_cast_float() {
         assert_eq!(
-            Value::Signed(-3).cast::<f64>().unwrap(),
-            Value::Float(-3.00)
-        );
-        assert_eq!(Value::Signed(3).cast::<f64>().unwrap(), Value::Float(3.00));
-        assert_eq!(
-            Value::UnSigned(3).cast::<f64>().unwrap(),
-            Value::Float(3.00)
+            AnyValue::Int32(-3).try_strict_cast(&DataType::Float64).unwrap(),
+            AnyValue::Float64(-3.00)
         );
         assert_eq!(
-            Value::String("3.0".into()).cast::<f64>().unwrap(),
-            Value::Float(3.00)
+            AnyValue::Int32(3).try_strict_cast(&DataType::Float64).unwrap(),
+            AnyValue::Float64(3.00)
         );
         assert_eq!(
-            Value::String("3".into()).cast::<f64>().unwrap(),
-            Value::Float(3.00)
+            AnyValue::UInt32(3).try_strict_cast(&DataType::Float64).unwrap(),
+            AnyValue::Float64(3.00)
         );
         assert_eq!(
-            Value::String("-3.0".into()).cast::<f64>().unwrap(),
-            Value::Float(-3.00)
+            AnyValue::StringOwned("3.0".into()).try_strict_cast(&DataType::Float64).unwrap(),
+            AnyValue::Float64(3.00)
         );
         assert_eq!(
-            Value::Float(3.1415926).cast::<f64>().unwrap(),
-            Value::Float(3.1415926)
+            AnyValue::StringOwned("3".into()).try_strict_cast(&DataType::Float64).unwrap(),
+            AnyValue::Float64(3.00)
         );
         assert_eq!(
-            Value::Float(-3.1415926).cast::<f64>().unwrap(),
-            Value::Float(-3.1415926)
+            AnyValue::StringOwned("-3.0".into())
+                .try_strict_cast(&DataType::Float64)
+                .unwrap(),
+            AnyValue::Float64(-3.00)
+        );
+        assert_eq!(
+            AnyValue::Float64(3.1415926).try_strict_cast(&DataType::Float64).unwrap(),
+            AnyValue::Float64(3.1415926)
+        );
+        assert_eq!(
+            AnyValue::Float64(-3.1415926).try_strict_cast(&DataType::Float64).unwrap(),
+            AnyValue::Float64(-3.1415926)
         );
 
-        assert!(Value::String("".into()).cast::<f64>().is_err());
-        assert!(Value::String("what".into()).cast::<f64>().is_err());
-        assert!(Value::String("hi".into()).cast::<f64>().is_err());
+        assert!(AnyValue::StringOwned("".into()).try_strict_cast(&DataType::Float64).is_err());
+        assert!(
+            AnyValue::StringOwned("what".into())
+                .try_strict_cast(&DataType::Float64)
+                .is_err()
+        );
+        assert!(
+            AnyValue::StringOwned("hi".into()).try_strict_cast(&DataType::Float64).is_err()
+        );
     }
 
     #[test]
     fn test_value_cast_string() {
         assert_eq!(
-            Value::Signed(-3).cast::<String>().unwrap(),
-            Value::String("-3".into())
+            AnyValue::Int32(-3).try_strict_cast(&DataType::String).unwrap(),
+            AnyValue::StringOwned("-3".into())
         );
         assert_eq!(
-            Value::UnSigned(3).cast::<String>().unwrap(),
-            Value::String("3".into())
+            AnyValue::UInt32(3).try_strict_cast(&DataType::String).unwrap(),
+            AnyValue::StringOwned("3".into())
         );
         assert_eq!(
-            Value::Float(3.5).cast::<String>().unwrap(),
-            Value::String("3.5".into())
+            AnyValue::Float64(3.5).try_strict_cast(&DataType::String).unwrap(),
+            AnyValue::StringOwned("3.5".into())
         );
         assert_eq!(
-            Value::String("hello".into()).cast::<String>().unwrap(),
-            Value::String("hello".into())
+            AnyValue::StringOwned("hello".into())
+                .try_strict_cast(&DataType::String)
+                .unwrap(),
+            AnyValue::StringOwned("hello".into())
         );
     }
 
     #[test]
     fn test_cast_type_mutation() {
-        let original = DataRange::new(Value::Signed(3), Value::Signed(5)).unwrap();
-        let mut cast = original.cast::<u32>().unwrap();
-        cast.set_start(Value::UnSigned(2)).unwrap();
+        let original = DataRange::new(AnyValue::Int32(3), AnyValue::Int32(5)).unwrap();
+        let mut cast = original.cast(&DataType::UInt32).unwrap();
+        cast.set_start(AnyValue::UInt32(2)).unwrap();
 
-        assert_eq!(original.start().clone(), Value::Signed(3));
+        assert_eq!(original.start().clone(), AnyValue::Int32(3));
+    }
+
+    #[test]
+    #[allow(unused_mut)]
+    fn test_mutate_response_label_text() {
+        let original = Response::new(None, vec![Code::new_unsigned(3, "Before", None, None)]);
+
+        let label_map_1 = original.response_label_map();
+        let label_copy_1 = label_map_1.get(&AnyValue::UInt32(3)).unwrap();
+
+        let mut label_map_2 = original.response_label_map();
+        let mut label_copy_2 = label_map_2.get_mut(&AnyValue::UInt32(3)).unwrap();
+
+        assert_eq!(label_copy_1.read().as_str(), "Before");
+        assert_eq!(label_copy_2.read().as_str(), "Before");
+
+        *label_copy_2.write() = "After".into();
+        assert_eq!(label_copy_1.read().as_str(), "After");
     }
 }

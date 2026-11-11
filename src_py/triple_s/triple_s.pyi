@@ -506,7 +506,7 @@ class Question:
         Changes to the copy do not affect the original.
         """
     @property
-    def data_label(self, /) -> dict:
+    def response_label(self, /) -> dict:
         """
         Get the lookup table for items in the `Question.response.values`, asdictionary of { value: label }
 
@@ -746,7 +746,7 @@ class QuestionData:
         Get a copy of question data as a Python tuple.
         """
     @property
-    def data_label(self, /) -> dict:
+    def response_label(self, /) -> dict:
         """
         Get the lookup table for items in the `Question.response.values`, asdictionary of { value: label }
 
@@ -1005,10 +1005,10 @@ class Response:
     def __repr__(self, /) -> str: ...
     def add_value(self, /, value: Code) -> None:
         """
-        Append a code, rejecting duplicate values and different Value variants.
+        Append a code, rejecting duplicate values and different Polars data types.
         """
     @property
-    def data_label(self, /) -> dict: ...
+    def response_label(self, /) -> dict: ...
     @staticmethod
     def from_dict(content: dict) -> Response:
         """
@@ -1037,7 +1037,7 @@ class Response:
         """
     def set_value(self, /, value: Code) -> None:
         """
-        Update or append a code, rejecting different Value variants.
+        Update or append a code, rejecting different Polars data types.
         Will overwrite existing code if they share the same 'code' attribute.
         """
     @property
@@ -1478,69 +1478,6 @@ class Usage:
     @staticmethod
     def available_options() -> list[str]: ...
 
-class Value:
-    """
-    Used for recording `code` attribute of triple-s ``<value>``` tag, as well as
-    `from` `to` of `\\<range\\>`` tag.
-
-    - Unsigned: used in Single/ Multiple/ Quantity question types.
-    - Signed: used in Quantity/ Date/ Time question types.
-    - Float: used in Quantity question type.
-    - String: used in Single question type, introduced from triple-s 2.0 onwards
-
-    # Example
-    ```rust
-    use triple_s::response::Value;
-
-    let value = Value::Float(32.0);
-    ```
-    """
-    @final
-    class Float(Value):
-        """
-        float (used only for quantity qurstion type)
-        """
-        __match_args__: Final = ("_0",)
-        @property
-        def _0(self, /) -> float: ...
-        def __getitem__(self, key: int, /) -> Any: ...
-        def __len__(self, /) -> int: ...
-        def __new__(cls, /, _0: float) -> Value.Float: ...
-    @final
-    class Signed(Value):
-        """
-        signed int (used only for quantity qurstion type)
-        """
-        __match_args__: Final = ("_0",)
-        @property
-        def _0(self, /) -> int: ...
-        def __getitem__(self, key: int, /) -> Any: ...
-        def __len__(self, /) -> int: ...
-        def __new__(cls, /, _0: int) -> Value.Signed: ...
-    @final
-    class String(Value):
-        """
-        string (used only for triple-s 2.0 onwards for question type `Single`)
-        """
-        __match_args__: Final = ("_0",)
-        @property
-        def _0(self, /) -> str: ...
-        def __getitem__(self, key: int, /) -> Any: ...
-        def __len__(self, /) -> int: ...
-        def __new__(cls, /, _0: str) -> Value.String: ...
-    @final
-    class UnSigned(Value):
-        """
-        unsigned int (used for single, mutiple, date and time question types)
-        """
-        __match_args__: Final = ("_0",)
-        @property
-        def _0(self, /) -> int: ...
-        def __getitem__(self, key: int, /) -> Any: ...
-        def __len__(self, /) -> int: ...
-        def __new__(cls, /, _0: int) -> Value.UnSigned: ...
-
-@final
 class Variant:
     """
     Introduced since sss 2.0 onwards.

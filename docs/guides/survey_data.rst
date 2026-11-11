@@ -12,7 +12,6 @@ Use ``describe()`` for a summary of each column:
 .. code-block:: python
 
    from triple_s import read_triple_s
-
    survey = read_triple_s("path/to/survey.sss", "path/to/data.asc")
    survey_data = survey.data
    survey_data.describe()
@@ -25,12 +24,8 @@ Use the survey to get a question's answers by name:
 
 .. code-block:: python
 
-   question_data = survey["Q1.b"]
-   print(question_data)
-
-An example output:
-
-.. code-block:: python
+   >>> question_data = survey["Q1.b"]
+   >>> print(question_data)
 
    QuestionData({
       name: "Q1.b"

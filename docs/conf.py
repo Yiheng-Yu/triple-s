@@ -49,11 +49,10 @@ PYTHON_API_CLASSES = {
     "SurveyData",
     "Text",
     "Usage",
-    "Value",
     "Variant",
     "Version",
 }
-PYTHON_API_FUNCTIONS = {"read_datamap", "read_triple_s"}
+PYTHON_API_FUNCTIONS = {"read_datamap", "read_triple_s", "read_data"}
 
 
 def rustdoc_link(match):
@@ -71,7 +70,7 @@ def prepare_docstring(app, what, name, obj, options, lines):
     if what == "class" and name.rsplit(".", 1)[-1] == "Datamap":
         # Read the Python guide directly so Sphinx does not need a rebuilt
         # native extension after documentation-only changes.
-        source = Path(__file__).resolve().parents[1] / "src/doc/datamap.python.rst"
+        source = Path(__file__).resolve().parents[1] / "src/doc/datamap_survey_py.rst"
         app.env.note_dependency(str(source))
         lines[:] = source.read_text(encoding="utf-8").splitlines()
         return
@@ -104,10 +103,6 @@ def prepare_docstring(app, what, name, obj, options, lines):
                 result.extend(["", heading[1], "^" * len(heading[1]), ""])
             else:
                 result.append(line)
-    # The Question constructor's Args block uses unindented fields.
-    if name == "triple_s.Question" and "Args:" in result:
-        start = result.index("Args:") + 1
-        result[start:] = ["    " + line if line else "" for line in result[start:]]
     lines[:] = result
 
 

@@ -3,7 +3,7 @@ import gc
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal, assert_series_equal
-from triple_s import NoDataError, QuestionData, Survey, SurveyData, read_triple_s
+from triple_s import read_data, NoDataError, QuestionData, Survey, SurveyData, read_triple_s
 
 PATH_SSS = "tests/sss-examples/sss-2.0/example1.sss"
 PATH_ASC = "tests/sss-examples/sss-2.0/example1.asc"
@@ -43,7 +43,7 @@ def test_view_can_be_created_before_loading_data():
     view = survey["Q2"]
     with pytest.raises(NoDataError):
         view.to_polars()
-    survey.data = survey.datamap.load_data(PATH_ASC)
+    survey.data = read_data(survey.datamap, PATH_ASC)
     assert len(view.to_polars()) == 3
     with pytest.raises(KeyError):
         survey["missing"]

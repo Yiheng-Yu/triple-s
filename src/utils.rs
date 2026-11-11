@@ -269,7 +269,7 @@ mod tests {
     }
 
     #[test]
-    fn utf16_streaming_handles_split_code_units() {
+    fn test_utf16_streaming_handles_split_code_units() {
         let text = "中文😀\r\n".repeat(3000);
         for little_endian in [true, false] {
             let bytes: Vec<u8> = std::iter::once(0xfeff)
@@ -290,7 +290,7 @@ mod tests {
     }
 
     #[test]
-    fn malformed_sequences_are_replaced_across_buffer_boundaries() {
+    fn test_malformed_sequences_are_replaced_across_buffer_boundaries() {
         let bytes = b"A\x96B\xc3\xa9\xf0\x9f\x98\x80\xe2\x82!\xff\xc3".repeat(3000);
         let expected = "A�Bé😀�!��".repeat(3000);
         for capacity in [1, 8192] {

@@ -13,6 +13,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use log::warn;
+use polars::prelude::AnyValue;
 use quick_xml::reader::Reader as XmlReader;
 use rayon::prelude::*;
 
@@ -20,8 +21,6 @@ use crate::{
     DataRange,
     datamap::{
         Code,
-        CodeFormat,
-        DataFormat,
         Datamap,
         Location,
         Question,
@@ -30,9 +29,11 @@ use crate::{
         Spread,
         Text,
         Usage,
-        Value,
         Variant,
-        Version,
+        question::CodeFormat,
+        record::DataFormat,
+        response::AnyValueExt,
+        survey_info::Version,
     },
     error::{
         self,
@@ -136,7 +137,9 @@ pub fn read_from_reader<R: BufRead>(mut input: R) -> Result<(Datamap, EventLog)>
     let builder = match file_type {
         FileType::Classic => {
             let input = BufReader::new(Cursor::new(prefix).chain(input));
-            classic::create_survey_builder(input.lines())?
+            classic::create_survey_builder(input.lines()).with_context(|| {
+                format!("trying to create survey builder from the data file")
+            })?
         }
         FileType::Xml => {
             input.read_to_end(&mut prefix)?;
@@ -146,7 +149,9 @@ pub fn read_from_reader<R: BufRead>(mut input: R) -> Result<(Datamap, EventLog)>
             let (text, _) = encoding.decode_without_bom_handling(&prefix);
             let mut reader = XmlReader::from_str(&text);
             reader.config_mut().trim_text(true);
-            xml::create_survey_builder(reader)?
+            xml::create_survey_builder(reader).with_context(|| {
+                format!("trying to create survey builder from the data file")
+            })?
         }
     };
     builder.build()
@@ -277,23 +282,22 @@ impl SurveyBuilder {
 
         if let Some(record) = self.attributes.remove("record") {
             if self.is_classic {
-                *output.record.ident_mut() = record
+                *output.record_mut().ident_mut() = record
                     .value
                     .and_then(|value| value.chars().next())
                     .ok_or(MissingValueError::new("survey", "record"))?;
             } else {
-                *output.record.ident_mut() = record
+                *output.record_mut().ident_mut() = record
                     .attributes
                     .get("ident")
                     .and_then(|value| value.chars().next())
                     .ok_or(MissingAttributeError::new("record", "ident"))?;
 
-                *output.record.skip_mut() =
+                *output.record_mut().skip_mut() =
                     record.attributes.get("skip").map(ToString::to_string);
-                *output.record.href_mut() =
+                *output.record_mut().href_mut() =
                     record.attributes.get("href").map(ToString::to_string);
-
-                *output.record.data_format_mut() = record
+                *output.record_mut().data_format_mut() = record
                     .attributes
                     .get("format")
                     .map(|value| DataFormat::from_str(value))
@@ -334,10 +338,10 @@ impl SurveyBuilder {
             .collect::<Result<Vec<(Question, Vec<Warning>)>>>()?;
 
         for (question, warnings) in results {
-            output.record.content_mut().push(lock_it_up(question));
+            output.record_mut().content_mut().push(lock_it_up(question));
             log.push_warnings(warnings);
         }
-        output.record.content_mut().shrink_to_fit();
+        output.record_mut().content_mut().shrink_to_fit();
         Ok((output, log))
     }
 }
@@ -427,23 +431,30 @@ impl QuestionBuilder {
             .attributes
             .remove("label")
             .ok_or(error::MissingAttributeError::new("variable", "label"))
-            .with_context(|| format!("When parsing question {}", question_name))?;
-        let label = parse_text(label, is_classic)
-            .with_context(|| format!("When parsing question {}", question_name))?;
+            .with_context(|| {
+                format!(
+                    "When trying to get question title for question {:?}",
+                    question_name
+                )
+            })?;
+
+        let label = parse_text(label, is_classic).with_context(|| {
+            format!("When parsing title text for question {:?}", question_name)
+        })?;
         *output.label_mut() = label;
 
         let location = self
             .attributes
             .remove("position")
             .ok_or(error::MissingAttributeError::new("variable", "position"))
-            .with_context(|| format!("When parsing question {}", question_name))?;
+            .with_context(|| format!("When parsing question {:?}", question_name))?;
 
         *output.location_mut() = if is_classic {
             Self::parse_location_classic(&location)
-                .with_context(|| format!("When parsing question {}", question_name))?
+                .with_context(|| format!("When parsing question {:?}", question_name))?
         } else {
             Self::parse_location_xml(&location)
-                .with_context(|| format!("When parsing question {}", question_name))?
+                .with_context(|| format!("When parsing question {:?}", question_name))?
         };
 
         *output.format_mut() = self
@@ -584,8 +595,8 @@ impl QuestionBuilder {
                 if let Some(size) = response.size {
                     let width = output.location().width()?;
                     let range = DataRange::new(
-                        Value::UnSigned(1),
-                        Value::UnSigned(size.saturating_add(1)),
+                        AnyValue::UInt32(1),
+                        AnyValue::UInt32(size.saturating_add(1)),
                     )?;
                     let response = Response::new(Some(range), Vec::new());
                     *output.response_mut() = response;
@@ -631,6 +642,7 @@ fn parse_text(mut node: Node, is_classic: bool) -> Result<Text> {
         value.trim().to_string()
     };
     let mut text = Text::new(value.as_str());
+
     for variant in node.children {
         let value = variant
             .value
@@ -644,7 +656,6 @@ fn parse_text(mut node: Node, is_classic: bool) -> Result<Text> {
             .map(|language| language.as_ref());
 
         let mode = variant.attributes.get("mode").map(|s| s.as_ref());
-
         let variant = Variant::new(value, mode, language)?;
         text.add_variant(variant)?;
     }
@@ -737,15 +748,15 @@ impl ResponseBuilder {
             let from = match kind {
                 ValueKind::Signed => {
                     let value = from.parse::<i32>()?;
-                    Value::Signed(value)
+                    AnyValue::Int32(value)
                 }
                 ValueKind::UnSigned => {
                     let value = from.parse::<u32>()?;
-                    Value::UnSigned(value)
+                    AnyValue::UInt32(value)
                 }
                 ValueKind::Float => {
                     let value = from.parse::<f64>()?;
-                    Value::Float(value)
+                    AnyValue::Float64(value)
                 }
                 _ => todo!(),
             };
@@ -777,15 +788,15 @@ impl ResponseBuilder {
             ))?;
 
         let value = match format {
-            ValueKind::String => Value::String(raw.value.to_string()),
+            ValueKind::String => AnyValue::StringOwned(raw.value.as_ref().into()),
             ValueKind::UnSigned => {
-                Value::UnSigned(raw.value.parse().context("Invalid unsigned code")?)
+                AnyValue::UInt32(raw.value.parse().context("Invalid unsigned code")?)
             }
             ValueKind::Signed => {
-                Value::Signed(raw.value.parse().context("Invalid signed code")?)
+                AnyValue::Int32(raw.value.parse().context("Invalid signed code")?)
             }
             ValueKind::Float => {
-                Value::Float(raw.value.parse().context("Invalid floating-point code")?)
+                AnyValue::Float64(raw.value.parse().context("Invalid floating-point code")?)
             }
         };
         let instance = Code {
