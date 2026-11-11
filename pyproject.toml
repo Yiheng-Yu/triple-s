@@ -49,6 +49,14 @@ features = ["pyo3"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = [
+    "--benchmark-columns=mean,min,max,stddev,rounds",
+    "--benchmark-sort=mean",
+    "--benchmark-name=short",
+    "--benchmark-save=benchmark",
+    "--benchmark-min-rounds=10",
+    "--benchmark-precision=0.02",
+]
 
 [tool.ruff]
 force-exclude = true

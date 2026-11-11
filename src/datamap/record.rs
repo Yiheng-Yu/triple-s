@@ -311,25 +311,40 @@ impl Record {
             }
         }
 
+        let questions = self
+            .content()
+            .iter()
+            .map(|question| question.read().clone())
+            .collect::<Vec<_>>();
+        let parsers = questions
+            .iter()
+            .map(|question| (question.question_type().clone(), question.format().clone()))
+            .collect::<Vec<_>>();
+
         // then do iteration
         match data_format {
             DataFormat::Fixed => {
-                let width = self
-                    .content()
+                let width = questions
                     .iter()
-                    .map(|question| *question.read().location().finish() as usize)
+                    .map(|question| *question.location().finish() as usize)
                     .max()
                     .context("Cannot determine record width: no questions")?;
                 Ok(Box::new(std::iter::from_fn(
                     move || match Self::read_one_record(&mut reader, width) {
                         Ok(row) if row.is_empty() => None,
                         Ok(row) => Some(
-                            self.content()
+                            questions
                                 .iter()
-                                .map(|question| {
-                                    let question = question.read();
+                                .zip(&parsers)
+                                .map(|(question, (question_type, format))| {
                                     let field = question.locate_data_asc(&row)?;
-                                    Ok(question.parse_question_value(field)?.into_static())
+                                    Ok(question
+                                        .parse_question_value_with_metadata(
+                                            field,
+                                            question_type,
+                                            format.as_ref(),
+                                        )?
+                                        .into_static())
                                 })
                                 .collect::<Result<Vec<_>>>()
                                 .map(Row),
@@ -339,6 +354,8 @@ impl Record {
                 )))
             }
             DataFormat::Csv => {
+                let csv_columns =
+                    questions.iter().map(Question::csv_column_index).collect::<Result<Vec<_>>>()?;
                 let rows = csv::ReaderBuilder::new()
                     .has_headers(false)
                     .flexible(true)
@@ -349,18 +366,25 @@ impl Record {
                         let row = row.with_context(|| {
                             format!("When reading CSV record {}", index + 1)
                         })?;
-                        self.content()
+                        questions
                             .iter()
-                            .map(|question| {
-                                let question = question.read();
+                            .zip(&parsers)
+                            .zip(&csv_columns)
+                            .map(|((question, (question_type, format)), column_index)| {
                                 let field =
-                                    question.locate_data_csv(&row).with_context(|| {
+                                    question.locate_data_csv_at(&row, *column_index).with_context(|| {
                                         format!(
                                             "When trying to extract data for question `{}`",
                                             question.name()
                                         )
                                     })?;
-                                Ok(question.parse_question_value(field)?.into_static())
+                                Ok(question
+                                    .parse_question_value_with_metadata(
+                                        field,
+                                        question_type,
+                                        format.as_ref(),
+                                    )?
+                                    .into_static())
                             })
                             .collect::<Result<Vec<_>>>()
                             .map(Row)

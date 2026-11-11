@@ -148,42 +148,66 @@ impl QuestionData {
     /// - `count_nan` (`bool`):
     ///     - Toogle on/ off for counting Null values, note that multi-choices entries of an empty list (`[]`) will also count as `null`
     pub fn value_counts(&self, count_nan: bool) -> PolarsResult<DataFrame> {
-        // Get raw value counts, always use the unlabelled version
-        let series = match self.question_type() {
-            QuestionType::Multiple => {
+        let question_name = self.name();
+        let multiple = self.question_type() == QuestionType::Multiple;
+        let cached_counts = self
+            .data
+            .read()
+            .cached_value_counts(&question_name, count_nan, multiple);
+        let mut df = match cached_counts {
+            Some(counts) => counts,
+            None => {
+            let series = if multiple {
                 let config = ExplodeOptions {
                     empty_as_null: true,
                     keep_nulls: true, // cell with value `null` gets exploded into `null`
                 };
                 self.to_value_column()?.explode(config)?.take_materialized_series()
+            } else {
+                self.to_value_column()?.take_materialized_series()
+            };
+
+            let series = if count_nan {
+                series.drop_nulls()
+            } else {
+                series
+            };
+
+            let counts = series.value_counts(true, true, "count".into(), false)?.sort(
+                [&question_name],
+                SortMultipleOptions::default()
+                    .with_nulls_last(true)
+                    .with_maintain_order(false)
+                    .with_order_descending(false),
+            )?;
+            self.data.read().cache_value_counts(
+                &question_name,
+                count_nan,
+                multiple,
+                counts.clone(),
+            );
+            counts
             }
-            _ => self.to_series()?,
         };
-
-        let series = if count_nan {
-            series.drop_nulls()
-        } else {
-            series
-        };
-
-        let df = series.value_counts(true, true, "count".into(), false)?.sort(
-            [self.name()],
-            SortMultipleOptions::default()
-                .with_nulls_last(true)
-                .with_maintain_order(false)
-                .with_order_descending(false),
-        )?;
 
         // append data label
         let (keys, labels) = self.get_datalabel_key_value()?;
-        let keys = keys.cast(series.dtype())?;
-        let height = labels.len();
-        let response_label = DataFrame::new(height, vec![keys.into(), labels.into()])?;
-
-        df.lazy()
-            .left_join(response_label.lazy(), col(self.name()), col(self.name()))
-            .select([col(self.name()), col("label"), col("count")])
-            .collect()
+        let keys = keys.cast(df.column(&question_name)?.dtype())?;
+        let label_by_key = keys
+            .iter()
+            .zip(labels.str()?.iter())
+            .filter_map(|(key, label)| {
+                label.map(|label| (key.into_static(), label.to_owned()))
+            })
+            .collect::<HashMap<_, _>>();
+        let labels = df
+            .column(&question_name)?
+            .as_materialized_series()
+            .iter()
+            .map(|value| label_by_key.get(&value).cloned())
+            .collect::<Vec<_>>();
+        df.insert_column(1, Series::new("label".into(), labels).into())?;
+        Ok(df)
     }
 
     /// Checks if `other` is comes from the same [`Survey`] as `self`.
@@ -580,7 +604,8 @@ impl ColumnIterator {
             return Ok(None);
         }
 
-        let value = self.column.get(self.index).map_err(PyPolarsErr::Polars)?;
+        // __next__ checks the index against the column length immediately above.
+        let value = unsafe { self.column.get_unchecked(self.index) };
 
         self.index += 1;
         anyvalue_to_python(py, value).map(Some) // bound already checked

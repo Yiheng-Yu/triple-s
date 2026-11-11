@@ -1,12 +1,18 @@
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use anyhow::Result;
+use parking_lot::Mutex;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::{prelude::*, types::PyDict};
+use pyo3::{
+    IntoPyObjectExt,
+    prelude::*,
+    types::{PyDict, PyIterator, PyString},
+};
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use tempfile::TempPath;
@@ -46,6 +52,8 @@ pub struct SurveyData {
 
     /// Cache that the `frame` sink into
     cache: Option<Arc<CacheDir>>,
+
+    value_counts_cache: Arc<Mutex<HashMap<(String, bool, bool), DataFrame>>>,
 }
 
 impl Clone for SurveyData {
@@ -56,6 +64,7 @@ impl Clone for SurveyData {
                 Self {
                     frame: Some(new),
                     cache: self.cache.clone(),
+                    value_counts_cache: Arc::clone(&self.value_counts_cache),
                 }
             }
             None => Self::default(),
@@ -151,6 +160,7 @@ impl SurveyData {
         Ok(Self {
             frame: Some(lazyframe),
             cache: Some(Arc::new(cache)),
+            value_counts_cache: Arc::default(),
         })
     }
 
@@ -173,6 +183,7 @@ impl SurveyData {
         Ok(Self {
             frame: Some(frame),
             cache: Some(Arc::new(CacheDir::Temporary(cache))),
+            value_counts_cache: Arc::default(),
         })
     }
 
@@ -197,6 +208,7 @@ impl SurveyData {
         Ok(Self {
             frame: Some(frame),
             cache: Some(Arc::new(CacheDir::Temporary(cache))),
+            value_counts_cache: Arc::default(),
         })
     }
 
@@ -206,6 +218,38 @@ impl SurveyData {
             .map_err(|err| PolarsError::NoData(err.to_string().into()))?
             .clone()
             .collect()
+    }
+
+    pub(crate) fn cached_value_counts(
+        &self,
+        question: &str,
+        count_nan: bool,
+        multiple: bool,
+    ) -> Option<DataFrame> {
+        if matches!(self.cache.as_deref(), Some(CacheDir::Persistent(_))) {
+            return None;
+        }
+
+        self.value_counts_cache
+            .lock()
+            .get(&(question.to_owned(), count_nan, multiple))
+            .cloned()
+    }
+
+    pub(crate) fn cache_value_counts(
+        &self,
+        question: &str,
+        count_nan: bool,
+        multiple: bool,
+        counts: DataFrame,
+    ) {
+        if matches!(self.cache.as_deref(), Some(CacheDir::Persistent(_))) {
+            return;
+        }
+
+        self.value_counts_cache
+            .lock()
+            .insert((question.to_owned(), count_nan, multiple), counts);
     }
 
     /// Dump cached data to parquet datafile
@@ -284,9 +328,12 @@ impl SurveyData {
 
     #[cfg(feature = "pyo3")]
     #[inline]
-    pub(crate) fn create_data_entry_iterator(&self) -> PyResult<DataEntryIterator> {
+    pub(crate) fn create_data_entry_iterator(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<DataEntryIterator> {
         let df = self.lazy()?.clone().collect().map_err(PyPolarsErr::Polars)?;
-        Ok(DataEntryIterator { df, index: 0 })
+        Ok(DataEntryIterator::new(py, df))
     }
 }
 
@@ -332,7 +379,7 @@ impl SurveyData {
     }
 
     pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<Py<DataEntryIterator>> {
-        let iterator = self.create_data_entry_iterator()?;
+        let iterator = self.create_data_entry_iterator(py)?;
         Py::new(py, iterator)
     }
 
@@ -359,6 +406,7 @@ impl SurveyData {
         Self {
             frame: Some(frame.0.lazy()),
             cache: None,
+            value_counts_cache: Arc::default(),
         }
     }
 
@@ -416,18 +464,60 @@ impl std::fmt::Debug for SurveyData {
 pub(crate) struct DataEntryIterator {
     pub df: DataFrame,
     pub index: usize,
+    pub names: Vec<Py<PyString>>,
+    rows: Option<Py<PyIterator>>,
 }
 
 #[cfg(feature = "pyo3")]
 impl DataEntryIterator {
-    pub fn get_row<'a>(
-        &'a self,
+    pub fn new(py: Python<'_>, df: DataFrame) -> Self {
+        let names = df
+            .columns()
+            .iter()
+            .map(|column| PyString::new(py, column.name().as_str()).unbind())
+            .collect();
+        Self {
+            df,
+            index: 0,
+            names,
+            rows: None,
+        }
+    }
+
+    fn python_rows<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyIterator>> {
+        if self.rows.is_none() {
+            let dataframe = PyDataFrame(self.df.clone()).into_bound_py_any(py)?;
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("named", true)?;
+            let rows = dataframe.call_method("iter_rows", (), Some(&kwargs))?;
+            self.rows = Some(PyIterator::from_object(&rows)?.unbind());
+        }
+
+        Ok(self.rows.as_ref().unwrap().bind(py).clone())
+    }
+
+    pub fn get_row<'py>(&self, py: Python<'py>, index: usize) -> PyResult<Bound<'py, PyDict>> {
+        if index >= self.df.height()
+            && let Some(column) = self.df.columns().first()
+        {
+            column.get(index).map_err(PyPolarsErr::Polars)?;
+        }
+
+        self.get_row_unchecked(py, index)
+    }
+
+    fn get_row_unchecked<'py>(
+        &self,
+        py: Python<'py>,
         index: usize,
-    ) -> impl Iterator<Item = PolarsResult<(&'a str, AnyValue<'a>)>> + 'a {
-        self.df.columns().iter().map(move |column| {
-            let value = column.get(index)?;
-            Ok((column.name().as_str(), value))
-        })
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let dict = PyDict::new(py);
+        for (column, name) in self.df.columns().iter().zip(&self.names) {
+            // Iterator bounds checks and get_row's row-level check guarantee valid column indices.
+            let value = unsafe { column.get_unchecked(index) };
+            dict.set_item(name.bind(py), anyvalue_to_python(py, value)?)?;
+        }
+        Ok(dict)
     }
 }
 
@@ -443,15 +533,9 @@ impl DataEntryIterator {
             return Ok(None);
         }
 
-        let dict = PyDict::new(py);
-        for row_result in self.get_row(self.index) {
-            let (colname, coldata) = row_result.map_err(PyPolarsErr::Polars)?;
-            let py_value = anyvalue_to_python(py, coldata)?;
-            dict.set_item(colname, py_value)?
-        }
-
+        let row = self.python_rows(py)?.next().transpose()?;
         self.index += 1;
-        Ok(Some(dict.into_any()))
+        Ok(row)
     }
 }
 

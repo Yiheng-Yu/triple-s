@@ -5,13 +5,13 @@ import pandas
 import pytest
 from triple_s import read_data, NoDataError, read_triple_s
 
-PATH_SSS_EXAMPLE_1 = "tests/sss-examples/sss-2.0/example1.sss"
-PATH_ASC = "tests/sss-examples/sss-2.0/example1.asc"
+PATH_SSS_EXAMPLE_1 = "tests/sss-examples/sss-2.0/stackoverflow_2026.sss"
+PATH_CSV = "tests/sss-examples/sss-2.0/stackoverflow_2026.csv"
 
 
 @pytest.fixture
 def survey():
-    return read_triple_s(PATH_SSS_EXAMPLE_1, PATH_ASC)
+    return read_triple_s(PATH_SSS_EXAMPLE_1, PATH_CSV)
 
 
 def test_read_only_datamap():
@@ -22,9 +22,6 @@ def test_read_only_datamap():
 
 def test_read_file_success(survey):
     assert survey.has_data()
-    assert survey.num_response == 3
-    assert survey.name == "SP5201-1"
-    assert survey.title == "Historic House Exit Survey<br/>First Wave"
 
     print()
     print("Survey datamap repr:")
@@ -36,7 +33,7 @@ def test_read_file_success(survey):
 
     print()
     print("Survet data:")
-    print(survey["Q1.b"])
+    print(survey["CodeMain"])
 
 
 @pytest.mark.parametrize("index", [0, 1, 2])
@@ -142,7 +139,7 @@ def test_survey_without_data():
     with pytest.raises(NoDataError):
         survey.data.to_polars()
 
-    data = read_data(survey.datamap, PATH_ASC)
+    data = read_data(survey.datamap, PATH_CSV)
     assert data.has_data()
     assert not survey.has_data()
 

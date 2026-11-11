@@ -39,7 +39,7 @@ opt-level = 3
 debug-assertions = false
 overflow-checks = true
 incremental = false
-lto = "thin"
+lto = "fat"
 
 [profile.docs]
 inherits = "dev"
