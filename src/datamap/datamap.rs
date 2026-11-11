@@ -6,7 +6,7 @@ use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*, types::PyDict};
 use quick_xml::{Writer, events::BytesText};
-use rayon::prelude::*;
+// use rayon::prelude::*;
 
 #[cfg(feature = "pyo3")]
 use crate::{
@@ -133,7 +133,8 @@ impl Datamap {
         self.record()
             .content()
             .clone()
-            .into_par_iter()
+            // .into_par_iter()
+            .into_iter()
             .map(|question| {
                 let question = question.read();
                 let name = question.name();

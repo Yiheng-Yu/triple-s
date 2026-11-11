@@ -65,10 +65,12 @@ pub fn read_data(datamap: &Datamap, path_data: impl AsRef<Path>) -> PolarsResult
     // prepare to write parquet file
     let mut writer = ParquetWriter::new(parquet_file).batched(&schema)?;
     let mut batch_buffer = Vec::new();
+
     let row_scan = record
         .scan_data_file(path_data, &data_format)
         .map_err(|err| PolarsError::ComputeError(format!("{:?}", err).into()))
         .with_context(|| format!("When trying to read data from: '{}'", path_string))?;
+
     for row in row_scan {
         let row = row
             .map_err(|err| PolarsError::ComputeError(format!("{:?}", err).into()))

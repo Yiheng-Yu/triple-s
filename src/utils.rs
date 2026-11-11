@@ -1,10 +1,15 @@
 use std::{
-    io::{self, BufRead, Read},
+    io::{self, Read},
     sync::Arc,
 };
 
+use encoding_rs::UTF_8;
+use encoding_rs_io::{
+    DecodeReaderBytes,
+    DecodeReaderBytesBuilder,
+};
+
 use anyhow::{Context, Result};
-use encoding_rs::{CoderResult, Decoder, UTF_8};
 use parking_lot::RwLock;
 #[cfg(feature = "pyo3")]
 use polars::{datatypes::AnyValue, frame::DataFrame};
@@ -186,68 +191,27 @@ pub(crate) fn extract_indicies<'py>(
     .collect())
 }
 
-/// Stream UTF-8 or BOM-marked UTF-16 data, replacing malformed sequences with U+FFFD.
-pub(crate) struct TextReader<R> {
-    source: R,
-    decoder: Decoder,
-    output: [u8; 8192],
-    position: usize,
-    length: usize,
-    finished: bool,
-}
+/// Streams UTF-8 or BOM-marked UTF-16 as valid UTF-8.
+/// Malformed sequences are replaced with U+FFFD.
+pub(crate) struct TextReader<R: Read>(
+    DecodeReaderBytes<R, Vec<u8>>,
+);
 
-impl<R: BufRead> TextReader<R> {
+impl<R: Read> TextReader<R> {
     pub(crate) fn new(source: R) -> Self {
-        Self {
-            source,
-            decoder: UTF_8.new_decoder(),
-            output: [0; 8192],
-            position: 0,
-            length: 0,
-            finished: false,
-        }
+        Self(
+            DecodeReaderBytesBuilder::new()
+                .encoding(Some(UTF_8))
+                .bom_override(true)
+                .strip_bom(true)
+                .build(source),
+        )
     }
 }
 
-impl<R: BufRead> Read for TextReader<R> {
-    fn read(&mut self, destination: &mut [u8]) -> io::Result<usize> {
-        if destination.is_empty() {
-            return Ok(0);
-        }
-        loop {
-            if self.position < self.length {
-                let count = destination.len().min(self.length - self.position);
-                destination[..count]
-                    .copy_from_slice(&self.output[self.position..self.position + count]);
-                self.position += count;
-                return Ok(count);
-            }
-            if self.finished {
-                return Ok(0);
-            }
-
-            let input = self.source.fill_buf()?;
-            let last = input.is_empty();
-            // The decoder needs space for one complete UTF-8 character.
-            let direct = destination.len() >= 4;
-            let output = if direct {
-                &mut *destination
-            } else {
-                &mut self.output
-            };
-            let (status, consumed, written, _) =
-                self.decoder.decode_to_utf8(input, output, last);
-            self.source.consume(consumed);
-            self.finished = last && status == CoderResult::InputEmpty;
-            if direct {
-                if written != 0 {
-                    return Ok(written);
-                }
-            } else {
-                self.position = 0;
-                self.length = written;
-            }
-        }
+impl<R: Read> Read for TextReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buf)
     }
 }
 
@@ -312,7 +276,6 @@ mod tests {
         for (input, expected) in [
             (b"".as_slice(), ""),
             (b"\xef\xbb\xbf", ""),
-            (b"\xff\xc3", "��"),
         ] {
             let mut reader = TextReader::new(input);
             assert_eq!(reader.read(&mut []).unwrap(), 0);

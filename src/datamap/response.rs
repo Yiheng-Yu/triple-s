@@ -13,7 +13,6 @@ use pyo3::{
     types::{PyDict, PyFloat, PyInt, PySlice, PyString, PyTuple},
 };
 use quick_xml::{events::BytesText, writer::Writer};
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{
     datamap::{QuestionType, Text},
@@ -178,7 +177,7 @@ impl Response {
     pub fn new(range: Option<DataRange>, values: Vec<Code>) -> Self {
         Self {
             range: lock_it_up(range),
-            values: lock_it_up(values.into_par_iter().map(lock_it_up).collect()),
+            values: lock_it_up(values.into_iter().map(lock_it_up).collect()),
         }
     }
 

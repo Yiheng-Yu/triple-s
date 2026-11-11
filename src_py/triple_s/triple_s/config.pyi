@@ -1,12 +1,10 @@
 from typing import Final, final
 
-__all__ = ["DataFrameFormat", "ResponseDisplay"]
-
 @final
 class DataFrameFormat:
     """
     Specifies the default DataFrame library used for Python output, default `Polars`.
-
+    
     This can be overriden by individal functional calls.
     """
     Pandas: Final[DataFrameFormat]
@@ -23,16 +21,16 @@ class DataFrameFormat:
 @final
 class ResponseDisplay:
     """
-
+    
     Controls whether choice responses are represented by their values or labels.
-
+    
     Notes:
         Members:
-
+    
         ``Value``:
             display code value (the `code` attribute of a `<value>` tag).
             i.e., [1, 1, 2, ...]
-
+    
         ``Label``:
             display choice text (content of a `<value>` tag).
             i.e., ["London", "London", "Scotland", ...]

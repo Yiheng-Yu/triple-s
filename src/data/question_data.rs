@@ -20,6 +20,7 @@ use crate::{
     config::DataFrameFormat,
     error::InternalError,
     prelude::*,
+    datamap::Text,
     utils::{
         anyvalue_to_python,
         convert_date,
@@ -51,9 +52,9 @@ Raises:
 #[derive(Clone)]
 pub struct QuestionData {
     data: ArcLock<SurveyData>,
-    data_label: HashMap<AnyValue<'static>, ArcLock<String>>,
     config: ArcLock<Config>,
     question: Question,
+    // data_label: HashMap<AnyValue<'static>, ArcLock<String>>,
 }
 
 /// ---
@@ -96,10 +97,10 @@ impl QuestionData {
     /// This method returns a Arc<RwLock<String>> for the code label text, this means mutating
     /// code label elsewhere will the hashmap returned from this function. Details on this mutation
     /// behaviour can be found in the documentation in [`Response::response_label_map`].
-    /// 
     #[allow(clippy::mutable_key_type)] // can only be string, float, or int
-    pub fn response_label_map(&self) -> &HashMap<AnyValue<'static>, ArcLock<String>> {
-        &self.data_label
+    pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
+        self.question.response_label_map()
+        // &self.data_label
     }
 
     /// Configuration options
@@ -118,11 +119,11 @@ impl QuestionData {
         question: Question,
         config: ArcLock<Config>,
     ) -> Self {
-        let data_label = question.response_label_map();
+        // let data_label = question.response_label_map();
 
         Self {
             data,
-            data_label,
+            // data_label,
             question,
             config,
         }
@@ -136,7 +137,7 @@ impl QuestionData {
                 QuestionType::Single => self.to_labelled_column_single_choice(),
                 QuestionType::Multiple => self.to_labelled_column_multi_choice(),
                 _ => self.to_value_column(),
-            }
+            },
         }
     }
 
@@ -154,7 +155,6 @@ impl QuestionData {
     /// # Arguments
     /// - `count_nan` (`bool`):
     ///     - Toogle on/ off for counting Null values, note that multi-choices entries of an empty list (`[]`) will also count as `null`
-    /// 
     pub fn value_counts(&self, count_nan: bool) -> PolarsResult<DataFrame> {
         let question_name = self.name();
         let multiple = self.question_type() == QuestionType::Multiple;
@@ -197,17 +197,14 @@ impl QuestionData {
         };
 
         // append data label
+        let label_map = self.response_label_map();
         let labels = df
             .column(&question_name)?
             .as_materialized_series()
             .iter()
-            .map(|value| {
-                self.data_label
-                    .get(&value)
-                    .map(|val| val.read().to_string())
-            })
+            .map(|value| label_map.get(&value).map(|val| val.read().to_string()))
             .collect::<Vec<Option<String>>>();
-        
+
         df.insert_column(1, Series::new("label".into(), labels).into())?;
         Ok(df)
     }
@@ -218,7 +215,8 @@ impl QuestionData {
     }
 
     fn get_datalabel_key_value(&self) -> PolarsResult<(Series, Series)> {
-        let (keys, values): (Vec<AnyValue<'_>>, Vec<String>) = self.response_label_map()
+        let (keys, values): (Vec<AnyValue<'_>>, Vec<String>) = self
+            .response_label_map()
             .iter()
             .map(|(key, value)| (key.clone(), value.clone().read().to_string()))
             .unzip();
@@ -236,7 +234,7 @@ impl QuestionData {
             lit(keys.clone()),
             lit(labels),
             None,
-            Some(DataTypeExpr::Literal(DataType::String)),
+            None::<DataTypeExpr>
         )]);
 
         query
@@ -260,7 +258,8 @@ impl QuestionData {
                 lit(keys.clone()),
                 lit(labels),
                 None,
-                Some(DataTypeExpr::Literal(DataType::String)),
+                None::<DataTypeExpr>
+                // Some(DataTypeExpr::Literal(DataType::String)),
             ))
             .alias(&question_name);
         let query = self.lazy()?.select([query]);

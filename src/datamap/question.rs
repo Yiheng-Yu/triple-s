@@ -766,21 +766,6 @@ impl Question {
             InternalError::new(format!("Integer underflow for position: {}", position))
         })?;
 
-        self.locate_data_csv_at(row, column_index)
-    }
-
-    pub(crate) fn csv_column_index(&self) -> Result<usize> {
-        let position: usize = *self.location().start() as usize;
-        position.checked_sub(1).ok_or_else(|| {
-            InternalError::new(format!("Integer underflow for position: {}", position)).into()
-        })
-    }
-
-    pub(crate) fn locate_data_csv_at<'a>(
-        &self,
-        row: &'a csv::StringRecord,
-        column_index: usize,
-    ) -> Result<&'a str> {
         row.get(column_index).ok_or_else(|| {
             InvalidArg::new(format!(
                 "Has total of {} fields; question '{}' requires field {}",
@@ -848,22 +833,9 @@ impl Question {
 
     /// Parse an extracted fixed-width field or decoded CSV field.
     pub(crate) fn parse_question_value<'a>(&self, data: &'a str) -> Result<AnyValue<'a>> {
-        let question_type = self.question_type().clone();
-        let format = if question_type == QuestionType::Single {
-            self.format().clone()
-        } else {
-            None
-        };
-        self.parse_question_value_with_metadata(data, &question_type, format.as_ref())
-    }
-
-    pub(crate) fn parse_question_value_with_metadata<'a>(
-        &self,
-        data: &'a str,
-        question_type: &QuestionType,
-        format: Option<&CodeFormat>,
-    ) -> Result<AnyValue<'a>> {
         let data = data.trim();
+        let question_type = self.question_type.read().to_owned();
+
         Ok(match question_type {
             QuestionType::Character => AnyValue::String(data),
             QuestionType::None => {
@@ -897,7 +869,7 @@ impl Question {
                 )
             }
             QuestionType::Single => {
-                if format.is_some_and(|format| *format == CodeFormat::Literal) {
+                if self.format().as_ref().is_some_and(|val| val.is_literal()) {
                     AnyValue::String(data)
                 } else {
                     AnyValue::UInt32(data.parse()?)
@@ -2744,6 +2716,13 @@ range. An example would be:
     )]
     #[strum(serialize = "literal")]
     Literal,
+}
+
+impl CodeFormat {
+    /// check if current code format is `literal`
+    pub fn is_literal(&self) -> bool {
+        matches!(self, Self::Literal)
+    }
 }
 
 impl DeepCopy for CodeFormat {

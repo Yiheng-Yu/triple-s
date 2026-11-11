@@ -333,12 +333,9 @@ impl SurveyData {
 
     #[cfg(feature = "pyo3")]
     #[inline]
-    pub(crate) fn create_data_entry_iterator(
-        &self,
-        py: Python<'_>,
-    ) -> PyResult<DataEntryIterator> {
+    pub(crate) fn create_data_entry_iterator(&self) -> PyResult<DataEntryIterator> {
         let df = self.lazy()?.clone().collect().map_err(PyPolarsErr::Polars)?;
-        Ok(DataEntryIterator::new(py, df))
+        Ok(DataEntryIterator::new(df))
     }
 }
 
@@ -384,7 +381,7 @@ impl SurveyData {
     }
 
     pub(crate) fn __iter__(&self, py: Python<'_>) -> PyResult<Py<DataEntryIterator>> {
-        let iterator = self.create_data_entry_iterator(py)?;
+        let iterator = self.create_data_entry_iterator()?;
         Py::new(py, iterator)
     }
 
@@ -469,36 +466,12 @@ impl std::fmt::Debug for SurveyData {
 pub(crate) struct DataEntryIterator {
     pub df: DataFrame,
     pub index: usize,
-    pub names: Vec<Py<PyString>>,
-    rows: Option<Py<PyIterator>>,
 }
 
 #[cfg(feature = "pyo3")]
 impl DataEntryIterator {
-    pub fn new(py: Python<'_>, df: DataFrame) -> Self {
-        let names = df
-            .columns()
-            .iter()
-            .map(|column| PyString::new(py, column.name().as_str()).unbind())
-            .collect();
-        Self {
-            df,
-            index: 0,
-            names,
-            rows: None,
-        }
-    }
-
-    fn python_rows<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyIterator>> {
-        if self.rows.is_none() {
-            let dataframe = PyDataFrame(self.df.clone()).into_bound_py_any(py)?;
-            let kwargs = PyDict::new(py);
-            kwargs.set_item("named", true)?;
-            let rows = dataframe.call_method("iter_rows", (), Some(&kwargs))?;
-            self.rows = Some(PyIterator::from_object(&rows)?.unbind());
-        }
-
-        Ok(self.rows.as_ref().unwrap().bind(py).clone())
+    pub fn new(df: DataFrame) -> Self {
+        Self { df, index: 0 }
     }
 }
 
@@ -514,9 +487,15 @@ impl DataEntryIterator {
             return Ok(None);
         }
 
-        let row = self.python_rows(py)?.next().transpose()?;
+        let row = self.df.slice(self.index as i64, 1);
+
+        let row = PyDataFrame(row)
+            .into_pyobject(py)?
+            .call_method("to_dicts", (), None)? // convert to list of dictionaries
+            .call_method("__getitem__", (0,).into_pyobject(py)?, None)?; // take the first row
+
         self.index += 1;
-        Ok(row)
+        Ok(Some(row))
     }
 }
 
