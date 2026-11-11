@@ -146,3 +146,19 @@ impl Flag for ResponseDisplay {
         }
     }
 }
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_resp_display_eq() {
+        let mut config = Config::default();
+        config.response_display = ResponseDisplay::Label;
+        assert_eq!(config.show_response_label(), true);
+        
+        config.response_display = ResponseDisplay::Value;
+        assert_eq!(config.show_response_label(), false)
+    }
+}

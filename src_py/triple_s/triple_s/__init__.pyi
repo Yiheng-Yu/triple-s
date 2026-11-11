@@ -1355,7 +1355,10 @@ class Response:
         String categorical responses do not support a range.
         """
     @property
-    def response_label(self, /) -> dict: ...
+    def response_label(self, /) -> dict:
+        """
+        Dictionary of { code_value: code_label }
+        """
     def set_value(self, /, value: Code) -> None:
         """
         Update or append a code, rejecting different Polars data types.

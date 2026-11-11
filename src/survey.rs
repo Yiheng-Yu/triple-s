@@ -1,23 +1,21 @@
 #[cfg(feature = "pyo3")]
 use std::sync::Arc;
-use std::{borrow::Cow, collections::HashMap};
+use std::collections::HashMap;
 
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
-use polars::{frame::row::Row, prelude::*};
+use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
     IntoPyObjectExt,
     exceptions,
     prelude::*,
-    types::{PyDict, PyList, PyString},
 };
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
-use rayon::prelude::*;
 
 #[cfg(feature = "pyo3")]
 use crate::{
-    SurveyInfo, config::{DataFrameFormat, ResponseDisplay}, data::DataEntryIterator, prelude::*, utils::{anyvalue_to_python, get_type_name, normalize_py_index, polars_to_pandas},
+    SurveyInfo, config::{DataFrameFormat, ResponseDisplay}, prelude::*, utils::{get_type_name, normalize_py_index, polars_to_pandas},
 };
 use crate::{
     data::{QuestionData, SurveyData, config::Config},
@@ -346,11 +344,12 @@ impl Survey {
             let row_index = normalize_py_index(index, height)
                 .ok_or(exceptions::PyIndexError::new_err(index))?;
 
-            let show_resp_label = self.config().response_display == ResponseDisplay::Label;
+            let show_resp_label = self.config().show_response_label();
             let row = self.get_row(row_index, show_resp_label).map_err(PyPolarsErr::Polars)?;
 
             PyDataFrame(row).into_bound_py_any(py)?
-                .call_method("to_dicts", (), None)
+                .call_method("to_dicts", (), None)?  // convert to list of dictionaries
+                .call_method("__getitem__", (0, ).into_pyobject(py)?, None) // take the first row
 
         // get data for specific question
         } else if let Ok(question_name) = index.extract::<&str>() {
@@ -379,11 +378,11 @@ impl Survey {
         let mut lazy = self.data().lazy()?.clone();
 
         let label_query = if self.config().show_response_label() {
-            self.question_names().into_iter().map(col).collect()
-        } else {
             let label_lookup = self.datamap().response_label_map();
             let schema = lazy.collect_schema().map_err(PyPolarsErr::Polars)?;
             Self::label_response_values(schema, &label_lookup).map_err(PyPolarsErr::Polars)?
+        } else {
+            self.question_names().into_iter().map(col).collect()
         };
 
         let n_rows = self.num_response().map_err(PyPolarsErr::Polars)? as i64;
@@ -645,7 +644,8 @@ impl ResponseIterator {
 
         let row = self.get_row(self.index).map_err(PyPolarsErr::Polars)?;
         let row = PyDataFrame(row).into_bound_py_any(py)?;
-        let row = row.call_method("to_dicts", (), None)?;
+        let row = row.call_method("to_dicts", (), None)?  // convert to list of dictionaries
+            .call_method("__getitem__", (0,).into_pyobject(py)?, None)?;  // take the first row
 
         self.index += 1;
         Ok(Some(row))

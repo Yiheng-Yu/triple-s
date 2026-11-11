@@ -19,7 +19,7 @@ use tempfile::TempPath;
 
 use crate::error::{InvalidArg, NoDataError};
 #[cfg(feature = "pyo3")]
-use crate::utils::{anyvalue_to_python, polars_to_pandas};
+use crate::utils::polars_to_pandas;
 
 /// The backing file and its cleanup policy.
 #[derive(Debug)]
@@ -499,30 +499,6 @@ impl DataEntryIterator {
         }
 
         Ok(self.rows.as_ref().unwrap().bind(py).clone())
-    }
-
-    pub fn get_row<'py>(&self, py: Python<'py>, index: usize) -> PyResult<Bound<'py, PyDict>> {
-        if index >= self.df.height()
-            && let Some(column) = self.df.columns().first()
-        {
-            column.get(index).map_err(PyPolarsErr::Polars)?;
-        }
-
-        self.get_row_unchecked(py, index)
-    }
-
-    fn get_row_unchecked<'py>(
-        &self,
-        py: Python<'py>,
-        index: usize,
-    ) -> PyResult<Bound<'py, PyDict>> {
-        let dict = PyDict::new(py);
-        for (column, name) in self.df.columns().iter().zip(&self.names) {
-            // Iterator bounds checks and get_row's row-level check guarantee valid column indices.
-            let value = unsafe { column.get_unchecked(index) };
-            dict.set_item(name.bind(py), anyvalue_to_python(py, value)?)?;
-        }
-        Ok(dict)
     }
 }
 

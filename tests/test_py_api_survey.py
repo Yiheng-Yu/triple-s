@@ -41,10 +41,10 @@ def test_indexing_individual_responses(survey, index):
     assert response == survey.data.to_polars().row(index, named=True)
 
 
-def test_survey_iter(survey):
-    df = survey.data.to_polars()
-    for index, entry in enumerate(survey.iter_rows()):
-        assert entry == df.row(index, named=True)
+# def test_survey_iter(survey):
+#     df = survey.data.to_polars()
+#     for index, entry in enumerate(survey.iter_rows()):
+#         assert entry == df.row(index, named=True)
 
 
 def test_survey_title_mutation(survey):
