@@ -235,60 +235,60 @@ impl Survey {
         self.datamap().get_response_label_hashmap()
     }
 
-    fn to_labelled_dataframe(&self) -> PolarsResult<DataFrame> {
-        // convert response value to response label
-        let df = self.data().lazy()?.clone().collect()?;
-        let data_label = self.response_labels()?.lazy();
+    // fn to_labelled_dataframe(&self) -> PolarsResult<DataFrame> {
+    //     // convert response value to response label
+    //     let df = self.data().lazy()?.clone().collect()?;
+    //     let data_label = self.response_labels()?.lazy();
 
-        let schema = df.schema().clone();
-        let query = schema
-            .iter()
-            .map(|(colname, dtype)| {
-                let colname = colname.clone();
-                let (dtype, is_multi) = match dtype {
-                    DataType::List(inner) if inner.as_ref() == &DataType::UInt32 => {
-                        (DataType::UInt32, true)
-                    }
-                    _ => (dtype.clone(), false),
-                };
-                let resposne_mapping = data_label
-                    .clone()
-                    .filter(col("question_name").eq(lit(colname.to_string())))
-                    .with_column(col("response").cast(dtype))
-                    .collect()?;
+    //     let schema = df.schema().clone();
+    //     let query = schema
+    //         .iter()
+    //         .map(|(colname, dtype)| {
+    //             let colname = colname.clone();
+    //             let (dtype, is_multi) = match dtype {
+    //                 DataType::List(inner) if inner.as_ref() == &DataType::UInt32 => {
+    //                     (DataType::UInt32, true)
+    //                 }
+    //                 _ => (dtype.clone(), false),
+    //             };
+    //             let resposne_mapping = data_label
+    //                 .clone()
+    //                 .filter(col("question_name").eq(lit(colname.to_string())))
+    //                 .with_column(col("response").cast(dtype))
+    //                 .collect()?;
 
-                let old = resposne_mapping.column("response")?.implode()?.into_series();
+    //             let old = resposne_mapping.column("response")?.implode()?.into_series();
 
-                // return as-is if no mathcing was found
-                if old.is_empty() {
-                    return Ok(col(colname));
-                }
+    //             // return as-is if no mathcing was found
+    //             if old.is_empty() {
+    //                 return Ok(col(colname));
+    //             }
 
-                let new = resposne_mapping.column("label")?.implode()?.into_series();
-                if new.is_empty() {
-                    return Ok(col(colname));
-                }
+    //             let new = resposne_mapping.column("label")?.implode()?.into_series();
+    //             if new.is_empty() {
+    //                 return Ok(col(colname));
+    //             }
 
-                if !is_multi {
-                    Ok(col(colname.clone()).replace_strict(
-                        lit(old),
-                        lit(new),
-                        Some(col(colname)),
-                        Some(DataTypeExpr::Literal(DataType::String)),
-                    ))
-                } else {
-                    Ok(col(colname.clone()).list().eval(element().replace_strict(
-                        lit(old),
-                        lit(new),
-                        Some(element()),
-                        Some(DataTypeExpr::Literal(DataType::String)),
-                    )))
-                }
-            })
-            .collect::<PolarsResult<Vec<Expr>>>()?;
+    //             if !is_multi {
+    //                 Ok(col(colname.clone()).replace_strict(
+    //                     lit(old),
+    //                     lit(new),
+    //                     Some(col(colname)),
+    //                     Some(DataTypeExpr::Literal(DataType::String)),
+    //                 ))
+    //             } else {
+    //                 Ok(col(colname.clone()).list().eval(element().replace_strict(
+    //                     lit(old),
+    //                     lit(new),
+    //                     Some(element()),
+    //                     Some(DataTypeExpr::Literal(DataType::String)),
+    //                 )))
+    //             }
+    //         })
+    //         .collect::<PolarsResult<Vec<Expr>>>()?;
 
-        df.lazy().select(query).collect()
-    }
+    //     df.lazy().select(query).collect()
+    // }
 
     #[cfg(feature = "pyo3")]
     #[inline]

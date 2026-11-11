@@ -31,6 +31,26 @@ def iter_rows_with_label(survey):
         _ = row
 
 
+def get_row_with_value(survey):
+    survey.response_display = "value"
+    _ = survey[0]
+
+
+def get_row_with_label(survey):
+    survey.response_display = "label"
+    _ = survey[0]
+
+
+def iter_survey_data(survey):
+    for row in survey.data:
+        _ = row
+
+
+def iter_questions(survey):
+    for question in survey.iter_questions():
+        _ = question
+
+
 def value_counts(survey):
     for question in survey.iter_questions():
         _ = question.value_counts()
@@ -52,6 +72,22 @@ def test_iter_rows_with_value(benchmark, survey):
 
 def test_iter_rows_with_labbel(benchmark, survey):
     _ = benchmark(iter_rows_with_label, survey)
+
+
+def test_get_row_with_value(benchmark, survey):
+    _ = benchmark(get_row_with_value, survey)
+
+
+def test_get_row_with_label(benchmark, survey):
+    _ = benchmark(get_row_with_label, survey)
+
+
+def test_iter_survey_data(benchmark, survey):
+    _ = benchmark(iter_survey_data, survey)
+
+
+def test_iter_questions(benchmark, survey):
+    _ = benchmark(iter_questions, survey)
 
 
 def test_value_counts(benchmark, survey):
