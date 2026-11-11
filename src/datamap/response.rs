@@ -117,16 +117,17 @@ impl Response {
     ///
     /// ```rust
     /// use triple_s::{Code, Response};
+    /// use polars::prelude::AnyValue;
     ///
     /// let original = Response::new(None, vec![Code::new_unsigned(3, "Before", None, None)]);
     ///
     /// // Get first copy
     /// let label_map_1 = original.response_label_map();
-    /// let label_copy_1 = label_map_1.get(&AnyValue::UInt32(3)).ok_or("Key not found")?;
+    /// let label_copy_1 = label_map_1.get(&AnyValue::UInt32(3)).expect("Key not found");
     ///
     /// // Get second copy
     /// let mut label_map_2 = original.response_label_map();
-    /// let mut label_copy_2 = label_map_2.get_mut(&AnyValue::UInt32(3)).ok_or("Key not found")?;
+    /// let mut label_copy_2 = label_map_2.get_mut(&AnyValue::UInt32(3)).expect("Key not found");
     ///
     /// // Value of the first and second copy are the same
     /// assert_eq!(label_copy_1.read().as_str(), "Before");
