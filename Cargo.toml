@@ -40,7 +40,6 @@ debug-assertions = false
 overflow-checks = true
 incremental = false
 lto = "fat"
-codegen-units = 16
 
 [profile.docs]
 inherits = "dev"
