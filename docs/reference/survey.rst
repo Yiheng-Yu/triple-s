@@ -33,7 +33,7 @@ Attributes
 
 Methods
 -------
-.. autoattribute:: Survey.response_labels
+.. autoattribute:: Survey.response_label_map
    :annotation: -> polars.DataFrame | pandas.DataFrame
 .. automethod:: Survey.has_data() -> bool
 .. automethod:: Survey.iter_rows() -> Generator[dict[str, Any]]

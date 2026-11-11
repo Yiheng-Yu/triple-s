@@ -111,14 +111,44 @@ impl Response {
 
     /// Get the lookup table for items in the [`Response::values()`] field, as: { [`Code::value`]: [`Code::label()`] }
     ///
-    /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
-    /// method will not mutate the caller.
-    pub fn response_label(&self) -> HashMap<AnyValue<'static>, Text> {
+    /// This method returns a Arc<RwLock<String>> for the code label text, this means mutating
+    /// code label elsewhere will the hashmap returned from this function.
+    ///
+    /// # Example: Shared mutation of response label mapping
+    ///
+    /// ```rust
+    /// use triple_s::{Code, Response};
+    ///
+    /// let original = Response::new(None, vec![Code::new_unsigned(3, "Before", None, None)]);
+    ///
+    /// // Get first copy
+    /// let label_map_1 = original.response_label_map();
+    /// let label_copy_1 = label_map_1.get(&AnyValue::UInt32(3)).ok_or("Key not found")?;
+    ///
+    /// // Get second copy
+    /// let mut label_map_2 = original.response_label_map();
+    /// let mut label_copy_2 = label_map_2.get_mut(&AnyValue::UInt32(3)).ok_or("Key not found")?;
+    ///
+    /// // Value of the first and second copy are the same
+    /// assert_eq!(label_copy_1.read().as_str(), "Before");
+    /// assert_eq!(label_copy_2.read().as_str(), "Before");
+    ///
+    /// // Updating value of the second copy...
+    /// *label_copy_2.write() = "After".into();
+    ///
+    /// // And the value for the first copy also changed.
+    /// assert_eq!(label_copy_1.read().as_str(), "After");
+    ///
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
         self.values()
             .iter()
-            .map(|item| {
-                let item = item.read();
-                (item.value().clone(), item.label().deepcopy())
+            .map(|code| {
+                let code = code.read();
+                let code_value = code.value();
+                let code_label = code.label().value.clone();
+                (code_value, code_label)
             })
             .collect()
     }
@@ -627,6 +657,7 @@ impl Response {
         )
     }
 
+    /// Dictionary of { code_value: code_label }
     #[getter(response_label)]
     pub(crate) fn py_get_response_label<'py>(
         &self,
@@ -2361,5 +2392,23 @@ mod test {
         cast.set_start(AnyValue::UInt32(2)).unwrap();
 
         assert_eq!(original.start().clone(), AnyValue::Int32(3));
+    }
+
+    #[test]
+    #[allow(unused_mut)]
+    fn test_mutate_response_label_text() {
+        let original = Response::new(None, vec![Code::new_unsigned(3, "Before", None, None)]);
+
+        let label_map_1 = original.response_label_map();
+        let label_copy_1 = label_map_1.get(&AnyValue::UInt32(3)).unwrap();
+
+        let mut label_map_2 = original.response_label_map();
+        let mut label_copy_2 = label_map_2.get_mut(&AnyValue::UInt32(3)).unwrap();
+
+        assert_eq!(label_copy_1.read().as_str(), "Before");
+        assert_eq!(label_copy_2.read().as_str(), "Before");
+
+        *label_copy_2.write() = "After".into();
+        assert_eq!(label_copy_1.read().as_str(), "After");
     }
 }

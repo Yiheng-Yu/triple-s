@@ -22,6 +22,13 @@ pub struct Config {
     pub response_display: ResponseDisplay,
 }
 
+impl Config {
+    /// boolean for checking if `response_display == ResponseDisplay::Label`
+    pub fn show_response_label(&self) -> bool {
+        self.response_display == ResponseDisplay::Label
+    }
+}
+
 /// Specifies the default DataFrame library used for Python output, default `Polars`.
 ///
 /// This can be overriden by individal functional calls.
@@ -137,5 +144,21 @@ impl Flag for ResponseDisplay {
             Self::Value => "value".into(),
             Self::Label => "label".into(),
         }
+    }
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_resp_display_eq() {
+        let mut config = Config::default();
+        config.response_display = ResponseDisplay::Label;
+        assert_eq!(config.show_response_label(), true);
+        
+        config.response_display = ResponseDisplay::Value;
+        assert_eq!(config.show_response_label(), false)
     }
 }

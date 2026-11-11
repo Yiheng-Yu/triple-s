@@ -88,7 +88,7 @@ def test_get_empty_datamap():
         assert container.get("") is None
 
 
-def test_question_response_labels():
+def test_question_response_label_map():
     labels = [
         dict(value=1, label="item 1"),
         dict(value=2, label="item 2"),

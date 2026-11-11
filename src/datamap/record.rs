@@ -354,8 +354,10 @@ impl Record {
                 )))
             }
             DataFormat::Csv => {
-                let csv_columns =
-                    questions.iter().map(Question::csv_column_index).collect::<Result<Vec<_>>>()?;
+                let csv_columns = questions
+                    .iter()
+                    .map(Question::csv_column_index)
+                    .collect::<Result<Vec<_>>>()?;
                 let rows = csv::ReaderBuilder::new()
                     .has_headers(false)
                     .flexible(true)
@@ -371,13 +373,14 @@ impl Record {
                             .zip(&parsers)
                             .zip(&csv_columns)
                             .map(|((question, (question_type, format)), column_index)| {
-                                let field =
-                                    question.locate_data_csv_at(&row, *column_index).with_context(|| {
-                                        format!(
-                                            "When trying to extract data for question `{}`",
-                                            question.name()
-                                        )
-                                    })?;
+                                let field = question
+                                    .locate_data_csv_at(&row, *column_index)
+                                    .with_context(|| {
+                                    format!(
+                                        "When trying to extract data for question `{}`",
+                                        question.name()
+                                    )
+                                })?;
                                 Ok(question
                                     .parse_question_value_with_metadata(
                                         field,

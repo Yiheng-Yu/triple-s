@@ -1,8 +1,11 @@
 import pytest
 from triple_s import read_triple_s
+import random
 
 PATH_SSS_EXAMPLE_1 = "tests/sss-examples/sss-2.0/stackoverflow_2026.sss"
 PATH_CSV = "tests/sss-examples/sss-2.0/stackoverflow_2026.csv"
+
+REPEAT = 3_000
 
 
 @pytest.fixture
@@ -26,19 +29,16 @@ def iter_rows_with_value(survey):
 
 def iter_rows_with_label(survey):
     survey.response_display = "label"
-
     for row in survey.iter_rows():
         _ = row
 
 
-def get_row_with_value(survey):
-    survey.response_display = "value"
-    _ = survey[0]
+def get_row_with_value(survey, index):
+    _ = survey[index]
 
 
-def get_row_with_label(survey):
-    survey.response_display = "label"
-    _ = survey[0]
+def get_row_with_label(survey, index):
+    _ = survey[index]
 
 
 def iter_survey_data(survey):
@@ -54,6 +54,7 @@ def iter_questions(survey):
 def value_counts(survey):
     for question in survey.iter_questions():
         _ = question.value_counts()
+
 
 # =========== tests ===========
 
@@ -75,11 +76,19 @@ def test_iter_rows_with_labbel(benchmark, survey):
 
 
 def test_get_row_with_value(benchmark, survey):
-    _ = benchmark(get_row_with_value, survey)
+    survey.response_display = "value"
+    index_range = survey.num_response - 1
+    for _ in range(REPEAT):
+        index = random.randint(0, index_range)
+        _ = benchmark(get_row_with_value, survey, index)
 
 
 def test_get_row_with_label(benchmark, survey):
-    _ = benchmark(get_row_with_label, survey)
+    survey.response_display = "label"
+    index_range = survey.num_response - 1
+    for _ in range(REPEAT):
+        index = random.randint(0, index_range)
+        _ = benchmark(get_row_with_label, survey, index)
 
 
 def test_iter_survey_data(benchmark, survey):

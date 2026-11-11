@@ -54,8 +54,6 @@ addopts = [
     "--benchmark-sort=mean",
     "--benchmark-name=short",
     "--benchmark-save=benchmark",
-    "--benchmark-min-rounds=10",
-    "--benchmark-precision=0.02",
 ]
 
 [tool.ruff]

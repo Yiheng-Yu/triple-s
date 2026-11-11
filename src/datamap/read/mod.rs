@@ -137,8 +137,9 @@ pub fn read_from_reader<R: BufRead>(mut input: R) -> Result<(Datamap, EventLog)>
     let builder = match file_type {
         FileType::Classic => {
             let input = BufReader::new(Cursor::new(prefix).chain(input));
-            classic::create_survey_builder(input.lines())
-                .with_context(|| format!("trying to create survey builder from the data file"))?
+            classic::create_survey_builder(input.lines()).with_context(|| {
+                format!("trying to create survey builder from the data file")
+            })?
         }
         FileType::Xml => {
             input.read_to_end(&mut prefix)?;
@@ -148,8 +149,9 @@ pub fn read_from_reader<R: BufRead>(mut input: R) -> Result<(Datamap, EventLog)>
             let (text, _) = encoding.decode_without_bom_handling(&prefix);
             let mut reader = XmlReader::from_str(&text);
             reader.config_mut().trim_text(true);
-            xml::create_survey_builder(reader)
-                .with_context(|| format!("trying to create survey builder from the data file"))?
+            xml::create_survey_builder(reader).with_context(|| {
+                format!("trying to create survey builder from the data file")
+            })?
         }
     };
     builder.build()
@@ -429,10 +431,16 @@ impl QuestionBuilder {
             .attributes
             .remove("label")
             .ok_or(error::MissingAttributeError::new("variable", "label"))
-            .with_context(|| format!("When trying to get question title for question {:?}", question_name))?;
+            .with_context(|| {
+                format!(
+                    "When trying to get question title for question {:?}",
+                    question_name
+                )
+            })?;
 
-        let label = parse_text(label, is_classic)
-            .with_context(|| format!("When parsing title text for question {:?}", question_name))?;
+        let label = parse_text(label, is_classic).with_context(|| {
+            format!("When parsing title text for question {:?}", question_name)
+        })?;
         *output.label_mut() = label;
 
         let location = self

@@ -497,22 +497,14 @@ impl Question {
         &mut self.response
     }
 
-    /// Get the lookup table for items in the [`Question::Response()::values()`] field, as: { [`Code::value`]: [`Code::label()`] }
+    /// Get the lookup table for items in the [`Question::response::values()`] field,
+    /// formatted as: { [`Code::value`]: [`Code::label()`] }
     ///
-    /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
-    /// method will not mutate the caller.
-    pub fn response_label(&self) -> HashMap<AnyValue<'static>, Text> {
-        self.response_label_iterator().collect()
-    }
-
-    #[inline]
-    pub(crate) fn response_label_iterator(
-        &self,
-    ) -> impl Iterator<Item = (AnyValue<'static>, Text)> + use<> {
-        self.response().values().clone().into_iter().map(|item| {
-            let item = item.read();
-            (item.value().clone().into_static(), item.label().deepcopy())
-        })
+    /// This method returns a Arc<RwLock<String>> for the code label text, this means mutating
+    /// code label elsewhere will the hashmap returned from this function. Details on this mutation
+    /// behaviour can be found in the documentation in [`Response::response_label_map`].
+    pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
+        self.response().response_label_map()
     }
 }
 
