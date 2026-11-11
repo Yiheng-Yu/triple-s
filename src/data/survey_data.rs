@@ -7,12 +7,10 @@ use std::{
 use anyhow::Result;
 use parking_lot::Mutex;
 use polars::prelude::*;
+
 #[cfg(feature = "pyo3")]
-use pyo3::{
-    IntoPyObjectExt,
-    prelude::*,
-    types::{PyDict, PyIterator, PyString},
-};
+use pyo3::prelude::*;
+
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use tempfile::TempPath;

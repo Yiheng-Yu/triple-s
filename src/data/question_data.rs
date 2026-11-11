@@ -54,7 +54,6 @@ pub struct QuestionData {
     data: ArcLock<SurveyData>,
     config: ArcLock<Config>,
     question: Question,
-    // data_label: HashMap<AnyValue<'static>, ArcLock<String>>,
 }
 
 /// ---
@@ -100,7 +99,6 @@ impl QuestionData {
     #[allow(clippy::mutable_key_type)] // can only be string, float, or int
     pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
         self.question.response_label_map()
-        // &self.data_label
     }
 
     /// Configuration options
@@ -119,14 +117,7 @@ impl QuestionData {
         question: Question,
         config: ArcLock<Config>,
     ) -> Self {
-        // let data_label = question.response_label_map();
-
-        Self {
-            data,
-            // data_label,
-            question,
-            config,
-        }
+        Self { data, question, config }
     }
 
     /// Export contents to a polars [`Column`]
@@ -259,7 +250,6 @@ impl QuestionData {
                 lit(labels),
                 None,
                 None::<DataTypeExpr>
-                // Some(DataTypeExpr::Literal(DataType::String)),
             ))
             .alias(&question_name);
         let query = self.lazy()?.select([query]);
