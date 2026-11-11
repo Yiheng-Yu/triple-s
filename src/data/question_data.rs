@@ -94,8 +94,8 @@ impl QuestionData {
     /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
     /// method will not mutate the caller.
     #[allow(clippy::mutable_key_type)] // can only be string, float, or int
-    pub fn response_label(&self) -> HashMap<AnyValue<'static>, Text> {
-        self.question.response_label()
+    pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
+        self.question.response_label_map()
     }
 
     /// Configuration options
@@ -150,43 +150,41 @@ impl QuestionData {
     pub fn value_counts(&self, count_nan: bool) -> PolarsResult<DataFrame> {
         let question_name = self.name();
         let multiple = self.question_type() == QuestionType::Multiple;
-        let cached_counts = self
-            .data
-            .read()
-            .cached_value_counts(&question_name, count_nan, multiple);
+        let cached_counts =
+            self.data.read().cached_value_counts(&question_name, count_nan, multiple);
         let mut df = match cached_counts {
             Some(counts) => counts,
             None => {
-            let series = if multiple {
-                let config = ExplodeOptions {
-                    empty_as_null: true,
-                    keep_nulls: true, // cell with value `null` gets exploded into `null`
+                let series = if multiple {
+                    let config = ExplodeOptions {
+                        empty_as_null: true,
+                        keep_nulls: true, // cell with value `null` gets exploded into `null`
+                    };
+                    self.to_value_column()?.explode(config)?.take_materialized_series()
+                } else {
+                    self.to_value_column()?.take_materialized_series()
                 };
-                self.to_value_column()?.explode(config)?.take_materialized_series()
-            } else {
-                self.to_value_column()?.take_materialized_series()
-            };
 
-            let series = if count_nan {
-                series.drop_nulls()
-            } else {
-                series
-            };
+                let series = if count_nan {
+                    series.drop_nulls()
+                } else {
+                    series
+                };
 
-            let counts = series.value_counts(true, true, "count".into(), false)?.sort(
-                [&question_name],
-                SortMultipleOptions::default()
-                    .with_nulls_last(true)
-                    .with_maintain_order(false)
-                    .with_order_descending(false),
-            )?;
-            self.data.read().cache_value_counts(
-                &question_name,
-                count_nan,
-                multiple,
-                counts.clone(),
-            );
-            counts
+                let counts = series.value_counts(true, true, "count".into(), false)?.sort(
+                    [&question_name],
+                    SortMultipleOptions::default()
+                        .with_nulls_last(true)
+                        .with_maintain_order(false)
+                        .with_order_descending(false),
+                )?;
+                self.data.read().cache_value_counts(
+                    &question_name,
+                    count_nan,
+                    multiple,
+                    counts.clone(),
+                );
+                counts
             }
         };
 
@@ -217,7 +215,9 @@ impl QuestionData {
 
     fn get_datalabel_key_value(&self) -> PolarsResult<(Series, Series)> {
         let (keys, values): (Vec<AnyValue<'_>>, Vec<String>) =
-            self.response_label().into_iter().map(|(key, val)| (key, val.value())).unzip();
+            self.response_label_map().into_iter().map(|(key, val)| 
+                (key, val.read().clone())
+            ).unzip();
         let keys = Series::from_any_values(self.name().into(), &keys, true)?;
         let labels = Series::new("label".into(), values);
         Ok((keys, labels))

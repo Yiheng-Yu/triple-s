@@ -2,11 +2,11 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
+use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*, types::PyDict};
 use quick_xml::{Writer, events::BytesText};
 use rayon::prelude::*;
-use polars::prelude::*;
 
 #[cfg(feature = "pyo3")]
 use crate::{
@@ -127,21 +127,19 @@ impl Datamap {
 
     /// Returns a hashmap of:
     /// {question_name: {respons_code: response_label}}
-    pub fn get_response_label_hashmap(&self) -> HashMap<String, HashMap<AnyValue<'static>, PlSmallStr>> {
-        self
-            .record()
+    pub fn response_label_map(
+        &self,
+    ) -> HashMap<PlSmallStr, HashMap<AnyValue<'static>, ArcLock<String>>> {
+        self.record()
             .content()
             .clone()
             .into_par_iter()
             .map(|question| {
                 let question = question.read();
                 let name = question.name();
-                let question_lookup = question
-                    .response_label_iterator()
-                    .into_iter()
-                    .map(|(key, value)| (key, PlSmallStr::from_string(value.value())))
-                    .collect::<HashMap<AnyValue<'static>, PlSmallStr>>();
-                (name, question_lookup)
+                let question_lookup = question.response_label_map();
+
+                (name.into(), question_lookup)
             })
             .collect()
     }

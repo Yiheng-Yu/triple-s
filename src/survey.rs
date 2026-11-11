@@ -1,13 +1,13 @@
-use std::collections::HashMap;
-
 #[cfg(feature = "pyo3")]
 use std::sync::Arc;
+use std::{borrow::Cow, collections::HashMap};
 
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use polars::{frame::row::Row, prelude::*};
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    IntoPyObjectExt, exceptions,
+    IntoPyObjectExt,
+    exceptions,
     prelude::*,
     types::{PyDict, PyList, PyString},
 };
@@ -17,11 +17,7 @@ use rayon::prelude::*;
 
 #[cfg(feature = "pyo3")]
 use crate::{
-    SurveyInfo,
-    config::{DataFrameFormat, ResponseDisplay},
-    data::DataEntryIterator,
-    prelude::*,
-    utils::{anyvalue_to_python, get_type_name, polars_to_pandas},
+    SurveyInfo, config::{DataFrameFormat, ResponseDisplay}, data::DataEntryIterator, prelude::*, utils::{anyvalue_to_python, get_type_name, normalize_py_index, polars_to_pandas},
 };
 use crate::{
     data::{QuestionData, SurveyData, config::Config},
@@ -154,33 +150,29 @@ impl Survey {
     /// │ Q8            ┆ "C"      ┆ More than 1 years time          │
     /// └───────────────┴──────────┴─────────────────────────────────┘
     /// ```
-    pub fn response_labels(&self) -> PolarsResult<DataFrame> {
-        let responses = self
-            .datamap()
-            .record()
-            .content()
-            .clone()
-            .into_par_iter()
-            .flat_map_iter(|question| {
-                let question = question.read();
-                let name = question.name().to_owned();
-                question.response_label_iterator().map(move |(key, value)| {
-                    Row::new(vec![
-                        AnyValue::StringOwned(name.clone().into()),
-                        AnyValue::StringOwned(key.to_string().into()),
-                        AnyValue::StringOwned(value.value().into()),
-                    ])
-                })
-            })
-            .collect::<Vec<Row<'_>>>();
+    pub fn response_label_map(&self) -> PolarsResult<DataFrame> {
+        let maps = self.datamap.response_label_map();
 
-        let schema = Schema::from_iter([
-            Field::new("question_name".into(), DataType::String),
-            Field::new("response".into(), DataType::String),
-            Field::new("label".into(), DataType::String),
-        ]);
+        let capacity: usize = maps.values().map(|m| m.len()).sum();
+        let mut names = StringChunkedBuilder::new("question_name".into(), capacity);
+        let mut responses = StringChunkedBuilder::new("response".into(), capacity);
+        let mut labels = StringChunkedBuilder::new("label".into(), capacity);
 
-        DataFrame::from_rows_and_schema(&responses, &schema)
+        for (name, map) in maps {
+            for (code, value) in map {
+                names.append_value(name.as_str());
+                responses.append_value(code.to_string());
+
+                let guard = value.read();
+                labels.append_value(guard.as_str());
+            }
+        }
+
+        DataFrame::new_infer_height(vec![
+            names.finish().into_column(),
+            responses.finish().into_column(),
+            labels.finish().into_column(),
+        ])
     }
 }
 
@@ -227,118 +219,65 @@ impl Survey {
         ))
     }
 
-    /// Returns a hashmap of:
-    ///     {question_name: {respons_code: response_label}}
-    pub fn get_response_label_hashmap(
-        &self,
-    ) -> HashMap<String, HashMap<AnyValue<'static>, PlSmallStr>> {
-        self.datamap().get_response_label_hashmap()
-    }
+    /// Get data for specific row
+    ///
+    /// Args:
+    ///
+    /// `response_label`:
+    ///     Set `true` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`), set `false` to show values instead (`[1, 1, 2, ...]`).
+    pub fn get_row(&self, row_index: usize, response_label: bool) -> PolarsResult<DataFrame> {
+        let data = self.data().get_row(row_index)?;
 
-    // fn to_labelled_dataframe(&self) -> PolarsResult<DataFrame> {
-    //     // convert response value to response label
-    //     let df = self.data().lazy()?.clone().collect()?;
-    //     let data_label = self.response_labels()?.lazy();
-
-    //     let schema = df.schema().clone();
-    //     let query = schema
-    //         .iter()
-    //         .map(|(colname, dtype)| {
-    //             let colname = colname.clone();
-    //             let (dtype, is_multi) = match dtype {
-    //                 DataType::List(inner) if inner.as_ref() == &DataType::UInt32 => {
-    //                     (DataType::UInt32, true)
-    //                 }
-    //                 _ => (dtype.clone(), false),
-    //             };
-    //             let resposne_mapping = data_label
-    //                 .clone()
-    //                 .filter(col("question_name").eq(lit(colname.to_string())))
-    //                 .with_column(col("response").cast(dtype))
-    //                 .collect()?;
-
-    //             let old = resposne_mapping.column("response")?.implode()?.into_series();
-
-    //             // return as-is if no mathcing was found
-    //             if old.is_empty() {
-    //                 return Ok(col(colname));
-    //             }
-
-    //             let new = resposne_mapping.column("label")?.implode()?.into_series();
-    //             if new.is_empty() {
-    //                 return Ok(col(colname));
-    //             }
-
-    //             if !is_multi {
-    //                 Ok(col(colname.clone()).replace_strict(
-    //                     lit(old),
-    //                     lit(new),
-    //                     Some(col(colname)),
-    //                     Some(DataTypeExpr::Literal(DataType::String)),
-    //                 ))
-    //             } else {
-    //                 Ok(col(colname.clone()).list().eval(element().replace_strict(
-    //                     lit(old),
-    //                     lit(new),
-    //                     Some(element()),
-    //                     Some(DataTypeExpr::Literal(DataType::String)),
-    //                 )))
-    //             }
-    //         })
-    //         .collect::<PolarsResult<Vec<Expr>>>()?;
-
-    //     df.lazy().select(query).collect()
-    // }
-
-    #[cfg(feature = "pyo3")]
-    #[inline]
-    fn create_response_iterator(&self, py: Python<'_>) -> PyResult<ResponseIterator> {
-        let df = self.data().lazy()?.clone().collect().map_err(PyPolarsErr::Polars)?;
-        Ok(self.response_iterator_from_dataframe(py, df))
-    }
-
-    #[cfg(feature = "pyo3")]
-    fn response_iterator_from_dataframe(
-        &self,
-        py: Python<'_>,
-        df: DataFrame,
-    ) -> ResponseIterator {
-        let label_lookup = match self.config().response_display {
-            ResponseDisplay::Value => Vec::new(),
-            ResponseDisplay::Label => {
-                let mut labels = self
-                    .datamap()
-                    .record()
-                    .content()
-                    .iter()
-                    .map(|question| {
-                        let question = question.read();
-                        let lookup = question
-                            .response()
-                            .values()
-                            .iter()
-                            .map(|response| {
-                                let response = response.read();
-                                (
-                                    response.value().clone().into_static(),
-                                    PyString::new(py, &response.label().value()).unbind(),
-                                )
-                            })
-                            .collect::<HashMap<_, _>>();
-                        (question.name(), lookup)
-                    })
-                    .collect::<HashMap<_, _>>();
-                df.columns()
-                    .iter()
-                    .map(|column| labels.remove(column.name().as_str()).unwrap_or_default())
-                    .collect()
-            }
-        };
-        ResponseIterator {
-            data_iterator: DataEntryIterator::new(py, df),
-            label_lookup,
+        if !response_label {
+            Ok(data)
+        } else {
+            let label_lookup = self.datamap().response_label_map();
+            let query = Self::label_response_values(data.schema().clone(), &label_lookup)?;
+            data.lazy().select(query).collect()
         }
     }
+
+    fn label_response_values(
+        schema: SchemaRef,
+        label_lookup: &HashMap<PlSmallStr, HashMap<AnyValue<'static>, ArcLock<String>>>,
+    ) -> PolarsResult<Vec<Expr>> {
+        schema
+            .iter()
+            .map(|(colname, dtype)| {
+                let Some(value_map) = label_lookup.get(colname) else {
+                    return Ok(col(colname.clone()));
+                };
+
+                let (old, new): (Vec<AnyValue<'static>>, Vec<String>) = value_map
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone().read().to_string()))
+                    .unzip();
+
+                let old = Series::from_any_values("key".into(), &old, true)?;
+                let new = Series::new("value".into(), new);
+
+                let expr = match dtype {
+                    DataType::List(_) => {
+                        col(colname.clone()).list().eval(element().replace_strict(
+                            lit(old),
+                            lit(new),
+                            Some(element()),
+                            None::<DataType>,
+                        ))
+                    }
+                    _ => col(colname.clone()).replace_strict(
+                        lit(old),
+                        lit(new),
+                        Some(col(colname.clone())),
+                        None::<DataType>,
+                    ),
+                };
+
+                Ok(expr)
+            })
+            .collect()
+    }
+
 }
 
 #[cfg(feature = "pyo3")]
@@ -400,22 +339,18 @@ impl Survey {
         Ok(format!("Survey({{\n  {}\n}})", value))
     }
 
-    fn __getitem__<'py>(&self, index: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        let py = index.py();
-
+    fn __getitem__<'py>(&self, py: Python<'py>, index: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Read individual row
-        if let Ok(index) = index.extract::<i64>() {
-            let df = self
-                .data()
-                .lazy()?
-                .clone()
-                .slice(index, 1)
-                .collect()
-                .map_err(PyPolarsErr::Polars)?;
+        if let Ok(index) = index.extract::<isize>() {
+            let height = self.num_response().map_err(PyPolarsErr::Polars)?;
+            let row_index = normalize_py_index(index, height)
+                .ok_or(exceptions::PyIndexError::new_err(index))?;
 
-            let iterator = self.response_iterator_from_dataframe(py, df);
-            let result = iterator.get_row(py, 0)?;
-            Ok(result.into_any())
+            let show_resp_label = self.config().response_display == ResponseDisplay::Label;
+            let row = self.get_row(row_index, show_resp_label).map_err(PyPolarsErr::Polars)?;
+
+            PyDataFrame(row).into_bound_py_any(py)?
+                .call_method("to_dicts", (), None)
 
         // get data for specific question
         } else if let Ok(question_name) = index.extract::<&str>() {
@@ -441,8 +376,19 @@ impl Survey {
     /// Returns:
     ///     Iterator[dict[str, object]]: An iterator over respondent rows.
     fn iter_rows(&self, py: Python<'_>) -> PyResult<Py<ResponseIterator>> {
-        let response_iterator = self.create_response_iterator(py)?;
-        Py::new(py, response_iterator)
+        let mut lazy = self.data().lazy()?.clone();
+
+        let label_query = if self.config().show_response_label() {
+            self.question_names().into_iter().map(col).collect()
+        } else {
+            let label_lookup = self.datamap().response_label_map();
+            let schema = lazy.collect_schema().map_err(PyPolarsErr::Polars)?;
+            Self::label_response_values(schema, &label_lookup).map_err(PyPolarsErr::Polars)?
+        };
+
+        let n_rows = self.num_response().map_err(PyPolarsErr::Polars)? as i64;
+        let iterator = ResponseIterator::new(lazy, n_rows, label_query);
+        Py::new(py, iterator)
     }
 
     /// Iterate over the survey questions and their response data.
@@ -596,12 +542,13 @@ impl Survey {
     ///             consistent with the survey.dataframe_format
     /// Returns:
     ///     polars.DataFrame | pandas.DataFrame: Value counts with response labels.
-    fn py_get_response_labels<'py>(
+    fn py_get_response_label_map<'py>(
         &self,
         py: Python<'py>,
         format: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let polars_frame = self.response_labels().map_err(|err| PyPolarsErr::Polars(err))?;
+        let polars_frame =
+            self.response_label_map().map_err(|err| PyPolarsErr::Polars(err))?;
 
         let format = format
             .map(|value| DataFrameFormat::from_py_any(value))
@@ -660,69 +607,27 @@ impl QuestionDataIterator {
 }
 
 // ---------- Helpers -----------
-/// Iterates through individual responses throughout the survey
+// /// Iterates through individual responses throughout the survey
 #[cfg(feature = "pyo3")]
 #[pyclass]
 struct ResponseIterator {
-    data_iterator: DataEntryIterator,
-    // Aligned with dataframe columns; Python strings are shared across rows.
-    label_lookup: Vec<HashMap<AnyValue<'static>, Py<PyString>>>,
+    lazy: LazyFrame,
+    n_rows: i64,
+    index: i64,
+    label_query: Vec<Expr>
 }
 
-#[cfg(feature = "pyo3")]
+#[cfg(feature="pyo3")]
 impl ResponseIterator {
-    fn get_row<'py>(&self, py: Python<'py>, row_index: usize) -> PyResult<Bound<'py, PyDict>> {
-        if self.label_lookup.is_empty() {
-            return self.data_iterator.get_row(py, row_index);
-        }
-        if row_index >= self.data_iterator.df.height()
-            && let Some(column) = self.data_iterator.df.columns().first()
-        {
-            column.get(row_index).map_err(PyPolarsErr::Polars)?;
-        }
-
-        self.get_row_unchecked(py, row_index)
+    pub fn new(lazy: LazyFrame, n_rows: i64, label_query: Vec<Expr>) -> Self {
+        Self { lazy, n_rows, index: 0, label_query }
     }
 
-    fn get_row_unchecked<'py>(
-        &self,
-        py: Python<'py>,
-        row_index: usize,
-    ) -> PyResult<Bound<'py, PyDict>> {
-        let dict = PyDict::new(py);
-        for ((column, name), lookup) in self
-            .data_iterator
-            .df
-            .columns()
-            .iter()
-            .zip(&self.data_iterator.names)
-            .zip(&self.label_lookup)
-        {
-            // Iterator bounds checks and get_row's row-level check guarantee valid column indices.
-            let value = unsafe { column.get_unchecked(row_index) };
-            let py_value = if lookup.is_empty() {
-                anyvalue_to_python(py, value)?
-            } else {
-                match &value {
-                    AnyValue::List(inner) if inner.dtype() == &DataType::UInt32 => {
-                        let values = inner
-                            .iter()
-                            .map(|entry| match lookup.get(&entry) {
-                                Some(label) => Ok(label.bind(py).clone().into_any()),
-                                None => anyvalue_to_python(py, entry),
-                            })
-                            .collect::<PyResult<Vec<_>>>()?;
-                        PyList::new(py, values)?.into_any()
-                    }
-                    _ => match lookup.get(&value) {
-                        Some(label) => label.bind(py).clone().into_any(),
-                        None => anyvalue_to_python(py, value)?,
-                    },
-                }
-            };
-            dict.set_item(name.bind(py), py_value)?;
-        }
-        Ok(dict)
+    fn get_row(&self, index: i64) -> PolarsResult<DataFrame> {
+        self.lazy.clone()
+            .slice(index, 1)
+            .select(&self.label_query)
+            .collect()
     }
 }
 
@@ -734,20 +639,107 @@ impl ResponseIterator {
     }
 
     fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
-        if self.label_lookup.is_empty() {
-            return self.data_iterator.__next__(py);
+        if self.index >= self.n_rows {
+            return Ok(None)
         };
 
-        let current_index = self.data_iterator.index;
-        if current_index >= self.data_iterator.df.height() {
-            return Ok(None);
-        };
-        let row_data = self.get_row_unchecked(py, current_index)?;
+        let row = self.get_row(self.index).map_err(PyPolarsErr::Polars)?;
+        let row = PyDataFrame(row).into_bound_py_any(py)?;
+        let row = row.call_method("to_dicts", (), None)?;
 
-        self.data_iterator.index += 1;
-        Ok(Some(row_data.into_any()))
+        self.index += 1;
+        Ok(Some(row))
     }
 }
+
+// /// Iterates through individual responses throughout the survey
+// #[cfg(feature = "pyo3")]
+// #[pyclass]
+// struct ResponseIterator {
+//     data_iterator: DataEntryIterator,
+//     // Aligned with dataframe columns; Python strings are shared across rows.
+//     label_lookup: Vec<HashMap<AnyValue<'static>, Py<PyString>>>,
+// }
+
+// #[cfg(feature = "pyo3")]
+// impl ResponseIterator {
+//     fn get_row<'py>(&self, py: Python<'py>, row_index: usize) -> PyResult<Bound<'py, PyDict>> {
+//         if self.label_lookup.is_empty() {
+//             return self.data_iterator.get_row(py, row_index);
+//         }
+//         if row_index >= self.data_iterator.df.height()
+//             && let Some(column) = self.data_iterator.df.columns().first()
+//         {
+//             column.get(row_index).map_err(PyPolarsErr::Polars)?;
+//         }
+
+//         self.get_row_unchecked(py, row_index)
+//     }
+
+//     fn get_row_unchecked<'py>(
+//         &self,
+//         py: Python<'py>,
+//         row_index: usize,
+//     ) -> PyResult<Bound<'py, PyDict>> {
+//         let dict = PyDict::new(py);
+//         for ((column, name), lookup) in self
+//             .data_iterator
+//             .df
+//             .columns()
+//             .iter()
+//             .zip(&self.data_iterator.names)
+//             .zip(&self.label_lookup)
+//         {
+//             // Iterator bounds checks and get_row's row-level check guarantee valid column indices.
+//             let value = unsafe { column.get_unchecked(row_index) };
+//             let py_value = if lookup.is_empty() {
+//                 anyvalue_to_python(py, value)?
+//             } else {
+//                 match &value {
+//                     AnyValue::List(inner) if inner.dtype() == &DataType::UInt32 => {
+//                         let values = inner
+//                             .iter()
+//                             .map(|entry| match lookup.get(&entry) {
+//                                 Some(label) => Ok(label.bind(py).clone().into_any()),
+//                                 None => anyvalue_to_python(py, entry),
+//                             })
+//                             .collect::<PyResult<Vec<_>>>()?;
+//                         PyList::new(py, values)?.into_any()
+//                     }
+//                     _ => match lookup.get(&value) {
+//                         Some(label) => label.bind(py).clone().into_any(),
+//                         None => anyvalue_to_python(py, value)?,
+//                     },
+//                 }
+//             };
+//             dict.set_item(name.bind(py), py_value)?;
+//         }
+//         Ok(dict)
+//     }
+// }
+
+// #[cfg(feature = "pyo3")]
+// #[pymethods]
+// impl ResponseIterator {
+//     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+//         slf
+//     }
+
+//     fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+//         if self.label_lookup.is_empty() {
+//             return self.data_iterator.__next__(py);
+//         };
+
+//         let current_index = self.data_iterator.index;
+//         if current_index >= self.data_iterator.df.height() {
+//             return Ok(None);
+//         };
+//         let row_data = self.get_row_unchecked(py, current_index)?;
+
+//         self.data_iterator.index += 1;
+//         Ok(Some(row_data.into_any()))
+//     }
+// }
 
 #[cfg(test)]
 mod test {
@@ -764,12 +756,6 @@ mod test {
     #[test]
     fn test_response_label_dataframe() {
         let survey = get_survey_struct();
-        let _ = survey.response_labels().unwrap();
+        let _ = survey.response_label_map().unwrap();
     }
-
-    // #[test]
-    // fn test_export_to_labelled_polars_dataframe() {
-    //     let survey = get_survey_struct();
-    //     let _ = survey.to_labelled_dataframe().unwrap();
-    // }
 }

@@ -303,6 +303,11 @@ impl SurveyData {
         }
     }
 
+    /// Get specific row in a survey
+    pub fn get_row(&self, row_index: usize) -> PolarsResult<DataFrame> {
+        self.lazy()?.clone().slice(row_index as i64, 1).collect()
+    }
+
     /// Used by Survey::__repr__
     #[cfg(feature = "pyo3")]
     pub(crate) fn py_repr_content(&self) -> PolarsResult<Vec<(&str, String)>> {
