@@ -1,6 +1,7 @@
 //! Configuration options for reading/ exporting/ intereacting with objects
 #[cfg(feature = "pyo3")]
 use std::str::FromStr;
+use std::sync::Arc;
 
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*};
@@ -147,9 +148,25 @@ impl Flag for ResponseDisplay {
     }
 }
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct ValueCountArg {
+    pub question_name: Arc<str>,
+    pub count_nan: bool,
+}
+
+impl ValueCountArg {
+    pub fn new(question_name: impl Into<String>, count_nan: bool) -> Self {
+        Self {
+            question_name: Arc::from(question_name.into().as_str()),
+            count_nan: count_nan
+        }
+    }
+}
 
 #[cfg(test)]
 mod test {
+
+    use std::collections::HashMap;
     use super::*;
 
     #[test]
@@ -160,5 +177,40 @@ mod test {
         
         config.response_display = ResponseDisplay::Value;
         assert_eq!(config.show_response_label(), false)
+    }
+
+    #[test]
+    fn test_value_count_arg_eq() {
+        assert_eq!(
+            ValueCountArg::new("haha", true),
+            ValueCountArg::new("haha", true),
+        );
+
+        assert_ne!(
+            ValueCountArg::new("haha", true),
+            ValueCountArg::new("haha", false),
+        );
+
+        assert_ne!(
+            ValueCountArg::new("haha ", true),
+            ValueCountArg::new("haha", true),
+        )
+    }
+
+    #[test]
+    fn test_hashmap_with_value_count_as_key() {
+        let k1 = ValueCountArg::new("haha", true);
+        let k2 = ValueCountArg::new("haha", false);
+
+        let map = HashMap::from([
+            (k1.clone(), "what"),
+            (k2.clone(), "this is k2")
+        ]);
+
+        assert_eq!(map[&k1], "what");
+        assert_eq!(map.get(&k1).unwrap().clone(), "what");
+
+        assert_eq!(map[&k2], "this is k2");
+        assert_eq!(map.get(&k2).unwrap().clone(), "this is k2");
     }
 }
