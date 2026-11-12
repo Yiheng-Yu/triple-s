@@ -30,7 +30,6 @@ overflow-checks = true
 incremental = true
 lto = "off"
 panic = 'unwind'
-codegen-units = 64
 
 [profile.release]
 debug = "none"

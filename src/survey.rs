@@ -173,6 +173,10 @@ impl Survey {
     }
 }
 
+
+/// Method calls
+///
+/// --- 
 impl Survey {
     /// Create new `Survey` instance
     pub fn new(datamap: Datamap, data: SurveyData) -> Self {
@@ -214,6 +218,25 @@ impl Survey {
             question,
             Arc::clone(&self.config),
         ))
+    }
+
+    /// Export survey raw data to polars dataframe
+    ///
+    /// Input args:
+    /// 
+    /// `response_label`:
+    ///     - Set `true` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`), 
+    ///     - Set `false` to show values instead (`[1, 1, 2, ...]`).
+    pub fn to_polars(&self, response_label: bool) -> PolarsResult<DataFrame> {
+        if response_label {
+            let mut lf = self.data().lazy()?.clone();
+
+            let label_lookup = self.datamap().response_label_map();
+            let query = Self::label_response_values(lf.collect_schema()?, &label_lookup)?;
+            lf.select(query).collect()
+        } else {
+            self.data().to_polars()
+        }
     }
 
     /// Get data for specific row
@@ -275,27 +298,6 @@ impl Survey {
             })
             .collect()
     }
-
-    /// Export survey raw data to polars dataframe
-    ///
-    /// Input args:
-    /// 
-    /// `response_label`:
-    ///     - Set `true` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`), 
-    ///     - Set `false` to show values instead (`[1, 1, 2, ...]`).
-    pub fn to_polars(&self, response_label: bool) -> PolarsResult<DataFrame> {
-        if response_label {
-            let mut lf = self.data().lazy()?.clone();
-
-            let label_lookup = self.datamap().response_label_map();
-            let query = Self::label_response_values(lf.collect_schema()?, &label_lookup)?;
-            lf.select(query).collect()
-        } else {
-            self.data().to_polars()
-        }
-    }
-
-
 }
 
 #[cfg(feature = "pyo3")]
