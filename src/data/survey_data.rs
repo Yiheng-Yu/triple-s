@@ -1,11 +1,9 @@
 use std::{
-    collections::HashMap,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use anyhow::Result;
-use parking_lot::Mutex;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -48,8 +46,6 @@ pub struct SurveyData {
 
     /// Cache that the `frame` sink into
     cache: Option<Arc<CacheDir>>,
-
-    value_counts_cache: Arc<Mutex<HashMap<(String, bool, bool), DataFrame>>>,
 }
 
 impl Clone for SurveyData {
@@ -60,7 +56,6 @@ impl Clone for SurveyData {
                 Self {
                     frame: Some(new),
                     cache: self.cache.clone(),
-                    value_counts_cache: Arc::clone(&self.value_counts_cache),
                 }
             }
             None => Self::default(),
@@ -144,10 +139,7 @@ impl SurveyData {
         schema: Option<Arc<Schema>>,
     ) -> Result<Self> {
         let cache = CacheDir::Persistent(std::path::absolute(path_parquet.as_ref())?);
-        let args = ScanArgsParquet {
-            schema,
-            ..Default::default()
-        };
+        let args = ScanArgsParquet { schema, ..Default::default() };
 
         let path_buf = cache.to_path_buf()?;
         let path = PlRefPath::try_from_path(path_buf.as_path())?;
@@ -156,7 +148,6 @@ impl SurveyData {
         Ok(Self {
             frame: Some(lazyframe),
             cache: Some(Arc::new(cache)),
-            value_counts_cache: Arc::default(),
         })
     }
 
@@ -179,7 +170,6 @@ impl SurveyData {
         Ok(Self {
             frame: Some(frame),
             cache: Some(Arc::new(CacheDir::Temporary(cache))),
-            value_counts_cache: Arc::default(),
         })
     }
 
@@ -204,7 +194,6 @@ impl SurveyData {
         Ok(Self {
             frame: Some(frame),
             cache: Some(Arc::new(CacheDir::Temporary(cache))),
-            value_counts_cache: Arc::default(),
         })
     }
 
@@ -214,38 +203,6 @@ impl SurveyData {
             .map_err(|err| PolarsError::NoData(err.to_string().into()))?
             .clone()
             .collect()
-    }
-
-    pub(crate) fn cached_value_counts(
-        &self,
-        question: &str,
-        count_nan: bool,
-        multiple: bool,
-    ) -> Option<DataFrame> {
-        if matches!(self.cache.as_deref(), Some(CacheDir::Persistent(_))) {
-            return None;
-        }
-
-        self.value_counts_cache
-            .lock()
-            .get(&(question.to_owned(), count_nan, multiple))
-            .cloned()
-    }
-
-    pub(crate) fn cache_value_counts(
-        &self,
-        question: &str,
-        count_nan: bool,
-        multiple: bool,
-        counts: DataFrame,
-    ) {
-        if matches!(self.cache.as_deref(), Some(CacheDir::Persistent(_))) {
-            return;
-        }
-
-        self.value_counts_cache
-            .lock()
-            .insert((question.to_owned(), count_nan, multiple), counts);
     }
 
     /// Dump cached data to parquet datafile
@@ -404,7 +361,6 @@ impl SurveyData {
         Self {
             frame: Some(frame.0.lazy()),
             cache: None,
-            value_counts_cache: Arc::default(),
         }
     }
 
