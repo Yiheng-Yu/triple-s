@@ -16,18 +16,20 @@ use polars::prelude::*;
 pub(crate) fn frequency_counts(
     column: &Column,
     count_nan: bool,
-    name: Option<&str>
+    name: Option<&str>,
 ) -> PolarsResult<DataFrame> {
     let colname_title = column.name();
     let colname_stats = name.unwrap_or("count");
 
     // Then we do `value_counts`
     let to_count = match column.dtype() {
-        DataType::List(_) => {
-            column.explode(ExplodeOptions { empty_as_null: true, keep_nulls: true })?
-            .take_materialized_series()
-        }
-        _ => column._get_backing_series()
+        DataType::List(_) => column
+            .explode(ExplodeOptions {
+                empty_as_null: true,
+                keep_nulls: true,
+            })?
+            .take_materialized_series(),
+        _ => column._get_backing_series(),
     };
 
     let to_count = if count_nan {
@@ -45,12 +47,8 @@ pub(crate) fn frequency_counts(
     )
 }
 
-
 /// Count total amount of not-null entries in a column, and return result as dataframe of single row
-pub(crate) fn count_not_null(
-    column: &Column,
-    name: &str,
-) -> PolarsResult<DataFrame> {
+pub(crate) fn count_not_null(column: &Column, name: &str) -> PolarsResult<DataFrame> {
     let base_size = column.len() - column.null_count();
     df! {
         column.name().as_str() => [None::<u64>],
@@ -58,6 +56,5 @@ pub(crate) fn count_not_null(
         name => [base_size as u64],
     }
 }
-
 
 // pub(crate) fn replace_value(df: )

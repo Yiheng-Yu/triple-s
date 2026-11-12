@@ -87,7 +87,10 @@ fn test_value_display_label_not_found() {
 
 #[test]
 fn test_read_stack_overflow_survey() {
-    let _ = read_stack_overflow();
+    let survey = read_stack_overflow();
+
+    let res = survey.crosstab("Employment", "CodeMain").unwrap();
+    println!("{:?}", res);
 }
 
 #[test]

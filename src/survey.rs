@@ -17,7 +17,10 @@ use crate::{
     utils::{get_type_name, normalize_py_index, polars_to_pandas},
 };
 use crate::{
-    data::{QuestionData, SurveyData, config::Config}, datamap::Datamap, error::QuestionNotFound, utils::{ArcLock, lock_it_up},
+    data::{QuestionData, SurveyData, config::Config},
+    datamap::Datamap,
+    error::QuestionNotFound,
+    utils::{ArcLock, lock_it_up},
 };
 
 #[cfg_attr(any(not(feature = "pyo3"), doc), doc = include_str!("./doc/survey_rs.md"))]
@@ -295,32 +298,78 @@ impl Survey {
 }
 
 /// Creating quick analysis
-/// 
+///
 /// ---
 impl Survey {
     /// Gets a topline table for a given question
-    /// 
-    pub fn get_question_summary(&self, question_name: &str, group_by: &[&str]) -> PolarsResult<DataFrame> {
-        let group_expr = group_by.iter()
-            .map(|name| col(*name))
-            .collect::<Vec<_>>();
+    pub fn crosstab(&self, question_name: &str, group_by: &str) -> PolarsResult<DataFrame> {
+        let binding = self.data();
+        let lf = binding.lazy()?;
 
-        self.data()
-        .lazy()?
-        .clone()
-        .group_by(group_expr)
-        .agg([
-            col(question_name)
-                .value_counts(true, true, "count".into(), false)
-                .alias(question_name)
-        ])
-        .collect()
+        let columns = lf
+            .clone()
+            .select([col(group_by)])
+            .unique(None, UniqueKeepStrategy::Any)
+            .sort([group_by], Default::default())
+            .collect()?;
+
+        let pivot = lf
+            .clone()
+            .pivot(
+                cols([group_by]),
+                Arc::new(columns),
+                cols([question_name]),
+                cols([question_name]),
+                len(),
+                false,
+                "_".into(),
+                polars::frame::PivotColumnNaming::Auto,
+            )
+            .sort([question_name], SortMultipleOptions::default());
+
+        // We then append row and column labels
+        let column_label = self
+            .datamap()
+            .get(group_by)
+            .ok_or(QuestionNotFound::new(group_by))?
+            .response_label_map();
+        let (col_old, col_new): (Vec<String>, Vec<String>) = column_label
+            .iter()
+            .map(|(id, label)| {
+                (
+                    id.to_string(),
+                    format!("{} - {}", group_by, label.read().clone()),
+                )
+            })
+            .unzip();
+
+        let pivot = pivot.rename(col_old, col_new, false);
+        let (row_old, row_new): (Vec<AnyValue<'static>>, Vec<String>) = self
+            .datamap()
+            .get(question_name)
+            .ok_or(QuestionNotFound::new(question_name))?
+            .response_label_map()
+            .iter()
+            .map(|(id, label)| (id.clone(), label.read().to_string()))
+            .unzip();
+        let row_old = Series::from_any_values("old".into(), &row_old, true)?;
+
+        let row_new = Series::new("new".into(), row_new);
+
+        pivot
+            .with_columns([col(question_name)
+                .replace_strict(lit(row_old), lit(row_new), None, Some(DataType::String))
+                .alias("label")])
+            .select([
+                col("label").alias(question_name),
+                all().exclude_cols([question_name, "label"]).as_expr(),
+            ])
+            .collect()
     }
 }
 
-
 /// Pyo3 implementations
-/// 
+///
 /// ---
 #[cfg(feature = "pyo3")]
 #[pymethods]

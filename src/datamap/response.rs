@@ -15,7 +15,10 @@ use pyo3::{
 use quick_xml::{events::BytesText, writer::Writer};
 
 use crate::{
-    datamap::{QuestionType, Text}, error::{self, InvalidArg, MissingAttributeError, TypeMismatch, UnsupportedFeature}, prelude::DeepCopy, utils::{ArcLock, lock_it_up},
+    datamap::{QuestionType, Text},
+    error::{self, InvalidArg, MissingAttributeError, TypeMismatch, UnsupportedFeature},
+    prelude::DeepCopy,
+    utils::{ArcLock, lock_it_up},
 };
 #[cfg(feature = "pyo3")]
 use crate::{
@@ -853,29 +856,29 @@ impl Code {
     }
 
     /// Sets the `value` field of current insteance
-    /// 
+    ///
     /// # Example: Update code value
-    /// 
+    ///
     /// ```
-    /// use triple_s::Code;
     /// use polars::prelude::*;
-    /// 
+    /// use triple_s::Code;
+    ///
     /// let mut instance = Code::new_literal("A", "Tea & coffee", None, None);
     /// assert_eq!(instance.value(), AnyValue::StringOwned("A".into()));
-    /// 
+    ///
     /// // Update value
     /// instance.set_value(AnyValue::Int32(-3))?;
     /// assert_eq!(instance.value(), AnyValue::Int32(-3));
-    /// 
+    ///
     /// # Ok::<(), anyhow::Error>(())
     /// ```
-    /// 
+    ///
     /// This method would only accept one of [`Int32`, `UInt32`, `Float64`, `StringOwned`, `String`] variant of [`AnyValue`] enum.
-    /// 
+    ///
     /// ```should_panic
-    /// use triple_s::Code;
     /// use polars::prelude::*;
-    /// 
+    /// use triple_s::Code;
+    ///
     /// let mut instance = Code::new_literal("A", "Tea & coffee", None, None);
     /// instance.set_value(AnyValue::Boolean(false)).unwrap();
     /// ```
