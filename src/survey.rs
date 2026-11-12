@@ -16,8 +16,9 @@ use crate::{
     prelude::*,
     utils::{get_type_name, normalize_py_index, polars_to_pandas},
 };
+
 use crate::{
-    data::{QuestionData, SurveyData, config::Config},
+    data::{QuestionData, SurveyData, config::Config, operation},
     datamap::Datamap,
     error::QuestionNotFound,
     utils::{ArcLock, lock_it_up},
@@ -303,31 +304,28 @@ impl Survey {
 impl Survey {
     /// Gets a topline table for a given question
     pub fn crosstab(&self, question_name: &str, group_by: &str) -> PolarsResult<DataFrame> {
-        let binding = self.data();
-        let lf = binding.lazy()?;
+        // let base_size = operation::calc_base_size(
+        //     self.data().lazy()?,
+        //     question_name,
+        //     group_by
+        // )?;
 
-        let columns = lf
-            .clone()
-            .select([col(group_by)])
-            .unique(None, UniqueKeepStrategy::Any)
-            .sort([group_by], Default::default())
-            .collect()?;
-
-        let pivot = lf
-            .clone()
-            .pivot(
-                cols([group_by]),
-                Arc::new(columns),
-                cols([question_name]),
-                cols([question_name]),
-                len(),
-                false,
-                "_".into(),
-                polars::frame::PivotColumnNaming::Auto,
-            )
-            .sort([question_name], SortMultipleOptions::default());
+        // base_size
+        //     .sort([group_by], SortMultipleOptions::default())?
+        //     .select([question_name, group_by])?
+        //     .transpose(
+        //         Some(group_by), 
+        //         None,
+        //     )
+        
+        let pivot = operation::create_crosstab(
+            self.data().lazy()?, 
+            question_name, 
+            group_by
+        )?;
 
         // We then append row and column labels
+        // column label
         let column_label = self
             .datamap()
             .get(group_by)
@@ -338,12 +336,14 @@ impl Survey {
             .map(|(id, label)| {
                 (
                     id.to_string(),
-                    format!("{} - {}", group_by, label.read().clone()),
+                    label.read().clone()
+                    // format!("{} - {}", group_by, label.read().clone()),
                 )
             })
             .unzip();
-
         let pivot = pivot.rename(col_old, col_new, false);
+
+        // row label
         let (row_old, row_new): (Vec<AnyValue<'static>>, Vec<String>) = self
             .datamap()
             .get(question_name)
@@ -353,10 +353,9 @@ impl Survey {
             .map(|(id, label)| (id.clone(), label.read().to_string()))
             .unzip();
         let row_old = Series::from_any_values("old".into(), &row_old, true)?;
-
         let row_new = Series::new("new".into(), row_new);
 
-        pivot
+        let result = pivot
             .with_columns([col(question_name)
                 .replace_strict(lit(row_old), lit(row_new), None, Some(DataType::String))
                 .alias("label")])
@@ -364,7 +363,9 @@ impl Survey {
                 col("label").alias(question_name),
                 all().exclude_cols([question_name, "label"]).as_expr(),
             ])
-            .collect()
+            .collect()?;
+
+        Ok(result)
     }
 }
 
