@@ -12,7 +12,7 @@ use pyo3::{
     types::{PyDict, PyTuple},
 };
 #[cfg(feature = "pyo3")]
-use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
+use pyo3_polars::{PyDataFrame, PySeries, error::PyPolarsErr};
 
 #[cfg(feature = "pyo3")]
 use crate::{
@@ -128,17 +128,22 @@ impl QuestionData {
     pub fn to_column(&self) -> PolarsResult<Column> {
         match self.config().response_display {
             ResponseDisplay::Value => self.to_value_column(),
-            ResponseDisplay::Label => match self.question_type() {
-                QuestionType::Single => self.to_labelled_column_single_choice(),
-                QuestionType::Multiple => self.to_labelled_column_multi_choice(),
-                _ => self.to_value_column(),
-            },
+            ResponseDisplay::Label => self.to_labelled_column(),
         }
     }
 
     /// Export contents to a polars [`Series`]
     pub fn to_series(&self) -> PolarsResult<Series> {
         self.to_column().map(Column::take_materialized_series)
+    }
+
+    /// export to labelled polars column
+    fn to_labelled_column(&self) -> PolarsResult<Column> {
+        match self.question_type() {
+            QuestionType::Single => self.to_labelled_column_single_choice(),
+            QuestionType::Multiple => self.to_labelled_column_multi_choice(),
+            _ => self.to_value_column()
+        }
     }
 
     /// Count unique values of this Series and a column "counts" with dtype IdxType
@@ -150,59 +155,58 @@ impl QuestionData {
     /// # Arguments
     /// - `count_nan` (`bool`):
     ///     - Toogle on/ off for counting Null values, note that multi-choices entries of an empty list (`[]`) will also count as `null`
+    /// - `name` (`impl Into<PlSmallStr>`, Optional):
+    ///     - Name of the column, default `count`
     #[allow(clippy::mutable_key_type)]
-    pub fn value_counts(&self, count_nan: bool) -> PolarsResult<DataFrame> {
+    pub fn value_counts(
+        &self, 
+        count_nan: bool, 
+        name: Option<impl Into<PlSmallStr>>,
+    ) -> PolarsResult<DataFrame> {
+        
         let question_name = self.name();
-        let multiple = self.question_type() == QuestionType::Multiple;
-        let cached_counts =
-            self.data.read().cached_value_counts(&question_name, count_nan, multiple);
-        let mut df = match cached_counts {
-            Some(counts) => counts,
-            None => {
-                let series = if multiple {
-                    let config = ExplodeOptions {
-                        empty_as_null: true,
-                        keep_nulls: true, // cell with value `null` gets exploded into `null`
-                    };
-                    self.to_value_column()?.explode(config)?.take_materialized_series()
-                } else {
-                    self.to_value_column()?.take_materialized_series()
-                };
+        
+        // First do `value_counts`
+        let mut summary = {
+            let to_count = if self.question_type() == QuestionType::Multiple {
+                self.to_value_column()?
+                    // cell with value `null` gets exploded into `null`
+                    .explode(ExplodeOptions { empty_as_null: true, keep_nulls: true, } )?
+                    .take_materialized_series()
+            } else {
+                self.to_value_column()?.take_materialized_series()
+            };
 
-                let series = if count_nan {
-                    series.drop_nulls()
-                } else {
-                    series
-                };
 
-                let counts = series.value_counts(true, true, "count".into(), false)?.sort(
-                    [&question_name],
-                    SortMultipleOptions::default()
-                        .with_nulls_last(true)
-                        .with_maintain_order(false)
-                        .with_order_descending(false),
-                )?;
-                self.data.read().cache_value_counts(
-                    &question_name,
-                    count_nan,
-                    multiple,
-                    counts.clone(),
-                );
-                counts
-            }
+            let to_count = if count_nan {
+                to_count.drop_nulls()
+            } else {
+                to_count
+            };
+
+            let col_name = name.map(|val| val.into())
+                .unwrap_or("count".into());
+
+            to_count.value_counts(true, true, col_name, false)?.sort(
+                [&question_name],
+                SortMultipleOptions::default()
+                    .with_nulls_last(true)
+                    .with_maintain_order(false)
+                    .with_order_descending(false),
+            )?
         };
 
         // append data label
         let label_map = self.response_label_map();
-        let labels = df
+        let labels = summary
             .column(&question_name)?
             .as_materialized_series()
             .iter()
             .map(|value| label_map.get(&value).map(|val| val.read().to_string()))
             .collect::<Vec<Option<String>>>();
 
-        df.insert_column(1, Series::new("label".into(), labels).into())?;
-        Ok(df)
+        summary.insert_column(1, Series::new("label".into(), labels).into())?;
+        Ok(summary)
     }
 
     /// Checks if `other` is comes from the same [`Survey`] as `self`.
@@ -495,9 +499,9 @@ impl QuestionData {
         anyvalue_to_python(py, value)
     }
 
-    fn __iter__(&self) -> PyResult<ColumnIterator> {
+    fn __iter__(&self) -> PyResult<CellIterator> {
         let column = self.to_column().map_err(PyPolarsErr::Polars)?;
-        Ok(ColumnIterator { column, index: 0 })
+        Ok(CellIterator { column, index: 0 })
     }
 
     /// Count unique values of this question data.
@@ -509,6 +513,9 @@ impl QuestionData {
     ///     count_nan (bool, *optional*): Toogle on/ off for counting Null values.
     ///         Note: multi-choice entries of an empty list (`[]`) will also count as `null`.
     ///         Default `False`
+    ///     name (str, *optional*):
+    ///         Give the resulting count column a specific name (same as `polars.Series.value_counts`)
+    ///         Default `'count'`
     ///     format ('polars' | 'pandas' |DataFrameFormat, *optional*): Select what kind of dataframe to output:
     ///         'polars' | DataFrameFormat.Polars: polars.DataFrame
     ///         'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
@@ -519,12 +526,11 @@ impl QuestionData {
     /// Returns:
     ///     polars.DataFrame | pandas.DataFrame: Value counts with response labels.
     ///
-    /// Note:
-    ///     The current implementation excludes null values when count_nan is True.
     #[pyo3(
         name = "value_counts", 
         signature=(
             count_nan:"bool" = None,
+            name: "str" = "count",
             format: "'polars'|'pandas'|DataFrameFormat" = None
         )
     )]
@@ -532,10 +538,11 @@ impl QuestionData {
         &self,
         py: Python<'py>,
         count_nan: Option<bool>,
+        name: Option<&str>,
         format: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let count_nan = count_nan.unwrap_or(false);
-        let result = self.value_counts(count_nan).map_err(PyPolarsErr::Polars)?;
+        let result = self.value_counts(count_nan, name).map_err(PyPolarsErr::Polars)?;
 
         // prep output
         let format = format
@@ -550,34 +557,62 @@ impl QuestionData {
 
     /// Return the answers as a polars Series.
     ///
+    /// Kwargs:
+    ///     response_label (bool, *optional*):
+    ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
+    ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
+    ///         Default `False`
+    /// 
     /// Returns:
     ///     polars.Series: The respondent data in Polars format.
-    #[pyo3(name = "to_polars")]
-    fn py_to_polars(&self) -> PyResult<pyo3_polars::PySeries> {
-        self.to_series()
-            .map(pyo3_polars::PySeries)
-            .map_err(|err| PyPolarsErr::Polars(err).into())
+    ///
+    #[pyo3(name = "to_polars", signature=(response_label: "bool"=None))]
+    fn py_to_polars(&self, response_label: Option<bool>) -> PyResult<PySeries> {
+        let response_label = response_label.unwrap_or(false);
+        
+        if response_label {
+            self.to_labelled_column()
+                .map(|column| PySeries(column.take_materialized_series()))
+                .map_err(|err| PyPolarsErr::Polars(err).into())
+        } else {
+            self.to_value_column()
+                .map(|column| PySeries(column.take_materialized_series()))
+                .map_err(|err| PyPolarsErr::Polars(err).into())
+        }
     }
 
     /// Export the answers as a pandas Series object.
-    ///
+    /// 
+    /// Kwargs:
+    ///     response_label (bool, *optional*):
+    ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
+    ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
+    ///         Default `False`
+    /// 
     /// Returns:
     ///     pandas.Series: The respondent data in pandas format.
-    #[pyo3(name = "to_pandas")]
-    pub fn py_to_pandas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let frame = self.py_to_polars()?.into_bound_py_any(py)?;
+    #[pyo3(name = "to_pandas", signature=(response_label: "bool"=None))]
+    pub fn py_to_pandas<'py>(&self, py: Python<'py>, response_label: Option<bool>) -> PyResult<Bound<'py, PyAny>> {
+        let series = self.py_to_polars(response_label)?.into_bound_py_any(py)?;
         let kwargs = PyDict::new(py);
         kwargs.set_item("use_pyarrow_extension_array", true)?;
-        frame.call_method("to_pandas", (), Some(&kwargs))
+        series.call_method("to_pandas", (), Some(&kwargs))
     }
 
     /// Export the answers as a list.
-    ///
+    /// 
+    /// Kwargs:
+    ///     response_label (bool, *optional*):
+    ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
+    ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
+    ///         Default `False`
+    /// 
     /// Returns:
     ///     list: The response values in row order.
-    #[pyo3(name = "to_list")]
-    pub fn py_to_list<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let frame = self.py_to_polars()?.into_bound_py_any(py)?;
+    /// 
+    #[pyo3(name = "to_list", signature=(response_label: "bool"=None))]
+    pub fn py_to_list<'py>(&self, py: Python<'py>, response_label: Option<bool>) -> PyResult<Bound<'py, PyAny>> {
+        let frame = self.py_to_polars(response_label)?.into_bound_py_any(py)?;
         frame.call_method("to_list", (), None)
     }
 }
@@ -586,14 +621,14 @@ impl QuestionData {
 /// Iterates through response data of a question
 #[cfg(feature = "pyo3")]
 #[pyclass]
-pub(crate) struct ColumnIterator {
+pub(crate) struct CellIterator {
     column: Column,
     index: usize,
 }
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl ColumnIterator {
+impl CellIterator {
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
