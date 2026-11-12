@@ -145,7 +145,8 @@ def test_survey_without_data():
 
 def test_value_counts(survey):
     for question in survey.iter_questions():
-        summary = question.value_counts()
+        summary = question.value_counts(name="what")
+        assert summary.columns[-1] == "what"
 
 def test_set_dataframe_format_config_success(survey):
     assert survey.dataframe_format == 'polars'   # the default

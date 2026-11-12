@@ -148,20 +148,6 @@ impl Flag for ResponseDisplay {
     }
 }
 
-// #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-// struct ValueCountArg {
-//     pub question_name: Arc<str>,
-//     pub count_nan: bool,
-// }
-
-// impl ValueCountArg {
-//     pub fn new(question_name: impl Into<String>, count_nan: bool) -> Self {
-//         Self {
-//             question_name: Arc::from(question_name.into().as_str()),
-//             count_nan: count_nan,
-//         }
-//     }
-// }
 
 #[cfg(test)]
 mod test {
