@@ -34,7 +34,7 @@ Attributes
 Properties
 -------------------
 .. :py:property:: triple_s.QuestionData.response_label
-   :annotation: Dict[str | int | float, Text]
+   :type: Dict[str | int | float, Text]
 
 Iteration and indexing
 ----------------------
@@ -46,6 +46,7 @@ column taken when iteration starts.
 Methods
 -------
 
+.. automethod:: QuestionData.value_counts() -> polars.DataFrame
 .. automethod:: QuestionData.to_polars() -> polars.Series
 .. automethod:: QuestionData.to_pandas() -> pandas.Series
 .. automethod:: QuestionData.to_list() -> List[Any]
