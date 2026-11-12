@@ -66,10 +66,12 @@ fn test_value_display_success() {
 fn test_value_display_label_not_found() {
     let mut survey = get_survey_struct();
     let mut question = survey.get_question_data("Q2").unwrap();
+
     question
         .datamap_mut()
         .response_mut()
-        .with_value_write(0, |item| *item.value_mut() = AnyValue::UInt32(55));
+        .with_value_write(0, |item| *item.value_mut() = AnyValue::UInt32(300));
+    // println!("{:?}", question.datamap_mut().response_mut());
 
     survey.config_mut().response_display = ResponseDisplay::Label;
     match question.to_series() {

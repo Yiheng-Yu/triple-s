@@ -1274,7 +1274,7 @@ impl Variant {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::datamap::datamap::test::normalize_xml;
+    use crate::datamap::survey_datamap::test::normalize_xml;
 
     #[test]
     fn test_variant_equal() {

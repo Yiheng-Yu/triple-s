@@ -18,6 +18,7 @@ use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use crate::{
     DataRange,
     config::DataFrameFormat,
+    datamap::Text,
     error::InternalError,
     prelude::*,
     utils::{
@@ -32,7 +33,7 @@ use crate::{
     QuestionType,
     config::ResponseDisplay,
     data::{config::Config, survey_data::SurveyData},
-    datamap::{Question, Text},
+    datamap::Question,
     utils::ArcLock,
 };
 
@@ -89,10 +90,12 @@ impl QuestionData {
         &mut self.question
     }
 
-    /// Get the lookup table for items in the [`Question::Response()::values()`] field, as: { [`Code::value`]: [`Code::label()`] }
+    /// Get the lookup table for items in the [`Question::response::values()`] field,
+    /// formatted as: { [`Code::value`]: [`Code::label()`] }
     ///
-    /// Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
-    /// method will not mutate the caller.
+    /// This method returns a Arc<RwLock<String>> for the code label text, this means mutating
+    /// code label elsewhere will the hashmap returned from this function. Details on this mutation
+    /// behaviour can be found in the documentation in [`Response::response_label_map`].
     #[allow(clippy::mutable_key_type)] // can only be string, float, or int
     pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
         self.question.response_label_map()
@@ -147,6 +150,7 @@ impl QuestionData {
     /// # Arguments
     /// - `count_nan` (`bool`):
     ///     - Toogle on/ off for counting Null values, note that multi-choices entries of an empty list (`[]`) will also count as `null`
+    #[allow(clippy::mutable_key_type)]
     pub fn value_counts(&self, count_nan: bool) -> PolarsResult<DataFrame> {
         let question_name = self.name();
         let multiple = self.question_type() == QuestionType::Multiple;
@@ -189,21 +193,14 @@ impl QuestionData {
         };
 
         // append data label
-        let (keys, labels) = self.get_datalabel_key_value()?;
-        let keys = keys.cast(df.column(&question_name)?.dtype())?;
-        let label_by_key = keys
-            .iter()
-            .zip(labels.str()?.iter())
-            .filter_map(|(key, label)| {
-                label.map(|label| (key.into_static(), label.to_owned()))
-            })
-            .collect::<HashMap<_, _>>();
+        let label_map = self.response_label_map();
         let labels = df
             .column(&question_name)?
             .as_materialized_series()
             .iter()
-            .map(|value| label_by_key.get(&value).cloned())
-            .collect::<Vec<_>>();
+            .map(|value| label_map.get(&value).map(|val| val.read().to_string()))
+            .collect::<Vec<Option<String>>>();
+
         df.insert_column(1, Series::new("label".into(), labels).into())?;
         Ok(df)
     }
@@ -214,10 +211,12 @@ impl QuestionData {
     }
 
     fn get_datalabel_key_value(&self) -> PolarsResult<(Series, Series)> {
-        let (keys, values): (Vec<AnyValue<'_>>, Vec<String>) =
-            self.response_label_map().into_iter().map(|(key, val)| 
-                (key, val.read().clone())
-            ).unzip();
+        let (keys, values): (Vec<AnyValue<'_>>, Vec<String>) = self
+            .response_label_map()
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone().read().to_string()))
+            .unzip();
+
         let keys = Series::from_any_values(self.name().into(), &keys, true)?;
         let labels = Series::new("label".into(), values);
         Ok((keys, labels))
@@ -231,7 +230,7 @@ impl QuestionData {
             lit(keys.clone()),
             lit(labels),
             None,
-            Some(DataTypeExpr::Literal(DataType::String)),
+            None::<DataTypeExpr>,
         )]);
 
         query
@@ -255,7 +254,7 @@ impl QuestionData {
                 lit(keys.clone()),
                 lit(labels),
                 None,
-                Some(DataTypeExpr::Literal(DataType::String)),
+                None::<DataTypeExpr>,
             ))
             .alias(&question_name);
         let query = self.lazy()?.select([query]);

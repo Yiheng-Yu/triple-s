@@ -15,7 +15,6 @@ use anyhow::{Context, Result};
 use log::warn;
 use polars::prelude::AnyValue;
 use quick_xml::reader::Reader as XmlReader;
-use rayon::prelude::*;
 
 use crate::{
     DataRange,
@@ -138,7 +137,7 @@ pub fn read_from_reader<R: BufRead>(mut input: R) -> Result<(Datamap, EventLog)>
         FileType::Classic => {
             let input = BufReader::new(Cursor::new(prefix).chain(input));
             classic::create_survey_builder(input.lines()).with_context(|| {
-                format!("trying to create survey builder from the data file")
+                "trying to create survey builder from the data file".to_string()
             })?
         }
         FileType::Xml => {
@@ -150,7 +149,7 @@ pub fn read_from_reader<R: BufRead>(mut input: R) -> Result<(Datamap, EventLog)>
             let mut reader = XmlReader::from_str(&text);
             reader.config_mut().trim_text(true);
             xml::create_survey_builder(reader).with_context(|| {
-                format!("trying to create survey builder from the data file")
+                "trying to create survey builder from the data file".to_string()
             })?
         }
     };
@@ -333,7 +332,7 @@ impl SurveyBuilder {
         let is_classic = self.is_classic;
         let results = self
             .questions
-            .par_drain(..)
+            .drain(..)
             .map(|item| item.build(is_classic))
             .collect::<Result<Vec<(Question, Vec<Warning>)>>>()?;
 
@@ -730,7 +729,7 @@ impl ResponseBuilder {
 
             // collect code values
             let values = rest
-                .par_iter_mut()
+                .iter_mut()
                 .map(|item| {
                     debug_assert!(item.tag.as_ref() == "value");
                     Self::extract_value_entry(item)
@@ -816,7 +815,7 @@ impl ResponseBuilder {
     ) -> Result<Response> {
         let values = self
             .entries
-            .into_par_iter()
+            .into_iter()
             .map(|raw| {
                 let code = Self::extract_code(raw, kind, is_classic)?;
                 Ok(code)
