@@ -173,10 +173,9 @@ impl Survey {
     }
 }
 
-
 /// Method calls
 ///
-/// --- 
+/// ---
 impl Survey {
     /// Create new `Survey` instance
     pub fn new(datamap: Datamap, data: SurveyData) -> Self {
@@ -220,31 +219,12 @@ impl Survey {
         ))
     }
 
-    /// Export survey raw data to polars dataframe
-    ///
-    /// Input args:
-    /// 
-    /// `response_label`:
-    ///     - Set `true` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`), 
-    ///     - Set `false` to show values instead (`[1, 1, 2, ...]`).
-    pub fn to_polars(&self, response_label: bool) -> PolarsResult<DataFrame> {
-        if response_label {
-            let mut lf = self.data().lazy()?.clone();
-
-            let label_lookup = self.datamap().response_label_map();
-            let query = Self::label_response_values(lf.collect_schema()?, &label_lookup)?;
-            lf.select(query).collect()
-        } else {
-            self.data().to_polars()
-        }
-    }
-
     /// Get data for specific row
     ///
     /// Args:
     ///
     /// `response_label`:
-    ///     - Set `true` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`) 
+    ///     - Set `true` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`)
     ///     - Set `false` to show values instead (`[1, 1, 2, ...]`).
     pub fn get_row(&self, row_index: usize, response_label: bool) -> PolarsResult<DataFrame> {
         let data = self.data().get_row(row_index)?;
@@ -593,7 +573,6 @@ impl Survey {
     ///             consistent with the survey.dataframe_format
     /// Returns:
     ///     polars.DataFrame | pandas.DataFrame: Value counts with response labels.
-    /// 
     fn py_get_response_label_map<'py>(
         &self,
         py: Python<'py>,
