@@ -116,8 +116,8 @@ impl Response {
     /// # Example: Shared mutation of response label mapping
     ///
     /// ```rust
-    /// use triple_s::{Code, Response};
     /// use polars::prelude::AnyValue;
+    /// use triple_s::{Code, Response};
     ///
     /// let original = Response::new(None, vec![Code::new_unsigned(3, "Before", None, None)]);
     ///
@@ -141,6 +141,7 @@ impl Response {
     ///
     /// # Ok::<(), anyhow::Error>(())
     /// ```
+    #[allow(clippy::module_inception)]
     pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
         self.values()
             .iter()
@@ -1989,7 +1990,7 @@ impl Eq for DataRange {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::datamap::datamap::test::normalize_xml;
+    use crate::datamap::survey_datamap::test::normalize_xml;
 
     #[test]
     fn test_value_float_parse_like() {

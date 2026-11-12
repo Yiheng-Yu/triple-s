@@ -3,13 +3,9 @@ use std::{
     sync::Arc,
 };
 
-use encoding_rs::UTF_8;
-use encoding_rs_io::{
-    DecodeReaderBytes,
-    DecodeReaderBytesBuilder,
-};
-
 use anyhow::{Context, Result};
+use encoding_rs::UTF_8;
+use encoding_rs_io::{DecodeReaderBytes, DecodeReaderBytesBuilder};
 use parking_lot::RwLock;
 #[cfg(feature = "pyo3")]
 use polars::{datatypes::AnyValue, frame::DataFrame};
@@ -193,9 +189,7 @@ pub(crate) fn extract_indicies<'py>(
 
 /// Streams UTF-8 or BOM-marked UTF-16 as valid UTF-8.
 /// Malformed sequences are replaced with U+FFFD.
-pub(crate) struct TextReader<R: Read>(
-    DecodeReaderBytes<R, Vec<u8>>,
-);
+pub(crate) struct TextReader<R: Read>(DecodeReaderBytes<R, Vec<u8>>);
 
 impl<R: Read> TextReader<R> {
     pub(crate) fn new(source: R) -> Self {
@@ -273,10 +267,7 @@ mod tests {
 
     #[test]
     fn text_reader_handles_empty_reads_and_eof() {
-        for (input, expected) in [
-            (b"".as_slice(), ""),
-            (b"\xef\xbb\xbf", ""),
-        ] {
+        for (input, expected) in [(b"".as_slice(), ""), (b"\xef\xbb\xbf", "")] {
             let mut reader = TextReader::new(input);
             assert_eq!(reader.read(&mut []).unwrap(), 0);
             let mut decoded = Vec::new();

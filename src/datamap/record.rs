@@ -81,8 +81,7 @@ impl DataFormat {
             _ => Err(InvalidArg::new(format!(
                 "Invalid file type: Expect '.csv' or '.asc' file, got: {}",
                 path.display()
-            ))
-            .into()),
+            ))),
         }
     }
 }
@@ -358,11 +357,13 @@ impl Record {
                         questions
                             .iter()
                             .map(|question| {
-                                let field = question.locate_data_csv(&row)
-                                    .with_context(|| format!(
-                                        "When trying to locate data for question `{}`",
-                                        question.name()
-                                    ))?;
+                                let field =
+                                    question.locate_data_csv(&row).with_context(|| {
+                                        format!(
+                                            "When trying to locate data for question `{}`",
+                                            question.name()
+                                        )
+                                    })?;
 
                                 let value = question.parse_question_value(field)
                                     .with_context(|| format!(

@@ -18,9 +18,9 @@ use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use crate::{
     DataRange,
     config::DataFrameFormat,
+    datamap::Text,
     error::InternalError,
     prelude::*,
-    datamap::Text,
     utils::{
         anyvalue_to_python,
         convert_date,
@@ -117,7 +117,11 @@ impl QuestionData {
         question: Question,
         config: ArcLock<Config>,
     ) -> Self {
-        Self { data, question, config }
+        Self {
+            data,
+            question,
+            config,
+        }
     }
 
     /// Export contents to a polars [`Column`]
@@ -146,6 +150,7 @@ impl QuestionData {
     /// # Arguments
     /// - `count_nan` (`bool`):
     ///     - Toogle on/ off for counting Null values, note that multi-choices entries of an empty list (`[]`) will also count as `null`
+    #[allow(clippy::mutable_key_type)]
     pub fn value_counts(&self, count_nan: bool) -> PolarsResult<DataFrame> {
         let question_name = self.name();
         let multiple = self.question_type() == QuestionType::Multiple;
@@ -225,7 +230,7 @@ impl QuestionData {
             lit(keys.clone()),
             lit(labels),
             None,
-            None::<DataTypeExpr>
+            None::<DataTypeExpr>,
         )]);
 
         query
@@ -249,7 +254,7 @@ impl QuestionData {
                 lit(keys.clone()),
                 lit(labels),
                 None,
-                None::<DataTypeExpr>
+                None::<DataTypeExpr>,
             ))
             .alias(&question_name);
         let query = self.lazy()?.select([query]);

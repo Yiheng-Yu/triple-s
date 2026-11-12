@@ -1,18 +1,18 @@
-pub mod datamap;
 pub mod question;
 pub mod read;
 pub mod record;
 pub mod response;
+pub mod survey_datamap;
 pub mod survey_info;
 pub mod text;
 
 use std::{fs::File, path::Path};
 
-pub use datamap::Datamap;
 use polars::{frame::row::Row, prelude::*};
 pub use question::{Location, Question, QuestionType, Spread, Usage};
 pub use record::DataFormat;
 pub use response::{Code, Response};
+pub use survey_datamap::Datamap;
 use tempfile::NamedTempFile;
 pub use text::{Text, Variant};
 

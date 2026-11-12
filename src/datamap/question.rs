@@ -503,6 +503,7 @@ impl Question {
     /// This method returns a Arc<RwLock<String>> for the code label text, this means mutating
     /// code label elsewhere will the hashmap returned from this function. Details on this mutation
     /// behaviour can be found in the documentation in [`Response::response_label_map`].
+    #[allow(clippy::module_inception)]
     pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
         self.response().response_label_map()
     }
@@ -2831,6 +2832,13 @@ pub enum QuestionType {
     Time,
 }
 
+impl QuestionType {
+    /// Check if instance was one of [`Single`, `Multiple`, `Logical`]
+    pub fn is_categorical(&self) -> bool {
+        matches!(self, Self::Single | Self::Multiple)
+    }
+}
+
 impl Flag for QuestionType {
     fn to_string(&self) -> String {
         match self {
@@ -2862,7 +2870,7 @@ mod test {
     use strum::IntoEnumIterator;
 
     use super::*;
-    use crate::datamap::{Variant, datamap::test::normalize_xml};
+    use crate::datamap::{Variant, survey_datamap::test::normalize_xml};
 
     #[test]
     fn test_qtype_from_str() {

@@ -19,6 +19,7 @@ for fname in os.listdir(folder):
         continue
     
     run_name = fname.rstrip("_benchmark.json")
+    run_name = int(run_name)
     
     path = osp.join(folder, fname)
     with open(path, "r") as data:
@@ -26,19 +27,17 @@ for fname in os.listdir(folder):
     
     data = json.loads(data)
     for entry in data['benchmarks']:
-        test_name = entry['fullname'].replace("test_py_benchmark.py::", "")
+        test_name = entry['fullname']\
+            .replace("test_py_benchmark.py::", "")\
+            .replace("tests/", "")
         mean = entry['stats']['mean']
-        
-        results.append([
-            run_name,
-            test_name,
-            mean
-        ])
+        results.append([ run_name, test_name, mean ])
         
 results = pd.DataFrame(
     results,
     columns=["run", "test", "average"]
     )
+results = results.sort_values("run")
 
 tests = results["test"].unique()
 
@@ -71,8 +70,6 @@ for ax, test in zip(axes.flat, tests):
     )
 
     ax.set_title(test)
-    ax.set_xlabel("")
-    ax.set_ylabel("Mean (seconds)")
 
     # Consistent Y range
     # Y-axis maximum specific to this benchmark
@@ -85,12 +82,13 @@ for ax, test in zip(axes.flat, tests):
     ax.tick_params(axis="x", rotation=45)
     ax.grid(axis="y", alpha=0.25)
     ax.set_axisbelow(True)
-    ax.set_title(test, fontsize=10)
-    ax.set_xlabel("", fontsize=9)
-    ax.set_ylabel("Mean (seconds)", fontsize=9)
+    
+    ax.set_title(test, fontsize=7)
+    ax.set_xlabel("", fontsize=7)
+    ax.set_ylabel("Mean (seconds)", fontsize=5)
 
-    ax.tick_params(axis="x", labelsize=8, rotation=45)
-    ax.tick_params(axis="y", labelsize=8)
+    ax.tick_params(axis="x", labelsize=5, rotation=45)
+    ax.tick_params(axis="y", labelsize=5)
 
 # Hide unused subplots
 for ax in axes.flat[len(tests):]:

@@ -6,8 +6,9 @@ use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*, types::PyDict};
 use quick_xml::{Writer, events::BytesText};
-// use rayon::prelude::*;
 
+// use rayon::iter::{IntoParallelIterator, ParallelIterator};
+// use rayon::prelude::*;
 #[cfg(feature = "pyo3")]
 use crate::{
     datamap::record::RecordIterator,
@@ -127,19 +128,21 @@ impl Datamap {
 
     /// Returns a hashmap of:
     /// {question_name: {respons_code: response_label}}
+    ///
+    /// This method will only get response labels from questions of
+    /// categorical response type (single choice, multi choice & logical questions).
+    #[allow(clippy::module_inception)]
     pub fn response_label_map(
         &self,
     ) -> HashMap<PlSmallStr, HashMap<AnyValue<'static>, ArcLock<String>>> {
         self.record()
             .content()
             .clone()
-            // .into_par_iter()
-            .into_iter()
+            .iter()
             .map(|question| {
                 let question = question.read();
                 let name = question.name();
                 let question_lookup = question.response_label_map();
-
                 (name.into(), question_lookup)
             })
             .collect()

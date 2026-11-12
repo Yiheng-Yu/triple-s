@@ -1667,6 +1667,16 @@ class Survey:
         """
     @title.setter
     def title(self, /, title: str |None) -> None: ...
+    def to_polars(self, /, response_label: "bool" = None) -> Incomplete:
+        """
+        Export survey raw data to polars dataframe
+        
+        Kwargs:
+            response_label (bool, *optional*):
+                Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`), 
+                Set `False` to show values instead (`[1, 1, 2, ...]`).
+                Default to be consistent with `Survey.response_label` flag
+        """
 
 @final
 class SurveyData:

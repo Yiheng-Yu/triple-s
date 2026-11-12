@@ -137,7 +137,7 @@ pub fn read_from_reader<R: BufRead>(mut input: R) -> Result<(Datamap, EventLog)>
         FileType::Classic => {
             let input = BufReader::new(Cursor::new(prefix).chain(input));
             classic::create_survey_builder(input.lines()).with_context(|| {
-                format!("trying to create survey builder from the data file")
+                "trying to create survey builder from the data file".to_string()
             })?
         }
         FileType::Xml => {
@@ -149,7 +149,7 @@ pub fn read_from_reader<R: BufRead>(mut input: R) -> Result<(Datamap, EventLog)>
             let mut reader = XmlReader::from_str(&text);
             reader.config_mut().trim_text(true);
             xml::create_survey_builder(reader).with_context(|| {
-                format!("trying to create survey builder from the data file")
+                "trying to create survey builder from the data file".to_string()
             })?
         }
     };
