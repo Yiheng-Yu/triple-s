@@ -70,8 +70,7 @@ fn test_value_display_label_not_found() {
     question
         .datamap_mut()
         .response_mut()
-        .with_value_write(0, |item| *item.value_mut() = AnyValue::UInt32(300));
-    // println!("{:?}", question.datamap_mut().response_mut());
+        .with_value_write(0, |item| item.set_value(AnyValue::UInt32(300)));
 
     survey.config_mut().response_display = ResponseDisplay::Label;
     match question.to_series() {
@@ -89,4 +88,12 @@ fn test_value_display_label_not_found() {
 #[test]
 fn test_read_stack_overflow_survey() {
     let _ = read_stack_overflow();
+}
+
+#[test]
+fn test_value_counts() {
+    let survey = get_survey_struct();
+    let question = survey.get_question_data("Q3").unwrap();
+    let stats = question.value_counts(false, None).unwrap();
+    println!("{:?}", stats)
 }

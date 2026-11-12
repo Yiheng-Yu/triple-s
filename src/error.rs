@@ -495,6 +495,37 @@ impl From<NoDataError> for pyo3::PyErr {
     }
 }
 
+#[derive(Debug)]
+pub struct QuestionNotFound { name: String }
+
+
+impl QuestionNotFound { 
+    pub fn new(name: impl Into<String> ) -> Self {
+        Self { name: name.into() }
+    }
+}
+
+impl fmt::Display for QuestionNotFound {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Question '{}' not found in the survey", &self.name)
+    }
+}
+
+impl Error for QuestionNotFound {}
+
+impl From<QuestionNotFound> for polars::error::PolarsError {
+    fn from(value: QuestionNotFound) -> Self {
+        polars::error::PolarsError::SchemaFieldNotFound(value.to_string().into())
+    }
+}
+
+#[cfg(feature = "pyo3")]
+impl From<QuestionNotFound> for pyo3::PyErr {
+    fn from(value: QuestionNotFound) -> Self {
+        exceptions::PyKeyError::new_err(value.to_string())
+    }
+}
+
 // ======================= warnings =======================
 #[derive(Debug)]
 pub struct EventLog {

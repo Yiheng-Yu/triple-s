@@ -17,9 +17,7 @@ use crate::{
     utils::{get_type_name, normalize_py_index, polars_to_pandas},
 };
 use crate::{
-    data::{QuestionData, SurveyData, config::Config},
-    datamap::Datamap,
-    utils::{ArcLock, lock_it_up},
+    data::{QuestionData, SurveyData, config::Config}, datamap::Datamap, error::QuestionNotFound, utils::{ArcLock, lock_it_up},
 };
 
 #[cfg_attr(any(not(feature = "pyo3"), doc), doc = include_str!("./doc/survey_rs.md"))]
@@ -296,6 +294,25 @@ impl Survey {
     }
 }
 
+/// Creating quick analysis
+/// 
+/// ---
+impl Survey {
+    /// Gets a topline table for a given question
+    /// 
+    fn get_question_summary(&self, question_name: &str, group_by: &[&str]) -> PolarsResult<DataFrame> {
+        
+        let target = self.get_question_data(question_name);
+            // .ok_or(|| QuestionNotFound::new(question_name).into())?;
+
+        todo!()
+    }
+}
+
+
+/// Pyo3 implementations
+/// 
+/// ---
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Survey {

@@ -151,8 +151,6 @@ impl Flag for ResponseDisplay {
 #[cfg(test)]
 mod test {
 
-    // use std::collections::HashMap;
-
     use super::*;
 
     #[test]
@@ -164,36 +162,4 @@ mod test {
         config.response_display = ResponseDisplay::Value;
         assert_eq!(config.show_response_label(), false)
     }
-
-    // #[test]
-    // fn test_value_count_arg_eq() {
-    //     assert_eq!(
-    //         ValueCountArg::new("haha", true),
-    //         ValueCountArg::new("haha", true),
-    //     );
-
-    //     assert_ne!(
-    //         ValueCountArg::new("haha", true),
-    //         ValueCountArg::new("haha", false),
-    //     );
-
-    //     assert_ne!(
-    //         ValueCountArg::new("haha ", true),
-    //         ValueCountArg::new("haha", true),
-    //     )
-    // }
-
-    // #[test]
-    // fn test_hashmap_with_value_count_as_key() {
-    //     let k1 = ValueCountArg::new("haha", true);
-    //     let k2 = ValueCountArg::new("haha", false);
-
-    //     let map = HashMap::from([(k1.clone(), "what"), (k2.clone(), "this is k2")]);
-
-    //     assert_eq!(map[&k1], "what");
-    //     assert_eq!(map.get(&k1).unwrap().clone(), "what");
-
-    //     assert_eq!(map[&k2], "this is k2");
-    //     assert_eq!(map.get(&k2).unwrap().clone(), "this is k2");
-    // }
 }

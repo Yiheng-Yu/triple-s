@@ -15,10 +15,7 @@ use pyo3::{
 use quick_xml::{events::BytesText, writer::Writer};
 
 use crate::{
-    datamap::{QuestionType, Text},
-    error::{self, InvalidArg, MissingAttributeError, UnsupportedFeature},
-    prelude::DeepCopy,
-    utils::{ArcLock, lock_it_up},
+    datamap::{QuestionType, Text}, error::{self, InvalidArg, MissingAttributeError, TypeMismatch, UnsupportedFeature}, prelude::DeepCopy, utils::{ArcLock, lock_it_up},
 };
 #[cfg(feature = "pyo3")]
 use crate::{
@@ -850,44 +847,62 @@ impl Code {
     /// assert_eq!(code.value(), AnyValue::StringOwned("A".into()))
     /// ```
     ///
-    /// Note that mutating the item returned from `code()` method does would not
-    /// update the original code value. To set new value, call `code_mut()`
-    /// instead.
-    ///
-    /// # Example
-    /// ```rust
-    /// use polars::prelude::AnyValue;
-    /// use triple_s::response::Code;
-    ///
-    /// let mut example = Code::new_literal("A", "Tea & coffee", None, None);
-    /// let mut example_code = example.value();
-    ///
-    /// match &mut example_code {
-    ///     AnyValue::StringOwned(item) => *item = "B".into(),
-    ///     _ => (),
-    /// };
-    /// assert_eq!(example_code, AnyValue::StringOwned("B".into()));
-    /// assert_ne!(example_code, example.value());
-    /// ```
+    /// To set new value, call `set_value()` instead.
     pub fn value(&self) -> AnyValue<'static> {
         self.value.read().clone()
     }
 
-    /// Returns a mutable `code` field for updating it.
-    ///
-    /// # Example
-    /// ```rust
-    /// use polars::prelude::AnyValue;
-    /// use triple_s::response::Code;
-    ///
-    /// let mut example = Code::new_literal("A", "Tea & coffee", None, None);
-    ///
-    /// let new_code = AnyValue::UInt32(32);
-    /// *example.value_mut() = new_code.clone();
-    /// assert_eq!(example.value(), new_code);
+    /// Sets the `value` field of current insteance
+    /// 
+    /// # Example: Update code value
+    /// 
     /// ```
-    pub fn value_mut(&mut self) -> RwLockWriteGuard<'_, AnyValue<'static>> {
-        self.value.write()
+    /// use triple_s::Code;
+    /// use polars::prelude::*;
+    /// 
+    /// let mut instance = Code::new_literal("A", "Tea & coffee", None, None);
+    /// assert_eq!(instance.value(), AnyValue::StringOwned("A".into()));
+    /// 
+    /// // Update value
+    /// instance.set_value(AnyValue::Int32(-3))?;
+    /// assert_eq!(instance.value(), AnyValue::Int32(-3));
+    /// 
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    /// 
+    /// This method would only accept one of [`Int32`, `UInt32`, `Float64`, `StringOwned`, `String`] variant of [`AnyValue`] enum.
+    /// 
+    /// ```should_panic
+    /// use triple_s::Code;
+    /// use polars::prelude::*;
+    /// 
+    /// let mut instance = Code::new_literal("A", "Tea & coffee", None, None);
+    /// instance.set_value(AnyValue::Boolean(false)).unwrap();
+    /// ```
+    pub fn set_value(&mut self, value: AnyValue<'static>) -> Result<(), TypeMismatch> {
+        match &value {
+            AnyValue::Int32(..)
+            | AnyValue::UInt32(..)
+            | AnyValue::Float64(..)
+            | AnyValue::StringOwned(..) => {
+                *self.value.write() = value;
+                Ok(())
+            }
+
+            AnyValue::String(val) => {
+                let string_value: PlSmallStr = val.to_string().into();
+                *self.value.write() = AnyValue::StringOwned(string_value);
+                Ok(())
+            }
+
+            _ => {
+                let err_message = format!(
+                    "Expect input to be one of [`Int32`, `UInt32`, `Float64`, `StringOwned`, `String`] variant of `AnyValue` enum, got: `{:?}`",
+                    value
+                );
+                Err(TypeMismatch::new(err_message))
+            }
+        }
     }
 
     /// text label of a response option for a question.
@@ -1096,16 +1111,17 @@ impl Code {
     /// ```
     pub fn cast(&self, dtype: &DataType) -> Result<Self> {
         let mut copy = self.deepcopy();
-        *copy.value_mut() = anyhow::Context::with_context(
-            copy.value().try_strict_cast(dtype).map(AnyValue::into_static),
-            || {
-                format!(
-                    "When trying to conver data type for [ `Code` ] instance with 'code' value '{}'",
-                    self.value().to_text()
-                )
-            },
-        )?;
 
+        let new_value = anyhow::Context::with_context(
+            self.value().try_strict_cast(dtype),
+            || format!(
+                "When trying to convert data type for [ `Code` ] instance with 'code' value '{}'",
+                self.value().to_text()
+            ),
+        )?
+        .into_static();
+
+        copy.set_value(new_value)?;
         Ok(copy)
     }
 

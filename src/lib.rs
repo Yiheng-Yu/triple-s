@@ -184,6 +184,9 @@ pub use prelude::DeepCopy;
 use pyo3::prelude::*;
 pub use survey::Survey;
 
+
+// TODO: SET UP DOCUMENTATION ON CREATING A NEW DATAMAP FROM PYTHON/ RUST SIDE!
+
 // -------------------------------------------------------------------------------------------------
 
 /// Read triple_s file.

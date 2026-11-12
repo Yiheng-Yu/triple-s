@@ -205,4 +205,11 @@ def test_print_one_response_as_label(survey):
         assert isinstance(response, dict)
         print(response)
         break
-        
+
+def test_survey_to_polars(survey):
+    result = survey.to_polars()
+    assert isinstance(result, polars.DataFrame)
+    
+def test_survey_to_pandas(survey):
+    result = survey.to_pandas()
+    assert isinstance(result, pandas.DataFrame)
