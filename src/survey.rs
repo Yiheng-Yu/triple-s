@@ -173,10 +173,9 @@ impl Survey {
     }
 }
 
-
 /// Method calls
 ///
-/// --- 
+/// ---
 impl Survey {
     /// Create new `Survey` instance
     pub fn new(datamap: Datamap, data: SurveyData) -> Self {
@@ -225,7 +224,7 @@ impl Survey {
     /// Args:
     ///
     /// `response_label`:
-    ///     - Set `true` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`) 
+    ///     - Set `true` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`)
     ///     - Set `false` to show values instead (`[1, 1, 2, ...]`).
     pub fn get_row(&self, row_index: usize, response_label: bool) -> PolarsResult<DataFrame> {
         let data = self.data().get_row(row_index)?;
@@ -574,7 +573,6 @@ impl Survey {
     ///             consistent with the survey.dataframe_format
     /// Returns:
     ///     polars.DataFrame | pandas.DataFrame: Value counts with response labels.
-    /// 
     fn py_get_response_label_map<'py>(
         &self,
         py: Python<'py>,
