@@ -142,7 +142,7 @@ impl QuestionData {
         match self.question_type() {
             QuestionType::Single => self.to_labelled_column_single_choice(),
             QuestionType::Multiple => self.to_labelled_column_multi_choice(),
-            _ => self.to_value_column()
+            _ => self.to_value_column(),
         }
     }
 
@@ -159,24 +159,25 @@ impl QuestionData {
     ///     - Name of the column, default `count`
     #[allow(clippy::mutable_key_type)]
     pub fn value_counts(
-        &self, 
-        count_nan: bool, 
+        &self,
+        count_nan: bool,
         name: Option<impl Into<PlSmallStr>>,
     ) -> PolarsResult<DataFrame> {
-        
         let question_name = self.name();
-        
+
         // First do `value_counts`
         let mut summary = {
             let to_count = if self.question_type() == QuestionType::Multiple {
                 self.to_value_column()?
                     // cell with value `null` gets exploded into `null`
-                    .explode(ExplodeOptions { empty_as_null: true, keep_nulls: true, } )?
+                    .explode(ExplodeOptions {
+                        empty_as_null: true,
+                        keep_nulls: true,
+                    })?
                     .take_materialized_series()
             } else {
                 self.to_value_column()?.take_materialized_series()
             };
-
 
             let to_count = if count_nan {
                 to_count.drop_nulls()
@@ -184,8 +185,7 @@ impl QuestionData {
                 to_count
             };
 
-            let col_name = name.map(|val| val.into())
-                .unwrap_or("count".into());
+            let col_name = name.map(|val| val.into()).unwrap_or("count".into());
 
             to_count.value_counts(true, true, col_name, false)?.sort(
                 [&question_name],
@@ -525,7 +525,6 @@ impl QuestionData {
     ///
     /// Returns:
     ///     polars.DataFrame | pandas.DataFrame: Value counts with response labels.
-    ///
     #[pyo3(
         name = "value_counts", 
         signature=(
@@ -562,14 +561,13 @@ impl QuestionData {
     ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
     ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
     ///         Default `False`
-    /// 
+    ///
     /// Returns:
     ///     polars.Series: The respondent data in Polars format.
-    ///
     #[pyo3(name = "to_polars", signature=(response_label: "bool"=None))]
     fn py_to_polars(&self, response_label: Option<bool>) -> PyResult<PySeries> {
         let response_label = response_label.unwrap_or(false);
-        
+
         if response_label {
             self.to_labelled_column()
                 .map(|column| PySeries(column.take_materialized_series()))
@@ -582,17 +580,21 @@ impl QuestionData {
     }
 
     /// Export the answers as a pandas Series object.
-    /// 
+    ///
     /// Kwargs:
     ///     response_label (bool, *optional*):
     ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
     ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
     ///         Default `False`
-    /// 
+    ///
     /// Returns:
     ///     pandas.Series: The respondent data in pandas format.
     #[pyo3(name = "to_pandas", signature=(response_label: "bool"=None))]
-    pub fn py_to_pandas<'py>(&self, py: Python<'py>, response_label: Option<bool>) -> PyResult<Bound<'py, PyAny>> {
+    pub fn py_to_pandas<'py>(
+        &self,
+        py: Python<'py>,
+        response_label: Option<bool>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let series = self.py_to_polars(response_label)?.into_bound_py_any(py)?;
         let kwargs = PyDict::new(py);
         kwargs.set_item("use_pyarrow_extension_array", true)?;
@@ -600,18 +602,21 @@ impl QuestionData {
     }
 
     /// Export the answers as a list.
-    /// 
+    ///
     /// Kwargs:
     ///     response_label (bool, *optional*):
     ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
     ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
     ///         Default `False`
-    /// 
+    ///
     /// Returns:
     ///     list: The response values in row order.
-    /// 
     #[pyo3(name = "to_list", signature=(response_label: "bool"=None))]
-    pub fn py_to_list<'py>(&self, py: Python<'py>, response_label: Option<bool>) -> PyResult<Bound<'py, PyAny>> {
+    pub fn py_to_list<'py>(
+        &self,
+        py: Python<'py>,
+        response_label: Option<bool>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let frame = self.py_to_polars(response_label)?.into_bound_py_any(py)?;
         frame.call_method("to_list", (), None)
     }

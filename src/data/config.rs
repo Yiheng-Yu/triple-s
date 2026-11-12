@@ -148,7 +148,6 @@ impl Flag for ResponseDisplay {
     }
 }
 
-
 #[cfg(test)]
 mod test {
 

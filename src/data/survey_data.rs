@@ -139,7 +139,10 @@ impl SurveyData {
         schema: Option<Arc<Schema>>,
     ) -> Result<Self> {
         let cache = CacheDir::Persistent(std::path::absolute(path_parquet.as_ref())?);
-        let args = ScanArgsParquet { schema, ..Default::default() };
+        let args = ScanArgsParquet {
+            schema,
+            ..Default::default()
+        };
 
         let path_buf = cache.to_path_buf()?;
         let path = PlRefPath::try_from_path(path_buf.as_path())?;
