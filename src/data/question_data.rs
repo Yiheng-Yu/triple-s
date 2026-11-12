@@ -200,43 +200,6 @@ impl QuestionData {
         // Then we do `value_counts`
         let mut value_counts = frequency_counts(&raw_data, count_nan, Some(column_name))?;
 
-        // We then append data labels
-
-        // 
-        // let base_size = raw_data.drop_nulls().len();
-        // let base_size_row = df! {
-        //     &question_name => [None::<u64>, ],
-        //     "label" => ["*Total*", ],
-        //     column_name => [base_size as u64, ]
-        // }?;
-
-        // // Then we do `value_counts`
-        // let mut value_counts = {
-        //     let to_count = if self.question_type() == QuestionType::Multiple {
-        //         raw_data.explode(ExplodeOptions {
-        //                 empty_as_null: true,   // cell with value `null` gets exploded into `null`
-        //                 keep_nulls: true,
-        //             })?
-        //             .take_materialized_series()
-        //     } else {
-        //         raw_data.take_materialized_series()
-        //     };
-
-        //     let to_count: Series = if count_nan {
-        //         to_count
-        //     } else {
-        //         to_count.drop_nulls()
-        //     };
-
-        //     to_count.value_counts(true, true, column_name.into(), false)?.sort(
-        //         [&question_name],
-        //         SortMultipleOptions::default()
-        //             .with_nulls_last(true)
-        //             .with_maintain_order(false)
-        //             .with_order_descending(false),
-        //     )?
-        // };
-
         // append data label
         let label_map = self.response_label_map();
         let labels = value_counts

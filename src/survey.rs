@@ -300,12 +300,21 @@ impl Survey {
 impl Survey {
     /// Gets a topline table for a given question
     /// 
-    fn get_question_summary(&self, question_name: &str, group_by: &[&str]) -> PolarsResult<DataFrame> {
-        
-        let target = self.get_question_data(question_name);
-            // .ok_or(|| QuestionNotFound::new(question_name).into())?;
+    pub fn get_question_summary(&self, question_name: &str, group_by: &[&str]) -> PolarsResult<DataFrame> {
+        let group_expr = group_by.iter()
+            .map(|name| col(*name))
+            .collect::<Vec<_>>();
 
-        todo!()
+        self.data()
+        .lazy()?
+        .clone()
+        .group_by(group_expr)
+        .agg([
+            col(question_name)
+                .value_counts(true, true, "count".into(), false)
+                .alias(question_name)
+        ])
+        .collect()
     }
 }
 
