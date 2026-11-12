@@ -65,7 +65,13 @@ def test_read_triple_s(benchmark):
     _ = benchmark(read_stack_overflow_survey)
 
 
-def test_dump_to_polars(benchmark, survey):
+def test_dump_to_polars_response_value(benchmark, survey):
+    survey.response_display = "value"
+    _ = benchmark(dump_to_polars, survey)
+    
+
+def test_dump_to_polars_response_label(benchmark, survey):
+    survey.response_display = "label"
     _ = benchmark(dump_to_polars, survey)
 
 

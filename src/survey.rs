@@ -274,6 +274,26 @@ impl Survey {
             })
             .collect()
     }
+
+    /// Export survey raw data to polars dataframe
+    /// 
+    /// `response_label`:
+    ///     Set `true` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`), set `false` to show values instead (`[1, 1, 2, ...]`).
+    pub fn to_polars(&self, response_label: bool) -> PolarsResult<DataFrame> {
+        if response_label {
+            let mut lf = self.data().lazy()?.clone();
+
+            let label_lookup = self.datamap().response_label_map();
+            let query = Self::label_response_values(
+                lf.collect_schema()?,
+                &label_lookup
+            )?;
+            lf.select(query).collect()
+
+        } else {
+            self.data().to_polars()
+        }
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -573,6 +593,25 @@ impl Survey {
     #[pyo3(name = "has_data")]
     fn py_has_data(&self) -> bool {
         self.has_data()
+    }
+
+    /// Export survey raw data to polars dataframe
+    /// 
+    /// Kwargs:
+    ///     response_label (bool, *optional*):
+    ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`), 
+    ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
+    ///         Default to be consistent with `Survey.response_label` flag
+    /// 
+    #[pyo3(name = "to_polars", signature=(response_label: "bool"=None))]
+    fn py_to_polars(&self, response_label: Option<bool>) -> PyResult<PyDataFrame> {
+        let response_label = response_label.unwrap_or_else(|| {
+            self.config().show_response_label()
+        });
+
+        self.to_polars(response_label)
+            .map(PyDataFrame)
+            .map_err(|err| PyPolarsErr::Polars(err).into())
     }
 }
 
