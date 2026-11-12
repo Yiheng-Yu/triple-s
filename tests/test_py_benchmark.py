@@ -33,12 +33,14 @@ def iter_rows_with_label(survey):
         _ = row
 
 
-def get_row_with_value(survey, index):
-    _ = survey[index]
+def get_row_with_value(survey, indicies):
+    for index in indicies:
+        _ = survey[index]
 
 
-def get_row_with_label(survey, index):
-    _ = survey[index]
+def get_row_with_label(survey, indicies):
+    for index in indicies:
+        _ = survey[index]
 
 
 def iter_survey_data(survey):
@@ -63,7 +65,13 @@ def test_read_triple_s(benchmark):
     _ = benchmark(read_stack_overflow_survey)
 
 
-def test_dump_to_polars(benchmark, survey):
+def test_dump_to_polars_response_value(benchmark, survey):
+    survey.response_display = "value"
+    _ = benchmark(dump_to_polars, survey)
+    
+
+def test_dump_to_polars_response_label(benchmark, survey):
+    survey.response_display = "label"
     _ = benchmark(dump_to_polars, survey)
 
 
@@ -78,17 +86,17 @@ def test_iter_rows_with_labbel(benchmark, survey):
 def test_get_row_with_value(benchmark, survey):
     survey.response_display = "value"
     index_range = survey.num_response - 1
-    for _ in range(REPEAT):
-        index = random.randint(0, index_range)
-        _ = benchmark(get_row_with_value, survey, index)
+    indicies = [random.randint(0, index_range) for _ in range(REPEAT)]
+    
+    _ = benchmark(get_row_with_value, survey, indicies)
 
 
 def test_get_row_with_label(benchmark, survey):
     survey.response_display = "label"
     index_range = survey.num_response - 1
-    for _ in range(REPEAT):
-        index = random.randint(0, index_range)
-        _ = benchmark(get_row_with_label, survey, index)
+    indicies = [random.randint(0, index_range) for _ in range(REPEAT)]
+    
+    _ = benchmark(get_row_with_label, survey, indicies)
 
 
 def test_iter_survey_data(benchmark, survey):

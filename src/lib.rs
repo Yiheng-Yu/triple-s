@@ -263,6 +263,7 @@ mod triple_s {
 
         let (survey, read_log) = read_from_reader(std::io::BufReader::new(input))
             .with_context(|| format!("When reading '{}'", path_datamap))?;
+
         if read_log.warnings.len() > 0 {
             read_log.print_warning_summary(py, &format!("Reading '{path_datamap}'"))?
         };

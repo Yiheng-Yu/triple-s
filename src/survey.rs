@@ -1,21 +1,20 @@
+use std::collections::HashMap;
 #[cfg(feature = "pyo3")]
 use std::sync::Arc;
-use std::collections::HashMap;
 
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::{
-    IntoPyObjectExt,
-    exceptions,
-    prelude::*,
-};
+use pyo3::{IntoPyObjectExt, exceptions, prelude::*};
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 
 #[cfg(feature = "pyo3")]
 use crate::{
-    SurveyInfo, config::{DataFrameFormat, ResponseDisplay}, prelude::*, utils::{get_type_name, normalize_py_index, polars_to_pandas},
+    SurveyInfo,
+    config::{DataFrameFormat, ResponseDisplay},
+    prelude::*,
+    utils::{get_type_name, normalize_py_index, polars_to_pandas},
 };
 use crate::{
     data::{QuestionData, SurveyData, config::Config},
@@ -225,7 +224,6 @@ impl Survey {
     ///     Set `true` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`), set `false` to show values instead (`[1, 1, 2, ...]`).
     pub fn get_row(&self, row_index: usize, response_label: bool) -> PolarsResult<DataFrame> {
         let data = self.data().get_row(row_index)?;
-
         if !response_label {
             Ok(data)
         } else {
@@ -276,6 +274,21 @@ impl Survey {
             .collect()
     }
 
+    /// Export survey raw data to polars dataframe
+    ///
+    /// `response_label`:
+    ///     Set `true` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`), set `false` to show values instead (`[1, 1, 2, ...]`).
+    pub fn to_polars(&self, response_label: bool) -> PolarsResult<DataFrame> {
+        if response_label {
+            let mut lf = self.data().lazy()?.clone();
+
+            let label_lookup = self.datamap().response_label_map();
+            let query = Self::label_response_values(lf.collect_schema()?, &label_lookup)?;
+            lf.select(query).collect()
+        } else {
+            self.data().to_polars()
+        }
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -337,7 +350,11 @@ impl Survey {
         Ok(format!("Survey({{\n  {}\n}})", value))
     }
 
-    fn __getitem__<'py>(&self, py: Python<'py>, index: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    fn __getitem__<'py>(
+        &self,
+        py: Python<'py>,
+        index: Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         // Read individual row
         if let Ok(index) = index.extract::<isize>() {
             let height = self.num_response().map_err(PyPolarsErr::Polars)?;
@@ -345,11 +362,15 @@ impl Survey {
                 .ok_or(exceptions::PyIndexError::new_err(index))?;
 
             let show_resp_label = self.config().show_response_label();
-            let row = self.get_row(row_index, show_resp_label).map_err(PyPolarsErr::Polars)?;
 
-            PyDataFrame(row).into_bound_py_any(py)?
-                .call_method("to_dicts", (), None)?  // convert to list of dictionaries
-                .call_method("__getitem__", (0, ).into_pyobject(py)?, None) // take the first row
+            // let row = py.detach(|| {
+            let row = self.get_row(row_index, show_resp_label).map_err(PyPolarsErr::Polars)?;
+            // })?;
+
+            PyDataFrame(row)
+                .into_bound_py_any(py)?
+                .call_method("to_dicts", (), None)? // convert to list of dictionaries
+                .call_method("__getitem__", (0,).into_pyobject(py)?, None) // take the first row
 
         // get data for specific question
         } else if let Ok(question_name) = index.extract::<&str>() {
@@ -568,6 +589,23 @@ impl Survey {
     fn py_has_data(&self) -> bool {
         self.has_data()
     }
+
+    /// Export survey raw data to polars dataframe
+    ///
+    /// Kwargs:
+    ///     response_label (bool, *optional*):
+    ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
+    ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
+    ///         Default to be consistent with `Survey.response_label` flag
+    #[pyo3(name = "to_polars", signature=(response_label: "bool"=None))]
+    fn py_to_polars(&self, response_label: Option<bool>) -> PyResult<PyDataFrame> {
+        let response_label =
+            response_label.unwrap_or_else(|| self.config().show_response_label());
+
+        self.to_polars(response_label)
+            .map(PyDataFrame)
+            .map_err(|err| PyPolarsErr::Polars(err).into())
+    }
 }
 
 // ---------- Helpers -----------
@@ -613,20 +651,22 @@ struct ResponseIterator {
     lazy: LazyFrame,
     n_rows: i64,
     index: i64,
-    label_query: Vec<Expr>
+    label_query: Vec<Expr>,
 }
 
-#[cfg(feature="pyo3")]
+#[cfg(feature = "pyo3")]
 impl ResponseIterator {
     pub fn new(lazy: LazyFrame, n_rows: i64, label_query: Vec<Expr>) -> Self {
-        Self { lazy, n_rows, index: 0, label_query }
+        Self {
+            lazy,
+            n_rows,
+            index: 0,
+            label_query,
+        }
     }
 
     fn get_row(&self, index: i64) -> PolarsResult<DataFrame> {
-        self.lazy.clone()
-            .slice(index, 1)
-            .select(&self.label_query)
-            .collect()
+        self.lazy.clone().slice(index, 1).select(&self.label_query).collect()
     }
 }
 
@@ -639,14 +679,15 @@ impl ResponseIterator {
 
     fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
         if self.index >= self.n_rows {
-            return Ok(None)
+            return Ok(None);
         };
 
-        let row = self.get_row(self.index).map_err(PyPolarsErr::Polars)?;
+        let row = py.detach(|| self.get_row(self.index).map_err(PyPolarsErr::Polars))?;
+        // let row = self.get_row(self.index).map_err(PyPolarsErr::Polars)?;
         let row = PyDataFrame(row).into_bound_py_any(py)?;
-        let row = row.call_method("to_dicts", (), None)?  // convert to list of dictionaries
-            .call_method("__getitem__", (0,).into_pyobject(py)?, None)?;  // take the first row
-
+        let row = row
+            .call_method("to_dicts", (), None)? // convert to list of dictionaries
+            .call_method("__getitem__", (0,).into_pyobject(py)?, None)?; // take the first row
         self.index += 1;
         Ok(Some(row))
     }

@@ -81,8 +81,7 @@ impl DataFormat {
             _ => Err(InvalidArg::new(format!(
                 "Invalid file type: Expect '.csv' or '.asc' file, got: {}",
                 path.display()
-            ))
-            .into()),
+            ))),
         }
     }
 }
@@ -316,35 +315,26 @@ impl Record {
             .iter()
             .map(|question| question.read().clone())
             .collect::<Vec<_>>();
-        let parsers = questions
-            .iter()
-            .map(|question| (question.question_type().clone(), question.format().clone()))
-            .collect::<Vec<_>>();
 
         // then do iteration
         match data_format {
             DataFormat::Fixed => {
                 let width = questions
-                    .iter()
-                    .map(|question| *question.location().finish() as usize)
+                    .par_iter()
+                    .map(|question| *question.location().finish())
                     .max()
                     .context("Cannot determine record width: no questions")?;
+
                 Ok(Box::new(std::iter::from_fn(
-                    move || match Self::read_one_record(&mut reader, width) {
+                    move || match Self::read_one_record(&mut reader, width as usize) {
                         Ok(row) if row.is_empty() => None,
                         Ok(row) => Some(
                             questions
                                 .iter()
-                                .zip(&parsers)
-                                .map(|(question, (question_type, format))| {
+                                .map(|question| {
                                     let field = question.locate_data_asc(&row)?;
-                                    Ok(question
-                                        .parse_question_value_with_metadata(
-                                            field,
-                                            question_type,
-                                            format.as_ref(),
-                                        )?
-                                        .into_static())
+                                    let result = question.parse_question_value(field)?;
+                                    Ok(result.into_static())
                                 })
                                 .collect::<Result<Vec<_>>>()
                                 .map(Row),
@@ -354,10 +344,6 @@ impl Record {
                 )))
             }
             DataFormat::Csv => {
-                let csv_columns = questions
-                    .iter()
-                    .map(Question::csv_column_index)
-                    .collect::<Result<Vec<_>>>()?;
                 let rows = csv::ReaderBuilder::new()
                     .has_headers(false)
                     .flexible(true)
@@ -370,24 +356,21 @@ impl Record {
                         })?;
                         questions
                             .iter()
-                            .zip(&parsers)
-                            .zip(&csv_columns)
-                            .map(|((question, (question_type, format)), column_index)| {
-                                let field = question
-                                    .locate_data_csv_at(&row, *column_index)
-                                    .with_context(|| {
-                                    format!(
-                                        "When trying to extract data for question `{}`",
-                                        question.name()
-                                    )
-                                })?;
-                                Ok(question
-                                    .parse_question_value_with_metadata(
-                                        field,
-                                        question_type,
-                                        format.as_ref(),
-                                    )?
-                                    .into_static())
+                            .map(|question| {
+                                let field =
+                                    question.locate_data_csv(&row).with_context(|| {
+                                        format!(
+                                            "When trying to locate data for question `{}`",
+                                            question.name()
+                                        )
+                                    })?;
+
+                                let value = question.parse_question_value(field)
+                                    .with_context(|| format!(
+                                        "When trying to parse raw text '{}' for question `{}`",
+                                        field, question.name()
+                                    ))?;
+                                Ok(value.into_static())
                             })
                             .collect::<Result<Vec<_>>>()
                             .map(Row)

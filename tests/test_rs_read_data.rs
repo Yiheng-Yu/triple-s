@@ -27,8 +27,7 @@ fn test_read_survey() {
 fn test_create_parquet() {
     let datamap = read_datamap(PATH_DATAMAP_V2_0).unwrap();
     let data = read_data(&datamap, PATH_DATAFILE_V2_0).unwrap();
-    let df = data.to_polars().unwrap();
-    println!("{:?}", df)
+    let _df = data.to_polars().unwrap();
 }
 
 #[test]

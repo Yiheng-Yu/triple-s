@@ -13,7 +13,6 @@ use pyo3::{
     types::{PyDict, PyFloat, PyInt, PySlice, PyString, PyTuple},
 };
 use quick_xml::{events::BytesText, writer::Writer};
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{
     datamap::{QuestionType, Text},
@@ -117,17 +116,18 @@ impl Response {
     /// # Example: Shared mutation of response label mapping
     ///
     /// ```rust
+    /// use polars::prelude::AnyValue;
     /// use triple_s::{Code, Response};
     ///
     /// let original = Response::new(None, vec![Code::new_unsigned(3, "Before", None, None)]);
     ///
     /// // Get first copy
     /// let label_map_1 = original.response_label_map();
-    /// let label_copy_1 = label_map_1.get(&AnyValue::UInt32(3)).ok_or("Key not found")?;
+    /// let label_copy_1 = label_map_1.get(&AnyValue::UInt32(3)).expect("Key not found");
     ///
     /// // Get second copy
     /// let mut label_map_2 = original.response_label_map();
-    /// let mut label_copy_2 = label_map_2.get_mut(&AnyValue::UInt32(3)).ok_or("Key not found")?;
+    /// let mut label_copy_2 = label_map_2.get_mut(&AnyValue::UInt32(3)).expect("Key not found");
     ///
     /// // Value of the first and second copy are the same
     /// assert_eq!(label_copy_1.read().as_str(), "Before");
@@ -141,6 +141,7 @@ impl Response {
     ///
     /// # Ok::<(), anyhow::Error>(())
     /// ```
+    #[allow(clippy::module_inception)]
     pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
         self.values()
             .iter()
@@ -178,7 +179,7 @@ impl Response {
     pub fn new(range: Option<DataRange>, values: Vec<Code>) -> Self {
         Self {
             range: lock_it_up(range),
-            values: lock_it_up(values.into_par_iter().map(lock_it_up).collect()),
+            values: lock_it_up(values.into_iter().map(lock_it_up).collect()),
         }
     }
 
@@ -1989,7 +1990,7 @@ impl Eq for DataRange {}
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::datamap::datamap::test::normalize_xml;
+    use crate::datamap::survey_datamap::test::normalize_xml;
 
     #[test]
     fn test_value_float_parse_like() {

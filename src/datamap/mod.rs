@@ -1,18 +1,18 @@
-pub mod datamap;
 pub mod question;
 pub mod read;
 pub mod record;
 pub mod response;
+pub mod survey_datamap;
 pub mod survey_info;
 pub mod text;
 
 use std::{fs::File, path::Path};
 
-pub use datamap::Datamap;
 use polars::{frame::row::Row, prelude::*};
 pub use question::{Location, Question, QuestionType, Spread, Usage};
 pub use record::DataFormat;
 pub use response::{Code, Response};
+pub use survey_datamap::Datamap;
 use tempfile::NamedTempFile;
 pub use text::{Text, Variant};
 
@@ -65,10 +65,12 @@ pub fn read_data(datamap: &Datamap, path_data: impl AsRef<Path>) -> PolarsResult
     // prepare to write parquet file
     let mut writer = ParquetWriter::new(parquet_file).batched(&schema)?;
     let mut batch_buffer = Vec::new();
+
     let row_scan = record
         .scan_data_file(path_data, &data_format)
         .map_err(|err| PolarsError::ComputeError(format!("{:?}", err).into()))
         .with_context(|| format!("When trying to read data from: '{}'", path_string))?;
+
     for row in row_scan {
         let row = row
             .map_err(|err| PolarsError::ComputeError(format!("{:?}", err).into()))
