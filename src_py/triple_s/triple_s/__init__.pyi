@@ -1044,7 +1044,7 @@ class QuestionData:
         """
         Type of the question ('single', 'multiple' etc.,)
         """
-    def value_counts(self, /, count_nan: "bool" = None, name: "str" = "count", format: "'polars'|'pandas'|DataFrameFormat" = None) -> Any:
+    def value_counts(self, /, name: "str" = "count", format: "'polars'|'pandas'|DataFrameFormat" = None) -> Any:
         """
         Count unique values of this question data.
         
@@ -1052,9 +1052,6 @@ class QuestionData:
         where the choice for each respondant is counted individually.
         
         Keyword Args:
-            count_nan (bool, *optional*): Toogle on/ off for counting Null values.
-                Note: multi-choice entries of an empty list (`[]`) will also count as `null`.
-                Default `False`
             name (str, *optional*):
                 Give the resulting count column a specific name (same as `polars.Series.value_counts`)
                 Default `'count'`
@@ -1548,6 +1545,40 @@ class Survey:
             Survey: The constructed Survey instance.
         """
     def __repr__(self, /) -> str: ...
+    def crosstab(self, /, row: "str", column: "str", format: "'polars'|'pandas'|None" = None) -> Any:
+        """
+        Create <a href="https://en.wikipedia.org/wiki/Contingency_table">topline table</a> for question `row`.
+        
+        Returns something that looks like:
+        
+        ```text
+        ┌───────────────────────┬───────┬───────┬──────┬────────────┬──────────────────────────┬───────────────────┬─────┐
+        │ DevIDEAdmired         ┆ Total ┆ Woman ┆ Man  ┆ Non-binary ┆ Prefer to self-describe: ┆ Prefer not to say ┆ NA  │
+        │ ---                   ┆ ---   ┆ ---   ┆ ---  ┆ ---        ┆ ---                      ┆ ---               ┆ --- │
+        │ str                   ┆ u32   ┆ u32   ┆ u32  ┆ u32        ┆ u32                      ┆ u32               ┆ u32 │
+        ╞═══════════════════════╪═══════╪═══════╪══════╪════════════╪══════════════════════════╪═══════════════════╪═════╡
+        │ Base                  ┆ null  ┆ 98    ┆ 1740 ┆ 34         ┆ 20                       ┆ 88                ┆ 20  │
+        │ Neovim                ┆ 142   ┆ 3     ┆ 130  ┆ 3          ┆ 0                        ┆ 6                 ┆ 0   │
+        │ VSCodium              ┆ 65    ┆ 1     ┆ 61   ┆ 2          ┆ 0                        ┆ 1                 ┆ 0   │
+        │ Cursor                ┆ 67    ┆ 4     ┆ 60   ┆ 0          ┆ 0                        ┆ 3                 ┆ 0   │
+        │ Kiro                  ┆ 11    ┆ 0     ┆ 10   ┆ 0          ┆ 0                        ┆ 1                 ┆ 0   │
+        │ …                     ┆ …     ┆ …     ┆ …    ┆ …          ┆ …                        ┆ …                 ┆ …   │
+        │ Rider                 ┆ 52    ┆ 2     ┆ 45   ┆ 2          ┆ 1                        ┆ 2                 ┆ 0   │
+        │ Visual Studio Code    ┆ 586   ┆ 24    ┆ 535  ┆ 7          ┆ 1                        ┆ 17                ┆ 2   │
+        │ Other, please specify ┆ 83    ┆ 2     ┆ 73   ┆ 2          ┆ 0                        ┆ 6                 ┆ 0   │
+        │ Vim                   ┆ 227   ┆ 10    ┆ 206  ┆ 2          ┆ 1                        ┆ 7                 ┆ 1   │
+        │ Xcode                 ┆ 62    ┆ 7     ┆ 51   ┆ 0          ┆ 0                        ┆ 3                 ┆ 1   │
+        └───────────────────────┴───────┴───────┴──────┴────────────┴──────────────────────────┴───────────────────┴─────┘
+        ``` 
+        
+        Args: 
+            row (str): name of the question to analyse
+            column (str): name of the question for topline
+        
+        Kwrags:
+            format ('pandas' | 'polars' | None, *optional*):
+                Which dataframe library this function should return, default `polars`
+        """
     @property
     def data(self, /) -> SurveyData:
         """
@@ -1618,7 +1649,21 @@ class Survey:
         """
         Total number of responses
         """
-    def py_get_response_label_map(self, /, format: Any |None) -> Any:
+    @property
+    def question_names(self, /) -> list[str]:
+        """
+        List of question names loaded to the survey
+        """
+    @property
+    def response_display(self, /) -> str:
+        """
+        Controls whether choice responses are represented by their values or labels; can be 'value' or 'label'.
+        
+        Default 'value'
+        """
+    @response_display.setter
+    def response_display(self, /, value: Any) -> None: ...
+    def response_label_map(self, /, format: "'polars'|'pandas'|None" = None) -> Any:
         """
         Creates a dataframe collating response labels for all questions in the survey.
         Very handy for look up some values.
@@ -1669,20 +1714,6 @@ class Survey:
         Returns:
             polars.DataFrame | pandas.DataFrame: Value counts with response labels.
         """
-    @property
-    def question_names(self, /) -> list[str]:
-        """
-        List of question names loaded to the survey
-        """
-    @property
-    def response_display(self, /) -> str:
-        """
-        Controls whether choice responses are represented by their values or labels; can be 'value' or 'label'.
-        
-        Default 'value'
-        """
-    @response_display.setter
-    def response_display(self, /, value: Any) -> None: ...
     @property
     def title(self, /) -> str |None:
         """

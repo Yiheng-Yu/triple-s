@@ -708,6 +708,20 @@ impl Survey {
             .map_err(|err| PyPolarsErr::Polars(err).into())
     }
 
+    /// Export survey raw data to pandas dataframe
+    ///
+    /// Kwargs:
+    ///     response_label (bool, *optional*):
+    ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
+    ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
+    ///         Default to be consistent with `Survey.response_label` flag
+    #[pyo3(name = "to_pandas", signature=(response_label: "bool"=None))]
+    fn py_to_pandas<'py>(&self, py: Python<'py>, response_label: Option<bool>) -> PyResult<Bound<'py, PyAny>> {
+        let response_label = response_label.unwrap_or(self.config().show_response_label());
+        let df = self.to_polars(response_label).map_err(PyPolarsErr::Polars)?;
+        polars_to_pandas(df, py)
+    }
+
     /// Create <a href="https://en.wikipedia.org/wiki/Contingency_table">topline table</a> for question `row`.
     /// 
     /// Returns something that looks like:
