@@ -97,7 +97,7 @@ impl QuestionData {
     /// Get the lookup table for items in the [`Question::response::values()`] field,
     /// formatted as: { [`Code::value`]: [`Code::label()`] }
     ///
-    /// This method returns a Arc<RwLock<String>> for the code label text, this means mutating
+    /// This method returns a `Arc<RwLock<String>>` for the code label text, this means mutating
     /// code label elsewhere will the hashmap returned from this function. Details on this mutation
     /// behaviour can be found in the documentation in [`Response::response_label_map`].
     #[allow(clippy::mutable_key_type)] // can only be string, float, or int
