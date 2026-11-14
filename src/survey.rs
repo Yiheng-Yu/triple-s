@@ -302,14 +302,14 @@ impl Survey {
 /// ---
 impl Survey {
     /// Gets a [topline table](https://en.wikipedia.org/wiki/Contingency_table) for a given question (`row`) with another question (`column`) as the header.
-    /// 
+    ///
     /// Inputs:
     /// - row: the question name of the rows
     /// - column: topnbreak used for group by
-    /// 
+    ///
     /// Returns:
     /// Something that looks like :
-    /// 
+    ///
     /// ```text
     /// ┌───────────────────────┬───────┬───────┬──────┬────────────┬──────────────────────────┬───────────────────┬─────┐
     /// │ DevIDEAdmired         ┆ Total ┆ Woman ┆ Man  ┆ Non-binary ┆ Prefer to self-describe: ┆ Prefer not to say ┆ NA  │
@@ -716,16 +716,20 @@ impl Survey {
     ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
     ///         Default to be consistent with `Survey.response_label` flag
     #[pyo3(name = "to_pandas", signature=(response_label: "bool"=None))]
-    fn py_to_pandas<'py>(&self, py: Python<'py>, response_label: Option<bool>) -> PyResult<Bound<'py, PyAny>> {
+    fn py_to_pandas<'py>(
+        &self,
+        py: Python<'py>,
+        response_label: Option<bool>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let response_label = response_label.unwrap_or(self.config().show_response_label());
         let df = self.to_polars(response_label).map_err(PyPolarsErr::Polars)?;
         polars_to_pandas(df, py)
     }
 
     /// Create <a href="https://en.wikipedia.org/wiki/Contingency_table">topline table</a> for question `row`.
-    /// 
+    ///
     /// Returns something that looks like:
-    /// 
+    ///
     /// ```text
     /// ┌───────────────────────┬───────┬───────┬──────┬────────────┬──────────────────────────┬───────────────────┬─────┐
     /// │ DevIDEAdmired         ┆ Total ┆ Woman ┆ Man  ┆ Non-binary ┆ Prefer to self-describe: ┆ Prefer not to say ┆ NA  │
@@ -744,12 +748,12 @@ impl Survey {
     /// │ Vim                   ┆ 227   ┆ 10    ┆ 206  ┆ 2          ┆ 1                        ┆ 7                 ┆ 1   │
     /// │ Xcode                 ┆ 62    ┆ 7     ┆ 51   ┆ 0          ┆ 0                        ┆ 3                 ┆ 1   │
     /// └───────────────────────┴───────┴───────┴──────┴────────────┴──────────────────────────┴───────────────────┴─────┘
-    /// ``` 
-    /// 
-    /// Args: 
+    /// ```
+    ///
+    /// Args:
     ///     row (str): name of the question to analyse
     ///     column (str): name of the question for topline
-    /// 
+    ///
     /// Kwrags:
     ///     format ('pandas' | 'polars' | None, *optional*):
     ///         Which dataframe library this function should return, default `polars`
@@ -758,14 +762,13 @@ impl Survey {
         signature=(row: "str", column: "str", format: "'polars'|'pandas'|None"=None)
     )]
     fn py_crosstab<'py>(
-        &self, 
+        &self,
         py: Python<'py>,
-        row: &str, 
+        row: &str,
         column: &str,
         format: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let polars_frame = self.crosstab(row, column)
-            .map_err(PyPolarsErr::Polars)?;
+        let polars_frame = self.crosstab(row, column).map_err(PyPolarsErr::Polars)?;
 
         let format = format
             .map(|value| DataFrameFormat::from_py_any(value))

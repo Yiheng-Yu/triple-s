@@ -142,6 +142,6 @@ pub(crate) fn create_crosstab(
     )?
     .select([
         col("__total").alias("Total"),
-        all().exclude_cols(["__total"]).as_expr()
+        all().exclude_cols(["__total"]).as_expr(),
     ]))
 }

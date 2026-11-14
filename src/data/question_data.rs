@@ -180,10 +180,7 @@ impl QuestionData {
     ///
     /// _The first row is the total count of not-null values_
     #[allow(clippy::mutable_key_type)]
-    pub fn value_counts(
-        &self,
-        name: Option<&str>,
-    ) -> PolarsResult<DataFrame> {
+    pub fn value_counts(&self, name: Option<&str>) -> PolarsResult<DataFrame> {
         let question_name = self.name();
         let column_name = name.unwrap_or("count");
         let raw_data = self.to_value_column()?;
