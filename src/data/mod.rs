@@ -1,4 +1,5 @@
 pub mod config;
+pub(crate) mod operation;
 mod question_data;
 mod survey_data;
 

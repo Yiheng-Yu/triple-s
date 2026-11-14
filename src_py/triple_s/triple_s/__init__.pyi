@@ -1000,23 +1000,41 @@ class QuestionData:
         Note that this methods returns a *deepcopy* of the data, and modifying items returned by this
         method will not mutate the caller.
         """
-    def to_list(self, /) -> Any:
+    def to_list(self, /, response_label: "bool" = None) -> Any:
         """
         Export the answers as a list.
+        
+        Kwargs:
+            response_label (bool, *optional*):
+                Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
+                Set `False` to show values instead (`[1, 1, 2, ...]`).
+                Default `False`
         
         Returns:
             list: The response values in row order.
         """
-    def to_pandas(self, /) -> Any:
+    def to_pandas(self, /, response_label: "bool" = None) -> Any:
         """
         Export the answers as a pandas Series object.
+        
+        Kwargs:
+            response_label (bool, *optional*):
+                Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
+                Set `False` to show values instead (`[1, 1, 2, ...]`).
+                Default `False`
         
         Returns:
             pandas.Series: The respondent data in pandas format.
         """
-    def to_polars(self, /) -> Incomplete:
+    def to_polars(self, /, response_label: "bool" = None) -> Incomplete:
         """
         Return the answers as a polars Series.
+        
+        Kwargs:
+            response_label (bool, *optional*):
+                Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
+                Set `False` to show values instead (`[1, 1, 2, ...]`).
+                Default `False`
         
         Returns:
             polars.Series: The respondent data in Polars format.
@@ -1026,7 +1044,7 @@ class QuestionData:
         """
         Type of the question ('single', 'multiple' etc.,)
         """
-    def value_counts(self, /, count_nan: "bool" = None, format: "'polars'|'pandas'|DataFrameFormat" = None) -> Any:
+    def value_counts(self, /, count_nan: "bool" = None, name: "str" = "count", format: "'polars'|'pandas'|DataFrameFormat" = None) -> Any:
         """
         Count unique values of this question data.
         
@@ -1037,6 +1055,9 @@ class QuestionData:
             count_nan (bool, *optional*): Toogle on/ off for counting Null values.
                 Note: multi-choice entries of an empty list (`[]`) will also count as `null`.
                 Default `False`
+            name (str, *optional*):
+                Give the resulting count column a specific name (same as `polars.Series.value_counts`)
+                Default `'count'`
             format ('polars' | 'pandas' |DataFrameFormat, *optional*): Select what kind of dataframe to output:
                 'polars' | DataFrameFormat.Polars: polars.DataFrame
                 'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
@@ -1046,9 +1067,6 @@ class QuestionData:
         
         Returns:
             polars.DataFrame | pandas.DataFrame: Value counts with response labels.
-        
-        Note:
-            The current implementation excludes null values when count_nan is True.
         """
 
 @final
@@ -1650,6 +1668,11 @@ class Survey:
                     consistent with the survey.dataframe_format
         Returns:
             polars.DataFrame | pandas.DataFrame: Value counts with response labels.
+        """
+    @property
+    def question_names(self, /) -> list[str]:
+        """
+        List of question names loaded to the survey
         """
     @property
     def response_display(self, /) -> str:

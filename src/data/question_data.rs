@@ -32,7 +32,11 @@ use crate::{
 use crate::{
     QuestionType,
     config::ResponseDisplay,
-    data::{config::Config, survey_data::SurveyData},
+    data::{
+        config::Config,
+        operation::{count_not_null, frequency_counts},
+        survey_data::SurveyData,
+    },
     datamap::Question,
     utils::ArcLock,
 };
@@ -93,7 +97,7 @@ impl QuestionData {
     /// Get the lookup table for items in the [`Question::response::values()`] field,
     /// formatted as: { [`Code::value`]: [`Code::label()`] }
     ///
-    /// This method returns a Arc<RwLock<String>> for the code label text, this means mutating
+    /// This method returns a `Arc<RwLock<String>>` for the code label text, this means mutating
     /// code label elsewhere will the hashmap returned from this function. Details on this mutation
     /// behaviour can be found in the documentation in [`Response::response_label_map`].
     #[allow(clippy::mutable_key_type)] // can only be string, float, or int
@@ -138,7 +142,7 @@ impl QuestionData {
     }
 
     /// export to labelled polars column
-    fn to_labelled_column(&self) -> PolarsResult<Column> {
+    pub(crate) fn to_labelled_column(&self) -> PolarsResult<Column> {
         match self.question_type() {
             QuestionType::Single => self.to_labelled_column_single_choice(),
             QuestionType::Multiple => self.to_labelled_column_multi_choice(),
@@ -153,60 +157,76 @@ impl QuestionData {
     /// where the choice for each respondant is counted individually.
     ///
     /// # Arguments
-    /// - `count_nan` (`bool`):
-    ///     - Toogle on/ off for counting Null values, note that multi-choices entries of an empty list (`[]`) will also count as `null`
     /// - `name` (`impl Into<PlSmallStr>`, Optional):
     ///     - Name of the column, default `count`
+    ///
+    /// This function would give you an example output that looks like:
+    ///
+    /// ```bash
+    /// shape: (6, 3)
+    /// ┌──────┬───────────────────────────┬───────┐
+    /// │ Q3   ┆ label                     ┆ count │
+    /// │ ---  ┆ ---                       ┆ ---   │
+    /// │ u64  ┆ str                       ┆ u64   │
+    /// ╞══════╪═══════════════════════════╪═══════╡
+    /// │ null ┆ *Total*                   ┆ 3     │
+    /// │ 1    ┆ Sherwood � Forest         ┆ 2     │
+    /// │ 2    ┆ Nottingham � Castle       ┆ 2     │
+    /// │ 3    ┆ "Friar � Tuck" Restaurant ┆ 1     │
+    /// │ 5    ┆ Mining museum             ┆ 1     │
+    /// │ 9    ┆ Other                     ┆ 2     │
+    /// └──────┴───────────────────────────┴───────┘
+    /// ```
+    ///
+    /// _The first row is the total count of not-null values_
     #[allow(clippy::mutable_key_type)]
     pub fn value_counts(
         &self,
-        count_nan: bool,
-        name: Option<impl Into<PlSmallStr>>,
+        name: Option<&str>,
     ) -> PolarsResult<DataFrame> {
         let question_name = self.name();
+        let column_name = name.unwrap_or("count");
+        let raw_data = self.to_value_column()?;
 
-        // First do `value_counts`
-        let mut summary = {
-            let to_count = if self.question_type() == QuestionType::Multiple {
-                self.to_value_column()?
-                    // cell with value `null` gets exploded into `null`
-                    .explode(ExplodeOptions {
-                        empty_as_null: true,
-                        keep_nulls: true,
-                    })?
-                    .take_materialized_series()
-            } else {
-                self.to_value_column()?.take_materialized_series()
-            };
+        // First get base sizes (total of not-null values)
+        let base_size = count_not_null(&raw_data, column_name)?;
 
-            let to_count = if count_nan {
-                to_count.drop_nulls()
-            } else {
-                to_count
-            };
-
-            let col_name = name.map(|val| val.into()).unwrap_or("count".into());
-
-            to_count.value_counts(true, true, col_name, false)?.sort(
-                [&question_name],
-                SortMultipleOptions::default()
-                    .with_nulls_last(true)
-                    .with_maintain_order(false)
-                    .with_order_descending(false),
-            )?
-        };
+        // Then we do `value_counts`
+        let mut value_counts = frequency_counts(
+            DataFrame::new(raw_data.len(), vec![raw_data])?.lazy(),
+            &question_name,
+            Some(column_name),
+        )?
+        .collect()?;
 
         // append data label
         let label_map = self.response_label_map();
-        let labels = summary
+        let labels = value_counts
             .column(&question_name)?
             .as_materialized_series()
             .iter()
-            .map(|value| label_map.get(&value).map(|val| val.read().to_string()))
+            .map(|value| {
+                if value.is_nan() | value.is_null() {
+                    Some("*null*".into())
+                } else {
+                    label_map.get(&value).map(|val| val.read().to_string())
+                }
+            })
             .collect::<Vec<Option<String>>>();
 
-        summary.insert_column(1, Series::new("label".into(), labels).into())?;
-        Ok(summary)
+        value_counts.insert_column(1, Series::new("label".into(), labels).into())?;
+
+        // putting everything together
+        let concat_args = UnionArgs {
+            parallel: true,
+            rechunk: true,
+            to_supertypes: true,
+            diagonal: true,
+            strict: false,
+            from_partitioned_ds: true,
+            maintain_order: true,
+        };
+        concat([base_size.lazy(), value_counts.lazy()], concat_args)?.collect()
     }
 
     /// Checks if `other` is comes from the same [`Survey`] as `self`.
@@ -510,9 +530,6 @@ impl QuestionData {
     /// where the choice for each respondant is counted individually.
     ///
     /// Keyword Args:
-    ///     count_nan (bool, *optional*): Toogle on/ off for counting Null values.
-    ///         Note: multi-choice entries of an empty list (`[]`) will also count as `null`.
-    ///         Default `False`
     ///     name (str, *optional*):
     ///         Give the resulting count column a specific name (same as `polars.Series.value_counts`)
     ///         Default `'count'`
@@ -528,7 +545,6 @@ impl QuestionData {
     #[pyo3(
         name = "value_counts", 
         signature=(
-            count_nan:"bool" = None,
             name: "str" = "count",
             format: "'polars'|'pandas'|DataFrameFormat" = None
         )
@@ -536,12 +552,10 @@ impl QuestionData {
     fn py_value_counts<'py>(
         &self,
         py: Python<'py>,
-        count_nan: Option<bool>,
         name: Option<&str>,
         format: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let count_nan = count_nan.unwrap_or(false);
-        let result = self.value_counts(count_nan, name).map_err(PyPolarsErr::Polars)?;
+        let result = self.value_counts(name).map_err(PyPolarsErr::Polars)?;
 
         // prep output
         let format = format

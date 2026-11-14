@@ -17,8 +17,9 @@ use crate::{
     utils::{get_type_name, normalize_py_index, polars_to_pandas},
 };
 use crate::{
-    data::{QuestionData, SurveyData, config::Config},
+    data::{QuestionData, SurveyData, config::Config, operation},
     datamap::Datamap,
+    error::QuestionNotFound,
     utils::{ArcLock, lock_it_up},
 };
 
@@ -296,6 +297,95 @@ impl Survey {
     }
 }
 
+/// Creating quick analysis
+///
+/// ---
+impl Survey {
+    /// Gets a [topline table](https://en.wikipedia.org/wiki/Contingency_table) for a given question (`row`) with another question (`column`) as the header.
+    /// 
+    /// Inputs:
+    /// - row: the question name of the rows
+    /// - column: topnbreak used for group by
+    /// 
+    /// Returns:
+    /// Something that looks like :
+    /// 
+    /// ```text
+    /// ┌───────────────────────┬───────┬───────┬──────┬────────────┬──────────────────────────┬───────────────────┬─────┐
+    /// │ DevIDEAdmired         ┆ Total ┆ Woman ┆ Man  ┆ Non-binary ┆ Prefer to self-describe: ┆ Prefer not to say ┆ NA  │
+    /// │ ---                   ┆ ---   ┆ ---   ┆ ---  ┆ ---        ┆ ---                      ┆ ---               ┆ --- │
+    /// │ str                   ┆ u32   ┆ u32   ┆ u32  ┆ u32        ┆ u32                      ┆ u32               ┆ u32 │
+    /// ╞═══════════════════════╪═══════╪═══════╪══════╪════════════╪══════════════════════════╪═══════════════════╪═════╡
+    /// │ Base                  ┆ null  ┆ 98    ┆ 1740 ┆ 34         ┆ 20                       ┆ 88                ┆ 20  │
+    /// │ Neovim                ┆ 142   ┆ 3     ┆ 130  ┆ 3          ┆ 0                        ┆ 6                 ┆ 0   │
+    /// │ VSCodium              ┆ 65    ┆ 1     ┆ 61   ┆ 2          ┆ 0                        ┆ 1                 ┆ 0   │
+    /// │ Cursor                ┆ 67    ┆ 4     ┆ 60   ┆ 0          ┆ 0                        ┆ 3                 ┆ 0   │
+    /// │ Kiro                  ┆ 11    ┆ 0     ┆ 10   ┆ 0          ┆ 0                        ┆ 1                 ┆ 0   │
+    /// │ …                     ┆ …     ┆ …     ┆ …    ┆ …          ┆ …                        ┆ …                 ┆ …   │
+    /// │ Rider                 ┆ 52    ┆ 2     ┆ 45   ┆ 2          ┆ 1                        ┆ 2                 ┆ 0   │
+    /// │ Visual Studio Code    ┆ 586   ┆ 24    ┆ 535  ┆ 7          ┆ 1                        ┆ 17                ┆ 2   │
+    /// │ Other, please specify ┆ 83    ┆ 2     ┆ 73   ┆ 2          ┆ 0                        ┆ 6                 ┆ 0   │
+    /// │ Vim                   ┆ 227   ┆ 10    ┆ 206  ┆ 2          ┆ 1                        ┆ 7                 ┆ 1   │
+    /// │ Xcode                 ┆ 62    ┆ 7     ┆ 51   ┆ 0          ┆ 0                        ┆ 3                 ┆ 1   │
+    /// └───────────────────────┴───────┴───────┴──────┴────────────┴──────────────────────────┴───────────────────┴─────┘
+    /// ```
+    pub fn crosstab(&self, row: &str, column: &str) -> PolarsResult<DataFrame> {
+        let result = operation::create_crosstab(self.data().lazy()?, row, column)?;
+        // We then append row and column labels
+        // column label
+        let column_label = self
+            .datamap()
+            .get(column)
+            .ok_or(QuestionNotFound::new(column))?
+            .response_label_map();
+        let (col_old, col_new): (Vec<String>, Vec<String>) = column_label
+            .iter()
+            .map(|(id, label)| (id.to_string(), label.read().clone()))
+            .unzip();
+        let result = result.rename(col_old, col_new, false);
+
+        // row label
+        let (row_old, row_new): (Vec<AnyValue<'static>>, Vec<String>) = self
+            .datamap()
+            .get(row)
+            .ok_or(QuestionNotFound::new(row))?
+            .response_label_map()
+            .iter()
+            .map(|(id, label)| (id.clone(), label.read().to_string()))
+            .unzip();
+        let row_old = Series::from_any_values("old".into(), &row_old, true)?;
+        let row_new = Series::new("new".into(), row_new);
+
+        let result = result
+            .with_columns([col(row)
+                .replace_strict(
+                    lit(row_old.clone()),
+                    lit(row_new),
+                    Some(lit("Base")), // TODO!
+                    Some(DataType::String),
+                )
+                .alias("label")])
+            .select([
+                col("label").alias(row),
+                all().exclude_cols([row, "label"]).as_expr(),
+            ])
+            .collect()?; // TODO: don't need to collect() here since we can append more crosstab tables in future?
+
+        Ok(result)
+    }
+
+    // pub fn quick_topline(
+    //     &self,
+    //     questions: &[&str],
+    //     topbreak: &str,
+    // ) -> PolarsResult<Vec<DataFrame>> {
+    //     todo!()
+    // }
+}
+
+/// Pyo3 implementations
+///
+/// ---
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Survey {
@@ -573,6 +663,7 @@ impl Survey {
     ///             consistent with the survey.dataframe_format
     /// Returns:
     ///     polars.DataFrame | pandas.DataFrame: Value counts with response labels.
+    #[pyo3(name="response_label_map", signature=(format: "'polars'|'pandas'|None"=None))]
     fn py_get_response_label_map<'py>(
         &self,
         py: Python<'py>,
@@ -615,6 +706,62 @@ impl Survey {
         self.to_polars(response_label)
             .map(PyDataFrame)
             .map_err(|err| PyPolarsErr::Polars(err).into())
+    }
+
+    /// Create <a href="https://en.wikipedia.org/wiki/Contingency_table">topline table</a> for question `row`.
+    /// 
+    /// Returns something that looks like:
+    /// 
+    /// ```text
+    /// ┌───────────────────────┬───────┬───────┬──────┬────────────┬──────────────────────────┬───────────────────┬─────┐
+    /// │ DevIDEAdmired         ┆ Total ┆ Woman ┆ Man  ┆ Non-binary ┆ Prefer to self-describe: ┆ Prefer not to say ┆ NA  │
+    /// │ ---                   ┆ ---   ┆ ---   ┆ ---  ┆ ---        ┆ ---                      ┆ ---               ┆ --- │
+    /// │ str                   ┆ u32   ┆ u32   ┆ u32  ┆ u32        ┆ u32                      ┆ u32               ┆ u32 │
+    /// ╞═══════════════════════╪═══════╪═══════╪══════╪════════════╪══════════════════════════╪═══════════════════╪═════╡
+    /// │ Base                  ┆ null  ┆ 98    ┆ 1740 ┆ 34         ┆ 20                       ┆ 88                ┆ 20  │
+    /// │ Neovim                ┆ 142   ┆ 3     ┆ 130  ┆ 3          ┆ 0                        ┆ 6                 ┆ 0   │
+    /// │ VSCodium              ┆ 65    ┆ 1     ┆ 61   ┆ 2          ┆ 0                        ┆ 1                 ┆ 0   │
+    /// │ Cursor                ┆ 67    ┆ 4     ┆ 60   ┆ 0          ┆ 0                        ┆ 3                 ┆ 0   │
+    /// │ Kiro                  ┆ 11    ┆ 0     ┆ 10   ┆ 0          ┆ 0                        ┆ 1                 ┆ 0   │
+    /// │ …                     ┆ …     ┆ …     ┆ …    ┆ …          ┆ …                        ┆ …                 ┆ …   │
+    /// │ Rider                 ┆ 52    ┆ 2     ┆ 45   ┆ 2          ┆ 1                        ┆ 2                 ┆ 0   │
+    /// │ Visual Studio Code    ┆ 586   ┆ 24    ┆ 535  ┆ 7          ┆ 1                        ┆ 17                ┆ 2   │
+    /// │ Other, please specify ┆ 83    ┆ 2     ┆ 73   ┆ 2          ┆ 0                        ┆ 6                 ┆ 0   │
+    /// │ Vim                   ┆ 227   ┆ 10    ┆ 206  ┆ 2          ┆ 1                        ┆ 7                 ┆ 1   │
+    /// │ Xcode                 ┆ 62    ┆ 7     ┆ 51   ┆ 0          ┆ 0                        ┆ 3                 ┆ 1   │
+    /// └───────────────────────┴───────┴───────┴──────┴────────────┴──────────────────────────┴───────────────────┴─────┘
+    /// ``` 
+    /// 
+    /// Args: 
+    ///     row (str): name of the question to analyse
+    ///     column (str): name of the question for topline
+    /// 
+    /// Kwrags:
+    ///     format ('pandas' | 'polars' | None, *optional*):
+    ///         Which dataframe library this function should return, default `polars`
+    #[pyo3(
+        name = "crosstab", 
+        signature=(row: "str", column: "str", format: "'polars'|'pandas'|None"=None)
+    )]
+    fn py_crosstab(
+        &self, 
+        py: Python<'py>,
+        row: &str, 
+        column: &str,
+        format: Option<Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let polars_frame = self.crosstab(row, column)
+            .map_err(PyPolarsErr::Polars)?;
+
+        let format = format
+            .map(|value| DataFrameFormat::from_py_any(value))
+            .transpose()?
+            .unwrap_or(DataFrameFormat::Polars);
+
+        match format {
+            DataFrameFormat::Polars => PyDataFrame(polars_frame).into_bound_py_any(py),
+            DataFrameFormat::Pandas => polars_to_pandas(polars_frame, py),
+        }
     }
 }
 
