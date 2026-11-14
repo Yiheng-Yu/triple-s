@@ -743,7 +743,7 @@ impl Survey {
         name = "crosstab", 
         signature=(row: "str", column: "str", format: "'polars'|'pandas'|None"=None)
     )]
-    fn py_crosstab(
+    fn py_crosstab<'py>(
         &self, 
         py: Python<'py>,
         row: &str, 
