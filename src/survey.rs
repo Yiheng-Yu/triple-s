@@ -16,7 +16,6 @@ use crate::{
     prelude::*,
     utils::{get_type_name, normalize_py_index, polars_to_pandas},
 };
-
 use crate::{
     data::{QuestionData, SurveyData, config::Config, operation},
     datamap::Datamap,
@@ -314,15 +313,13 @@ impl Survey {
         //     .sort([group_by], SortMultipleOptions::default())?
         //     .select([question_name, group_by])?
         //     .transpose(
-        //         Some(group_by), 
+        //         Some(group_by),
         //         None,
         //     )
-        
-        let pivot = operation::create_crosstab(
-            self.data().lazy()?, 
-            question_name, 
-            group_by
-        )?;
+
+        // operation::calc_base_size(self.data().lazy()?, group_by)
+
+        let result = operation::create_crosstab(self.data().lazy()?, question_name, group_by)?;
 
         // We then append row and column labels
         // column label
@@ -341,7 +338,7 @@ impl Survey {
                 )
             })
             .unzip();
-        let pivot = pivot.rename(col_old, col_new, false);
+        let result = result.rename(col_old, col_new, false);
 
         // row label
         let (row_old, row_new): (Vec<AnyValue<'static>>, Vec<String>) = self
@@ -351,13 +348,22 @@ impl Survey {
             .response_label_map()
             .iter()
             .map(|(id, label)| (id.clone(), label.read().to_string()))
+            // .chain(std::iter::once(
+            //     (AnyValue::StringOwned("Base".into()), "Base".into())
+            // ))
             .unzip();
+
         let row_old = Series::from_any_values("old".into(), &row_old, true)?;
         let row_new = Series::new("new".into(), row_new);
 
-        let result = pivot
+        let result = result
             .with_columns([col(question_name)
-                .replace_strict(lit(row_old), lit(row_new), None, Some(DataType::String))
+                .replace_strict(
+                    lit(row_old.clone()),
+                    lit(row_new),
+                    Some(lit("Base")),
+                    Some(DataType::String),
+                )
                 .alias("label")])
             .select([
                 col("label").alias(question_name),

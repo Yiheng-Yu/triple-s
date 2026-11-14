@@ -58,34 +58,46 @@ pub(crate) fn count_not_null(column: &Column, name: &str) -> PolarsResult<DataFr
 }
 
 /// This function returns a lazyframe to be collected later (basically needs to add text labels)
-/// 
+///
 /// Inputs:
 /// - target: sidebreak
 /// - group_by: topbreak
 pub(crate) fn create_crosstab(
-    lf: &LazyFrame,
+    original: &LazyFrame,
     target: &str,
     group_by: &str,
 ) -> PolarsResult<LazyFrame> {
-    let lf = lf.clone()
-        .with_columns([
-            concat_list([col(group_by)])?.alias(group_by),
-        ])
-    .explode(
-        cols([group_by]),
-        ExplodeOptions {
-            empty_as_null: false,
-            keep_nulls: false,
-        },
-    )
-    .with_columns([concat_list([col(target)])?.alias(target),])
-    .explode(
-        cols([target]),
-        ExplodeOptions {
-            empty_as_null: false,
-            keep_nulls: false,
-        },
-    );
+    // create base sizes
+    let base_col =
+        original.clone().select([col(group_by)]).collect()?.column(group_by)?.clone();
+    let base_size = frequency_counts(&base_col, true, Some("Base"))?
+        .lazy()
+        .with_column(col(group_by).cast(DataType::String))
+        .collect()?
+        .transpose(
+            Some(target),
+            Some(either::Either::Left(group_by.to_string())),
+        )?;
+
+    // create cross tabs
+    let lf = original
+        .clone()
+        .with_columns([concat_list([col(group_by)])?.alias(group_by)])
+        .explode(
+            cols([group_by]),
+            ExplodeOptions {
+                empty_as_null: false,
+                keep_nulls: false,
+            },
+        )
+        .with_columns([concat_list([col(target)])?.alias(target)])
+        .explode(
+            cols([target]),
+            ExplodeOptions {
+                empty_as_null: false,
+                keep_nulls: false,
+            },
+        );
 
     let columns = lf
         .clone()
@@ -98,7 +110,7 @@ pub(crate) fn create_crosstab(
         .clone()
         .pivot(
             cols([group_by]),
-            Arc::new(columns),
+            Arc::new(columns.clone()),
             cols([target]),
             cols([target]),
             len(),
@@ -107,20 +119,22 @@ pub(crate) fn create_crosstab(
             polars::frame::PivotColumnNaming::Auto,
         )
         .sort([target], SortMultipleOptions::default());
+    // Ok(pivot)
 
-    Ok(pivot)
-}
-
-pub (crate) fn calc_base_size(
-    lf: &LazyFrame,
-    target: &str,
-    group_by: &str,
-) -> PolarsResult<DataFrame> {
-    
-    let df = lf.clone()
-        .group_by([col(group_by)])
-        .agg([col(target).count()])
-        .collect()?;
-
-    Ok(df)
+    println!("{:?}", base_size);
+    println!(
+        "Write some sort of python function to validate if this crosstab was correct or not!!"
+    );
+    concat(
+        [base_size.lazy(), pivot],
+        UnionArgs {
+            diagonal: true,
+            from_partitioned_ds: true,
+            parallel: true,
+            rechunk: true,
+            to_supertypes: true,
+            strict: true,
+            maintain_order: false,
+        },
+    )
 }
