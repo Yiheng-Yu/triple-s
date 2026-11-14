@@ -302,19 +302,15 @@ impl Survey {
 /// ---
 impl Survey {
     /// Gets a topline table for a given question
-    pub fn crosstab(
-        &self, 
-        question_name: &str, 
-        group_by: &str
-    ) -> PolarsResult<DataFrame> {
-        let result = operation::create_crosstab(self.data().lazy()?, question_name, group_by)?;
+    pub fn crosstab(&self, row: &str, column: &str) -> PolarsResult<DataFrame> {
+        let result = operation::create_crosstab(self.data().lazy()?, row, column)?;
 
         // We then append row and column labels
         // column label
         let column_label = self
             .datamap()
-            .get(group_by)
-            .ok_or(QuestionNotFound::new(group_by))?
+            .get(column)
+            .ok_or(QuestionNotFound::new(column))?
             .response_label_map();
         let (col_old, col_new): (Vec<String>, Vec<String>) = column_label
             .iter()
@@ -330,8 +326,8 @@ impl Survey {
         // row label
         let (row_old, row_new): (Vec<AnyValue<'static>>, Vec<String>) = self
             .datamap()
-            .get(question_name)
-            .ok_or(QuestionNotFound::new(question_name))?
+            .get(row)
+            .ok_or(QuestionNotFound::new(row))?
             .response_label_map()
             .iter()
             .map(|(id, label)| (id.clone(), label.read().to_string()))
@@ -340,7 +336,7 @@ impl Survey {
         let row_new = Series::new("new".into(), row_new);
 
         let result = result
-            .with_columns([col(question_name)
+            .with_columns([col(row)
                 .replace_strict(
                     lit(row_old.clone()),
                     lit(row_new),
@@ -349,8 +345,8 @@ impl Survey {
                 )
                 .alias("label")])
             .select([
-                col("label").alias(question_name),
-                all().exclude_cols([question_name, "label"]).as_expr(),
+                col("label").alias(row),
+                all().exclude_cols([row, "label"]).as_expr(),
             ])
             .collect()?;  // TODO: don't need to collect() here since we can append more crosstab tables in future?
 

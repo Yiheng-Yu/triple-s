@@ -2,13 +2,17 @@
 
 use polars::prelude::*;
 
-/// Build a lazy frequency table with a value column and an IdxType count column.
+/// Count unique values of this Series and a column "counts" with dtype IdxType
 ///
-/// List entries are exploded so each choice is counted individually. Empty lists
-/// and null lists count as null when `count_nan` is true. Despite its name,
-/// `count_nan` controls nulls, not floating-point NaNs.
+/// This function basically calls [`polars::Series::value_counts`] under the hood, apart from multi-choice
+/// questions ([`QuestionData::question_type()`] is [`QuestionType::Multiple`]),
+/// where the choice for each respondant is counted individually.
 ///
-/// Only the schema is resolved here; data execution is deferred until collection.
+/// # Arguments
+/// - `count_nan` (`bool`):
+///     - Toogle on/ off for counting Null values, note that multi-choices entries of an empty list (`[]`) will also count as `null`
+/// - `name` (`impl Into<PlSmallStr>`, Optional):
+///     - Name of the column, default `count`
 pub(crate) fn frequency_counts(
     frame: LazyFrame,
     column_name: &str,
@@ -70,6 +74,12 @@ pub(crate) fn create_crosstab(
             Some(either::Either::Left(group_by.to_string())),
         )?;
 
+    let overall = frequency_counts(
+        original.clone().select([col(target)]),
+        target,
+        Some("__total"),
+    )?;
+
     // create cross tabs
     let lf = original
         .clone()
@@ -111,8 +121,15 @@ pub(crate) fn create_crosstab(
         )
         .sort([target], SortMultipleOptions::default());
 
-    concat(
-        [base_size.lazy(), pivot],
+    let summary = overall.join(
+        pivot,
+        [col(target)],
+        [col(target)],
+        JoinArgs::new(JoinType::Left),
+    );
+
+    Ok(concat(
+        [base_size.lazy(), summary],
         UnionArgs {
             diagonal: true,
             from_partitioned_ds: true,
@@ -122,5 +139,9 @@ pub(crate) fn create_crosstab(
             strict: true,
             maintain_order: false,
         },
-    )
+    )?
+    .select([
+        col("__total").alias("Total"),
+        all().exclude_cols(["__total"]).as_expr()
+    ]))
 }
