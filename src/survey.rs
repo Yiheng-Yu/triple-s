@@ -303,22 +303,6 @@ impl Survey {
 impl Survey {
     /// Gets a topline table for a given question
     pub fn crosstab(&self, question_name: &str, group_by: &str) -> PolarsResult<DataFrame> {
-        // let base_size = operation::calc_base_size(
-        //     self.data().lazy()?,
-        //     question_name,
-        //     group_by
-        // )?;
-
-        // base_size
-        //     .sort([group_by], SortMultipleOptions::default())?
-        //     .select([question_name, group_by])?
-        //     .transpose(
-        //         Some(group_by),
-        //         None,
-        //     )
-
-        // operation::calc_base_size(self.data().lazy()?, group_by)
-
         let result = operation::create_crosstab(self.data().lazy()?, question_name, group_by)?;
 
         // We then append row and column labels
@@ -334,7 +318,6 @@ impl Survey {
                 (
                     id.to_string(),
                     label.read().clone()
-                    // format!("{} - {}", group_by, label.read().clone()),
                 )
             })
             .unzip();
@@ -348,11 +331,7 @@ impl Survey {
             .response_label_map()
             .iter()
             .map(|(id, label)| (id.clone(), label.read().to_string()))
-            // .chain(std::iter::once(
-            //     (AnyValue::StringOwned("Base".into()), "Base".into())
-            // ))
             .unzip();
-
         let row_old = Series::from_any_values("old".into(), &row_old, true)?;
         let row_new = Series::new("new".into(), row_new);
 
@@ -361,7 +340,7 @@ impl Survey {
                 .replace_strict(
                     lit(row_old.clone()),
                     lit(row_new),
-                    Some(lit("Base")),
+                    Some(lit("Base")),  // TODO!
                     Some(DataType::String),
                 )
                 .alias("label")])
@@ -369,9 +348,13 @@ impl Survey {
                 col("label").alias(question_name),
                 all().exclude_cols([question_name, "label"]).as_expr(),
             ])
-            .collect()?;
+            .collect()?;  // TODO: don't need to collect() here since we can append more crosstab tables in future?
 
         Ok(result)
+    }
+
+    pub fn quick_topline(&self, questions: &[&str], topbreak: &str) -> PolarsResult<Vec<DataFrame>> {
+        todo!()
     }
 }
 

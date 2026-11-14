@@ -70,7 +70,7 @@ pub(crate) fn create_crosstab(
     // create base sizes
     let base_col =
         original.clone().select([col(group_by)]).collect()?.column(group_by)?.clone();
-    let base_size = frequency_counts(&base_col, true, Some("Base"))?
+    let base_size = frequency_counts(&base_col, false, Some("Base"))?
         .lazy()
         .with_column(col(group_by).cast(DataType::String))
         .collect()?
@@ -119,12 +119,7 @@ pub(crate) fn create_crosstab(
             polars::frame::PivotColumnNaming::Auto,
         )
         .sort([target], SortMultipleOptions::default());
-    // Ok(pivot)
 
-    println!("{:?}", base_size);
-    println!(
-        "Write some sort of python function to validate if this crosstab was correct or not!!"
-    );
     concat(
         [base_size.lazy(), pivot],
         UnionArgs {
