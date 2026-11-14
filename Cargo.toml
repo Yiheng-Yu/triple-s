@@ -84,9 +84,6 @@ pyo3-build-config = { version = ">=0.29.2", features = [
     "resolve-config",
 ], optional = true }
 
-[dev-dependencies]
-reqwest = { version = "0.13.5", features = ["blocking"] }
-polars = { version="0.55", features = ["lazy", "parquet", "replace", "rows", "fmt", "dtype-categorical", "pivot"]}
 
 [features]
 default = []
