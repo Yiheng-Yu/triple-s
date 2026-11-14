@@ -302,7 +302,11 @@ impl Survey {
 /// ---
 impl Survey {
     /// Gets a topline table for a given question
-    pub fn crosstab(&self, question_name: &str, group_by: &str) -> PolarsResult<DataFrame> {
+    pub fn crosstab(
+        &self, 
+        question_name: &str, 
+        group_by: &str
+    ) -> PolarsResult<DataFrame> {
         let result = operation::create_crosstab(self.data().lazy()?, question_name, group_by)?;
 
         // We then append row and column labels

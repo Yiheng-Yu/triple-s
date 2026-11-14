@@ -2,49 +2,43 @@
 
 use polars::prelude::*;
 
-/// Count unique values of this Series and a column "counts" with dtype IdxType
+/// Build a lazy frequency table with a value column and an IdxType count column.
 ///
-/// This function basically calls [`polars::Series::value_counts`] under the hood, apart from multi-choice
-/// questions ([`QuestionData::question_type()`] is [`QuestionType::Multiple`]),
-/// where the choice for each respondant is counted individually.
+/// List entries are exploded so each choice is counted individually. Empty lists
+/// and null lists count as null when `count_nan` is true. Despite its name,
+/// `count_nan` controls nulls, not floating-point NaNs.
 ///
-/// # Arguments
-/// - `count_nan` (`bool`):
-///     - Toogle on/ off for counting Null values, note that multi-choices entries of an empty list (`[]`) will also count as `null`
-/// - `name` (`impl Into<PlSmallStr>`, Optional):
-///     - Name of the column, default `count`
+/// Only the schema is resolved here; data execution is deferred until collection.
 pub(crate) fn frequency_counts(
-    column: &Column,
-    count_nan: bool,
+    frame: LazyFrame,
+    column_name: &str,
     name: Option<&str>,
-) -> PolarsResult<DataFrame> {
-    let colname_title = column.name();
-    let colname_stats = name.unwrap_or("count");
-
-    // Then we do `value_counts`
-    let to_count = match column.dtype() {
-        DataType::List(_) => column
-            .explode(ExplodeOptions {
+) -> PolarsResult<LazyFrame> {
+    let mut to_count = frame.select([col(column_name)]);
+    if matches!(
+        to_count.collect_schema()?.try_get(column_name)?,
+        DataType::List(_)
+    ) {
+        to_count = to_count.explode(
+            cols([column_name]),
+            ExplodeOptions {
                 empty_as_null: true,
                 keep_nulls: true,
-            })?
-            .take_materialized_series(),
-        _ => column._get_backing_series(),
-    };
+            },
+        );
+    }
 
-    let to_count = if count_nan {
-        to_count
-    } else {
-        to_count.drop_nulls()
-    };
-
-    to_count.value_counts(true, true, colname_stats.into(), false)?.sort(
-        [&colname_title],
-        SortMultipleOptions::default()
-            .with_nulls_last(true)
-            .with_maintain_order(false)
-            .with_order_descending(false),
-    )
+    Ok(to_count
+        .filter(col(column_name).is_not_null())
+        .group_by([col(column_name)])
+        .agg([len().alias(name.unwrap_or("count"))])
+        .sort(
+            [column_name],
+            SortMultipleOptions::default()
+                .with_nulls_last(true)
+                .with_maintain_order(false)
+                .with_order_descending(false),
+        ))
 }
 
 /// Count total amount of not-null entries in a column, and return result as dataframe of single row
@@ -68,10 +62,7 @@ pub(crate) fn create_crosstab(
     group_by: &str,
 ) -> PolarsResult<LazyFrame> {
     // create base sizes
-    let base_col =
-        original.clone().select([col(group_by)]).collect()?.column(group_by)?.clone();
-    let base_size = frequency_counts(&base_col, false, Some("Base"))?
-        .lazy()
+    let base_size = frequency_counts(original.clone(), group_by, Some("Base"))?
         .with_column(col(group_by).cast(DataType::String))
         .collect()?
         .transpose(

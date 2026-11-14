@@ -157,8 +157,6 @@ impl QuestionData {
     /// where the choice for each respondant is counted individually.
     ///
     /// # Arguments
-    /// - `count_nan` (`bool`):
-    ///     - Toogle on/ off for counting Null values, note that multi-choices entries of an empty list (`[]`) will also count as `null`
     /// - `name` (`impl Into<PlSmallStr>`, Optional):
     ///     - Name of the column, default `count`
     ///
@@ -184,7 +182,6 @@ impl QuestionData {
     #[allow(clippy::mutable_key_type)]
     pub fn value_counts(
         &self,
-        count_nan: bool,
         name: Option<&str>,
     ) -> PolarsResult<DataFrame> {
         let question_name = self.name();
@@ -195,7 +192,12 @@ impl QuestionData {
         let base_size = count_not_null(&raw_data, column_name)?;
 
         // Then we do `value_counts`
-        let mut value_counts = frequency_counts(&raw_data, count_nan, Some(column_name))?;
+        let mut value_counts = frequency_counts(
+            DataFrame::new(raw_data.len(), vec![raw_data])?.lazy(),
+            &question_name,
+            Some(column_name),
+        )?
+        .collect()?;
 
         // append data label
         let label_map = self.response_label_map();
@@ -528,9 +530,6 @@ impl QuestionData {
     /// where the choice for each respondant is counted individually.
     ///
     /// Keyword Args:
-    ///     count_nan (bool, *optional*): Toogle on/ off for counting Null values.
-    ///         Note: multi-choice entries of an empty list (`[]`) will also count as `null`.
-    ///         Default `False`
     ///     name (str, *optional*):
     ///         Give the resulting count column a specific name (same as `polars.Series.value_counts`)
     ///         Default `'count'`
@@ -546,7 +545,6 @@ impl QuestionData {
     #[pyo3(
         name = "value_counts", 
         signature=(
-            count_nan:"bool" = None,
             name: "str" = "count",
             format: "'polars'|'pandas'|DataFrameFormat" = None
         )
@@ -554,12 +552,10 @@ impl QuestionData {
     fn py_value_counts<'py>(
         &self,
         py: Python<'py>,
-        count_nan: Option<bool>,
         name: Option<&str>,
         format: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let count_nan = count_nan.unwrap_or(false);
-        let result = self.value_counts(count_nan, name).map_err(PyPolarsErr::Polars)?;
+        let result = self.value_counts(name).map_err(PyPolarsErr::Polars)?;
 
         // prep output
         let format = format

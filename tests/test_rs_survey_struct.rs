@@ -97,7 +97,7 @@ fn test_read_stack_overflow_survey() {
     let base = survey
         .get_question_data("Gender")
         .unwrap()
-        .value_counts(false, Some("count"))
+        .value_counts(Some("count"))
         .unwrap();
     println!("{:?}", base);
 }
@@ -106,6 +106,6 @@ fn test_read_stack_overflow_survey() {
 fn test_value_counts() {
     let survey = get_survey_struct();
     let question = survey.get_question_data("Q3").unwrap();
-    let stats = question.value_counts(false, None).unwrap();
+    let stats = question.value_counts(None).unwrap();
     println!("{:?}", stats)
 }
