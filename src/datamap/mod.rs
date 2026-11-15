@@ -18,7 +18,7 @@ pub use text::{Text, Variant};
 
 use crate::data::SurveyData;
 
-const BATCH_SIZE: usize = 500; // no. rows when writing to paquet cache
+const BATCH_SIZE: usize = 4096; // no. rows when writing to paquet cache
 
 /// Reads .asc or .csv datafile with datamap provided.
 ///

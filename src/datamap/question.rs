@@ -782,6 +782,7 @@ impl Question {
     /// Chinese characters and supplementary characters each occupy one position.
     pub(crate) fn locate_data_asc<'a>(&self, row: &'a str) -> Result<&'a str> {
         let data_location = self.get_data_range();
+
         let mut boundaries =
             row.char_indices().map(|(offset, _)| offset).chain(std::iter::once(row.len()));
         let data = boundaries
@@ -807,6 +808,14 @@ impl Question {
             })?;
         Ok(data)
     }
+
+    // fn extract_string_chars(text: &str, range: std::ops::Range<usize>) -> Option<&str> {
+    //     let start = text.char_indices()
+    //         .map(|(i, _)| i)
+    //         .chain(std::iter::once(text.len()))
+    //         .nth(range.start);
+    //     todo!()
+    // }
 
     /// validate one line of respondant data from a '.asc' file
     pub(crate) fn validate_asc_entry(&self, row: &str) -> Result<()> {

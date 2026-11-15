@@ -319,6 +319,20 @@ impl Record {
         // then do iteration
         match data_format {
             DataFormat::Fixed => {
+                // let mut boundaries = Vec::with_capacity(questions.len());
+                // let mut text_width = None::<usize>;
+                // let _ = questions.iter()
+                //     .for_each(|question| {
+                //         let range = question.get_data_range();
+                //         let width = range.end.saturating_sub(range.start).saturating_add(1);
+                //         boundaries.push((range.start, width));
+
+                //         text_width = Some(
+                //             text_width.map_or(range.end, |max| max.max(range.end))
+                //         );
+                //     });
+                // let text_width = text_width.context("Cannot determine record width: no question loaded.")?;
+
                 let width = questions
                     .par_iter()
                     .map(|question| *question.location().finish())

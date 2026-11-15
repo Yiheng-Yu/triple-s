@@ -11,6 +11,7 @@ view updates the survey. ``title`` is also writable.
 
 Attributes
 ----------
+
 .. autoattribute:: Survey.name
    :annotation: -> str | None
 
@@ -36,22 +37,22 @@ Attributes
 Properties
 -----------
 
-.. :py:property:: Survey.question_names
-   :type: list[str]
+.. autoattribute:: Survey.question_names
+   :annotation: -> list[str]
 
-.. :py:property:: Survey.num_response
-   :type: int
+.. autoattribute:: Survey.num_response
+   :annotation: -> int
 
 Methods
--------
+----------
 
 .. automethod:: Survey.has_data() -> bool
+
+.. automethod:: Survey.response_label_map(format: 'polars' | 'pandas' | None = None) -> polars.DataFrame | pandas.DataFrame
 
 .. automethod:: Survey.iter_rows() -> Generator[dict[str, Any]]
 
 .. automethod:: Survey.iter_questions() -> Generator[QuestionData]
-
-.. automethod:: Survey.response_label_map(format: 'polars' | 'pandas' | None = None) -> polars.DataFrame | pandas.DataFrame
 
 .. automethod:: Survey.to_polars(response_label: bool = None) -> polars.DataFrame
 

@@ -128,3 +128,37 @@ fn test_malformed_utf8_at_field_boundaries_and_eof_is_replaced() {
         }
     }
 }
+
+
+#[test]
+fn test_read_chinese() {
+    const SENTENCE: &str = "this 中文含有 mixed with chinese 中文中文";
+
+    let range = 0..5;
+    let start = SENTENCE
+        .char_indices()
+        .nth(range.start)
+        .map(|(i, _)| i)
+        .unwrap_or(SENTENCE.len());
+    let end = SENTENCE[start..]
+        .char_indices()
+        .nth(range.len())
+        .map(|(i, _)| start + i)
+        .unwrap_or(SENTENCE.len());
+    let slice: &str = &SENTENCE[start..end];
+    println!("Range: {:?} | Text: {:?}", range, slice);
+
+    let range = 1..6;
+    let start = SENTENCE
+        .char_indices()
+        .nth(range.start)
+        .map(|(i, _)| i)
+        .unwrap_or(SENTENCE.len());
+    let end = SENTENCE[start..]
+        .char_indices()
+        .nth(range.len())
+        .map(|(i, _)| start + i)
+        .unwrap_or(SENTENCE.len());
+    let slice: &str = &SENTENCE[start..end];
+    println!("Range: {:?} | Text: {:?}", range, slice);
+}

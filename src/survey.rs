@@ -501,8 +501,11 @@ impl Survey {
             self.question_names().into_iter().map(col).collect()
         };
 
+        let transformed = lazy.select(label_query)
+            .with_simplify_expr(true)
+            .with_streaming(true);
         let n_rows = self.num_response().map_err(PyPolarsErr::Polars)? as i64;
-        let iterator = RowIterator::new(lazy, n_rows, label_query);
+        let iterator = RowIterator::new(transformed, n_rows);
         Py::new(py, iterator)
     }
 
@@ -604,12 +607,14 @@ impl Survey {
     }
 
     /// Total number of responses
+    /// 
     #[getter(num_response)]
     fn py_get_num_response(&self) -> PyResult<usize> {
         self.num_response().map_err(|err| PyPolarsErr::Polars(err).into())
     }
 
     /// List of question names loaded to the survey
+    /// 
     #[getter(question_names)]
     fn py_quesiton_names(&self) -> Vec<String> {
         self.datamap().question_names()
@@ -741,48 +746,49 @@ impl Survey {
     ///     format ('pandas' | 'polars' | None, *optional*):
     ///         Which dataframe library this function should return, default `polars`
     /// 
-    /// *******************************************
-    /// Example: Compare IDE admired by country
-    /// *******************************************
+    /// Examples:
     /// 
-    /// Using stack overflow 2026 survey data as an example, suppose you want to look at the IDE people admire by each country..
+    ///     Compare IDE admired by country
+    ///     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     /// 
-    /// We starts with reading the data:
-    /// 
-    /// .. code-block:: python
+    ///     Using stack overflow 2026 survey data as an example, suppose you want to look at the IDE people admire by each country..
     ///     
-    ///     >>> from triple_s import read_triple_s
-    ///     >>> survey = read_triple_s("stackoverflow_2026.sss", "stackoverflow_2026.asc")
-    /// 
-    /// 
-    /// Then use `Survey.crosstab()` method to get the data:
-    ///  
-    /// .. code-block:: python
-    /// 
-    ///     >>> survey.crosstab("DevIDEAdmired", "Country")
-    /// 
-    /// This would give you a table that looks like:
-    ///
-    /// ```text
-    /// ┌─────────────────────────────┬───────┬──────────────────────────┬─────────┬───┬────────┬──────────┬─────────┬──────┐
-    /// │ DevIDEAdmired               ┆ Total ┆ United States of America ┆ Germany ┆ … ┆ Zambia ┆ Zimbabwe ┆ Nomadic ┆ NA   │
-    /// │ ---                         ┆ ---   ┆ ---                      ┆ ---     ┆   ┆ ---    ┆ ---      ┆ ---     ┆ ---  │
-    /// │ str                         ┆ u32   ┆ u32                      ┆ u32     ┆   ┆ u32    ┆ u32      ┆ u32     ┆ u32  │
-    /// ╞═════════════════════════════╪═══════╪══════════════════════════╪═════════╪═══╪════════╪══════════╪═════════╪══════╡
-    /// │ Base                        ┆ null  ┆ 4755                     ┆ 1983    ┆ … ┆ 6      ┆ 10       ┆ 43      ┆ 9533 │
-    /// │ Jupyter Notebook/JupyterLab ┆ 669   ┆ 168                      ┆ 56      ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
-    /// │ PhpStorm                    ┆ 383   ┆ 44                       ┆ 51      ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
-    /// │ Cursor                      ┆ 649   ┆ 139                      ┆ 31      ┆ … ┆ 0      ┆ 0        ┆ 1       ┆ 0    │
-    /// │ NetBeans                    ┆ 85    ┆ 9                        ┆ 6       ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
-    /// │ …                           ┆ …     ┆ …                        ┆ …       ┆ … ┆ …      ┆ …        ┆ …       ┆ …    │
-    /// │ Replit                      ┆ 69    ┆ 13                       ┆ 2       ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
-    /// │ Vim                         ┆ 1996  ┆ 539                      ┆ 213     ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
-    /// │ IntelliJ IDEA               ┆ 1705  ┆ 315                      ┆ 247     ┆ … ┆ 0      ┆ 0        ┆ 1       ┆ 0    │
-    /// │ CLion                       ┆ 322   ┆ 64                       ┆ 39      ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
-    /// │ Emacs                       ┆ 424   ┆ 118                      ┆ 43      ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
-    /// └─────────────────────────────┴───────┴──────────────────────────┴─────────┴───┴────────┴──────────┴─────────┴──────┘
-    /// ```
-    /// 
+    ///     We starts with reading the data:
+    ///     
+    ///     .. code-block:: python
+    ///         
+    ///         >>> from triple_s import read_triple_s
+    ///         >>> survey = read_triple_s("stackoverflow_2026.sss", "stackoverflow_2026.asc")
+    ///     
+    ///     
+    ///     Then use `Survey.crosstab()` method to get the data:
+    ///      
+    ///     .. code-block:: python
+    ///     
+    ///         >>> survey.crosstab("DevIDEAdmired", "Country")
+    ///     
+    ///     This would give you a table that looks like:
+    ///     
+    ///     ```text
+    ///     ┌─────────────────────────────┬───────┬──────────────────────────┬─────────┬───┬────────┬──────────┬─────────┬──────┐
+    ///     │ DevIDEAdmired               ┆ Total ┆ United States of America ┆ Germany ┆ … ┆ Zambia ┆ Zimbabwe ┆ Nomadic ┆ NA   │
+    ///     │ ---                         ┆ ---   ┆ ---                      ┆ ---     ┆   ┆ ---    ┆ ---      ┆ ---     ┆ ---  │
+    ///     │ str                         ┆ u32   ┆ u32                      ┆ u32     ┆   ┆ u32    ┆ u32      ┆ u32     ┆ u32  │
+    ///     ╞═════════════════════════════╪═══════╪══════════════════════════╪═════════╪═══╪════════╪══════════╪═════════╪══════╡
+    ///     │ Base                        ┆ null  ┆ 4755                     ┆ 1983    ┆ … ┆ 6      ┆ 10       ┆ 43      ┆ 9533 │
+    ///     │ Jupyter Notebook/JupyterLab ┆ 669   ┆ 168                      ┆ 56      ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
+    ///     │ PhpStorm                    ┆ 383   ┆ 44                       ┆ 51      ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
+    ///     │ Cursor                      ┆ 649   ┆ 139                      ┆ 31      ┆ … ┆ 0      ┆ 0        ┆ 1       ┆ 0    │
+    ///     │ NetBeans                    ┆ 85    ┆ 9                        ┆ 6       ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
+    ///     │ …                           ┆ …     ┆ …                        ┆ …       ┆ … ┆ …      ┆ …        ┆ …       ┆ …    │
+    ///     │ Replit                      ┆ 69    ┆ 13                       ┆ 2       ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
+    ///     │ Vim                         ┆ 1996  ┆ 539                      ┆ 213     ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
+    ///     │ IntelliJ IDEA               ┆ 1705  ┆ 315                      ┆ 247     ┆ … ┆ 0      ┆ 0        ┆ 1       ┆ 0    │
+    ///     │ CLion                       ┆ 322   ┆ 64                       ┆ 39      ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
+    ///     │ Emacs                       ┆ 424   ┆ 118                      ┆ 43      ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
+    ///     └─────────────────────────────┴───────┴──────────────────────────┴─────────┴───┴────────┴──────────┴─────────┴──────┘
+    ///     ```
+    ///     
     #[pyo3(
         name = "crosstab", 
         signature=(row: "str", column: "str", format: "'polars'|'pandas'|None"=None)
@@ -851,22 +857,22 @@ struct RowIterator {
     lazy: LazyFrame,
     n_rows: i64,
     index: i64,
-    label_query: Vec<Expr>,
 }
 
 #[cfg(feature = "pyo3")]
 impl RowIterator {
-    pub fn new(lazy: LazyFrame, n_rows: i64, label_query: Vec<Expr>) -> Self {
+    pub fn new(lazy: LazyFrame, n_rows: i64) -> Self {
         Self {
             lazy,
             n_rows,
             index: 0,
-            label_query,
         }
     }
 
     fn get_row(&self, index: i64) -> PolarsResult<DataFrame> {
-        self.lazy.clone().slice(index, 1).select(&self.label_query).collect()
+        self.lazy.clone()
+            .slice(index, 1)
+            .collect()
     }
 }
 
@@ -882,8 +888,8 @@ impl RowIterator {
             return Ok(None);
         };
 
-        let row = py.detach(|| self.get_row(self.index).map_err(PyPolarsErr::Polars))?;
-        // let row = self.get_row(self.index).map_err(PyPolarsErr::Polars)?;
+        // let row = py.detach(|| self.get_row(self.index).map_err(PyPolarsErr::Polars))?;
+        let row = self.get_row(self.index).map_err(PyPolarsErr::Polars)?;
         let row = PyDataFrame(row).into_bound_py_any(py)?;
         let row = row
             .call_method("to_dicts", (), None)? // convert to list of dictionaries
