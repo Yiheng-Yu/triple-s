@@ -10,7 +10,10 @@ mod parsing;
 
 use std::{fs::File, path::Path};
 
-use polars::{frame::row::Row, prelude::*};
+use polars::{
+    frame::row::{AnyValueBuffer, Row},
+    prelude::*,
+};
 pub use question::{Location, Question, QuestionType, Spread, Usage};
 pub use record::DataFormat;
 pub use response::{Code, Response};
@@ -70,7 +73,7 @@ pub fn read_data(datamap: &Datamap, path_data: impl AsRef<Path>) -> PolarsResult
 
     // prepare to write parquet file
     let mut writer = ParquetWriter::new(parquet_file).batched(&schema)?;
-    let mut batch_buffer = Vec::new();
+    let mut batch_buffer = Vec::with_capacity(BATCH_SIZE);
 
     let row_scan = record
         .scan_data_file(path_data, &data_format)
@@ -101,8 +104,31 @@ fn write_batch(
     schema: &Schema,
     batch_buffer: &mut Vec<Row<'static>>,
 ) -> PolarsResult<()> {
-    let df = DataFrame::from_rows_and_schema(batch_buffer, schema)?;
+    if batch_buffer.is_empty() {
+        return Ok(());
+    }
+    let height = batch_buffer.len();
+    let mut buffers: Vec<AnyValueBuffer<'static>> = schema
+        .iter_values()
+        .map(|dtype| (dtype, height).into())
+        .collect();
+    // Rows are no longer needed after writing. Move their values into the
+    // column builders instead of cloning every value (including strings/lists).
+    for row in batch_buffer.drain(..) {
+        for (value, buffer) in row.0.into_iter().zip(&mut buffers) {
+            polars_ensure!(buffer.add(value).is_some(), ComputeError: "Unable to append parsed value to column buffer");
+        }
+    }
+    let columns = buffers
+        .into_iter()
+        .zip(schema.iter_names())
+        .map(|(buffer, name)| {
+            let mut column = buffer.into_series()?.into_column();
+            column.rename(name.clone());
+            Ok(column)
+        })
+        .collect::<PolarsResult<Vec<_>>>()?;
+    let df = DataFrame::new(height, columns)?;
     writer.write_batch(&df)?;
-    batch_buffer.clear();
     Ok(())
 }

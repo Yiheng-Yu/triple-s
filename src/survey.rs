@@ -13,6 +13,7 @@ use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use crate::{
     SurveyInfo,
     config::{DataFrameFormat, ResponseDisplay},
+    data::row_iterator::RowIterator,
     prelude::*,
     utils::{get_type_name, normalize_py_index, polars_to_pandas},
 };
@@ -373,14 +374,6 @@ impl Survey {
 
         Ok(result)
     }
-
-    // pub fn quick_topline(
-    //     &self,
-    //     questions: &[&str],
-    //     topbreak: &str,
-    // ) -> PolarsResult<Vec<DataFrame>> {
-    //     todo!()
-    // }
 }
 
 /// Pyo3 implementations
@@ -492,8 +485,11 @@ impl Survey {
     ///
     /// Returns:
     ///     Iterator[dict[str, object]]: An iterator over respondent rows.
+    ///     Captures the current data and display settings, buffering a small
+    ///     number of rows locally. New iterators use subsequent changes.
     fn iter_rows(&self, py: Python<'_>) -> PyResult<Py<RowIterator>> {
-        let mut lazy = self.data().lazy()?.clone();
+        let source = self.data().clone();
+        let mut lazy = source.lazy()?.clone();
 
         let label_query = if self.config().show_response_label() {
             let label_lookup = self.datamap().response_label_map();
@@ -503,12 +499,12 @@ impl Survey {
             self.question_names().into_iter().map(col).collect()
         };
 
+        let width = label_query.len();
         let transformed = lazy
             .select(label_query)
             .with_simplify_expr(true)
             .with_streaming(true);
-        let n_rows = self.num_response().map_err(PyPolarsErr::Polars)? as i64;
-        let iterator = RowIterator::new(transformed, n_rows);
+        let iterator = RowIterator::new(source, transformed, width);
         Py::new(py, iterator)
     }
 
@@ -850,54 +846,6 @@ impl QuestionDataIterator {
 
         self.index += 1;
         Ok(Some(instance))
-    }
-}
-
-// ---------- Helpers -----------
-// Iterates through individual responses throughout the survey
-#[cfg(feature = "pyo3")]
-#[pyclass]
-struct RowIterator {
-    lazy: LazyFrame,
-    n_rows: i64,
-    index: i64,
-}
-
-#[cfg(feature = "pyo3")]
-impl RowIterator {
-    pub fn new(lazy: LazyFrame, n_rows: i64) -> Self {
-        Self {
-            lazy,
-            n_rows,
-            index: 0,
-        }
-    }
-
-    fn get_row(&self, index: i64) -> PolarsResult<DataFrame> {
-        self.lazy.clone().slice(index, 1).collect()
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl RowIterator {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-        slf
-    }
-
-    fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
-        if self.index >= self.n_rows {
-            return Ok(None);
-        };
-
-        // let row = py.detach(|| self.get_row(self.index).map_err(PyPolarsErr::Polars))?;
-        let row = self.get_row(self.index).map_err(PyPolarsErr::Polars)?;
-        let row = PyDataFrame(row).into_bound_py_any(py)?;
-        let row = row
-            .call_method("to_dicts", (), None)? // convert to list of dictionaries
-            .call_method("__getitem__", (0,).into_pyobject(py)?, None)?; // take the first row
-        self.index += 1;
-        Ok(Some(row))
     }
 }
 

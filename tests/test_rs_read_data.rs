@@ -1,12 +1,6 @@
 use polars::prelude::AnyValue;
 use triple_s::{
-    Datamap,
-    QuestionOptions,
-    QuestionType,
-    Survey,
-    read_data,
-    read_datamap,
-    read_triple_s,
+    Datamap, QuestionOptions, QuestionType, Survey, read_data, read_datamap, read_triple_s,
 };
 
 const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
@@ -183,4 +177,111 @@ fn test_read_chinese() {
     //     .unwrap_or(SENTENCE.len());
     // let slice: &str = &SENTENCE[start..end];
     // println!("Range: {:?} | Text: {:?}", range, slice);
+}
+
+#[test]
+fn test_parallel_scanners_preserve_respondents() {
+    use std::io::Write;
+    for extension in ["asc", "csv"] {
+        let mut datamap = Datamap::empty();
+        datamap.record_mut().add_question(
+            QuestionOptions::new("TEXT")
+                .with_question_type(QuestionType::Character)
+                .with_location(1, Some(8))
+                .finish()
+                .unwrap(),
+        );
+        let mut file = tempfile::Builder::new()
+            .suffix(&format!(".{extension}"))
+            .tempfile()
+            .unwrap();
+        for i in 0..2200 {
+            writeln!(file, "中{i:07}").unwrap();
+        }
+        for threads in [1, 4] {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap();
+            let data = pool.install(|| read_data(&datamap, file.path())).unwrap();
+            let frame = data.to_polars().unwrap();
+            assert_eq!(frame.height(), 2200);
+            for i in 0..2200 {
+                assert_eq!(
+                    frame.column("TEXT").unwrap().str().unwrap().get(i),
+                    Some(format!("中{i:07}").as_str())
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn test_parallel_csv_quoted_newlines() {
+    use std::io::Write;
+    let mut datamap = Datamap::empty();
+    datamap.record_mut().add_question(
+        QuestionOptions::new("TEXT")
+            .with_question_type(QuestionType::Character)
+            .with_location(1, Some(20))
+            .finish()
+            .unwrap(),
+    );
+    let mut file = tempfile::Builder::new().suffix(".csv").tempfile().unwrap();
+    file.write_all(b"\"hello\nworld\"\r\n\"a,b\"\r\n").unwrap();
+    let data = read_data(&datamap, file.path()).unwrap();
+    let frame = data.to_polars().unwrap();
+    let values = frame.column("TEXT").unwrap().str().unwrap();
+    assert_eq!(values.get(0), Some("hello\nworld"));
+    assert_eq!(values.get(1), Some("a,b"));
+}
+
+#[test]
+fn test_load_batch_boundaries_with_nulls_and_unicode() {
+    use std::io::Write;
+
+    for extension in ["asc", "csv"] {
+        let mut datamap = Datamap::empty();
+        for (name, kind, start, end) in [
+            ("NUMBER", QuestionType::Quantity, 1, 8),
+            (
+                "TEXT",
+                QuestionType::Character,
+                if extension == "asc" { 9 } else { 2 },
+                if extension == "asc" { 16 } else { 2 },
+            ),
+        ] {
+            datamap.record_mut().add_question(
+                QuestionOptions::new(name)
+                    .with_question_type(kind)
+                    .with_location(start, Some(end))
+                    .finish()
+                    .unwrap(),
+            );
+        }
+        for count in [0, 4096, 4097, 8192] {
+            let mut file = tempfile::Builder::new()
+                .suffix(&format!(".{extension}"))
+                .tempfile()
+                .unwrap();
+            for i in 0..count {
+                let number = if i % 3 == 0 {
+                    "        ".into()
+                } else {
+                    format!("{i:8}")
+                };
+                let separator = if extension == "asc" { "" } else { "," };
+                writeln!(file, "{number}{separator}中{i:07}").unwrap();
+            }
+            let data = read_data(&datamap, file.path()).unwrap();
+            let frame = data.to_polars().unwrap();
+            assert_eq!(frame.shape(), (count, 2), "{extension}: {count} rows");
+            let numbers = frame.column("NUMBER").unwrap().f64().unwrap();
+            let text = frame.column("TEXT").unwrap().str().unwrap();
+            for i in 0..count {
+                assert_eq!(numbers.get(i), (i % 3 != 0).then_some(i as f64));
+                assert_eq!(text.get(i), Some(format!("中{i:07}").as_str()));
+            }
+        }
+    }
 }

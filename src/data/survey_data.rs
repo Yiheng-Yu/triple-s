@@ -14,6 +14,8 @@ use tempfile::TempPath;
 use crate::error::{InvalidArg, NoDataError};
 #[cfg(feature = "pyo3")]
 use crate::utils::polars_to_pandas;
+#[cfg(feature = "pyo3")]
+use super::row_iterator::RowIterator;
 
 /// The backing file and its cleanup policy.
 #[derive(Debug)]
@@ -290,12 +292,11 @@ impl SurveyData {
     #[cfg(feature = "pyo3")]
     #[inline]
     pub(crate) fn create_data_entry_iterator(&self) -> PyResult<DataEntryIterator> {
-        let df = self
-            .lazy()?
-            .clone()
-            .collect()
-            .map_err(PyPolarsErr::Polars)?;
-        Ok(DataEntryIterator::new(df))
+        let mut lazy = self.lazy()?.clone();
+        let width = lazy.collect_schema().map_err(PyPolarsErr::Polars)?.len();
+        Ok(DataEntryIterator {
+            rows: RowIterator::new(self.clone(), lazy, width),
+        })
     }
 }
 
@@ -431,15 +432,7 @@ impl std::fmt::Debug for SurveyData {
 #[cfg(feature = "pyo3")]
 #[pyclass]
 pub(crate) struct DataEntryIterator {
-    pub df: DataFrame,
-    pub index: usize,
-}
-
-#[cfg(feature = "pyo3")]
-impl DataEntryIterator {
-    pub fn new(df: DataFrame) -> Self {
-        Self { df, index: 0 }
-    }
+    rows: RowIterator,
 }
 
 #[cfg(feature = "pyo3")]
@@ -450,19 +443,7 @@ impl DataEntryIterator {
     }
 
     pub fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
-        if self.index >= self.df.height() {
-            return Ok(None);
-        }
-
-        let row = self.df.slice(self.index as i64, 1);
-
-        let row = PyDataFrame(row)
-            .into_pyobject(py)?
-            .call_method("to_dicts", (), None)? // convert to list of dictionaries
-            .call_method("__getitem__", (0,).into_pyobject(py)?, None)?; // take the first row
-
-        self.index += 1;
-        Ok(Some(row))
+        self.rows.__next__(py)
     }
 }
 

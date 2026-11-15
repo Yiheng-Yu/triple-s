@@ -1658,6 +1658,8 @@ class Survey:
         
         Returns:
             Iterator[dict[str, object]]: An iterator over respondent rows.
+            Captures the current data and display settings, buffering a small
+            number of rows locally. New iterators use subsequent changes.
         """
     @property
     def name(self, /) -> str |None:

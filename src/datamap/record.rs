@@ -7,15 +7,13 @@ use std::{
     io::{BufRead, BufReader},
     path::Path,
 };
-use polars::prelude::AnyValue;
 
 use anyhow::{Context, Result};
 use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
 use polars::frame::row::Row;
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    IntoPyObjectExt,
-    exceptions,
+    IntoPyObjectExt, exceptions,
     prelude::*,
     types::{PyDict, PySlice, PyTuple},
 };
@@ -26,7 +24,11 @@ use strum::{EnumIter, EnumString};
 #[cfg(feature = "pyo3")]
 use crate::utils::{extract_indicies, get_type_name, normalize_py_index, py_value_error};
 use crate::{
-    Question, datamap::parsing::FixedWidthParser, error::{self, InvalidArg}, prelude::{DeepCopy, Flag}, utils::{ArcLock, TextReader, lock_it_up},
+    Question,
+    datamap::parsing::FixedWidthParser,
+    error::{self, InvalidArg},
+    prelude::{DeepCopy, Flag},
+    utils::{ArcLock, TextReader, lock_it_up},
 };
 
 /// Flags that collects all allowed values of `format` attribute of a `<record>`
@@ -313,140 +315,72 @@ impl Record {
             }
         }
 
-        let questions = self
-            .content()
-            .iter()
-            .map(|question| question.read().clone())
-            .collect::<Vec<_>>();
-
-        // then do iteration
         match data_format {
             DataFormat::Fixed => self.scan_fixed_width(reader),
-                // let width = questions
-                //     .par_iter()
-                //     .map(|question| *question.location().finish())
-                //     .max()
-                //     .context("Cannot determine record width: no questions")?;
-
-                // Ok(Box::new(std::iter::from_fn(
-                //     move || match Self::read_one_record(&mut reader, width as usize) {
-                //         Ok(row) if row.is_empty() => None,
-                //         Ok(row) => Some(
-                //             questions
-                //                 .iter()
-                //                 .map(|question| {
-                //                     let field = question.locate_data_asc(&row)?;
-                //                     let result = question.parse_question_value(field)?;
-                //                     Ok(result.into_static())
-                //                 })
-                //                 .collect::<Result<Vec<_>>>()
-                //                 .map(Row),
-                //         ),
-                //         Err(error) => Some(Err(error)),
-                //     },
-                // )))
-            // }
-            DataFormat::Csv => {
-                todo!()
-                // let rows = csv::ReaderBuilder::new()
-                //     .has_headers(false)
-                //     .flexible(true)
-                //     .from_reader(reader)
-                //     .into_records()
-                //     .enumerate()
-                //     .map(move |(index, row)| {
-                //         let row = row.with_context(|| {
-                //             format!("When reading CSV record {}", index + 1)
-                //         })?;
-                //         questions
-                //             .iter()
-                //             .map(|question| {
-                //                 let field =
-                //                     question.locate_data_csv(&row).with_context(|| {
-                //                         format!(
-                //                             "When trying to locate data for question `{}`",
-                //                             question.name()
-                //                         )
-                //                     })?;
-
-                //                 let value = question.parse_question_value(field)
-                //                     .with_context(|| format!(
-                //                         "When trying to parse raw text '{}' for question `{}`",
-                //                         field, question.name()
-                //                     ))?;
-                //                 Ok(value.into_static())
-                //             })
-                //             .collect::<Result<Vec<_>>>()
-                //             .map(Row)
-                //     });
-                // Ok(Box::new(rows))
-            }
+            DataFormat::Csv => self.scan_csv(reader),
         }
     }
 
-    fn scan_fixed_width<'a>(
+    fn parsing_plan(&self) -> Result<Vec<FixedWidthParser>> {
+        self.content
+            .read()
+            .iter()
+            .map(|question| FixedWidthParser::from_question(question.read()))
+            .collect()
+    }
+
+    fn scan_fixed_width(
         &self,
         mut reader: BufReader<TextReader<BufReader<File>>>,
-    ) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>> + 'a>> {
-        let parsers = self.content.read().iter()
-            .map(|question| FixedWidthParser::from_question(question.read()))
-            .collect::<Result<Vec<FixedWidthParser>>>()?;
-        let record_width = parsers.iter()
-            .map(|item| item.end)
-            .reduce(usize::max)
-            .ok_or(InvalidArg::new("Error determing record length."))
-            .context("Cannot determine record width: no question loaded.")?;
-
+    ) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>>>> {
+        let parsers = self.parsing_plan()?;
+        let width = parsers
+            .iter()
+            .map(|p| p.end)
+            .max()
+            .context("Cannot determine record width: no questions")?;
+        anyhow::ensure!(width > 0, "Record width must be positive");
         let mut finished = false;
-        Ok(Box::new(std::iter::from_fn(move || {
+        let records = std::iter::from_fn(move || {
             if finished {
                 return None;
             }
-
-            let current_row = match Self::read_one_record(&mut reader, record_width) {
-                Ok(row) => {
-                    if row.is_empty() {
-                        finished = true;
-                        return None;
-                    } else {
-                        row
-                    }
+            match Self::read_one_record(&mut reader, width) {
+                Ok(row) if row.is_empty() => {
+                    finished = true;
+                    None
                 }
+                Ok(row) => Some(Ok(row)),
                 Err(error) => {
                     finished = true;
-                    return Some(Err(error));
-                }
-            };
-
-            let result: Result<Row<'static>> = parsers
-                .par_iter()
-                .map(|parser| {
-                    parser
-                        .parse_row(&current_row)
-                        .map(|value| value.into_static())
-                        .map_err(anyhow::Error::from)
-                })
-                .collect::<Result<Vec<_>>>()
-                .map(Row);
-
-            match result {
-                Ok(extracted) => Some(Ok(extracted)),
-                Err(err) => {
-                    finished = true;
-                    return Some(Err(err))
+                    Some(Err(error))
                 }
             }
-        })))
+        });
+        Ok(Box::new(crate::datamap::parsing::parallel_rows(
+            records,
+            move |row| crate::datamap::parsing::parse_fixed(&parsers, &row?),
+        )))
     }
 
-    fn scan_csv<'a>(
-        &self, 
-        mut reader: BufReader<TextReader<BufReader<File>>>
-    ) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>> + 'a>> {
-        let rows = csv::ReaderBuilder::new()
+    fn scan_csv(
+        &self,
+        reader: BufReader<TextReader<BufReader<File>>>,
+    ) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>>>> {
+        let parsers = self.parsing_plan()?;
+        let records = csv::ReaderBuilder::new()
             .has_headers(false)
-            .flexible(true);
-        todo!()
+            .flexible(true)
+            .from_reader(reader)
+            .into_records()
+            .enumerate();
+        Ok(Box::new(crate::datamap::parsing::parallel_rows(
+            records,
+            move |(index, row)| {
+                let row = row.with_context(|| format!("When reading CSV record {}", index + 1))?;
+                crate::datamap::parsing::parse_csv(&parsers, &row)
+            },
+        )))
     }
 
     /// Validate an `.asc` or `.csv` file against the record's questions and skip setting.
@@ -507,7 +441,7 @@ impl Record {
     }
 
     /// extract one row of data from a fixed width data read
-    fn read_one_record<'a, R: BufRead>(reader: &mut R, record_width: usize) -> Result<String> {
+    fn read_one_record<R: BufRead>(reader: &mut R, record_width: usize) -> Result<String> {
         anyhow::ensure!(record_width > 0, "Record width must be positive");
 
         let mut output = Vec::with_capacity(record_width);
@@ -518,6 +452,17 @@ impl Record {
                 let buffer = reader.fill_buf()?;
                 if buffer.is_empty() {
                     break; // EOF, possibly a shorter final record
+                }
+
+                let ascii_len = (record_width - characters).min(buffer.len());
+                if ascii_len > 0 && buffer[..ascii_len].is_ascii() {
+                    output.extend_from_slice(&buffer[..ascii_len]);
+                    characters += ascii_len;
+                    reader.consume(ascii_len);
+                    if characters == record_width {
+                        break;
+                    }
+                    continue;
                 }
 
                 let mut end = 0;
@@ -546,8 +491,7 @@ impl Record {
         }
 
         // Validate the assembled record once.
-        let record =
-            String::from_utf8(output).context("Invalid UTF-8 in fixed-width record")?;
+        let record = String::from_utf8(output).context("Invalid UTF-8 in fixed-width record")?;
 
         // Consume optional separators without trimming meaningful spaces.
         if reader.fill_buf()?.first() == Some(&b'\r') {
@@ -558,48 +502,6 @@ impl Record {
         }
 
         Ok(record)
-        // let mut result = String::with_capacity(record_width);
-
-        // for _ in 0..record_width {
-        //     let mut first = [0u8; 1];
-
-        //     // EOF
-        //     if reader.read(&mut first)? == 0 {
-        //         break;
-        //     }
-        //     let len = match first[0] {
-        //         0x00..=0x7f => 1,
-        //         0xc2..=0xdf => 2,
-        //         0xe0..=0xef => 3,
-        //         0xf0..=0xf4 => 4,
-        //         _ => {
-        //             return Err(std::io::Error::new(
-        //                 std::io::ErrorKind::InvalidData,
-        //                 "Invalid UTF-8",
-        //             )
-        //             .into());
-        //         }
-        //     };
-        //     let mut bytes = [0u8; 4];
-        //     bytes[0] = first[0];
-        //     reader.read_exact(&mut bytes[1..len])?;
-
-        //     let character = std::str::from_utf8(&bytes[..len])
-        //         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-
-        //     result.push_str(character);
-        // }
-
-        // // Record separators are not part of the fixed-width data. Peek so
-        // // separator-free records and significant field spaces stay intact.
-        // if reader.fill_buf()?.first() == Some(&b'\r') {
-        //     reader.consume(1);
-        // }
-        // if reader.fill_buf()?.first() == Some(&b'\n') {
-        //     reader.consume(1);
-        // }
-
-        // Ok(result)
     }
 }
 
@@ -992,6 +894,19 @@ impl RecordIterator {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_unicode_fixed_records_across_buffers() {
+        for capacity in 1..=12 {
+            for separator in ["", "\n", "\r\n"] {
+                let input = ["A中😀 ", "é BC"].join(separator);
+                let mut reader = BufReader::with_capacity(capacity, input.as_bytes());
+                assert_eq!(Record::read_one_record(&mut reader, 4).unwrap(), "A中😀 ");
+                assert_eq!(Record::read_one_record(&mut reader, 4).unwrap(), "é BC");
+                assert_eq!(Record::read_one_record(&mut reader, 4).unwrap(), "");
+            }
+        }
+    }
 
     #[test]
     fn test_fixed_width_record_separators_preserve_fields() {
