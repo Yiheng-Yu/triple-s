@@ -314,11 +314,14 @@ impl QuestionData {
     }
 
     fn to_value_column(&self) -> PolarsResult<Column> {
-        self.lazy()?.collect()?.into_columns().into_iter().next().ok_or(
-            PolarsError::ColumnNotFound(
+        self.lazy()?
+            .collect()?
+            .into_columns()
+            .into_iter()
+            .next()
+            .ok_or(PolarsError::ColumnNotFound(
                 format!("Unable to find column '{}' in `SurveyData`", self.name()).into(),
-            ),
-        )
+            ))
     }
 }
 

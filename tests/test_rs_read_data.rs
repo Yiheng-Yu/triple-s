@@ -67,10 +67,15 @@ fn test_invalid_utf8_is_replaced_in_fixed_and_csv_data() {
         let mut datamap = read_datamap(format!("{base}.sss")).unwrap();
         let mut bytes = std::fs::read(format!("{base}.{extension}")).unwrap();
         let answer = b"Nottingham Goose Fair";
-        let offset = bytes.windows(answer.len()).position(|part| part == answer).unwrap();
+        let offset = bytes
+            .windows(answer.len())
+            .position(|part| part == answer)
+            .unwrap();
         bytes[offset] = 0x96;
-        let mut file =
-            tempfile::Builder::new().suffix(&format!(".{extension}")).tempfile().unwrap();
+        let mut file = tempfile::Builder::new()
+            .suffix(&format!(".{extension}"))
+            .tempfile()
+            .unwrap();
         file.write_all(&bytes).unwrap();
 
         let record = datamap.record_mut();
@@ -79,7 +84,14 @@ fn test_invalid_utf8_is_replaced_in_fixed_and_csv_data() {
         let frame = data.to_polars().unwrap();
         assert_eq!(frame.height(), 3);
         assert_eq!(
-            frame.column("Q3.a").unwrap().str().unwrap().get(0).unwrap().trim_end(),
+            frame
+                .column("Q3.a")
+                .unwrap()
+                .str()
+                .unwrap()
+                .get(0)
+                .unwrap()
+                .trim_end(),
             "�ottingham Goose Fair"
         );
         assert_eq!(
@@ -106,9 +118,13 @@ fn test_malformed_utf8_at_field_boundaries_and_eof_is_replaced() {
                 .unwrap();
             let mut datamap = Datamap::empty();
             let record = datamap.record_mut();
-            record.content_mut().push(Arc::new(parking_lot::RwLock::new(question)));
-            let mut file =
-                tempfile::Builder::new().suffix(&format!(".{extension}")).tempfile().unwrap();
+            record
+                .content_mut()
+                .push(Arc::new(parking_lot::RwLock::new(question)));
+            let mut file = tempfile::Builder::new()
+                .suffix(&format!(".{extension}"))
+                .tempfile()
+                .unwrap();
             file.write_all(bytes).unwrap();
 
             record.validate_data(file.path()).unwrap();
@@ -122,43 +138,49 @@ fn test_malformed_utf8_at_field_boundaries_and_eof_is_replaced() {
             );
 
             let record = datamap.record_mut();
-            record.content()[0].write().set_question_type(QuestionType::Quantity).unwrap();
+            record.content()[0]
+                .write()
+                .set_question_type(QuestionType::Quantity)
+                .unwrap();
             assert!(record.validate_data(file.path()).is_err());
             assert!(read_data(&datamap, file.path()).is_err());
         }
     }
 }
 
-
 #[test]
 fn test_read_chinese() {
-    const SENTENCE: &str = "this 中文含有 mixed with chinese 中文中文";
+    const SENTENCE: &str = "🦔 this 中文含有 mixed 🦔 with 🦔 chinese 中文中文";
 
-    let range = 0..5;
-    let start = SENTENCE
-        .char_indices()
-        .nth(range.start)
-        .map(|(i, _)| i)
-        .unwrap_or(SENTENCE.len());
-    let end = SENTENCE[start..]
-        .char_indices()
-        .nth(range.len())
-        .map(|(i, _)| start + i)
-        .unwrap_or(SENTENCE.len());
-    let slice: &str = &SENTENCE[start..end];
-    println!("Range: {:?} | Text: {:?}", range, slice);
+    for (count, (idx, cha)) in SENTENCE.char_indices().enumerate() {
+        println!("count: {} | idx: {} | char: {}", count, idx, cha);
+    }
 
-    let range = 1..6;
-    let start = SENTENCE
-        .char_indices()
-        .nth(range.start)
-        .map(|(i, _)| i)
-        .unwrap_or(SENTENCE.len());
-    let end = SENTENCE[start..]
-        .char_indices()
-        .nth(range.len())
-        .map(|(i, _)| start + i)
-        .unwrap_or(SENTENCE.len());
-    let slice: &str = &SENTENCE[start..end];
-    println!("Range: {:?} | Text: {:?}", range, slice);
+    // let range = 0..5;
+    // let start = SENTENCE
+    //     .char_indices()
+    //     .nth(range.start)
+    //     .map(|(i, _)| i)
+    //     .unwrap_or(SENTENCE.len());
+    // let end = SENTENCE[start..]
+    //     .char_indices()
+    //     .nth(range.len())
+    //     .map(|(i, _)| start + i)
+    //     .unwrap_or(SENTENCE.len());
+    // let slice: &str = &SENTENCE[start..end];
+    // println!("Range: {:?} | Text: {:?}", range, slice);
+
+    // let range = 1..6;
+    // let start = SENTENCE
+    //     .char_indices()
+    //     .nth(range.start)
+    //     .map(|(i, _)| i)
+    //     .unwrap_or(SENTENCE.len());
+    // let end = SENTENCE[start..]
+    //     .char_indices()
+    //     .nth(range.len())
+    //     .map(|(i, _)| start + i)
+    //     .unwrap_or(SENTENCE.len());
+    // let slice: &str = &SENTENCE[start..end];
+    // println!("Range: {:?} | Text: {:?}", range, slice);
 }

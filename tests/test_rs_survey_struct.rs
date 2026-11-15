@@ -102,8 +102,11 @@ fn test_read_stack_overflow_survey() {
     println!("{:?}", res);
 
     println!("Base size:");
-    let base =
-        survey.get_question_data(topbreak).unwrap().value_counts(Some("count")).unwrap();
+    let base = survey
+        .get_question_data(topbreak)
+        .unwrap()
+        .value_counts(Some("count"))
+        .unwrap();
     println!("{:?}", base);
 }
 

@@ -7,6 +7,7 @@ use std::{
     io::{BufRead, BufReader},
     path::Path,
 };
+use polars::prelude::AnyValue;
 
 use anyhow::{Context, Result};
 use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -25,10 +26,7 @@ use strum::{EnumIter, EnumString};
 #[cfg(feature = "pyo3")]
 use crate::utils::{extract_indicies, get_type_name, normalize_py_index, py_value_error};
 use crate::{
-    Question,
-    error::{self, InvalidArg},
-    prelude::{DeepCopy, Flag},
-    utils::{ArcLock, TextReader, lock_it_up},
+    Question, datamap::parsing::FixedWidthParser, error::{self, InvalidArg}, prelude::{DeepCopy, Flag}, utils::{ArcLock, TextReader, lock_it_up},
 };
 
 /// Flags that collects all allowed values of `format` attribute of a `<record>`
@@ -194,7 +192,8 @@ impl Record {
 
     /// get a question by its question name, name matching is case insensitive.
     pub fn get(&self, question_name: &str) -> Option<ArcRwLockReadGuard<RawRwLock, Question>> {
-        self.find_question(question_name).map(|item| item.read_arc())
+        self.find_question(question_name)
+            .map(|item| item.read_arc())
     }
 
     /// Remove a question from current record, returns the removed question.
@@ -216,7 +215,10 @@ impl Record {
     pub fn add_question(&mut self, question: Question) {
         let query = question.name().to_uppercase();
         let mut content = self.content_mut();
-        match content.iter_mut().find(|item| item.read().name().to_uppercase() == query) {
+        match content
+            .iter_mut()
+            .find(|item| item.read().name().to_uppercase() == query)
+        {
             Some(previous) => {
                 log::warn!(
                     "A question named `{}` already exists. The existing question will be replaced with the new one.",
@@ -256,8 +258,9 @@ impl Record {
             return Err(InvalidArg::new("Record ident must be set before XML export").into());
         }
         let ident = self.id.to_string();
-        let mut element =
-            writer.create_element("record").with_attribute(("ident", ident.as_str()));
+        let mut element = writer
+            .create_element("record")
+            .with_attribute(("ident", ident.as_str()));
         for (name, value) in [("skip", &self.skip), ("href", &self.href)] {
             if let Some(value) = value {
                 element = element.with_attribute((name, value.as_str()));
@@ -318,80 +321,132 @@ impl Record {
 
         // then do iteration
         match data_format {
-            DataFormat::Fixed => {
-                // let mut boundaries = Vec::with_capacity(questions.len());
-                // let mut text_width = None::<usize>;
-                // let _ = questions.iter()
-                //     .for_each(|question| {
-                //         let range = question.get_data_range();
-                //         let width = range.end.saturating_sub(range.start).saturating_add(1);
-                //         boundaries.push((range.start, width));
+            DataFormat::Fixed => self.scan_fixed_width(reader),
+                // let width = questions
+                //     .par_iter()
+                //     .map(|question| *question.location().finish())
+                //     .max()
+                //     .context("Cannot determine record width: no questions")?;
 
-                //         text_width = Some(
-                //             text_width.map_or(range.end, |max| max.max(range.end))
-                //         );
-                //     });
-                // let text_width = text_width.context("Cannot determine record width: no question loaded.")?;
-
-                let width = questions
-                    .par_iter()
-                    .map(|question| *question.location().finish())
-                    .max()
-                    .context("Cannot determine record width: no questions")?;
-
-                Ok(Box::new(std::iter::from_fn(
-                    move || match Self::read_one_record(&mut reader, width as usize) {
-                        Ok(row) if row.is_empty() => None,
-                        Ok(row) => Some(
-                            questions
-                                .iter()
-                                .map(|question| {
-                                    let field = question.locate_data_asc(&row)?;
-                                    let result = question.parse_question_value(field)?;
-                                    Ok(result.into_static())
-                                })
-                                .collect::<Result<Vec<_>>>()
-                                .map(Row),
-                        ),
-                        Err(error) => Some(Err(error)),
-                    },
-                )))
-            }
+                // Ok(Box::new(std::iter::from_fn(
+                //     move || match Self::read_one_record(&mut reader, width as usize) {
+                //         Ok(row) if row.is_empty() => None,
+                //         Ok(row) => Some(
+                //             questions
+                //                 .iter()
+                //                 .map(|question| {
+                //                     let field = question.locate_data_asc(&row)?;
+                //                     let result = question.parse_question_value(field)?;
+                //                     Ok(result.into_static())
+                //                 })
+                //                 .collect::<Result<Vec<_>>>()
+                //                 .map(Row),
+                //         ),
+                //         Err(error) => Some(Err(error)),
+                //     },
+                // )))
+            // }
             DataFormat::Csv => {
-                let rows = csv::ReaderBuilder::new()
-                    .has_headers(false)
-                    .flexible(true)
-                    .from_reader(reader)
-                    .into_records()
-                    .enumerate()
-                    .map(move |(index, row)| {
-                        let row = row.with_context(|| {
-                            format!("When reading CSV record {}", index + 1)
-                        })?;
-                        questions
-                            .iter()
-                            .map(|question| {
-                                let field =
-                                    question.locate_data_csv(&row).with_context(|| {
-                                        format!(
-                                            "When trying to locate data for question `{}`",
-                                            question.name()
-                                        )
-                                    })?;
+                todo!()
+                // let rows = csv::ReaderBuilder::new()
+                //     .has_headers(false)
+                //     .flexible(true)
+                //     .from_reader(reader)
+                //     .into_records()
+                //     .enumerate()
+                //     .map(move |(index, row)| {
+                //         let row = row.with_context(|| {
+                //             format!("When reading CSV record {}", index + 1)
+                //         })?;
+                //         questions
+                //             .iter()
+                //             .map(|question| {
+                //                 let field =
+                //                     question.locate_data_csv(&row).with_context(|| {
+                //                         format!(
+                //                             "When trying to locate data for question `{}`",
+                //                             question.name()
+                //                         )
+                //                     })?;
 
-                                let value = question.parse_question_value(field)
-                                    .with_context(|| format!(
-                                        "When trying to parse raw text '{}' for question `{}`",
-                                        field, question.name()
-                                    ))?;
-                                Ok(value.into_static())
-                            })
-                            .collect::<Result<Vec<_>>>()
-                            .map(Row)
-                    });
-                Ok(Box::new(rows))
+                //                 let value = question.parse_question_value(field)
+                //                     .with_context(|| format!(
+                //                         "When trying to parse raw text '{}' for question `{}`",
+                //                         field, question.name()
+                //                     ))?;
+                //                 Ok(value.into_static())
+                //             })
+                //             .collect::<Result<Vec<_>>>()
+                //             .map(Row)
+                //     });
+                // Ok(Box::new(rows))
             }
         }
+    }
+
+    fn scan_fixed_width<'a>(
+        &self,
+        mut reader: BufReader<TextReader<BufReader<File>>>,
+    ) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>> + 'a>> {
+        let parsers = self.content.read().iter()
+            .map(|question| FixedWidthParser::from_question(question.read()))
+            .collect::<Result<Vec<FixedWidthParser>>>()?;
+        let record_width = parsers.iter()
+            .map(|item| item.end)
+            .reduce(usize::max)
+            .ok_or(InvalidArg::new("Error determing record length."))
+            .context("Cannot determine record width: no question loaded.")?;
+
+        let mut finished = false;
+        Ok(Box::new(std::iter::from_fn(move || {
+            if finished {
+                return None;
+            }
+
+            let current_row = match Self::read_one_record(&mut reader, record_width) {
+                Ok(row) => {
+                    if row.is_empty() {
+                        finished = true;
+                        return None;
+                    } else {
+                        row
+                    }
+                }
+                Err(error) => {
+                    finished = true;
+                    return Some(Err(error));
+                }
+            };
+
+            let result: Result<Row<'static>> = parsers
+                .par_iter()
+                .map(|parser| {
+                    parser
+                        .parse_row(&current_row)
+                        .map(|value| value.into_static())
+                        .map_err(anyhow::Error::from)
+                })
+                .collect::<Result<Vec<_>>>()
+                .map(Row);
+
+            match result {
+                Ok(extracted) => Some(Ok(extracted)),
+                Err(err) => {
+                    finished = true;
+                    return Some(Err(err))
+                }
+            }
+        })))
+    }
+
+    fn scan_csv<'a>(
+        &self, 
+        mut reader: BufReader<TextReader<BufReader<File>>>
+    ) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>> + 'a>> {
+        let rows = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .flexible(true);
+        todo!()
     }
 
     /// Validate an `.asc` or `.csv` file against the record's questions and skip setting.
@@ -452,41 +507,49 @@ impl Record {
     }
 
     /// extract one row of data from a fixed width data read
-    fn read_one_record<R: BufRead>(reader: &mut R, record_width: usize) -> Result<String> {
-        let mut result = String::with_capacity(record_width);
+    fn read_one_record<'a, R: BufRead>(reader: &mut R, record_width: usize) -> Result<String> {
+        anyhow::ensure!(record_width > 0, "Record width must be positive");
 
-        for _ in 0..record_width {
-            let mut first = [0u8; 1];
+        let mut output = Vec::with_capacity(record_width);
+        let mut characters = 0;
 
-            // EOF
-            if reader.read(&mut first)? == 0 {
+        loop {
+            let (consumed, record_complete) = {
+                let buffer = reader.fill_buf()?;
+                if buffer.is_empty() {
+                    break; // EOF, possibly a shorter final record
+                }
+
+                let mut end = 0;
+                while end < buffer.len() {
+                    let byte = buffer[end];
+                    // UTF-8 continuation bytes have the bit pattern 10xxxxxx.
+                    let starts_character = (byte & 0b1100_0000) != 0b1000_0000;
+                    if starts_character {
+                        if characters == record_width {
+                            break;
+                        }
+                        characters += 1;
+                    }
+                    end += 1;
+                }
+
+                // Include continuation bytes belonging to the last character, even when that character crosses a buffer boundary.
+                output.extend_from_slice(&buffer[..end]);
+                (end, end < buffer.len())
+            };
+
+            reader.consume(consumed);
+            if record_complete {
                 break;
             }
-            let len = match first[0] {
-                0x00..=0x7f => 1,
-                0xc2..=0xdf => 2,
-                0xe0..=0xef => 3,
-                0xf0..=0xf4 => 4,
-                _ => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "Invalid UTF-8",
-                    )
-                    .into());
-                }
-            };
-            let mut bytes = [0u8; 4];
-            bytes[0] = first[0];
-            reader.read_exact(&mut bytes[1..len])?;
-
-            let character = std::str::from_utf8(&bytes[..len])
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-
-            result.push_str(character);
         }
 
-        // Record separators are not part of the fixed-width data. Peek so
-        // separator-free records and significant field spaces stay intact.
+        // Validate the assembled record once.
+        let record =
+            String::from_utf8(output).context("Invalid UTF-8 in fixed-width record")?;
+
+        // Consume optional separators without trimming meaningful spaces.
         if reader.fill_buf()?.first() == Some(&b'\r') {
             reader.consume(1);
         }
@@ -494,7 +557,49 @@ impl Record {
             reader.consume(1);
         }
 
-        Ok(result)
+        Ok(record)
+        // let mut result = String::with_capacity(record_width);
+
+        // for _ in 0..record_width {
+        //     let mut first = [0u8; 1];
+
+        //     // EOF
+        //     if reader.read(&mut first)? == 0 {
+        //         break;
+        //     }
+        //     let len = match first[0] {
+        //         0x00..=0x7f => 1,
+        //         0xc2..=0xdf => 2,
+        //         0xe0..=0xef => 3,
+        //         0xf0..=0xf4 => 4,
+        //         _ => {
+        //             return Err(std::io::Error::new(
+        //                 std::io::ErrorKind::InvalidData,
+        //                 "Invalid UTF-8",
+        //             )
+        //             .into());
+        //         }
+        //     };
+        //     let mut bytes = [0u8; 4];
+        //     bytes[0] = first[0];
+        //     reader.read_exact(&mut bytes[1..len])?;
+
+        //     let character = std::str::from_utf8(&bytes[..len])
+        //         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+        //     result.push_str(character);
+        // }
+
+        // // Record separators are not part of the fixed-width data. Peek so
+        // // separator-free records and significant field spaces stay intact.
+        // if reader.fill_buf()?.first() == Some(&b'\r') {
+        //     reader.consume(1);
+        // }
+        // if reader.fill_buf()?.first() == Some(&b'\n') {
+        //     reader.consume(1);
+        // }
+
+        // Ok(result)
     }
 }
 
@@ -605,7 +710,12 @@ impl Record {
     /// lists of `<variable>` child nodes
     #[getter(content)]
     fn py_get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
-        let items = self.content.read().clone().into_iter().map(|item| item.read().clone());
+        let items = self
+            .content
+            .read()
+            .clone()
+            .into_iter()
+            .map(|item| item.read().clone());
         PyTuple::new(py, items)
     }
 
@@ -620,7 +730,8 @@ impl Record {
     ///     Question | None: The matching question, or None if it does not exist.
     #[pyo3(name="get", signature=(question_name:"str"))]
     pub fn py_get(&self, question_name: &str) -> Option<Question> {
-        self.find_question(question_name).map(|item| item.read().clone())
+        self.find_question(question_name)
+            .map(|item| item.read().clone())
     }
 
     /// List of question names in the record
@@ -717,7 +828,9 @@ impl Record {
     ///     Question | None: An independent copy of the removed question, or None if it was not found.
     #[pyo3(name = "remove_question")]
     fn py_remove_question(&mut self, question_name: &str) -> PyResult<Option<Question>> {
-        let deepcopy = self.remove_question(question_name).map(|item| item.read().deepcopy());
+        let deepcopy = self
+            .remove_question(question_name)
+            .map(|item| item.read().deepcopy());
         Ok(deepcopy)
     }
 

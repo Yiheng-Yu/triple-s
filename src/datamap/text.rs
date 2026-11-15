@@ -297,8 +297,10 @@ impl Text {
         let mut unique = HashSet::new();
         variants.retain(|item| unique.insert((item.value(), item.mode(), item.language())));
 
-        let variants =
-            variants.into_iter().map(|item| item.deepcopy()).collect::<Vec<Variant>>();
+        let variants = variants
+            .into_iter()
+            .map(|item| item.deepcopy())
+            .collect::<Vec<Variant>>();
         self.variants = lock_it_up(variants);
         Ok(())
     }
@@ -383,8 +385,11 @@ impl Text {
             .map(|found| found.value())
             .ok_or(InvalidArg::new(format!(
                 "Variant with mode [{}] and language ['{}'] does not exist.",
-                mode.map(|val| format!("{:?}", val.to_string())).unwrap_or("None".into()),
-                language.map(|val| format!("{:?}", val)).unwrap_or("None".into())
+                mode.map(|val| format!("{:?}", val.to_string()))
+                    .unwrap_or("None".into()),
+                language
+                    .map(|val| format!("{:?}", val))
+                    .unwrap_or("None".into())
             )))
     }
 
@@ -440,15 +445,16 @@ impl Text {
         attributes: Vec<(&str, &str)>,
     ) -> Result<(), std::io::Error> {
         let value = self.value();
-        writer.create_element(tag).with_attributes(attributes).write_inner_content(
-            |child_writer| {
+        writer
+            .create_element(tag)
+            .with_attributes(attributes)
+            .write_inner_content(|child_writer| {
                 child_writer.write_event(Event::Text(BytesText::new(&value)))?;
                 for variant in self.variants.read().iter() {
                     variant.write_xml(child_writer)?;
                 }
                 Ok(())
-            },
-        )?;
+            })?;
 
         Ok(())
     }
@@ -498,7 +504,8 @@ impl Text {
     #[pyo3(signature = (value, variants=None))]
     fn py_new(value: String, variants: Option<Vec<Variant>>) -> PyResult<Self> {
         let mut text = Self::new(value);
-        text.set_variants(variants.unwrap_or_default()).map_err(py_value_error)?;
+        text.set_variants(variants.unwrap_or_default())
+            .map_err(py_value_error)?;
         Ok(text)
     }
 
@@ -652,7 +659,12 @@ impl Text {
     // makes a shallow copy
     #[getter]
     fn get_variants<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
-        let variants_view = self.variants.read().clone().into_iter().map(|item| item.clone());
+        let variants_view = self
+            .variants
+            .read()
+            .clone()
+            .into_iter()
+            .map(|item| item.clone());
         PyTuple::new(py, variants_view)
     }
 
@@ -966,8 +978,9 @@ impl Variant {
     /// updates `language` attribute, this method will validate language tag
     /// beforehand.
     pub fn set_language(&mut self, language: Option<&str>) -> Result<()> {
-        let language =
-            language.map(|s| validate_language_tag(s).map(str::to_owned)).transpose()?;
+        let language = language
+            .map(|s| validate_language_tag(s).map(str::to_owned))
+            .transpose()?;
         // Update the shared value, rather than replacing the shared pointer.
         *self.language.write() = language;
         Ok(())
@@ -1081,7 +1094,10 @@ impl Variant {
             .mode()
             .map(|item| format!("{:?}", item.to_string()))
             .unwrap_or("None".into());
-        let language = self.language().map(|s| format!("{:?}", s)).unwrap_or("None".into());
+        let language = self
+            .language()
+            .map(|s| format!("{:?}", s))
+            .unwrap_or("None".into());
         format!("Variant(value={value}, mode={mode}, language={language})")
     }
 
@@ -1319,7 +1335,8 @@ mod test {
         text.add_variant(variant).unwrap();
 
         let mut writer = Writer::new(Vec::new());
-        text.write_xml(&mut writer, "some_tag_name", Vec::new()).unwrap();
+        text.write_xml(&mut writer, "some_tag_name", Vec::new())
+            .unwrap();
         let content = String::from_utf8(writer.into_inner()).unwrap();
         let correct = r#"<some_tag_name>variant a<text mode="interview" xml:lang="en-GB">variant a</text></some_tag_name>"#;
         assert_eq!(normalize_xml(&content), normalize_xml(correct));

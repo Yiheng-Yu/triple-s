@@ -459,7 +459,9 @@ impl Survey {
             let show_resp_label = self.config().show_response_label();
 
             // let row = py.detach(|| {
-            let row = self.get_row(row_index, show_resp_label).map_err(PyPolarsErr::Polars)?;
+            let row = self
+                .get_row(row_index, show_resp_label)
+                .map_err(PyPolarsErr::Polars)?;
             // })?;
 
             PyDataFrame(row)
@@ -501,7 +503,8 @@ impl Survey {
             self.question_names().into_iter().map(col).collect()
         };
 
-        let transformed = lazy.select(label_query)
+        let transformed = lazy
+            .select(label_query)
             .with_simplify_expr(true)
             .with_streaming(true);
         let n_rows = self.num_response().map_err(PyPolarsErr::Polars)? as i64;
@@ -607,14 +610,13 @@ impl Survey {
     }
 
     /// Total number of responses
-    /// 
     #[getter(num_response)]
     fn py_get_num_response(&self) -> PyResult<usize> {
-        self.num_response().map_err(|err| PyPolarsErr::Polars(err).into())
+        self.num_response()
+            .map_err(|err| PyPolarsErr::Polars(err).into())
     }
 
     /// List of question names loaded to the survey
-    /// 
     #[getter(question_names)]
     fn py_quesiton_names(&self) -> Vec<String> {
         self.datamap().question_names()
@@ -627,7 +629,7 @@ impl Survey {
     ///
     /// .. table::
     ///     :align: left
-    /// 
+    ///
     ///     =================  ======
     ///     column             dtype
     ///     =================  ======
@@ -641,7 +643,7 @@ impl Survey {
     ///     Polars only supports dataframe with *single data type*, hence all response values needs to
     ///     be converted to string beforehand. You can convert them back to the correct type later.
     ///
-    /// 
+    ///
     /// ```text
     /// shape: (26, 3)
     /// ┌───────────────┬──────────┬─────────────────────────────────┐
@@ -662,7 +664,7 @@ impl Survey {
     /// │ Q8            ┆ "C"      ┆ More than 1 years time          │
     /// └───────────────┴──────────┴─────────────────────────────────┘
     /// ```
-    /// 
+    ///
     /// Keyword Args:
     ///     format ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
     ///         'polars' | DataFrameFormat.Polars: polars.DataFrame
@@ -672,15 +674,15 @@ impl Survey {
     ///             consistent with the survey.dataframe_format
     /// Returns:
     ///     polars.DataFrame | pandas.DataFrame: Value counts with response labels.
-    /// 
     #[pyo3(name="response_label_map", signature=(format: "'polars'|'pandas'|None"=None))]
     fn py_get_response_label_map<'py>(
         &self,
         py: Python<'py>,
         format: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let polars_frame =
-            self.response_label_map().map_err(|err| PyPolarsErr::Polars(err))?;
+        let polars_frame = self
+            .response_label_map()
+            .map_err(|err| PyPolarsErr::Polars(err))?;
 
         let format = format
             .map(|value| DataFrameFormat::from_py_any(value))
@@ -732,12 +734,14 @@ impl Survey {
         response_label: Option<bool>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let response_label = response_label.unwrap_or(self.config().show_response_label());
-        let df = self.to_polars(response_label).map_err(PyPolarsErr::Polars)?;
+        let df = self
+            .to_polars(response_label)
+            .map_err(PyPolarsErr::Polars)?;
         polars_to_pandas(df, py)
     }
 
     /// Create a `topline table <https://en.wikipedia.org/wiki/Contingency_table>`_ for a question in the survey.
-    /// 
+    ///
     /// Args:
     ///     row (str): name of the question to analyse
     ///     column (str): name of the question for topline
@@ -745,12 +749,12 @@ impl Survey {
     /// Kwrags:
     ///     format ('pandas' | 'polars' | None, *optional*):
     ///         Which dataframe library this function should return, default `polars`
-    /// 
+    ///
     /// Examples:
-    /// 
+    ///
     ///     Compare IDE admired by country
     ///     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    /// 
+    ///
     ///     Using stack overflow 2026 survey data as an example, suppose you want to look at the IDE people admire by each country..
     ///     
     ///     We starts with reading the data:
@@ -870,9 +874,7 @@ impl RowIterator {
     }
 
     fn get_row(&self, index: i64) -> PolarsResult<DataFrame> {
-        self.lazy.clone()
-            .slice(index, 1)
-            .collect()
+        self.lazy.clone().slice(index, 1).collect()
     }
 }
 

@@ -273,11 +273,15 @@ impl SurveyBuilder {
         let mut output = Datamap::empty();
         let mut log = EventLog::new();
 
-        *output.info_mut().title_mut() =
-            self.attributes.remove("title").and_then(|val| val.value.map(unquote));
+        *output.info_mut().title_mut() = self
+            .attributes
+            .remove("title")
+            .and_then(|val| val.value.map(unquote));
 
-        *output.info_mut().name_mut() =
-            self.attributes.remove("name").and_then(|val| val.value.map(unquote));
+        *output.info_mut().name_mut() = self
+            .attributes
+            .remove("name")
+            .and_then(|val| val.value.map(unquote));
 
         if let Some(record) = self.attributes.remove("record") {
             if self.is_classic {
@@ -305,20 +309,30 @@ impl SurveyBuilder {
             }
         }
 
-        *output.info_mut().origin_mut() =
-            self.attributes.remove("origin").and_then(|val| val.value.map(unquote));
+        *output.info_mut().origin_mut() = self
+            .attributes
+            .remove("origin")
+            .and_then(|val| val.value.map(unquote));
 
-        *output.info_mut().user_mut() =
-            self.attributes.remove("user").and_then(|val| val.value.map(unquote));
+        *output.info_mut().user_mut() = self
+            .attributes
+            .remove("user")
+            .and_then(|val| val.value.map(unquote));
 
-        *output.info_mut().date_mut() =
-            self.attributes.remove("date").and_then(|val| val.value.map(unquote));
+        *output.info_mut().date_mut() = self
+            .attributes
+            .remove("date")
+            .and_then(|val| val.value.map(unquote));
 
-        *output.info_mut().time_mut() =
-            self.attributes.remove("time").and_then(|val| val.value.map(unquote));
+        *output.info_mut().time_mut() = self
+            .attributes
+            .remove("time")
+            .and_then(|val| val.value.map(unquote));
 
-        *output.info_mut().standard_mut() =
-            self.attributes.remove("standard").and_then(|val| val.value.map(unquote));
+        *output.info_mut().standard_mut() = self
+            .attributes
+            .remove("standard")
+            .and_then(|val| val.value.map(unquote));
 
         *output.info_mut().version_mut() = self
             .attributes
@@ -498,8 +512,9 @@ impl QuestionBuilder {
         // update spread
         if let Some(mut node) = self.attributes.remove("spread") {
             let spread = if is_classic {
-                let raw_spread =
-                    node.value.ok_or(MissingAttributeError::new("spread", "subfields"))?;
+                let raw_spread = node
+                    .value
+                    .ok_or(MissingAttributeError::new("spread", "subfields"))?;
 
                 let splitted = raw_spread.trim().splitn(2, " OF ").collect::<Vec<&str>>();
                 let subfields = splitted
@@ -715,7 +730,9 @@ impl ResponseBuilder {
                 instance.range_from = first_entry.attributes.remove("from");
                 instance.range_to = first_entry.attributes.remove("to");
             } else if first_entry.tag.as_ref() == "value" {
-                instance.entries.push(Self::extract_value_entry(first_entry)?);
+                instance
+                    .entries
+                    .push(Self::extract_value_entry(first_entry)?);
             } else if first_entry.tag.as_ref() == "size" {
                 instance.size = first_entry
                     .value
@@ -780,8 +797,11 @@ impl ResponseBuilder {
             code_name
         ))?;
 
-        let score =
-            raw.score.map(|value| value.parse::<f64>()).transpose().context(format!(
+        let score = raw
+            .score
+            .map(|value| value.parse::<f64>())
+            .transpose()
+            .context(format!(
                 "When parsing response attribute 'score' for code {}",
                 code_name
             ))?;
@@ -863,7 +883,10 @@ impl ResponseBuilder {
         is_classic: bool,
     ) -> Result<(Response, Vec<Warning>)> {
         let range = if self.range_from.is_some() {
-            Some(self.extract_range(kind).context("When parsing response range")?)
+            Some(
+                self.extract_range(kind)
+                    .context("When parsing response range")?,
+            )
         } else {
             None
         };

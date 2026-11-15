@@ -6,6 +6,8 @@ pub mod survey_datamap;
 pub mod survey_info;
 pub mod text;
 
+mod parsing;
+
 use std::{fs::File, path::Path};
 
 use polars::{frame::row::Row, prelude::*};
@@ -59,8 +61,12 @@ pub fn read_data(datamap: &Datamap, path_data: impl AsRef<Path>) -> PolarsResult
 
     // get parquet schema
     let record = datamap.record().clone(); // only clones pointer
-    let schema =
-        Schema::from_iter(record.content().iter().map(|item| item.read().polars_field()));
+    let schema = Schema::from_iter(
+        record
+            .content()
+            .iter()
+            .map(|item| item.read().polars_field()),
+    );
 
     // prepare to write parquet file
     let mut writer = ParquetWriter::new(parquet_file).batched(&schema)?;
