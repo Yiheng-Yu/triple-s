@@ -620,21 +620,24 @@ impl Survey {
     ///
     /// This method will return dataframe with the following columns:
     ///
-    /// =============== ===============
-    /// column          dtype
-    /// =============== ===============
-    /// `question_name` String
-    /// `response`      String
-    /// `label`         String
-    /// =============== ===============
+    /// .. table::
+    ///     :align: left
+    /// 
+    ///     =================  ======
+    ///     column             dtype
+    ///     =================  ======
+    ///     ``question_name``  String
+    ///     ``response``       String
+    ///     ``label``          String
+    ///     =================  ======
     ///
     /// Note:
     ///
     ///     Polars only supports dataframe with *single data type*, hence all response values needs to
     ///     be converted to string beforehand. You can convert them back to the correct type later.
     ///
-    /// .. code:: bash
-    ///
+    /// 
+    /// ```text
     /// shape: (26, 3)
     /// ┌───────────────┬──────────┬─────────────────────────────────┐
     /// │ question_name ┆ response ┆ label                           │
@@ -653,9 +656,10 @@ impl Survey {
     /// │ Q8            ┆ "B"      ┆ Between 3 months and 1 year     │
     /// │ Q8            ┆ "C"      ┆ More than 1 years time          │
     /// └───────────────┴──────────┴─────────────────────────────────┘
-    ///
+    /// ```
+    /// 
     /// Keyword Args:
-    ///     format ('polars' | 'pandas' |DataFrameFormat, *optional*): Select what kind of dataframe to output:
+    ///     format ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
     ///         'polars' | DataFrameFormat.Polars: polars.DataFrame
     ///         'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
     ///
@@ -663,6 +667,7 @@ impl Survey {
     ///             consistent with the survey.dataframe_format
     /// Returns:
     ///     polars.DataFrame | pandas.DataFrame: Value counts with response labels.
+    /// 
     #[pyo3(name="response_label_map", signature=(format: "'polars'|'pandas'|None"=None))]
     fn py_get_response_label_map<'py>(
         &self,
@@ -726,30 +731,8 @@ impl Survey {
         polars_to_pandas(df, py)
     }
 
-    /// Create <a href="https://en.wikipedia.org/wiki/Contingency_table">topline table</a> for question `row`.
-    ///
-    /// Returns something that looks like:
-    ///
-    /// ```text
-    /// ┌───────────────────────┬───────┬───────┬──────┬────────────┬──────────────────────────┬───────────────────┬─────┐
-    /// │ DevIDEAdmired         ┆ Total ┆ Woman ┆ Man  ┆ Non-binary ┆ Prefer to self-describe: ┆ Prefer not to say ┆ NA  │
-    /// │ ---                   ┆ ---   ┆ ---   ┆ ---  ┆ ---        ┆ ---                      ┆ ---               ┆ --- │
-    /// │ str                   ┆ u32   ┆ u32   ┆ u32  ┆ u32        ┆ u32                      ┆ u32               ┆ u32 │
-    /// ╞═══════════════════════╪═══════╪═══════╪══════╪════════════╪══════════════════════════╪═══════════════════╪═════╡
-    /// │ Base                  ┆ null  ┆ 98    ┆ 1740 ┆ 34         ┆ 20                       ┆ 88                ┆ 20  │
-    /// │ Neovim                ┆ 142   ┆ 3     ┆ 130  ┆ 3          ┆ 0                        ┆ 6                 ┆ 0   │
-    /// │ VSCodium              ┆ 65    ┆ 1     ┆ 61   ┆ 2          ┆ 0                        ┆ 1                 ┆ 0   │
-    /// │ Cursor                ┆ 67    ┆ 4     ┆ 60   ┆ 0          ┆ 0                        ┆ 3                 ┆ 0   │
-    /// │ Kiro                  ┆ 11    ┆ 0     ┆ 10   ┆ 0          ┆ 0                        ┆ 1                 ┆ 0   │
-    /// │ …                     ┆ …     ┆ …     ┆ …    ┆ …          ┆ …                        ┆ …                 ┆ …   │
-    /// │ Rider                 ┆ 52    ┆ 2     ┆ 45   ┆ 2          ┆ 1                        ┆ 2                 ┆ 0   │
-    /// │ Visual Studio Code    ┆ 586   ┆ 24    ┆ 535  ┆ 7          ┆ 1                        ┆ 17                ┆ 2   │
-    /// │ Other, please specify ┆ 83    ┆ 2     ┆ 73   ┆ 2          ┆ 0                        ┆ 6                 ┆ 0   │
-    /// │ Vim                   ┆ 227   ┆ 10    ┆ 206  ┆ 2          ┆ 1                        ┆ 7                 ┆ 1   │
-    /// │ Xcode                 ┆ 62    ┆ 7     ┆ 51   ┆ 0          ┆ 0                        ┆ 3                 ┆ 1   │
-    /// └───────────────────────┴───────┴───────┴──────┴────────────┴──────────────────────────┴───────────────────┴─────┘
-    /// ```
-    ///
+    /// Create a `topline table <https://en.wikipedia.org/wiki/Contingency_table>`_ for a question in the survey.
+    /// 
     /// Args:
     ///     row (str): name of the question to analyse
     ///     column (str): name of the question for topline
@@ -757,6 +740,49 @@ impl Survey {
     /// Kwrags:
     ///     format ('pandas' | 'polars' | None, *optional*):
     ///         Which dataframe library this function should return, default `polars`
+    /// 
+    /// *******************************************
+    /// Example: Compare IDE admired by country
+    /// *******************************************
+    /// 
+    /// Using stack overflow 2026 survey data as an example, suppose you want to look at the IDE people admire by each country..
+    /// 
+    /// We starts with reading the data:
+    /// 
+    /// .. code-block:: python
+    ///     
+    ///     >>> from triple_s import read_triple_s
+    ///     >>> survey = read_triple_s("stackoverflow_2026.sss", "stackoverflow_2026.asc")
+    /// 
+    /// 
+    /// Then use `Survey.crosstab()` method to get the data:
+    ///  
+    /// .. code-block:: python
+    /// 
+    ///     >>> survey.crosstab("DevIDEAdmired", "Country")
+    /// 
+    /// This would give you a table that looks like:
+    ///
+    /// ```text
+    /// ┌─────────────────────────────┬───────┬──────────────────────────┬─────────┬───┬────────┬──────────┬─────────┬──────┐
+    /// │ DevIDEAdmired               ┆ Total ┆ United States of America ┆ Germany ┆ … ┆ Zambia ┆ Zimbabwe ┆ Nomadic ┆ NA   │
+    /// │ ---                         ┆ ---   ┆ ---                      ┆ ---     ┆   ┆ ---    ┆ ---      ┆ ---     ┆ ---  │
+    /// │ str                         ┆ u32   ┆ u32                      ┆ u32     ┆   ┆ u32    ┆ u32      ┆ u32     ┆ u32  │
+    /// ╞═════════════════════════════╪═══════╪══════════════════════════╪═════════╪═══╪════════╪══════════╪═════════╪══════╡
+    /// │ Base                        ┆ null  ┆ 4755                     ┆ 1983    ┆ … ┆ 6      ┆ 10       ┆ 43      ┆ 9533 │
+    /// │ Jupyter Notebook/JupyterLab ┆ 669   ┆ 168                      ┆ 56      ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
+    /// │ PhpStorm                    ┆ 383   ┆ 44                       ┆ 51      ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
+    /// │ Cursor                      ┆ 649   ┆ 139                      ┆ 31      ┆ … ┆ 0      ┆ 0        ┆ 1       ┆ 0    │
+    /// │ NetBeans                    ┆ 85    ┆ 9                        ┆ 6       ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
+    /// │ …                           ┆ …     ┆ …                        ┆ …       ┆ … ┆ …      ┆ …        ┆ …       ┆ …    │
+    /// │ Replit                      ┆ 69    ┆ 13                       ┆ 2       ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
+    /// │ Vim                         ┆ 1996  ┆ 539                      ┆ 213     ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
+    /// │ IntelliJ IDEA               ┆ 1705  ┆ 315                      ┆ 247     ┆ … ┆ 0      ┆ 0        ┆ 1       ┆ 0    │
+    /// │ CLion                       ┆ 322   ┆ 64                       ┆ 39      ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
+    /// │ Emacs                       ┆ 424   ┆ 118                      ┆ 43      ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
+    /// └─────────────────────────────┴───────┴──────────────────────────┴─────────┴───┴────────┴──────────┴─────────┴──────┘
+    /// ```
+    /// 
     #[pyo3(
         name = "crosstab", 
         signature=(row: "str", column: "str", format: "'polars'|'pandas'|None"=None)

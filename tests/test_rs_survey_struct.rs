@@ -87,15 +87,23 @@ fn test_value_display_label_not_found() {
 
 #[test]
 fn test_read_stack_overflow_survey() {
+    println!("Reading survey data");
     let survey = read_stack_overflow();
 
-    let res = survey.crosstab("DevIDEAdmired", "Gender").unwrap();
+    println!("Data loaded");
+    // println!("{:#?}", survey.question_names());
+
+    println!("running crosstab");
+    let row = "DevIDEAdmired";
+    let topbreak = "Country";
+
+    let res = survey.crosstab(row, topbreak).unwrap();
     println!("Crosstab:");
     println!("{:?}", res);
 
     println!("Base size:");
     let base =
-        survey.get_question_data("Gender").unwrap().value_counts(Some("count")).unwrap();
+        survey.get_question_data(topbreak).unwrap().value_counts(Some("count")).unwrap();
     println!("{:?}", base);
 }
 

@@ -530,7 +530,7 @@ impl QuestionData {
     ///     name (str, *optional*):
     ///         Give the resulting count column a specific name (same as `polars.Series.value_counts`)
     ///         Default `'count'`
-    ///     format ('polars' | 'pandas' |DataFrameFormat, *optional*): Select what kind of dataframe to output:
+    ///     format ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
     ///         'polars' | DataFrameFormat.Polars: polars.DataFrame
     ///         'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
     ///

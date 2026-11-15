@@ -1055,7 +1055,7 @@ class QuestionData:
             name (str, *optional*):
                 Give the resulting count column a specific name (same as `polars.Series.value_counts`)
                 Default `'count'`
-            format ('polars' | 'pandas' |DataFrameFormat, *optional*): Select what kind of dataframe to output:
+            format ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
                 'polars' | DataFrameFormat.Polars: polars.DataFrame
                 'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
         
@@ -1547,7 +1547,7 @@ class Survey:
     def __repr__(self, /) -> str: ...
     def crosstab(self, /, row: "str", column: "str", format: "'polars'|'pandas'|None" = None) -> Any:
         """
-        Create <a href="https://en.wikipedia.org/wiki/Contingency_table">topline table</a> for question `row`.
+        Create a `topline table <https://en.wikipedia.org/wiki/Contingency_table>`_ for a question in the survey.
         
         Returns something that looks like:
         
@@ -1569,9 +1569,9 @@ class Survey:
         │ Vim                   ┆ 227   ┆ 10    ┆ 206  ┆ 2          ┆ 1                        ┆ 7                 ┆ 1   │
         │ Xcode                 ┆ 62    ┆ 7     ┆ 51   ┆ 0          ┆ 0                        ┆ 3                 ┆ 1   │
         └───────────────────────┴───────┴───────┴──────┴────────────┴──────────────────────────┴───────────────────┴─────┘
-        ``` 
+        ```
         
-        Args: 
+        Args:
             row (str): name of the question to analyse
             column (str): name of the question for topline
         
@@ -1670,21 +1670,24 @@ class Survey:
         
         This method will return dataframe with the following columns:
         
-        =============== ===============
-        column          dtype
-        =============== ===============
-        `question_name` String
-        `response`      String
-        `label`         String
-        =============== ===============
+        .. table::
+            :align: left
+        
+            =================  ======
+            column             dtype
+            =================  ======
+            ``question_name``  String
+            ``response``       String
+            ``label``          String
+            =================  ======
         
         Note:
         
             Polars only supports dataframe with *single data type*, hence all response values needs to
             be converted to string beforehand. You can convert them back to the correct type later.
         
-        .. code:: bash
         
+        ```text
         shape: (26, 3)
         ┌───────────────┬──────────┬─────────────────────────────────┐
         │ question_name ┆ response ┆ label                           │
@@ -1703,9 +1706,10 @@ class Survey:
         │ Q8            ┆ "B"      ┆ Between 3 months and 1 year     │
         │ Q8            ┆ "C"      ┆ More than 1 years time          │
         └───────────────┴──────────┴─────────────────────────────────┘
+        ```
         
         Keyword Args:
-            format ('polars' | 'pandas' |DataFrameFormat, *optional*): Select what kind of dataframe to output:
+            format ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
                 'polars' | DataFrameFormat.Polars: polars.DataFrame
                 'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
         
@@ -1721,6 +1725,16 @@ class Survey:
         """
     @title.setter
     def title(self, /, title: str |None) -> None: ...
+    def to_pandas(self, /, response_label: "bool" = None) -> Any:
+        """
+        Export survey raw data to pandas dataframe
+        
+        Kwargs:
+            response_label (bool, *optional*):
+                Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
+                Set `False` to show values instead (`[1, 1, 2, ...]`).
+                Default to be consistent with `Survey.response_label` flag
+        """
     def to_polars(self, /, response_label: "bool" = None) -> Incomplete:
         """
         Export survey raw data to polars dataframe
