@@ -349,7 +349,9 @@ impl Survey {
             })?;
         
         crosstabs.collect()
-
+        
+        // // TODO: APPEND ROW LABLE AND NEED TO THINK HOW TO AMEND ROW TOTAL
+        // // MAYBE THINK OF A WAY TO SEPARATE ROW TOTAL & COLUMN TOTAL??
         // self.label_output_row(crosstabs, row)?
         //     .with_simplify_expr(true)
         //     .with_comm_subexpr_elim(true)
