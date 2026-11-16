@@ -129,6 +129,19 @@ def test_crosstab_none_total_flags_use_defaults(survey):
     )
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="crosstab currently joins row totals to an empty frame without the row-question column",
+)
+@pytest.mark.parametrize("kwargs", [{}, {"column": None}, {"column": []}])
+def test_crosstab_without_column_questions(survey, kwargs):
+    expected = pl.DataFrame({
+        "choice": ["Null", "Yes", "No"],
+        "choice - Total": [4, 2, 2],
+    })
+    assert_frame_equal(survey.crosstab("choice", **kwargs), expected, check_dtypes=False)
+
+
 @pytest.mark.parametrize("column", ["group", 1, [1], [None]])
 def test_crosstab_rejects_invalid_columns(survey, column):
     with pytest.raises(TypeError):

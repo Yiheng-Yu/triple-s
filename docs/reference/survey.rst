@@ -62,5 +62,11 @@ Methods
 
 .. automethod:: Survey.to_pandas(response_label: bool | None = None) -> pandas.DataFrame
 
-.. automethod:: Survey.crosstab(row: str, column: List[str]=None, show_row_total: bool=True, show_column_total: bool=True, format: str | triple_s.config.DataFrameFormat | None = None) -> polars.DataFrame | pandas.DataFrame
+.. py:method:: Survey.crosstab(row: str, column: list[str] | None = None, show_row_total: bool | None = None, show_column_total: bool | None = None, format: str | triple_s.config.DataFrameFormat | None = None) -> polars.DataFrame | pandas.DataFrame
 
+   Get a cross tab for a question in the survey. You can use one or more questions as the columns:
+
+   .. code-block:: python
+
+      table = survey.crosstab("Q2", ["Q4"])
+      combined = survey.crosstab("Q2", ["Q4", "Q5"])
