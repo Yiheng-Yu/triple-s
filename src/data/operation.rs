@@ -76,7 +76,7 @@ pub(crate) fn create_crosstab(
     // create cross tabs
     let mut lf = original
         .clone()
-        .select([target, group_by])
+        .select([col(target), col(group_by)])
         .with_columns([concat_list([col(group_by)])?.alias(group_by)])
         .explode(
             cols([group_by]),
