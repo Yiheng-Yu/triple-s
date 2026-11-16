@@ -41,7 +41,7 @@ pub(crate) fn frequency_counts(
         .filter(col(column_name).is_not_null())
         .group_by([col(column_name)])
         .agg([len().alias(name.unwrap_or("count"))])
-        .select([col(column_name).cast(datatype)])
+        .with_column(col(column_name).cast(datatype))
         .sort(
             [column_name],
             SortMultipleOptions::default()
@@ -92,6 +92,9 @@ pub(crate) fn create_crosstab(
                 keep_nulls: false,
             },
         );
+    let original_dtype = lf.collect_schema()?
+        .try_get(target)?
+        .clone();
 
     let columns = lf
         .clone()
@@ -112,6 +115,7 @@ pub(crate) fn create_crosstab(
             "_".into(),
             polars::frame::PivotColumnNaming::Auto,
         )
+        .with_column(col(target).cast(original_dtype))
         .sort(
             [target], 
             SortMultipleOptions::default()
