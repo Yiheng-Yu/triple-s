@@ -288,7 +288,7 @@ impl Question {
         self.name.read().clone()
     }
 
-    /// Returns a write guard for updating the question name.
+    /// A writable access of quesiton name
     ///
     /// # Example:
     /// ```rust
@@ -409,8 +409,9 @@ impl Question {
         self.filter.write()
     }
 
-    /// Returns the optional code format: `numeric` or `literal`.
-    ///
+    /// Corresponds to the `use` attribute of a `<variable>` node, also used for parsing 
+    /// data for single-choice questions.
+    /// 
     /// Please refer to the documentation of [`CodeFormat`] for more details.
     pub fn format(&self) -> RwLockReadGuard<'_, Option<CodeFormat>> {
         self.format.read()
@@ -433,8 +434,11 @@ impl Question {
     }
 
     /// Returns the optional role declared by the `use` attribute.
-    /// `serial` identifies records, while `weight` supplies their analysis
-    /// weights.
+    /// 
+    /// Can have two possible values: 
+    /// 
+    /// `serial` identifies records, while `weight` supplies their analysis weights.
+    /// 
     pub fn usage(&self) -> RwLockReadGuard<'_, Option<Usage>> {
         self.usage.read()
     }

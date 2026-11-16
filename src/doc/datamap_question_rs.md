@@ -95,28 +95,56 @@ Here's a list of fields in a `Question` instance, more details can be found in t
 ### `index` (u32)
 Index of a question in `<record>`, this corresponds to the `ident` attribute of a `<variable>` node in trile-s xml.
 
+#### Example:
+
+```no-run
+use triple_s::question::QuestionOptions;
+
+// Create a new question instance
+let mut question = QuestionOptions::default().with_index(67).finish()?;
+assert_eq!(question.index(), &67);
+
+// To update index of an question,,
+*question.index_mut() = 32;
+assert_eq!(question.index(), &32);
+# Ok::<(), anyhow::Error>(())
+```
+
 ### `name` (String)
 Name of the question.
 
 ### `label` ([`Text`])
 Question wording (i.e., 'what is your age?')
 
+#### Example: update question wording
+
+```no-run
+use triple_s::question::QuestionOptions;
+
+let mut question = QuestionOptions::new("Q1").finish()?;
+
+*question.label_mut().value_mut() = "What is your age?".to_string();
+assert_eq!(question.label().value(), "What is your age?");
+# Ok::<(), anyhow::Error>(())
+```
+
 ### `location` ([`Location`])
-The data location described by `<position>` child node.
+The data location described by `<position>` child node. For more information about data location, please refer to the relevant documentations for [`Location`] struct for more info.
 
 IMPORTANT NOTE: Data location is 1-indexed (start counting from 1 instead of 0)
 
 ### `spread` (Option<[`Spread`]>)
-Optional `<spread>` layout for a multiple-response variable.
-
-`spread` field controls how to parse response data of questions with multi-choice reponses.
-
-For more information on how this was done, please check the relevant documentation of [`Spread`] struct.
+Optional `<spread>` layout for a multiple-response variable. Basically, `spread` field controls how to parse response data of questions with multi-choice reponses. Please refer to the relevant documentations for [`Spread`] struct for more info.
 
 ### `filter` (`Option<String>`)
 Question filter, this corresponds to the `<filter>` node of a `<variable>` element.
 
+This field is left unused anywhere else in the crate.
+
 ### `format` (Option<[`CodeFormat`]>)
+Corresponds to the `use` attribute of a `<variable>` node, also used for parsing 
+data for single-choice questions.
+
 Please refer to the documentation of [`CodeFormat`] for more details.
 
 ### `usage` (Option<[`Usage`]>)
@@ -131,6 +159,9 @@ Direct mutable access to question_type is disabled because it would mess up data
 
 Conversion between _some_ question types are allowed, please refer to the implementation details in [`Question::set_question_type()`] for more details. To update question type, call [`Question::set_question_type()`] instead.
 
+Also note that `question_type` field *controls how question data gets read/ parsed*. Updating this field AFTER data been loaded will leads to very undefined/ unexpected behaviours.
+
 ### `response` ([`Response`])
 Response definition, basically each of the selectable items in a single/ multi-choice question, as well as 
 the data range/ maximum allowed values for quantity/ date/ time kind of questions.
+
