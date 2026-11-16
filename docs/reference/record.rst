@@ -9,38 +9,40 @@ Attributes
 ----------------
 
 .. autoattribute:: Record.data_format
-   :annotation: -> DataFormat | None
+   :annotation: : DataFormat | None
 
 .. autoattribute:: Record.content
-   :annotation: -> tuple[Question, ...]
+   :annotation: : tuple[Question, ...]
 
 .. autoattribute:: Record.href
-   :annotation: -> str | None
+   :annotation: : str | None
 
 .. autoattribute:: Record.ident
-   :annotation: -> str
+   :annotation: : str
 
 .. autoattribute:: Record.skip
-   :annotation: -> str | None
+   :annotation: : str | None
 
-Properties
------------------
+.. autoattribute:: Record.question_names
+   :annotation: : list[str]
 
-.. py:property:: triple_s.Record.question_names
-   :type: List[str]
-
-   List of question names.
-
-.. py:property:: triple_s.Record.num_questions
-   :type: int
-
-.. py:property:: triple_s.Record.response_label
-   :type: Dict[int | float | str, Text]
+.. autoattribute:: Record.num_questions
+   :annotation: : int
 
 Methods
--------------
+--------
 
-.. automethod:: Record.get(question_name) -> Question | None
-.. automethod:: Record.validate_data(path) -> None
-.. automethod:: Record.from_dict(content) -> Record
+.. automethod:: Record.empty() -> Record
+
+.. automethod:: Record.get(question_name: str) -> Question | None
+
+.. automethod:: Record.add_question(question: Question) -> None
+
+.. automethod:: Record.remove_question(question_name: str) -> Question | None
+
+.. automethod:: Record.validate_data(path: str) -> None
+
+.. automethod:: Record.from_dict(content: dict) -> Record
+
 .. automethod:: Record.to_xml() -> str
+

@@ -9,44 +9,46 @@ Attributes
 ----------
 
 .. autoattribute:: QuestionData.name
-   :annotation: -> str
+   :annotation: : str
 
 .. autoattribute:: QuestionData.type
-   :annotation: -> str | None
+   :annotation: : str | None
 
 .. autoattribute:: QuestionData.label
-   :annotation: -> triple_s.Text
+   :annotation: : Text
 
 .. autoattribute:: QuestionData.range
-   :annotation: -> triple_s.DataRange | None
+   :annotation: : DataRange | None
 
 .. autoattribute:: QuestionData.datamap
-   :annotation: -> triple_s.Question
+   :annotation: : Question
+
+   Shared question definition.
 
 .. autoattribute:: QuestionData.data
-   :annotation: -> tuple
+   :annotation: : tuple[object, ...]
 
-   A copy of the answers as a tuple, with ``None`` for missing values.
+.. autoattribute:: QuestionData.dataframe_format
+   :annotation: : str
+
+   Inherited from the parent survey.
 
 .. autoattribute:: QuestionData.response_display
-   :annotation: -> str
+   :annotation: : str
 
-Properties
--------------------
-.. :py:property:: triple_s.QuestionData.response_label
-   :type: Dict[str | int | float, Text]
+   Inherited from the parent survey.
 
-Iteration and indexing
-----------------------
-
-Use ``view[index]`` to read an answer (negative indices are supported), or
-``list(view)`` to iterate over answers. Each iterator reads a snapshot of the
-column taken when iteration starts.
+.. autoattribute:: QuestionData.response_label
+   :annotation: : dict[int | float | str, Text]
 
 Methods
 -------
 
-.. automethod:: QuestionData.value_counts() -> polars.DataFrame
-.. automethod:: QuestionData.to_polars() -> polars.Series
-.. automethod:: QuestionData.to_pandas() -> pandas.Series
-.. automethod:: QuestionData.to_list() -> List[Any]
+.. automethod:: QuestionData.value_counts(name: str | None = 'count', format: str | triple_s.config.DataFrameFormat | None = None) -> polars.DataFrame | pandas.DataFrame
+
+.. automethod:: QuestionData.to_polars(response_label: bool | None = None) -> polars.Series
+
+.. automethod:: QuestionData.to_pandas(response_label: bool | None = None) -> pandas.Series
+
+.. automethod:: QuestionData.to_list(response_label: bool | None = None) -> list[object]
+

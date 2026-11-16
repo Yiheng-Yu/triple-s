@@ -155,3 +155,18 @@ Attributes
 
 .. autoattribute:: triple_s.config.ResponseDisplay.Label
    :annotation: -> ResponseDisplay
+
+
+****
+
+DataFrameFormat
+---------------
+
+.. autoclass:: triple_s.config.DataFrameFormat
+
+Attributes
+^^^^^^^^^^
+
+.. autoattribute:: triple_s.config.DataFrameFormat.Polars
+
+.. autoattribute:: triple_s.config.DataFrameFormat.Pandas

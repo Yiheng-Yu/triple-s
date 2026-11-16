@@ -9,26 +9,32 @@ Attributes
 ----------------
 
 .. autoattribute:: Datamap.record
-   :annotation: -> Record
+   :annotation: : Record
 
 .. autoattribute:: Datamap.info
-   :annotation: -> SurveyInfo
+   :annotation: : SurveyInfo
 
 .. autoattribute:: Datamap.title
-   :annotation: -> str | None
+   :annotation: : str | None
 
-Properties
-----------------
-.. :py:property:: triple_s.Datamap.question_names
-   :type: -> List[str]
+.. autoattribute:: Datamap.question_names
+   :annotation: : list[str]
 
-.. :py:property:: triple_s.Datamap.num_questions
-   :type: -> int
+   Returns a copy of question names in the current survey datamap.
+
+.. autoattribute:: Datamap.num_questions
+   :annotation: : int
+
+   Read-only question count.
 
 Methods
--------------
+-------
 
-.. automethod:: Datamap.get(question_name) -> Question | None
-.. automethod:: Datamap.from_dict(content) -> Datamap
+.. automethod:: Datamap.get(question_name: str) -> Question | None
+
+.. automethod:: Datamap.from_dict(content: dict) -> Datamap
+
 .. automethod:: Datamap.to_classic() -> str
+
 .. automethod:: Datamap.to_xml() -> str
+

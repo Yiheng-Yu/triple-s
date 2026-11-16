@@ -9,40 +9,41 @@ Attributes
 ----------------
 
 .. autoattribute:: SurveyInfo.time
-   :annotation: -> str | None
+   :annotation: : str | None
 
 .. autoattribute:: SurveyInfo.style
-   :annotation: -> str | None
+   :annotation: : str | None
 
 .. autoattribute:: SurveyInfo.name
-   :annotation: -> str | None
+   :annotation: : str | None
 
 .. autoattribute:: SurveyInfo.user
-   :annotation: -> str | None
+   :annotation: : str | None
 
 .. autoattribute:: SurveyInfo.origin
-   :annotation: -> str | None
+   :annotation: : str | None
 
 .. autoattribute:: SurveyInfo.title
-   :annotation: -> str | None
+   :annotation: : str | None
 
 .. autoattribute:: SurveyInfo.standard
-   :annotation: -> str | None
+   :annotation: : str | None
 
 .. autoattribute:: SurveyInfo.date
-   :annotation: -> str | None
+   :annotation: : str | None
 
 .. autoattribute:: SurveyInfo.version
-   :annotation: -> Version
+   :annotation: : Version
 
 .. autoattribute:: SurveyInfo.language_options
-   :annotation: -> tuple[str, ...]
+   :annotation: : tuple[str, ...]
 
 .. autoattribute:: SurveyInfo.mode_options
-   :annotation: -> tuple[Mode, ...]
+   :annotation: : tuple[Mode, ...]
 
 Methods
 -------------
 
-.. automethod:: SurveyInfo.from_dict(content) -> SurveyInfo
+.. automethod:: SurveyInfo.from_dict(content: dict) -> SurveyInfo
+   
 .. automethod:: SurveyInfo.to_dict() -> dict[str, Version | str | list[str] | list[Mode]]

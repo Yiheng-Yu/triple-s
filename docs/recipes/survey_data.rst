@@ -2,10 +2,10 @@ Survey Data
 ===========================
 
 
-Get quick summaries for quesitions in a survey
+Get quick summaries for questions in a survey
 ----------------------------------------------
 
-Use `value_counts()` to get a quick summary for a survey question:
+Use ``value_counts()`` to get a quick summary for a survey question:
 
 .. code-block:: python
 
@@ -45,8 +45,13 @@ or a parquet file provided by the user.
 .. code-block:: python
 
     from datasets import Dataset
+    from triple_s import read_triple_s
 
-    dataset = Dataset.from_generator(survey.data.iter_rows)
+    def generate_responses():
+        survey = read_triple_s("survey.sss", "survey.asc")
+        yield from survey.iter_rows()
+
+    dataset = Dataset.from_generator(generate_responses)
 
 If you want it to return class labels instead of indicies (i.e., `'London'` instead of class index `1`), you can do so by
 setting `response_display` attribute to `label`:
@@ -54,5 +59,4 @@ setting `response_display` attribute to `label`:
 .. code-block:: python
 
     survey.response_display = "label"
-
     dataset = Dataset.from_generator(survey.data.iter_rows)

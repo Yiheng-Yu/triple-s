@@ -12,18 +12,21 @@ Attributes
 ^^^^^^^^^^
 
 .. autoattribute:: Text.value
-   :annotation: -> str
+   :annotation: : str
 
 .. autoattribute:: Text.variants
-   :annotation: -> tuple[Variant, ...]
+   :annotation: : tuple[Variant, ...]
 
 Methods
 ^^^^^^^
 
-.. automethod:: Text.add_variant(variant, mode=None, language=None) -> None
-.. automethod:: Text.remove_variant(index) -> Variant
-.. automethod:: Text.from_dict(content) -> Text
-.. automethod:: Text.to_dict() -> Dict[str, str|List[Dict[str, str]]]
+.. automethod:: Text.add_variant(variant: str | Variant, mode: str | None = None, language: str | None = None) -> None
+
+.. automethod:: Text.remove_variant(index: int) -> Variant
+
+.. automethod:: Text.from_dict(content: dict) -> Text
+
+.. automethod:: Text.to_dict() -> dict[str, str | list[dict[str, str]]]
 
 Variant
 -------
@@ -34,17 +37,22 @@ Attributes
 ^^^^^^^^^^
 
 .. autoattribute:: Variant.language
-   :annotation: -> str | None
+   :annotation: : str | None
 
 .. autoattribute:: Variant.value
-   :annotation: -> str
+   :annotation: : str
+
 
 .. autoattribute:: Variant.mode
-   :annotation: -> str | None
+   :annotation: : str | None
+
 
 Methods
 ^^^^^^^
 
 .. automethod:: Variant.copy() -> Variant
-.. automethod:: Variant.from_dict(content) -> Variant
-.. automethod:: Variant.to_dict() -> Dict[str, str] 
+
+.. automethod:: Variant.from_dict(content: dict) -> Variant
+
+.. automethod:: Variant.to_dict() -> dict[str, str]
+
