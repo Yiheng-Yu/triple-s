@@ -185,42 +185,38 @@ impl QuestionData {
         // let base_size = count_not_null(&raw_data, column_name)?;
 
         // Then we do `value_counts`
-        frequency_counts(
+        let result = frequency_counts(
             DataFrame::new(raw_data.len(), vec![raw_data])?.lazy(),
             &question_name,
             Some(column_name),
             true,
-        )?
+        )?;
+
+        // append data label
+        let (row_old, row_new): (Vec<AnyValue<'static>>, Vec<String>) = self
+            .datamap()
+            .response_label_map()
+            .iter()
+            .map(|(id, label)| (id.clone(), label.read().to_string()))
+            .unzip();
+        let row_old = Series::from_any_values("old".into(), &row_old, true)?;
+        let row_new = Series::new("new".into(), row_new);
+        
+        result
+        .with_columns([col(&question_name)
+            .replace_strict(
+                lit(row_old.clone()),
+                lit(row_new),
+                Some(col(&question_name).cast(DataType::String)),
+                Some(DataType::String),
+            )
+            .fill_null(lit("Null"))
+            .alias("label")])
+        .select([
+            col("label").alias(&question_name),
+            all().exclude_cols([&question_name, "label"]).as_expr(),
+        ])
         .collect()
-
-        // // append data label
-        // let label_map = self.response_label_map();
-        // let labels = value_counts
-        //     .column(&question_name)?
-        //     .as_materialized_series()
-        //     .iter()
-        //     .map(|value| {
-        //         if value.is_nan() | value.is_null() {
-        //             Some("*null*".into())
-        //         } else {
-        //             label_map.get(&value).map(|val| val.read().to_string())
-        //         }
-        //     })
-        //     .collect::<Vec<Option<String>>>();
-
-        // value_counts.insert_column(1, Series::new("label".into(), labels).into())?;
-
-        // // putting everything together
-        // let concat_args = UnionArgs {
-        //     parallel: true,
-        //     rechunk: true,
-        //     to_supertypes: true,
-        //     diagonal: true,
-        //     strict: false,
-        //     from_partitioned_ds: true,
-        //     maintain_order: true,
-        // };
-        // concat([base_size.lazy(), value_counts.lazy()], concat_args)?.collect()
     }
 
     /// Checks if `other` is comes from the same survey as `self`.
