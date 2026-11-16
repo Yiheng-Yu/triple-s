@@ -753,7 +753,8 @@ impl Survey {
     ///
     /// Kwrags:
     ///     format ('pandas' | 'polars' | None, *optional*):
-    ///         Which dataframe library this function should return, default `polars`
+    ///         Which dataframe library this function should return, 
+    ///         default to be consistent with the `dataframe_format` attribute of the current instance (`Survey.dataframe_format`).
     ///
     /// Examples:
     ///
@@ -814,7 +815,7 @@ impl Survey {
         let format = format
             .map(|value| DataFrameFormat::from_py_any(value))
             .transpose()?
-            .unwrap_or(DataFrameFormat::Polars);
+            .unwrap_or(self.dataframe_format());
 
         match format {
             DataFrameFormat::Polars => PyDataFrame(polars_frame).into_bound_py_any(py),
