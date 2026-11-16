@@ -97,7 +97,7 @@ Index of a question in `<record>`, this corresponds to the `ident` attribute of 
 
 #### Example:
 
-```no-run
+```no_run
 use triple_s::question::QuestionOptions;
 
 // Create a new question instance
@@ -118,7 +118,7 @@ Question wording (i.e., 'what is your age?')
 
 #### Example: update question wording
 
-```no-run
+```no_run
 use triple_s::question::QuestionOptions;
 
 let mut question = QuestionOptions::new("Q1").finish()?;
