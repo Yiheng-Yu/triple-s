@@ -409,9 +409,9 @@ impl Question {
         self.filter.write()
     }
 
-    /// Corresponds to the `use` attribute of a `<variable>` node, also used for parsing 
+    /// Corresponds to the `use` attribute of a `<variable>` node, also used for parsing
     /// data for single-choice questions.
-    /// 
+    ///
     /// Please refer to the documentation of [`CodeFormat`] for more details.
     pub fn format(&self) -> RwLockReadGuard<'_, Option<CodeFormat>> {
         self.format.read()
@@ -434,11 +434,10 @@ impl Question {
     }
 
     /// Returns the optional role declared by the `use` attribute.
-    /// 
-    /// Can have two possible values: 
-    /// 
+    ///
+    /// Can have two possible values:
+    ///
     /// `serial` identifies records, while `weight` supplies their analysis weights.
-    /// 
     pub fn usage(&self) -> RwLockReadGuard<'_, Option<Usage>> {
         self.usage.read()
     }

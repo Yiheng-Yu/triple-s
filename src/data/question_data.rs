@@ -32,11 +32,7 @@ use crate::{
 use crate::{
     QuestionType,
     config::ResponseDisplay,
-    data::{
-        config::Config,
-        operation::{count_not_null, frequency_counts},
-        survey_data::SurveyData,
-    },
+    data::{config::Config, operation::frequency_counts, survey_data::SurveyData},
     datamap::Question,
     utils::ArcLock,
 };
@@ -186,48 +182,48 @@ impl QuestionData {
         let raw_data = self.to_value_column()?;
 
         // First get base sizes (total of not-null values)
-        let base_size = count_not_null(&raw_data, column_name)?;
+        // let base_size = count_not_null(&raw_data, column_name)?;
 
         // Then we do `value_counts`
-        let mut value_counts = frequency_counts(
+        frequency_counts(
             DataFrame::new(raw_data.len(), vec![raw_data])?.lazy(),
             &question_name,
             Some(column_name),
+            true,
         )?
-        .collect()?;
+        .collect()
 
-        // append data label
-        let label_map = self.response_label_map();
-        let labels = value_counts
-            .column(&question_name)?
-            .as_materialized_series()
-            .iter()
-            .map(|value| {
-                if value.is_nan() | value.is_null() {
-                    Some("*null*".into())
-                } else {
-                    label_map.get(&value).map(|val| val.read().to_string())
-                }
-            })
-            .collect::<Vec<Option<String>>>();
+        // // append data label
+        // let label_map = self.response_label_map();
+        // let labels = value_counts
+        //     .column(&question_name)?
+        //     .as_materialized_series()
+        //     .iter()
+        //     .map(|value| {
+        //         if value.is_nan() | value.is_null() {
+        //             Some("*null*".into())
+        //         } else {
+        //             label_map.get(&value).map(|val| val.read().to_string())
+        //         }
+        //     })
+        //     .collect::<Vec<Option<String>>>();
 
-        value_counts.insert_column(1, Series::new("label".into(), labels).into())?;
+        // value_counts.insert_column(1, Series::new("label".into(), labels).into())?;
 
-        // putting everything together
-        let concat_args = UnionArgs {
-            parallel: true,
-            rechunk: true,
-            to_supertypes: true,
-            diagonal: true,
-            strict: false,
-            from_partitioned_ds: true,
-            maintain_order: true,
-        };
-        concat([base_size.lazy(), value_counts.lazy()], concat_args)?.collect()
+        // // putting everything together
+        // let concat_args = UnionArgs {
+        //     parallel: true,
+        //     rechunk: true,
+        //     to_supertypes: true,
+        //     diagonal: true,
+        //     strict: false,
+        //     from_partitioned_ds: true,
+        //     maintain_order: true,
+        // };
+        // concat([base_size.lazy(), value_counts.lazy()], concat_args)?.collect()
     }
 
     /// Checks if `other` is comes from the same survey as `self`.
-    /// 
     pub fn is_same_survey(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.data, &other.data)
     }
@@ -419,7 +415,9 @@ impl QuestionData {
                     .collect::<PyResult<Vec<Option<NaiveTime>>>>()?;
                 PyTuple::new(py, iterator)
             }
-            DataType::List(inner) if matches!(inner.as_ref(), DataType::UInt32 | DataType::String) => {
+            DataType::List(inner)
+                if matches!(inner.as_ref(), DataType::UInt32 | DataType::String) =>
+            {
                 let values = series
                     .iter()
                     .map(|s| anyvalue_to_python(py, s))

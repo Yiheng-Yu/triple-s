@@ -18,6 +18,7 @@ use crate::{
     utils::{get_type_name, normalize_py_index, polars_to_pandas},
 };
 use crate::{
+    analysis::CrossTabArgs,
     data::{QuestionData, SurveyData, config::Config, operation},
     datamap::Datamap,
     error::QuestionNotFound,
@@ -313,91 +314,111 @@ impl Survey {
 impl Survey {
     /// Gets a [topline table](https://en.wikipedia.org/wiki/Contingency_table) for a given question (`row`) with another question (`column`) as the header.
     ///
-    /// Inputs:
-    /// - row: the question name of the rows
-    /// - column: list of columns to group by
+    /// Uses [`CrossTabArgs`] to select the row question, column groups, and optional totals.
     ///
-    pub fn crosstab2(&self, row: &str, columns: &[&str]) -> PolarsResult<DataFrame> {
-        let original = self.data().lazy()?.clone();
-        
-        let row_total = operation::frequency_counts(
-            original.clone().select([col(row)]),
-            row,
-            Some(format!("{} - Total", row).as_str())
-        )?;
-        let crosstabs = columns.iter().try_fold(
-            row_total,
-            |left, &col_name| {
-                let right = operation::create_crosstab(&original,row,col_name)?;
-                let right = self.label_output_column(right, col_name)?;
-
-                Ok::<LazyFrame, PolarsError>(left.join(
-                    right,
-                    [col(row)],
-                    [col(row)],
-                    JoinArgs {
-                        how: JoinType::Full,
-                        validation: JoinValidation::OneToOne,
-                        suffix: None,
-                        slice: None,
-                        nulls_equal: true,
-                        coalesce: JoinCoalesce::CoalesceColumns,
-                        maintain_order: MaintainOrderJoin::Left,
-                        build_side: None
-                    },
-                ))
-            })?;
-        
-        crosstabs.collect()
-        
-        // // TODO: APPEND ROW LABLE AND NEED TO THINK HOW TO AMEND ROW TOTAL
-        // // MAYBE THINK OF A WAY TO SEPARATE ROW TOTAL & COLUMN TOTAL??
-        // self.label_output_row(crosstabs, row)?
-        //     .with_simplify_expr(true)
-        //     .with_comm_subexpr_elim(true)
-        //     .collect()
-    }
-
-    /// Gets a [topline table](https://en.wikipedia.org/wiki/Contingency_table) for a given question (`row`) with another question (`column`) as the header.
+    /// An example output looks like:
     ///
-    /// Inputs:
-    /// - row: the question name of the rows
-    /// - column: topnbreak used for group by
+    /// ## Example: looking at respondent age by their AI usage:
     ///
-    /// Returns:
-    /// Something that looks like :
+    /// ```ignore
+    /// use triple_s::{read_triple_s, CorssTabArgs};
+    ///
+    /// let survey = read_triple_s("path/to/survey.sss", "path/to/datamap.asc")?;
+    /// let result = survey.corstab(CorssTabArgs {
+    ///     question_name: "Age",
+    ///     columns: &["AIFreq_1", ],
+    ///     show_row_total: true,
+    ///     show_column_total: true
+    /// })?;
+    ///
+    /// println!("{:?}", result);
+    /// ```
+    ///
+    /// This would in term gives you an output that looks like this:
     ///
     /// ```text
-    /// ┌───────────────────────┬───────┬───────┬──────┬────────────┬──────────────────────────┬───────────────────┬─────┐
-    /// │ DevIDEAdmired         ┆ Total ┆ Woman ┆ Man  ┆ Non-binary ┆ Prefer to self-describe: ┆ Prefer not to say ┆ NA  │
-    /// │ ---                   ┆ ---   ┆ ---   ┆ ---  ┆ ---        ┆ ---                      ┆ ---               ┆ --- │
-    /// │ str                   ┆ u32   ┆ u32   ┆ u32  ┆ u32        ┆ u32                      ┆ u32               ┆ u32 │
-    /// ╞═══════════════════════╪═══════╪═══════╪══════╪════════════╪══════════════════════════╪═══════════════════╪═════╡
-    /// │ Base                  ┆ null  ┆ 98    ┆ 1740 ┆ 34         ┆ 20                       ┆ 88                ┆ 20  │
-    /// │ Neovim                ┆ 142   ┆ 3     ┆ 130  ┆ 3          ┆ 0                        ┆ 6                 ┆ 0   │
-    /// │ VSCodium              ┆ 65    ┆ 1     ┆ 61   ┆ 2          ┆ 0                        ┆ 1                 ┆ 0   │
-    /// │ Cursor                ┆ 67    ┆ 4     ┆ 60   ┆ 0          ┆ 0                        ┆ 3                 ┆ 0   │
-    /// │ Kiro                  ┆ 11    ┆ 0     ┆ 10   ┆ 0          ┆ 0                        ┆ 1                 ┆ 0   │
-    /// │ …                     ┆ …     ┆ …     ┆ …    ┆ …          ┆ …                        ┆ …                 ┆ …   │
-    /// │ Rider                 ┆ 52    ┆ 2     ┆ 45   ┆ 2          ┆ 1                        ┆ 2                 ┆ 0   │
-    /// │ Visual Studio Code    ┆ 586   ┆ 24    ┆ 535  ┆ 7          ┆ 1                        ┆ 17                ┆ 2   │
-    /// │ Other, please specify ┆ 83    ┆ 2     ┆ 73   ┆ 2          ┆ 0                        ┆ 6                 ┆ 0   │
-    /// │ Vim                   ┆ 227   ┆ 10    ┆ 206  ┆ 2          ┆ 1                        ┆ 7                 ┆ 1   │
-    /// │ Xcode                 ┆ 62    ┆ 7     ┆ 51   ┆ 0          ┆ 0                        ┆ 3                 ┆ 1   │
-    /// └───────────────────────┴───────┴───────┴──────┴────────────┴──────────────────────────┴───────────────────┴─────┘
+    /// ┌────────────────────┬─────────────┬──────────────────┬─────────────────────────────────┬───────────────┬───────────────────┐
+    /// │ Age                ┆ Age - Total ┆ AIFreq_1 - Daily ┆ AIFreq_1 - Monthly or Infreque… ┆ AIFreq_1 - NA ┆ AIFreq_1 - Weekly │
+    /// │ ---                ┆ ---         ┆ ---              ┆ ---                             ┆ ---           ┆ ---               │
+    /// │ str                ┆ u32         ┆ u32              ┆ u32                             ┆ u32           ┆ u32               │
+    /// ╞════════════════════╪═════════════╪══════════════════╪═════════════════════════════════╪═══════════════╪═══════════════════╡
+    /// │ Null               ┆ 30903       ┆ 8403             ┆ 712                             ┆ 19472         ┆ 2316              │
+    /// │ Under 18 years old ┆ 969         ┆ 62               ┆ 33                              ┆ 830           ┆ 44                │
+    /// │ 18-24 years old    ┆ 4944        ┆ 809              ┆ 106                             ┆ 3760          ┆ 269               │
+    /// │ 25-34 years old    ┆ 9267        ┆ 2489             ┆ 165                             ┆ 5956          ┆ 657               │
+    /// │ 35-44 years old    ┆ 8522        ┆ 2809             ┆ 195                             ┆ 4860          ┆ 658               │
+    /// │ 45-54 years old    ┆ 4198        ┆ 1437             ┆ 112                             ┆ 2256          ┆ 393               │
+    /// │ 55-64 years old    ┆ 1829        ┆ 581              ┆ 67                              ┆ 980           ┆ 201               │
+    /// │ 65 years or older  ┆ 822         ┆ 178              ┆ 29                              ┆ 534           ┆ 81                │
+    /// │ Prefer not to say  ┆ 352         ┆ 38               ┆ 5                               ┆ 296           ┆ 13                │
+    /// └────────────────────┴─────────────┴──────────────────┴─────────────────────────────────┴───────────────┴───────────────────┘
     /// ```
-    pub fn crosstab(&self, row: &str, column: &str) -> PolarsResult<DataFrame> {
-        let result = operation::create_crosstab(self.data().lazy()?, row, column)?;
+    pub fn crosstab(&self, args: CrossTabArgs<'_>) -> PolarsResult<DataFrame> {
+        let row = args.question_name;
+        let original = self.data().lazy()?.clone();
 
-        // We then append row and column labels
-        // column label
-        let result = self.label_output_column(result, column)?;
+        // get crosstab for columns
+        let mut headers = args.columns.into_iter();
+        let first = match headers.next() {
+            None => DataFrame::empty().lazy(),
+            Some(&first) => {
+                let tab =
+                    operation::create_crosstab(&original, row, first, args.show_column_total)?;
+                self.label_output_column(tab, first)?
+            }
+        };
+        let mut output = headers.try_fold(first, |left, &colname| {
+            let right =
+                operation::create_crosstab(&original, row, colname, args.show_column_total)?;
+            let right = self.label_output_column(right, colname)?;
 
-        // And finally, append row labels
-        let result = self.label_output_row(result, row)?;
+            Ok::<LazyFrame, PolarsError>(left.join(
+                right,
+                [col(row)],
+                [col(row)],
+                JoinArgs {
+                    how: JoinType::Full,
+                    validation: JoinValidation::OneToOne,
+                    nulls_equal: true,
+                    coalesce: JoinCoalesce::CoalesceColumns,
+                    maintain_order: MaintainOrderJoin::Left,
+                    suffix: None,
+                    slice: None,
+                    build_side: None,
+                },
+            ))
+        })?;
 
-        // output
-        result.collect()
+        // row total
+        if args.show_row_total {
+            output = operation::frequency_counts(
+                original.clone(),
+                row,
+                Some(&format!("{row} - Total")),
+                args.show_column_total,
+            )?
+            .join(
+                output,
+                [col(row)],
+                [col(row)],
+                JoinArgs {
+                    how: JoinType::Full,
+                    validation: JoinValidation::OneToOne,
+                    nulls_equal: true,
+                    coalesce: JoinCoalesce::CoalesceColumns,
+                    maintain_order: MaintainOrderJoin::Left,
+                    suffix: None,
+                    slice: None,
+                    build_side: None,
+                },
+            );
+        };
+        let output = self.label_output_row(output, row)?;
+
+        output
+            .with_simplify_expr(true)
+            .with_comm_subexpr_elim(true)
+            .collect()
     }
 
     #[inline(always)]
@@ -447,7 +468,6 @@ impl Survey {
                 .replace_strict(
                     lit(row_old.clone()),
                     lit(row_new),
-
                     Some(col(question_name).cast(DataType::String)),
                     Some(DataType::String),
                 )
@@ -586,7 +606,10 @@ impl Survey {
         let width = label_query.len();
         let transformed = lazy
             .select(label_query)
+            .with_check_order(true)
             .with_simplify_expr(true)
+            .with_comm_subexpr_elim(true)
+            .with_comm_subplan_elim(true)
             .with_streaming(true);
         let iterator = RowIterator::new(source, transformed, width);
         Py::new(py, iterator)
@@ -827,74 +850,100 @@ impl Survey {
     ///     column (str): name of the question for topline
     ///
     /// Kwrags:
+    ///     show_row_total (bool *optional*): 
+    ///         Toogle on to show total sizes for the `row`
+    ///         Default True
+    ///     
+    ///     show_column_total (bool *optional*): 
+    ///         Toggle on to show total size for each column.
+    ///         Defaul tRUE
+    ///     
     ///     format ('pandas' | 'polars' | None, *optional*):
     ///         Which dataframe library this function should return,
     ///         default to be consistent with the `dataframe_format` attribute of the current instance (`Survey.dataframe_format`).
     ///
     /// Examples:
     ///
-    ///     Compare IDE admired by country
-    ///     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ///     Compare AI usage by respondent age
+    ///     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     ///
     ///     Using stack overflow 2026 survey data as an example, suppose you want to look at the IDE people admire by each country..
-    ///     
+    ///
     ///     We starts with reading the data:
-    ///     
+    ///
     ///     .. code-block:: python
-    ///         
+    ///
     ///         >>> from triple_s import read_triple_s
     ///         >>> survey = read_triple_s("stackoverflow_2026.sss", "stackoverflow_2026.asc")
-    ///     
-    ///     
+    ///
+    ///
     ///     Then use `Survey.crosstab()` method to get the data:
-    ///      
+    ///
     ///     .. code-block:: python
-    ///     
-    ///         >>> survey.crosstab("DevIDEAdmired", "Country")
-    ///     
+    ///
+    ///         >>> survey.crosstab("Age", ["AIFreq_1"], show_row_total=True, show_column_total=True)
+    ///
     ///     This would give you a table that looks like:
     ///     
     ///     ```text
-    ///     ┌─────────────────────────────┬───────┬──────────────────────────┬─────────┬───┬────────┬──────────┬─────────┬──────┐
-    ///     │ DevIDEAdmired               ┆ Total ┆ United States of America ┆ Germany ┆ … ┆ Zambia ┆ Zimbabwe ┆ Nomadic ┆ NA   │
-    ///     │ ---                         ┆ ---   ┆ ---                      ┆ ---     ┆   ┆ ---    ┆ ---      ┆ ---     ┆ ---  │
-    ///     │ str                         ┆ u32   ┆ u32                      ┆ u32     ┆   ┆ u32    ┆ u32      ┆ u32     ┆ u32  │
-    ///     ╞═════════════════════════════╪═══════╪══════════════════════════╪═════════╪═══╪════════╪══════════╪═════════╪══════╡
-    ///     │ Base                        ┆ null  ┆ 4755                     ┆ 1983    ┆ … ┆ 6      ┆ 10       ┆ 43      ┆ 9533 │
-    ///     │ Jupyter Notebook/JupyterLab ┆ 669   ┆ 168                      ┆ 56      ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
-    ///     │ PhpStorm                    ┆ 383   ┆ 44                       ┆ 51      ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
-    ///     │ Cursor                      ┆ 649   ┆ 139                      ┆ 31      ┆ … ┆ 0      ┆ 0        ┆ 1       ┆ 0    │
-    ///     │ NetBeans                    ┆ 85    ┆ 9                        ┆ 6       ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
-    ///     │ …                           ┆ …     ┆ …                        ┆ …       ┆ … ┆ …      ┆ …        ┆ …       ┆ …    │
-    ///     │ Replit                      ┆ 69    ┆ 13                       ┆ 2       ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
-    ///     │ Vim                         ┆ 1996  ┆ 539                      ┆ 213     ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
-    ///     │ IntelliJ IDEA               ┆ 1705  ┆ 315                      ┆ 247     ┆ … ┆ 0      ┆ 0        ┆ 1       ┆ 0    │
-    ///     │ CLion                       ┆ 322   ┆ 64                       ┆ 39      ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
-    ///     │ Emacs                       ┆ 424   ┆ 118                      ┆ 43      ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
-    ///     └─────────────────────────────┴───────┴──────────────────────────┴─────────┴───┴────────┴──────────┴─────────┴──────┘
+    ///     ┌────────────────────┬─────────────┬──────────────────┬─────────────────────────────────┬───────────────┬───────────────────┐
+    ///     │ Age                ┆ Age - Total ┆ AIFreq_1 - Daily ┆ AIFreq_1 - Monthly or Infreque… ┆ AIFreq_1 - NA ┆ AIFreq_1 - Weekly │
+    ///     │ ---                ┆ ---         ┆ ---              ┆ ---                             ┆ ---           ┆ ---               │
+    ///     │ str                ┆ u32         ┆ u32              ┆ u32                             ┆ u32           ┆ u32               │
+    ///     ╞════════════════════╪═════════════╪══════════════════╪═════════════════════════════════╪═══════════════╪═══════════════════╡
+    ///     │ Null               ┆ 30903       ┆ 8403             ┆ 712                             ┆ 19472         ┆ 2316              │
+    ///     │ Under 18 years old ┆ 969         ┆ 62               ┆ 33                              ┆ 830           ┆ 44                │
+    ///     │ 18-24 years old    ┆ 4944        ┆ 809              ┆ 106                             ┆ 3760          ┆ 269               │
+    ///     │ 25-34 years old    ┆ 9267        ┆ 2489             ┆ 165                             ┆ 5956          ┆ 657               │
+    ///     │ 35-44 years old    ┆ 8522        ┆ 2809             ┆ 195                             ┆ 4860          ┆ 658               │
+    ///     │ 45-54 years old    ┆ 4198        ┆ 1437             ┆ 112                             ┆ 2256          ┆ 393               │
+    ///     │ 55-64 years old    ┆ 1829        ┆ 581              ┆ 67                              ┆ 980           ┆ 201               │
+    ///     │ 65 years or older  ┆ 822         ┆ 178              ┆ 29                              ┆ 534           ┆ 81                │
+    ///     │ Prefer not to say  ┆ 352         ┆ 38               ┆ 5                               ┆ 296           ┆ 13                │
+    ///     └────────────────────┴─────────────┴──────────────────┴─────────────────────────────────┴───────────────┴───────────────────┘
     ///     ```
-    ///
+    /// 
     #[pyo3(
-        name = "crosstab", 
-        signature=(row: "str", column: "str", format: "'polars'|'pandas'|None"=None)
+        name = "crosstab",
+        signature=(
+            row: "str", 
+            column: "list[str]"=None,
+            show_row_total: "bool"=None,
+            show_column_total: "bool"=None,
+            format: "'polars'|'pandas'|None"=None
+        )
     )]
     fn py_crosstab<'py>(
         &self,
         py: Python<'py>,
         row: &str,
-        column: &str,
+        column: Option<Vec<String>>,
+        show_row_total: Option<bool>,
+        show_column_total: Option<bool>,
         format: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let polars_frame = self.crosstab(row, column).map_err(PyPolarsErr::Polars)?;
+        let columns: Vec<&str> = column
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .map(String::as_str)
+            .collect();
 
-        let format = format
+        let arguments = CrossTabArgs {
+            question_name: row,
+            columns: &columns,
+            show_row_total: show_row_total.unwrap_or(true),
+            show_column_total: show_column_total.unwrap_or(true),
+        };
+        let frame = self.crosstab(arguments).map_err(PyPolarsErr::Polars)?;
+
+        match format
             .map(|value| DataFrameFormat::from_py_any(value))
             .transpose()?
-            .unwrap_or(self.config().py_dataframe_format.clone());
-
-        match format {
-            DataFrameFormat::Polars => PyDataFrame(polars_frame).into_bound_py_any(py),
-            DataFrameFormat::Pandas => polars_to_pandas(polars_frame, py),
+            .unwrap_or(self.config().py_dataframe_format.clone())
+        {
+            DataFrameFormat::Polars => PyDataFrame(frame).into_bound_py_any(py),
+            DataFrameFormat::Pandas => polars_to_pandas(frame, py),
         }
     }
 }

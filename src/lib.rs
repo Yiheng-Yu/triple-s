@@ -159,6 +159,7 @@ mod utils;
 
 use std::path::Path;
 
+pub use analysis::CrossTabArgs;
 use anyhow::Result;
 pub use data::{QuestionData, SurveyData};
 pub use datamap::{

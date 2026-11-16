@@ -62,5 +62,5 @@ Methods
 
 .. automethod:: Survey.to_pandas(response_label: bool | None = None) -> pandas.DataFrame
 
-.. automethod:: Survey.crosstab(row: str, column: str, format: str | triple_s.config.DataFrameFormat | None = None) -> polars.DataFrame | pandas.DataFrame
+.. automethod:: Survey.crosstab(row: str, column: List[str]=None, show_row_total: bool=True, show_column_total: bool=True, format: str | triple_s.config.DataFrameFormat | None = None) -> polars.DataFrame | pandas.DataFrame
 
