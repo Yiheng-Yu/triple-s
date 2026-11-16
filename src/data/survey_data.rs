@@ -249,7 +249,7 @@ impl SurveyData {
     }
 
     /// List of question names in the current instance
-    pub fn questions(&self) -> PolarsResult<Vec<String>> {
+    pub fn question_names(&self) -> PolarsResult<Vec<String>> {
         match self.frame.as_ref() {
             None => Ok(Vec::new()),
             Some(lf) => Ok(lf
@@ -304,9 +304,9 @@ impl SurveyData {
 #[pymethods]
 impl SurveyData {
     /// List of question names in the current instance
-    #[getter(questions)]
-    fn py_get_questions(&self) -> Vec<String> {
-        self.questions().ok().unwrap_or_default()
+    #[getter(question_names)]
+    fn py_get_question_names(&self) -> Vec<String> {
+        self.question_names().ok().unwrap_or_default()
     }
 
     #[getter(num_response)]
@@ -319,7 +319,7 @@ impl SurveyData {
         let mut info = Vec::new();
 
         const MAX_NUM_COLNAME_SHOW: usize = 3;
-        let colnames = self.questions().ok().unwrap_or_default();
+        let colnames = self.question_names().ok().unwrap_or_default();
         let mut colname_repr = colnames[0..colnames.len().min(MAX_NUM_COLNAME_SHOW)]
             .iter()
             .map(|s| format!("{:?}", s))
@@ -329,7 +329,7 @@ impl SurveyData {
             colname_repr.push_str(", ...");
         }
         let colname_repr = format!("[{}]", colname_repr);
-        info.push(("questions", colname_repr));
+        info.push(("question_names", colname_repr));
 
         let num_response = self
             .num_response()

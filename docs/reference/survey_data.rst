@@ -11,7 +11,7 @@ Obtain data with :func:`read_data`, :meth:`SurveyData.empty`, or
 Properties
 ----------
 
-.. autoattribute:: SurveyData.questions
+.. autoattribute:: SurveyData.question_names
    :annotation: : list[str]
 
    List of question names in a SurveyData instance.
