@@ -74,8 +74,9 @@ pub(crate) fn create_crosstab(
     group_by: &str,
 ) -> PolarsResult<LazyFrame> {
     // create cross tabs
-    let lf = original
+    let mut lf = original
         .clone()
+        .select([target, group_by])
         .with_columns([concat_list([col(group_by)])?.alias(group_by)])
         .explode(
             cols([group_by]),
