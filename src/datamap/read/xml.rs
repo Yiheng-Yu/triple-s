@@ -338,6 +338,8 @@ where
                 }
             }
 
+            Event::Eof => anyhow::bail!("Unexpected end of XML while reading variable"),
+
             // self-closing elements
             Event::Empty(ele) => {
                 let tag = ele.local_name().into_inner();

@@ -2,11 +2,9 @@ import warnings
 
 import pytest
 from triple_s import (
-    read_data,
     Datamap,
     Question,
     Survey,
-    SurveyData,
     Text,
     read_datamap,
     read_triple_s,
@@ -42,16 +40,6 @@ def test_read_data(path_sss, path_data):
     assert survey.data.to_polars().shape == (3, 12)
 
 
-def test_load_asc_file(datamap):
-    href = datamap.record.href
-    data = read_data(datamap, PATH_ASC)
-    assert isinstance(data, SurveyData)
-    assert data.has_data()
-    assert data.num_response == 3
-    assert data.to_polars().shape == (3, 12)
-    assert datamap.record.href == href
-
-
 def test_datamap_iter(datamap):
     question_names = datamap.record.question_names
     record = datamap.record
@@ -77,15 +65,6 @@ def test_datamap_iter(datamap):
             assert container.get(name) is None
             with pytest.raises(KeyError):
                 container[name]
-
-
-def test_get_empty_datamap():
-    datamap = Datamap.from_dict({})
-    for container in [datamap, datamap.record]:
-        assert container.question_names == []
-        assert container.num_questions == 0
-        assert container.get("Q1") is None
-        assert container.get("") is None
 
 
 def test_question_response_label_map():

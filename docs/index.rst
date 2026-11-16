@@ -6,7 +6,7 @@ Welcome to ``triple-s``! This library helps you read, explore, and edit
 handling the work behind the scenes. 
 
 `Triple-S <https://triple-s.org/documentation/faq/>`__ is a file format used for handling survey data. 
-This format has been relatively popular and been used accross many different 
+This format has been relatively popular and been used across many different 
 places, and most of the major survey platforms uses triple-s to transfer 
 survey data from one place to another.
 

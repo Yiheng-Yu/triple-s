@@ -180,10 +180,7 @@ impl QuestionData {
     ///
     /// _The first row is the total count of not-null values_
     #[allow(clippy::mutable_key_type)]
-    pub fn value_counts(
-        &self,
-        name: Option<&str>,
-    ) -> PolarsResult<DataFrame> {
+    pub fn value_counts(&self, name: Option<&str>) -> PolarsResult<DataFrame> {
         let question_name = self.name();
         let column_name = name.unwrap_or("count");
         let raw_data = self.to_value_column()?;
@@ -317,11 +314,14 @@ impl QuestionData {
     }
 
     fn to_value_column(&self) -> PolarsResult<Column> {
-        self.lazy()?.collect()?.into_columns().into_iter().next().ok_or(
-            PolarsError::ColumnNotFound(
+        self.lazy()?
+            .collect()?
+            .into_columns()
+            .into_iter()
+            .next()
+            .ok_or(PolarsError::ColumnNotFound(
                 format!("Unable to find column '{}' in `SurveyData`", self.name()).into(),
-            ),
-        )
+            ))
     }
 }
 
@@ -386,7 +386,7 @@ impl QuestionData {
     #[getter(data)]
     fn py_get_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let series = self.to_series().map_err(PyPolarsErr::Polars)?;
-        let dtype = self.question.polars_dtype();
+        let dtype = series.dtype();
         match dtype {
             DataType::Null => PyTuple::new(py, (0..series.len()).map(|_| py.None())),
             DataType::String => {
@@ -418,7 +418,7 @@ impl QuestionData {
                     .collect::<PyResult<Vec<Option<NaiveTime>>>>()?;
                 PyTuple::new(py, iterator)
             }
-            DataType::List(inner) if *inner == DataType::UInt32 => {
+            DataType::List(inner) if matches!(inner.as_ref(), DataType::UInt32 | DataType::String) => {
                 let values = series
                     .iter()
                     .map(|s| anyvalue_to_python(py, s))
@@ -533,7 +533,7 @@ impl QuestionData {
     ///     name (str, *optional*):
     ///         Give the resulting count column a specific name (same as `polars.Series.value_counts`)
     ///         Default `'count'`
-    ///     format ('polars' | 'pandas' |DataFrameFormat, *optional*): Select what kind of dataframe to output:
+    ///     format ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
     ///         'polars' | DataFrameFormat.Polars: polars.DataFrame
     ///         'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
     ///

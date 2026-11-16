@@ -42,36 +42,56 @@ Use a zero-based index to read one respondent's answers:
 
    >>> survey[0]
 
-   {'RESPONDENT_ID': 520001.0, 'Q1.a': datetime.date(2005, 5, 4), 'Q1.b': datetime.time(11, 20), 'Q2': 0, 'Q3': [1, 3, 5, 9], 'Q3.a': 'Nottingham Goose Fair         ', 'Q4': 2, 'Q5': [1, 5], 'Q6': 25.0, 'Q7': 1, 'Q8': 'A', 'WT': 1.131}
+   {'RESPONDENT_ID': 520001.0, 'Q1.a': datetime.date(2005, 5, 4), 'Q1.b': datetime.time(11, 20), 'Q2': 0, 'Q3': [1, 3, 5, 9], 'Q3.a': 'Nottingham Goose Fair', 'Q4': 2, 'Q5': [1, 5], 'Q6': 25.0, 'Q7': 1, 'Q8': 'A', 'WT': 1.131}
 
-Or iterate through the responses:
+Or iterate through the responses, output as dictionary of ``{ question_name: question_response }``:
 
 .. code-block:: python
 
    for response in survey:
       print(response)
    
-Responses returned by iteration or indexing are copies, and 
-modifying them does not change the survey's underlying data:
+This is equivalent to ``survey.iter_rows()``:
 
 .. code-block:: python
 
-   response = survey[0]
+   for response in survey.iter_rows():
+      print(response)
 
-   print("Original value:", response["Q2"])
-   response["Q2"] = 2
 
-   print("Modified copy:", response["Q2"])
-   print("Survey value:", survey[0]["Q2"])
+To switch between values and labels:
 
-The survey still holds the original value:
+.. code-block:: python
 
-.. code-block:: text
-   :class: code-output
+   print("This is response as values:")
+   print(next(survey.iter_rows()))
 
-   Original value: 0
-   Modified copy: 2
-   Survey value: 0
+   print("This is response as text labels:")
+   survey.response_display = "label"
+   print(next( survey.iter_rows()))
+
+Note:
+
+   Responses returned by iteration or indexing are copies of the original data. Modifying them does not change the survey's underlying data.
+   
+   .. code-block:: python
+
+      response = survey[0]
+
+      print("Original value:", response["Q2"])
+      response["Q2"] = 2
+
+      print("Modified copy:", response["Q2"])
+      print("Survey value:", survey[0]["Q2"])
+
+   The survey still holds the original value:
+
+   .. code-block:: text
+      :class: code-output
+
+      Original value: 0
+      Modified copy: 2
+      Survey value: 0
 
 
 Work with one question's answers
@@ -100,7 +120,7 @@ Next steps
 ----------
 
 * :doc:`Datamap <datamap>`
-  Interacting with survey datamp.
+  Working with survey definitions.
 
 * :doc:`SurveyData <survey_data>`
   Interacting with survey data.

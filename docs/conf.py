@@ -97,7 +97,7 @@ def prepare_docstring(app, what, name, obj, options, lines):
         else:
             # Rustdoc type links and Markdown inline code.
             line = re.sub(r"\[`([^`]+)`\]", rustdoc_link, line)
-            line = re.sub(r"(?<![\w:`])`([^`]+)`(?!`)", r"``\1``", line)
+            line = re.sub(r"(?<![\w:`])`([^`]+)`(?![`_])", r"``\1``", line)
             heading = re.match(r"^#+ (.+)$", line)
             if heading:
                 result.extend(["", heading[1], "^" * len(heading[1]), ""])

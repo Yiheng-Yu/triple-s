@@ -55,8 +55,19 @@ Or to a ``pandas.DataFrame``:
    pandas_df = survey_data.to_pandas()
 
 
-Caching
--------
+Iteration and data replacement
+-------------------------------
 
-Loaded responses use a temporary Parquet cache. Keep the ``SurveyData``
-object alive while using its cache.
+Iterate raw respondent as dictionaries with ``iter(survey_data)``, this is the same as ``SurvreyData.iter_rows()``:
+
+.. code-block:: python
+
+   for response in survey_data:
+       print(response)
+
+
+
+Caching
+---------
+
+Loading a response file creates a temporary Parquet cache, hence it's pretty fast and memory efficient (i think)!

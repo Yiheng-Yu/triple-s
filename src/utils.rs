@@ -79,12 +79,16 @@ pub(crate) fn polars_to_pandas<'py>(
 #[cfg(feature = "pyo3")]
 #[inline]
 pub fn get_type_name<'py>(object: &pyo3::Bound<'py, pyo3::PyAny>) -> pyo3::PyResult<String> {
-    object.get_type().name()?.extract::<String>().map_err(|err| {
-        exceptions::PyRuntimeError::new_err(format!(
-            "Backend error raised from rust: {:#}",
-            err
-        ))
-    })
+    object
+        .get_type()
+        .name()?
+        .extract::<String>()
+        .map_err(|err| {
+            exceptions::PyRuntimeError::new_err(format!(
+                "Backend error raised from rust: {:#}",
+                err
+            ))
+        })
 }
 
 #[cfg(feature = "pyo3")]

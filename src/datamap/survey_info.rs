@@ -299,43 +299,71 @@ impl SurveyInfo {
         let name = self
             .name()
             .as_ref()
-            .map(|value| PyString::new(py, value).repr().map(|value| value.to_string()))
+            .map(|value| {
+                PyString::new(py, value)
+                    .repr()
+                    .map(|value| value.to_string())
+            })
             .transpose()?
             .unwrap_or("None".into());
         let title = self
             .title()
             .as_ref()
-            .map(|value| PyString::new(py, value).repr().map(|value| value.to_string()))
+            .map(|value| {
+                PyString::new(py, value)
+                    .repr()
+                    .map(|value| value.to_string())
+            })
             .transpose()?
             .unwrap_or("None".into());
         let date = self
             .date()
             .as_ref()
-            .map(|value| PyString::new(py, value).repr().map(|value| value.to_string()))
+            .map(|value| {
+                PyString::new(py, value)
+                    .repr()
+                    .map(|value| value.to_string())
+            })
             .transpose()?
             .unwrap_or("None".into());
         let time = self
             .time()
             .as_ref()
-            .map(|value| PyString::new(py, value).repr().map(|value| value.to_string()))
+            .map(|value| {
+                PyString::new(py, value)
+                    .repr()
+                    .map(|value| value.to_string())
+            })
             .transpose()?
             .unwrap_or("None".into());
         let origin = self
             .origin()
             .as_ref()
-            .map(|value| PyString::new(py, value).repr().map(|value| value.to_string()))
+            .map(|value| {
+                PyString::new(py, value)
+                    .repr()
+                    .map(|value| value.to_string())
+            })
             .transpose()?
             .unwrap_or("None".into());
         let user = self
             .user()
             .as_ref()
-            .map(|value| PyString::new(py, value).repr().map(|value| value.to_string()))
+            .map(|value| {
+                PyString::new(py, value)
+                    .repr()
+                    .map(|value| value.to_string())
+            })
             .transpose()?
             .unwrap_or("None".into());
         let style = self
             .style()
             .as_ref()
-            .map(|value| PyString::new(py, value).repr().map(|value| value.to_string()))
+            .map(|value| {
+                PyString::new(py, value)
+                    .repr()
+                    .map(|value| value.to_string())
+            })
             .transpose()?
             .unwrap_or("None".into());
         let language_options = self
@@ -361,7 +389,11 @@ impl SurveyInfo {
         let standard = self
             .standard()
             .as_ref()
-            .map(|value| PyString::new(py, value).repr().map(|value| value.to_string()))
+            .map(|value| {
+                PyString::new(py, value)
+                    .repr()
+                    .map(|value| value.to_string())
+            })
             .transpose()?
             .unwrap_or("None".into());
         Ok(format!(
@@ -378,6 +410,10 @@ impl SurveyInfo {
 
     #[setter(version)]
     fn py_set_version(&mut self, version: Bound<'_, PyAny>) -> PyResult<()> {
+        if let Ok(version) = version.extract::<Version>() {
+            *self.version_mut() = version;
+            return Ok(());
+        }
         let version = if let Ok(version) = version.extract::<String>() {
             version
         } else if let Ok(value) = version.extract::<f64>() {
@@ -611,7 +647,9 @@ impl SurveyInfo {
     #[staticmethod]
     #[pyo3(name = "from_dict")]
     pub(crate) fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
-        let version = content.get_item("version")?.ok_or(missing_key_err("version"))?;
+        let version = content
+            .get_item("version")?
+            .ok_or(missing_key_err("version"))?;
         let version = if let Ok(version) = version.extract::<Version>() {
             version
         } else if let Ok(version) = version.extract::<String>() {

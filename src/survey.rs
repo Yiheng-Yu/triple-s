@@ -13,6 +13,7 @@ use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use crate::{
     SurveyInfo,
     config::{DataFrameFormat, ResponseDisplay},
+    data::row_iterator::RowIterator,
     prelude::*,
     utils::{get_type_name, normalize_py_index, polars_to_pandas},
 };
@@ -302,14 +303,14 @@ impl Survey {
 /// ---
 impl Survey {
     /// Gets a [topline table](https://en.wikipedia.org/wiki/Contingency_table) for a given question (`row`) with another question (`column`) as the header.
-    /// 
+    ///
     /// Inputs:
     /// - row: the question name of the rows
     /// - column: topnbreak used for group by
-    /// 
+    ///
     /// Returns:
     /// Something that looks like :
-    /// 
+    ///
     /// ```text
     /// ┌───────────────────────┬───────┬───────┬──────┬────────────┬──────────────────────────┬───────────────────┬─────┐
     /// │ DevIDEAdmired         ┆ Total ┆ Woman ┆ Man  ┆ Non-binary ┆ Prefer to self-describe: ┆ Prefer not to say ┆ NA  │
@@ -373,14 +374,6 @@ impl Survey {
 
         Ok(result)
     }
-
-    // pub fn quick_topline(
-    //     &self,
-    //     questions: &[&str],
-    //     topbreak: &str,
-    // ) -> PolarsResult<Vec<DataFrame>> {
-    //     todo!()
-    // }
 }
 
 /// Pyo3 implementations
@@ -459,7 +452,9 @@ impl Survey {
             let show_resp_label = self.config().show_response_label();
 
             // let row = py.detach(|| {
-            let row = self.get_row(row_index, show_resp_label).map_err(PyPolarsErr::Polars)?;
+            let row = self
+                .get_row(row_index, show_resp_label)
+                .map_err(PyPolarsErr::Polars)?;
             // })?;
 
             PyDataFrame(row)
@@ -490,8 +485,11 @@ impl Survey {
     ///
     /// Returns:
     ///     Iterator[dict[str, object]]: An iterator over respondent rows.
+    ///     Captures the current data and display settings, buffering a small
+    ///     number of rows locally. New iterators use subsequent changes.
     fn iter_rows(&self, py: Python<'_>) -> PyResult<Py<RowIterator>> {
-        let mut lazy = self.data().lazy()?.clone();
+        let source = self.data().clone();
+        let mut lazy = source.lazy()?.clone();
 
         let label_query = if self.config().show_response_label() {
             let label_lookup = self.datamap().response_label_map();
@@ -501,8 +499,12 @@ impl Survey {
             self.question_names().into_iter().map(col).collect()
         };
 
-        let n_rows = self.num_response().map_err(PyPolarsErr::Polars)? as i64;
-        let iterator = RowIterator::new(lazy, n_rows, label_query);
+        let width = label_query.len();
+        let transformed = lazy
+            .select(label_query)
+            .with_simplify_expr(true)
+            .with_streaming(true);
+        let iterator = RowIterator::new(source, transformed, width);
         Py::new(py, iterator)
     }
 
@@ -606,7 +608,8 @@ impl Survey {
     /// Total number of responses
     #[getter(num_response)]
     fn py_get_num_response(&self) -> PyResult<usize> {
-        self.num_response().map_err(|err| PyPolarsErr::Polars(err).into())
+        self.num_response()
+            .map_err(|err| PyPolarsErr::Polars(err).into())
     }
 
     /// List of question names loaded to the survey
@@ -620,21 +623,24 @@ impl Survey {
     ///
     /// This method will return dataframe with the following columns:
     ///
-    /// =============== ===============
-    /// column          dtype
-    /// =============== ===============
-    /// `question_name` String
-    /// `response`      String
-    /// `label`         String
-    /// =============== ===============
+    /// .. table::
+    ///     :align: left
+    ///
+    ///     =================  ======
+    ///     column             dtype
+    ///     =================  ======
+    ///     ``question_name``  String
+    ///     ``response``       String
+    ///     ``label``          String
+    ///     =================  ======
     ///
     /// Note:
     ///
     ///     Polars only supports dataframe with *single data type*, hence all response values needs to
     ///     be converted to string beforehand. You can convert them back to the correct type later.
     ///
-    /// .. code:: bash
     ///
+    /// ```text
     /// shape: (26, 3)
     /// ┌───────────────┬──────────┬─────────────────────────────────┐
     /// │ question_name ┆ response ┆ label                           │
@@ -653,9 +659,10 @@ impl Survey {
     /// │ Q8            ┆ "B"      ┆ Between 3 months and 1 year     │
     /// │ Q8            ┆ "C"      ┆ More than 1 years time          │
     /// └───────────────┴──────────┴─────────────────────────────────┘
+    /// ```
     ///
     /// Keyword Args:
-    ///     format ('polars' | 'pandas' |DataFrameFormat, *optional*): Select what kind of dataframe to output:
+    ///     format ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
     ///         'polars' | DataFrameFormat.Polars: polars.DataFrame
     ///         'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
     ///
@@ -669,8 +676,9 @@ impl Survey {
         py: Python<'py>,
         format: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let polars_frame =
-            self.response_label_map().map_err(|err| PyPolarsErr::Polars(err))?;
+        let polars_frame = self
+            .response_label_map()
+            .map_err(|err| PyPolarsErr::Polars(err))?;
 
         let format = format
             .map(|value| DataFrameFormat::from_py_any(value))
@@ -708,50 +716,91 @@ impl Survey {
             .map_err(|err| PyPolarsErr::Polars(err).into())
     }
 
-    /// Create <a href="https://en.wikipedia.org/wiki/Contingency_table">topline table</a> for question `row`.
-    /// 
-    /// Returns something that looks like:
-    /// 
-    /// ```text
-    /// ┌───────────────────────┬───────┬───────┬──────┬────────────┬──────────────────────────┬───────────────────┬─────┐
-    /// │ DevIDEAdmired         ┆ Total ┆ Woman ┆ Man  ┆ Non-binary ┆ Prefer to self-describe: ┆ Prefer not to say ┆ NA  │
-    /// │ ---                   ┆ ---   ┆ ---   ┆ ---  ┆ ---        ┆ ---                      ┆ ---               ┆ --- │
-    /// │ str                   ┆ u32   ┆ u32   ┆ u32  ┆ u32        ┆ u32                      ┆ u32               ┆ u32 │
-    /// ╞═══════════════════════╪═══════╪═══════╪══════╪════════════╪══════════════════════════╪═══════════════════╪═════╡
-    /// │ Base                  ┆ null  ┆ 98    ┆ 1740 ┆ 34         ┆ 20                       ┆ 88                ┆ 20  │
-    /// │ Neovim                ┆ 142   ┆ 3     ┆ 130  ┆ 3          ┆ 0                        ┆ 6                 ┆ 0   │
-    /// │ VSCodium              ┆ 65    ┆ 1     ┆ 61   ┆ 2          ┆ 0                        ┆ 1                 ┆ 0   │
-    /// │ Cursor                ┆ 67    ┆ 4     ┆ 60   ┆ 0          ┆ 0                        ┆ 3                 ┆ 0   │
-    /// │ Kiro                  ┆ 11    ┆ 0     ┆ 10   ┆ 0          ┆ 0                        ┆ 1                 ┆ 0   │
-    /// │ …                     ┆ …     ┆ …     ┆ …    ┆ …          ┆ …                        ┆ …                 ┆ …   │
-    /// │ Rider                 ┆ 52    ┆ 2     ┆ 45   ┆ 2          ┆ 1                        ┆ 2                 ┆ 0   │
-    /// │ Visual Studio Code    ┆ 586   ┆ 24    ┆ 535  ┆ 7          ┆ 1                        ┆ 17                ┆ 2   │
-    /// │ Other, please specify ┆ 83    ┆ 2     ┆ 73   ┆ 2          ┆ 0                        ┆ 6                 ┆ 0   │
-    /// │ Vim                   ┆ 227   ┆ 10    ┆ 206  ┆ 2          ┆ 1                        ┆ 7                 ┆ 1   │
-    /// │ Xcode                 ┆ 62    ┆ 7     ┆ 51   ┆ 0          ┆ 0                        ┆ 3                 ┆ 1   │
-    /// └───────────────────────┴───────┴───────┴──────┴────────────┴──────────────────────────┴───────────────────┴─────┘
-    /// ``` 
-    /// 
-    /// Args: 
+    /// Export survey raw data to pandas dataframe
+    ///
+    /// Kwargs:
+    ///     response_label (bool, *optional*):
+    ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
+    ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
+    ///         Default to be consistent with `Survey.response_label` flag
+    #[pyo3(name = "to_pandas", signature=(response_label: "bool"=None))]
+    fn py_to_pandas<'py>(
+        &self,
+        py: Python<'py>,
+        response_label: Option<bool>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let response_label = response_label.unwrap_or(self.config().show_response_label());
+        let df = self
+            .to_polars(response_label)
+            .map_err(PyPolarsErr::Polars)?;
+        polars_to_pandas(df, py)
+    }
+
+    /// Create a `topline table <https://en.wikipedia.org/wiki/Contingency_table>`_ for a question in the survey.
+    ///
+    /// Args:
     ///     row (str): name of the question to analyse
     ///     column (str): name of the question for topline
-    /// 
+    ///
     /// Kwrags:
     ///     format ('pandas' | 'polars' | None, *optional*):
     ///         Which dataframe library this function should return, default `polars`
+    ///
+    /// Examples:
+    ///
+    ///     Compare IDE admired by country
+    ///     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ///
+    ///     Using stack overflow 2026 survey data as an example, suppose you want to look at the IDE people admire by each country..
+    ///     
+    ///     We starts with reading the data:
+    ///     
+    ///     .. code-block:: python
+    ///         
+    ///         >>> from triple_s import read_triple_s
+    ///         >>> survey = read_triple_s("stackoverflow_2026.sss", "stackoverflow_2026.asc")
+    ///     
+    ///     
+    ///     Then use `Survey.crosstab()` method to get the data:
+    ///      
+    ///     .. code-block:: python
+    ///     
+    ///         >>> survey.crosstab("DevIDEAdmired", "Country")
+    ///     
+    ///     This would give you a table that looks like:
+    ///     
+    ///     ```text
+    ///     ┌─────────────────────────────┬───────┬──────────────────────────┬─────────┬───┬────────┬──────────┬─────────┬──────┐
+    ///     │ DevIDEAdmired               ┆ Total ┆ United States of America ┆ Germany ┆ … ┆ Zambia ┆ Zimbabwe ┆ Nomadic ┆ NA   │
+    ///     │ ---                         ┆ ---   ┆ ---                      ┆ ---     ┆   ┆ ---    ┆ ---      ┆ ---     ┆ ---  │
+    ///     │ str                         ┆ u32   ┆ u32                      ┆ u32     ┆   ┆ u32    ┆ u32      ┆ u32     ┆ u32  │
+    ///     ╞═════════════════════════════╪═══════╪══════════════════════════╪═════════╪═══╪════════╪══════════╪═════════╪══════╡
+    ///     │ Base                        ┆ null  ┆ 4755                     ┆ 1983    ┆ … ┆ 6      ┆ 10       ┆ 43      ┆ 9533 │
+    ///     │ Jupyter Notebook/JupyterLab ┆ 669   ┆ 168                      ┆ 56      ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
+    ///     │ PhpStorm                    ┆ 383   ┆ 44                       ┆ 51      ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
+    ///     │ Cursor                      ┆ 649   ┆ 139                      ┆ 31      ┆ … ┆ 0      ┆ 0        ┆ 1       ┆ 0    │
+    ///     │ NetBeans                    ┆ 85    ┆ 9                        ┆ 6       ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
+    ///     │ …                           ┆ …     ┆ …                        ┆ …       ┆ … ┆ …      ┆ …        ┆ …       ┆ …    │
+    ///     │ Replit                      ┆ 69    ┆ 13                       ┆ 2       ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
+    ///     │ Vim                         ┆ 1996  ┆ 539                      ┆ 213     ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
+    ///     │ IntelliJ IDEA               ┆ 1705  ┆ 315                      ┆ 247     ┆ … ┆ 0      ┆ 0        ┆ 1       ┆ 0    │
+    ///     │ CLion                       ┆ 322   ┆ 64                       ┆ 39      ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
+    ///     │ Emacs                       ┆ 424   ┆ 118                      ┆ 43      ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
+    ///     └─────────────────────────────┴───────┴──────────────────────────┴─────────┴───┴────────┴──────────┴─────────┴──────┘
+    ///     ```
+    ///     
     #[pyo3(
         name = "crosstab", 
         signature=(row: "str", column: "str", format: "'polars'|'pandas'|None"=None)
     )]
     fn py_crosstab<'py>(
-        &self, 
+        &self,
         py: Python<'py>,
-        row: &str, 
+        row: &str,
         column: &str,
         format: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let polars_frame = self.crosstab(row, column)
-            .map_err(PyPolarsErr::Polars)?;
+        let polars_frame = self.crosstab(row, column).map_err(PyPolarsErr::Polars)?;
 
         let format = format
             .map(|value| DataFrameFormat::from_py_any(value))
@@ -797,56 +846,6 @@ impl QuestionDataIterator {
 
         self.index += 1;
         Ok(Some(instance))
-    }
-}
-
-// ---------- Helpers -----------
-// Iterates through individual responses throughout the survey
-#[cfg(feature = "pyo3")]
-#[pyclass]
-struct RowIterator {
-    lazy: LazyFrame,
-    n_rows: i64,
-    index: i64,
-    label_query: Vec<Expr>,
-}
-
-#[cfg(feature = "pyo3")]
-impl RowIterator {
-    pub fn new(lazy: LazyFrame, n_rows: i64, label_query: Vec<Expr>) -> Self {
-        Self {
-            lazy,
-            n_rows,
-            index: 0,
-            label_query,
-        }
-    }
-
-    fn get_row(&self, index: i64) -> PolarsResult<DataFrame> {
-        self.lazy.clone().slice(index, 1).select(&self.label_query).collect()
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl RowIterator {
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-        slf
-    }
-
-    fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
-        if self.index >= self.n_rows {
-            return Ok(None);
-        };
-
-        let row = py.detach(|| self.get_row(self.index).map_err(PyPolarsErr::Polars))?;
-        // let row = self.get_row(self.index).map_err(PyPolarsErr::Polars)?;
-        let row = PyDataFrame(row).into_bound_py_any(py)?;
-        let row = row
-            .call_method("to_dicts", (), None)? // convert to list of dictionaries
-            .call_method("__getitem__", (0,).into_pyobject(py)?, None)?; // take the first row
-        self.index += 1;
-        Ok(Some(row))
     }
 }
 

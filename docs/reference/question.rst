@@ -11,28 +11,28 @@ Attributes
 ^^^^^^^^^^
 
 .. autoattribute:: Question.type
-   :annotation: -> str | None
-
-.. autoattribute:: Question.location
-   :annotation: -> Location
+   :annotation: : str | None
 
 .. autoattribute:: Question.label
-   :annotation: -> Text
+   :annotation: : Text
+
+.. autoattribute:: Question.location
+   :annotation: : Location
 
 .. autoattribute:: Question.spread
-   :annotation: -> Spread | None
+   :annotation: : Spread | None
 
 .. autoattribute:: Question.format
-   :annotation: -> str | None
+   :annotation: : str | None
 
 .. autoattribute:: Question.usage
-   :annotation: -> str | None
+   :annotation: : str | None
 
 .. autoattribute:: Question.filter
-   :annotation: -> str | None
+   :annotation: : str | None
 
 .. autoattribute:: Question.response
-   :annotation: -> Response
+   :annotation: : Response
 
 .. autoattribute:: Question.name
    :annotation: -> str
@@ -47,10 +47,15 @@ Methods
 ^^^^^^^
 
 .. automethod:: Question.copy() -> Question
-.. automethod:: Question.set_location(start=None, finish=None) -> None
-.. automethod:: Question.from_string(question_fragment) -> Question
-.. automethod:: Question.from_dict(content) -> Question
+
+.. automethod:: Question.set_location(start: int | None = None, finish: int | None = None) -> None
+
+.. automethod:: Question.from_string(question_fragment: str) -> Question
+
+.. automethod:: Question.from_dict(content: dict) -> Question
+
 .. automethod:: Question.to_classic() -> str
+
 .. automethod:: Question.to_xml() -> str
 
 ****
@@ -60,18 +65,25 @@ Location
 
 .. autoclass:: triple_s.Location
 
-Attributes
-^^^^^^^^^^
+Positions are one-based and inclusive. ``finish=None`` uses ``start``. Fixed-width positions count Unicode scalar values; CSV uses ``start`` as a field number.
+
+Properties
+----------
 
 .. autoattribute:: Location.start
-   :annotation: -> int
+   :annotation: : int
+
+   Writable.
 
 .. autoattribute:: Location.finish
-   :annotation: -> int
+   :annotation: : int
+
+   Writable.
 
 Methods
-^^^^^^^
-.. automethod:: Location.from_dict(value) -> Location
+-------
+
+.. automethod:: Location.from_dict(value: dict) -> Location
 
 ****
 
@@ -84,10 +96,7 @@ Attributes
 ^^^^^^^^^^
 
 .. autoattribute:: Spread.subfield_width
-   :annotation: -> int | None
-
-.. autoattribute:: Spread.num_subfields
-   :annotation: -> int
+   :annotation: : int | None
 
 Methods
 ^^^^^^^
@@ -104,18 +113,25 @@ Attributes
 ^^^^^^^^^^
 
 .. autoattribute:: Response.range
-   :annotation: -> DataRange | None
+   :annotation: : DataRange | None
 
 .. autoattribute:: Response.values
-   :annotation: -> tuple[Code, ...]
+   :annotation: : tuple[Code, ...]
+
+.. autoattribute:: Response.response_label
+   :annotation: : dict[int | float | str, Text]
+
 
 Methods
 ^^^^^^^
 
-.. automethod:: Response.get_value(value) -> Code | None
-.. automethod:: Response.add_value(value) -> None
-.. automethod:: Response.set_value(value) -> None
-.. automethod:: Response.from_dict(content) -> Response
+.. automethod:: Response.get_value(value: int | float | str) -> Code | None
+
+.. automethod:: Response.add_value(value: Code) -> None
+
+.. automethod:: Response.set_value(value: Code) -> None
+
+.. automethod:: Response.from_dict(content: dict) -> Response
 
 ****
 
@@ -136,10 +152,13 @@ Attributes
 Methods
 ^^^^^^^
 
-.. automethod:: DataRange.unsigned(start, end) -> DataRange
-.. automethod:: DataRange.signed(start, end) -> DataRange
-.. automethod:: DataRange.float(start, end) -> DataRange
-.. automethod:: DataRange.from_dict(content) -> DataRange
+.. automethod:: DataRange.unsigned(start: int, end: int) -> DataRange
+
+.. automethod:: DataRange.signed(start: int, end: int) -> DataRange
+
+.. automethod:: DataRange.float(start: float, end: float) -> DataRange
+
+.. automethod:: DataRange.from_dict(content: dict) -> DataRange
 
 ****
 
@@ -152,16 +171,16 @@ Attributes
 ^^^^^^^^^^
 
 .. autoattribute:: Code.label
-   :annotation: -> Text
+   :annotation: : Text
 
 .. autoattribute:: Code.value
-   :annotation: -> int | float | str
+   :annotation: : int | float | str
 
 .. autoattribute:: Code.score
-   :annotation: -> float | None
+   :annotation: : float | None
 
 .. autoattribute:: Code.filter
-   :annotation: -> str | None
+   :annotation: : str | None
 
 Methods
 ^^^^^^^
@@ -169,11 +188,14 @@ Methods
 Creating new instance with various data types:
 *********************************************************
 
-.. automethod:: Code.unsigned(value, label=None, filter=None, score=None) -> Code
-.. automethod:: Code.string(value, label=None, filter=None, score=None) -> Code
-.. automethod:: Code.float(value, label=None, filter=None, score=None) -> Code
-.. automethod:: Code.signed(value, label=None, filter=None, score=None) -> Code
+.. automethod:: Code.unsigned(value: int, label: str | None = None, filter: str | None = None, score: float | None = None) -> Code
+
+.. automethod:: Code.signed(value: int, label: str | None = None, filter: str | None = None, score: float | None = None) -> Code
+
+.. automethod:: Code.float(value: float, label: str | None = None, filter: str | None = None, score: float | None = None) -> Code
+
+.. automethod:: Code.string(value: str, label: str | None = None, filter: str | None = None, score: float | None = None) -> Code
 
 Creating new instance from dictionary:
 *********************************************************
-.. automethod:: Code.from_dict(content) -> Code
+.. automethod:: Code.from_dict(content: dict) -> Code

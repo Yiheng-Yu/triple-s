@@ -29,13 +29,6 @@ def xml_content(tree):
     return sorted(content)
 
 
-def test_record_slice_indexing(record):
-    result = record[0:3]
-    assert len(result) == 3
-    result = record[0:-2]
-    assert len(result) == (len(record.content) - 2)
-
-
 @pytest.mark.parametrize("index", [0, 1, -1, -2])
 def test_record_getitem_integer(record, index):
     result = record[index]
@@ -68,6 +61,8 @@ def test_record_getitem_missing_name(record, name):
     "index",
     [
         slice(None),
+        slice(0, 3),
+        slice(0, -2),
         slice(1, 3),
         slice(None, 2),
         slice(1, None),
@@ -108,7 +103,6 @@ def test_record_getitem_zero_slice_step(record):
 
 @pytest.mark.parametrize("lookup", ["integer", "name", "slice"])
 def test_record_getitem_shares_question(record, lookup):
-    record = record
     if lookup == "integer":
         result = record[0]
     elif lookup == "name":

@@ -206,7 +206,6 @@ def test_meta_options_are_tuples():
 
 def test_meta_setter_success():
     meta = SurveyInfo("2.0")
-    meta = SurveyInfo("2.0")
     meta.name = "example"
     meta.title = "title"
     meta.standard = "standardnames"
@@ -432,7 +431,3 @@ def test_survey_mutate_question(xml):
     assert xml.get("Q3") is not None
     assert copy1.name == copy2.name
     assert copy1.name != example.name
-
-
-# def test_question_repl(xml):
-# example = xml.get("Q3")

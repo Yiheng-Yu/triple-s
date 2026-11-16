@@ -180,7 +180,10 @@ impl QuestionOptions {
             usage: lock_it_up(self.usage),
             question_type: lock_it_up(self.question_type),
             location: Location::new(self.location.0, self.location.1)?,
-            spread: self.spread.map(|(sub, width)| Spread::new(sub, width)).transpose()?,
+            spread: self
+                .spread
+                .map(|(sub, width)| Spread::new(sub, width))
+                .transpose()?,
             response,
         })
     }
@@ -682,6 +685,11 @@ impl Question {
         }
     }
 
+    /// Check if current question_type is [`QuestionType::None`]
+    pub fn is_none_type(&self) -> bool {
+        self.question_type().is_none_type()
+    }
+
     /// Get range of data locations from the `location` field,
     /// as a `Range<usize>` object.
     ///
@@ -745,7 +753,11 @@ impl Question {
         match self.question_type.read().clone() {
             QuestionType::None => DataType::Null,
             QuestionType::Single => {
-                if self.format().as_ref().is_some_and(|item| item == &CodeFormat::Literal) {
+                if self
+                    .format()
+                    .as_ref()
+                    .is_some_and(|item| item == &CodeFormat::Literal)
+                {
                     DataType::String
                 } else {
                     DataType::UInt32
@@ -782,8 +794,11 @@ impl Question {
     /// Chinese characters and supplementary characters each occupy one position.
     pub(crate) fn locate_data_asc<'a>(&self, row: &'a str) -> Result<&'a str> {
         let data_location = self.get_data_range();
-        let mut boundaries =
-            row.char_indices().map(|(offset, _)| offset).chain(std::iter::once(row.len()));
+
+        let mut boundaries = row
+            .char_indices()
+            .map(|(offset, _)| offset)
+            .chain(std::iter::once(row.len()));
         let data = boundaries
             .nth(data_location.start)
             .and_then(|start| {
@@ -807,6 +822,14 @@ impl Question {
             })?;
         Ok(data)
     }
+
+    // fn extract_string_chars(text: &str, range: std::ops::Range<usize>) -> Option<&str> {
+    //     let start = text.char_indices()
+    //         .map(|(i, _)| i)
+    //         .chain(std::iter::once(text.len()))
+    //         .nth(range.start);
+    //     todo!()
+    // }
 
     /// validate one line of respondant data from a '.asc' file
     pub(crate) fn validate_asc_entry(&self, row: &str) -> Result<()> {
@@ -1015,12 +1038,15 @@ impl Question {
         let name = name.to_string();
         let label = label.map(Text::new).unwrap_or_default();
         let filter = lock_it_up(filter.map(|s| s.to_string()));
-        let format = format.map(CodeFormat::from_str).transpose().with_context(|| {
-            format!(
-                "Expect value to be one of: {:?} or None",
-                CodeFormat::available_options()
-            )
-        })?;
+        let format = format
+            .map(CodeFormat::from_str)
+            .transpose()
+            .with_context(|| {
+                format!(
+                    "Expect value to be one of: {:?} or None",
+                    CodeFormat::available_options()
+                )
+            })?;
         let format = lock_it_up(format);
         let usage = usage.map(Usage::from_str).transpose().with_context(|| {
             format!(
@@ -1092,7 +1118,9 @@ impl Question {
     /// ```
     pub fn from_string(input: &str) -> Result<Self> {
         let is_classic = !input.trim().starts_with('<');
-        let stream = input.lines().map(|line| Ok::<_, error::BadLine>(line.to_owned()));
+        let stream = input
+            .lines()
+            .map(|line| Ok::<_, error::BadLine>(line.to_owned()));
 
         let builder = if is_classic {
             super::read::classic::collect_question_stream(stream, 0)?
@@ -1569,7 +1597,9 @@ impl Question {
 
     #[setter(location)]
     fn py_set_location(&mut self, location: Location) -> PyResult<()> {
-        location.validate().map_err(|err| exceptions::PyValueError::new_err(err.0))?;
+        location
+            .validate()
+            .map_err(|err| exceptions::PyValueError::new_err(err.0))?;
         *self.location_mut() = location;
         Ok(())
     }
@@ -1821,8 +1851,10 @@ impl Question {
     #[pyo3(name = "from_dict")]
     #[staticmethod]
     fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
-        let name =
-            content.get_item("name")?.ok_or(missing_key_err("name"))?.extract::<String>()?;
+        let name = content
+            .get_item("name")?
+            .ok_or(missing_key_err("name"))?
+            .extract::<String>()?;
 
         let qtype = content
             .get_item("question_type")?
@@ -2287,8 +2319,10 @@ impl Location {
     #[staticmethod]
     #[pyo3(name = "from_dict")]
     fn py_from_dict(value: Bound<'_, PyDict>) -> PyResult<Self> {
-        let start =
-            value.get_item("start")?.ok_or(missing_key_err("start"))?.extract::<u32>()?;
+        let start = value
+            .get_item("start")?
+            .ok_or(missing_key_err("start"))?
+            .extract::<u32>()?;
         let finish = value
             .get_item("finish")?
             .map(|val| val.extract::<Option<u32>>()) // allows dict(start=1, finish=None)
@@ -2803,6 +2837,7 @@ pub enum QuestionType {
     /// such as a blank page with just a 'Next Page' button.
     #[default]
     None,
+
     /// Single response question with numeric or literal response codes.
     #[strum(serialize = "single")]
     Single,
@@ -2836,6 +2871,11 @@ impl QuestionType {
     /// Check if instance was one of [`Single`, `Multiple`, `Logical`]
     pub fn is_categorical(&self) -> bool {
         matches!(self, Self::Single | Self::Multiple)
+    }
+
+    /// check if instance is QuestionType::None
+    pub fn is_none_type(&self) -> bool {
+        matches!(self, Self::None)
     }
 }
 
@@ -3277,8 +3317,10 @@ mod test {
                 .unwrap();
             assert_eq!(question.locate_data_asc(row).unwrap(), expected);
         }
-        let question =
-            QuestionOptions::new("past_end").with_location(8, Some(8)).finish().unwrap();
+        let question = QuestionOptions::new("past_end")
+            .with_location(8, Some(8))
+            .finish()
+            .unwrap();
         assert!(question.locate_data_asc(row).is_err());
         assert!(question.locate_data_asc("").is_err());
     }
