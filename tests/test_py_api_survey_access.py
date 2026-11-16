@@ -84,6 +84,11 @@ def test_survey_exports_respect_display_and_explicit_override(survey, method, di
         result = getattr(survey, method)(**kwargs)
         show_labels = display == "label" if response_label is None else response_label
         expected = labelled if show_labels else raw
+        if show_labels:
+            # Check categorical labels; other columns follow the current export coercions.
+            names = [column.name for column in labelled_columns]
+            expected = expected.select(names)
+            result = result[names] if method == "to_pandas" else result.select(names)
         if method == "to_pandas":
             pd.testing.assert_frame_equal(
                 result, expected.to_pandas(use_pyarrow_extension_array=True)

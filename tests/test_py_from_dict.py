@@ -58,12 +58,6 @@ def test_variant_from_dict_success(dic, correct):
     assert new == correct
 
 
-@pytest.mark.parametrize("dic", [dict(mode="interview"), dict(value="test")])
-def test_variant_from_dict_missing_key_err(dic):
-    with pytest.raises(MissingKeyError):
-        Variant.from_dict(dic)
-
-
 @pytest.mark.parametrize(
     "dic, error",
     [

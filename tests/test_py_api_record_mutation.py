@@ -135,8 +135,12 @@ def test_datamap_from_dict_accepts_info_aliases_and_objects(info_key, as_objects
 def test_datamap_from_dict_optional_defaults(content):
     datamap = Datamap.from_dict(content)
     assert datamap.info.name is datamap.title is None
-    assert datamap.num_questions == 0
-    assert list(datamap) == []
+    for container in (datamap, datamap.record):
+        assert container.num_questions == 0
+        assert container.question_names == []
+        assert list(container) == []
+        for name in ("Q1", ""):
+            assert container.get(name) is None
 
 
 @pytest.mark.parametrize("key", ["info", "survey_info", "record"])

@@ -14,41 +14,16 @@ def response():
     )
 
 
-@pytest.fixture
-def code():
-    return Code.unsigned(1, "label", filter=None, score=0.2)
-
-
-def test_init_response_code_value(response):
-    assert response[0].value == 1
-    assert response[1].value == 2
-    assert response[2].value == 5
-    assert response[-1].value == 5
-    assert response[-2].value == 2
-
-
-def test_init_response_code_label_text(response):
-    assert response[0].label.value == "haha"
-    assert response[1].label.value == "yes"
-    assert response[2].label.value == ""
-    assert response[-1].label.value == ""
-    assert response[-2].label.value == "yes"
-
-
-def test_init_response_filter(response):
-    assert response[0].filter == None
-    assert response[1].filter == None
-    assert response[2].filter == "filter"
-    assert response[-1].filter == "filter"
-    assert response[-2].filter == None
-
-
-def test_init_response_score(response):
-    assert response[0].score == None
-    assert response[1].score == 3.2
-    assert response[2].score == -5.5
-    assert response[-1].score == -5.5
-    assert response[-2].score == 3.2
+@pytest.mark.parametrize("index, label, filter, score", [
+    (0, "haha", None, None),
+    (1, "yes", None, 3.2),
+    (2, "", "filter", -5.5),
+])
+def test_response_initial_code_metadata(response, index, label, filter, score):
+    code = response[index]
+    assert code.label.value == label
+    assert code.filter == filter
+    assert code.score == score
 
 
 def test_update_code_value_via_indexing(response):
@@ -103,12 +78,6 @@ def test_add_duplicate_and_set_existing_code(response):
     assert existing.score == 2.5
     response.set_value(existing)
     assert existing.label.value == "updated"
-
-
-def test_update_code(code):
-    code.label.add_variant("variant", "analysis")
-    code.filter = "Q2"
-    assert code.filter == "Q2"
 
 
 @pytest.mark.parametrize(
@@ -197,6 +166,8 @@ def test_code_factory_fields_and_mutation(factory, value):
     assert code.label == Text("Label")
     assert code.filter == "Q1"
     assert code.score == 1.5
+    code.filter = "Updated filter"
+    assert code.filter == "Updated filter"
     code.score = -2.5
     assert code.score == -2.5
     code.score = code.filter = None

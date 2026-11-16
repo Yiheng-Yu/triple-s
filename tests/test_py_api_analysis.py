@@ -1,3 +1,5 @@
+from datetime import date, time
+
 import pandas as pd
 import polars as pl
 import pytest
@@ -116,8 +118,9 @@ def test_analysis_requires_data(survey, method):
 
 @pytest.mark.parametrize("row, column", [("missing", "group"), ("choice", "missing")])
 def test_crosstab_missing_question(survey, row, column):
-    with pytest.raises(pl.exceptions.ColumnNotFoundError, match="missing"):
+    with pytest.raises(Exception, match="missing") as error:
         survey.crosstab(row, column)
+    assert type(error.value).__name__ == "ColumnNotFound"
 
 
 def test_response_label_map_contents(survey):
@@ -221,3 +224,20 @@ def test_value_counts_format_and_count_name(survey, format):
         result = pl.from_pandas(result)
     assert_frame_equal(result, expected, check_dtypes=False)
     assert question.dataframe_format == "pandas"
+
+
+@pytest.mark.parametrize("kind, first, second", [
+    ("date", date(2026, 1, 1), date(2026, 1, 2)),
+    ("time", time(12, 30), time(14, 0)),
+])
+def test_value_counts_temporal_columns(kind, first, second):
+    datamap = Datamap.from_dict({"record": {"content": [
+        {"name": "Q1", "question_type": kind},
+    ]}})
+    data = SurveyData.from_polars(pl.DataFrame({"Q1": [first, first, second, None]}))
+    result = Survey(datamap, data)["Q1"].value_counts()
+    assert result.to_dicts() == [
+        {"Q1": None, "label": "*Total*", "count": 3},
+        {"Q1": first, "label": None, "count": 2},
+        {"Q1": second, "label": None, "count": 1},
+    ]

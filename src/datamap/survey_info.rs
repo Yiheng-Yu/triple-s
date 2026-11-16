@@ -410,6 +410,10 @@ impl SurveyInfo {
 
     #[setter(version)]
     fn py_set_version(&mut self, version: Bound<'_, PyAny>) -> PyResult<()> {
+        if let Ok(version) = version.extract::<Version>() {
+            *self.version_mut() = version;
+            return Ok(());
+        }
         let version = if let Ok(version) = version.extract::<String>() {
             version
         } else if let Ok(value) = version.extract::<f64>() {

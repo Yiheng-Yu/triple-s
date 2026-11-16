@@ -22,7 +22,6 @@ def test_view_survives_owner():
     assert isinstance(view, QuestionData)
     assert view.name == "Q2"
     assert isinstance(view.to_polars(), pl.Series)
-    assert view.name == "Q2"
     del survey
     gc.collect()
     assert_series_equal(view.to_polars(), expected)
@@ -60,13 +59,6 @@ def test_cloned_survey_data_retains_cache():
     assert_frame_equal(another.data.to_polars(), expected)
 
 
-@pytest.mark.parametrize("name", ["Q2", "Q3", "Q3.a", "Q1.a", "Q1.b", "WT"])
-def test_column_preserves_name_dtype_and_values(survey, name):
-    actual = survey[name].to_polars()
-    assert isinstance(actual, pl.Series)
-    assert_series_equal(actual, survey.data.to_polars().get_column(name))
-
-
 QUESTION_NAMES = [
     "RESPONDENT_ID", "Q1.a", "Q1.b", "Q2", "Q3", "Q3.a", "Q4", "Q5", "Q6",
     "Q7", "Q8", "WT",
@@ -76,7 +68,9 @@ QUESTION_NAMES = [
 @pytest.mark.parametrize("name", QUESTION_NAMES)
 def test_question_data_python_values(survey, name):
     question = survey[name]
-    expected = survey.data.to_polars()[name].to_list()
+    column = survey.data.to_polars()[name]
+    assert_series_equal(question.to_polars(), column)
+    expected = column.to_list()
     assert question.to_list() == expected
     assert question.data == tuple(expected)
     assert list(question) == expected
@@ -127,7 +121,7 @@ def test_question_data_label_exports(survey, name):
 
 @pytest.mark.parametrize("index", [3, -4, 100, -100])
 def test_question_data_index_out_of_bounds(survey, index):
-    with pytest.raises(pl.exceptions.OutOfBoundsError):
+    with pytest.raises(IndexError):
         survey["Q2"][index]
 
 

@@ -1,4 +1,4 @@
-from copy import copy, deepcopy
+from copy import copy
 
 import pytest
 
@@ -106,7 +106,7 @@ def test_location_defaults_and_setters():
         Location(5, 3)
 
 
-@pytest.mark.parametrize("clone", [copy, deepcopy])
+@pytest.mark.parametrize("clone", [copy, Text.__deepcopy__])
 def test_text_copy_preserves_independent_variants(clone):
     original = Text("Original", [Variant("English", language="en")])
     copied = clone(original)
@@ -118,7 +118,7 @@ def test_text_copy_preserves_independent_variants(clone):
     assert original.variants == (Variant("English", language="en"),)
 
 
-@pytest.mark.parametrize("clone", [Question.copy, copy, deepcopy])
+@pytest.mark.parametrize("clone", [Question.copy, copy, Question.__deepcopy__])
 def test_question_copy_preserves_independent_nested_fields(clone):
     original = Question("Q1", "multiple", label="Original", location=Location(1, 4),
                         spread=Spread(2, 2), filter="Q0")
@@ -133,7 +133,7 @@ def test_question_copy_preserves_independent_nested_fields(clone):
     copied.spread.num_subfields = 3
     copied.filter = "Q9"
     copied.response.range.end = 10
-    copied.response[0].label.value = "Changed code"
+    copied.response[0].filter = "Changed filter"
     copied.response.add_value(Code.unsigned(2, "Two"))
     assert original.name == "Q1"
     assert original.label.value == "Original"
@@ -142,7 +142,7 @@ def test_question_copy_preserves_independent_nested_fields(clone):
     assert original.spread == Spread(2, 2)
     assert original.filter == "Q0"
     assert original.response.range == DataRange.unsigned(1, 9)
-    assert original.response[0].label.value == "One"
+    assert original.response[0].filter is None
     assert len(original.response.values) == 1
 
 

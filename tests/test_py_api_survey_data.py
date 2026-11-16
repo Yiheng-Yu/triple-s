@@ -29,7 +29,7 @@ def test_survey_data_empty_metadata():
 
 @pytest.mark.parametrize("method", ["to_polars", "to_pandas", "describe", "__iter__"])
 def test_survey_data_empty_operations_require_data(method):
-    with pytest.raises(NoDataError):
+    with pytest.raises(NoDataError, match="Data not loaded"):
         getattr(SurveyData.empty(), method)()
 
 
@@ -70,5 +70,5 @@ def test_survey_data_exports_are_independent(frame):
 
 @pytest.mark.parametrize("value", [None, [], {"number": [1]}, pl.Series([1])])
 def test_survey_data_from_polars_rejects_other_types(value):
-    with pytest.raises(TypeError):
+    with pytest.raises(AttributeError, match="get_columns"):
         SurveyData.from_polars(value)

@@ -386,7 +386,7 @@ impl QuestionData {
     #[getter(data)]
     fn py_get_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let series = self.to_series().map_err(PyPolarsErr::Polars)?;
-        let dtype = self.question.polars_dtype();
+        let dtype = series.dtype();
         match dtype {
             DataType::Null => PyTuple::new(py, (0..series.len()).map(|_| py.None())),
             DataType::String => {
@@ -418,7 +418,7 @@ impl QuestionData {
                     .collect::<PyResult<Vec<Option<NaiveTime>>>>()?;
                 PyTuple::new(py, iterator)
             }
-            DataType::List(inner) if *inner == DataType::UInt32 => {
+            DataType::List(inner) if matches!(inner.as_ref(), DataType::UInt32 | DataType::String) => {
                 let values = series
                     .iter()
                     .map(|s| anyvalue_to_python(py, s))

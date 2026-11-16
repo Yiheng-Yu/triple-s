@@ -48,11 +48,11 @@ pub(crate) fn frequency_counts(
 /// Count total amount of not-null entries in a column, and return result as dataframe of single row
 pub(crate) fn count_not_null(column: &Column, name: &str) -> PolarsResult<DataFrame> {
     let base_size = column.len() - column.null_count();
-    df! {
-        column.name().as_str() => [None::<u64>],
-        "label" => ["*Total*"],
-        name => [base_size as u64],
-    }
+    DataFrame::new_infer_height(vec![
+        Column::full_null(column.name().clone(), 1, &DataType::Null),
+        Series::new("label".into(), ["*Total*"]).into(),
+        Series::new(name.into(), [base_size as u64]).into(),
+    ])
 }
 
 /// This function returns a lazyframe to be collected later (basically needs to add text labels)
