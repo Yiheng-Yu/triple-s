@@ -159,8 +159,9 @@ impl Datamap {
     /// errors.
     pub fn write_xml<W: std::io::Write>(&self, writer: &mut Writer<W>) -> Result<()> {
         let version = self.info().version().to_string();
-        let mut element =
-            writer.create_element("sss").with_attribute(("version", version.as_str()));
+        let mut element = writer
+            .create_element("sss")
+            .with_attribute(("version", version.as_str()));
         if let Some(standard) = &self.info().standard().as_ref() {
             element = element.with_attribute(("options", standard.as_str()));
         }
@@ -189,22 +190,26 @@ impl Datamap {
                 ("style", &self.info().style().as_ref()),
             ] {
                 if let Some(value) = value {
-                    children.create_element(name).write_text_content(BytesText::new(value))?;
+                    children
+                        .create_element(name)
+                        .write_text_content(BytesText::new(value))?;
                 }
             }
-            children.create_element("survey").write_inner_content(|survey| {
-                for (name, value) in [
-                    ("name", &self.info().name().as_ref()),
-                    ("title", &self.info().title().as_ref()),
-                ] {
-                    if let Some(value) = value {
-                        survey
-                            .create_element(name)
-                            .write_text_content(BytesText::new(value))?;
+            children
+                .create_element("survey")
+                .write_inner_content(|survey| {
+                    for (name, value) in [
+                        ("name", &self.info().name().as_ref()),
+                        ("title", &self.info().title().as_ref()),
+                    ] {
+                        if let Some(value) = value {
+                            survey
+                                .create_element(name)
+                                .write_text_content(BytesText::new(value))?;
+                        }
                     }
-                }
-                self.record.write_xml(survey).map_err(std::io::Error::other)
-            })?;
+                    self.record.write_xml(survey).map_err(std::io::Error::other)
+                })?;
             Ok(())
         })?;
         Ok(())
@@ -267,7 +272,9 @@ impl Datamap {
     #[staticmethod]
     #[pyo3(name = "from_dict")]
     fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
-        let info = content.get_item("survey_info")?.or(content.get_item("info")?);
+        let info = content
+            .get_item("survey_info")?
+            .or(content.get_item("info")?);
         let info = match info {
             None => SurveyInfo::new(Version::V1_2),
             Some(value) if value.is_none() => SurveyInfo::new(Version::V1_2),

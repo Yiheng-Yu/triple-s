@@ -14,6 +14,8 @@ use tempfile::TempPath;
 use crate::error::{InvalidArg, NoDataError};
 #[cfg(feature = "pyo3")]
 use crate::utils::polars_to_pandas;
+#[cfg(feature = "pyo3")]
+use super::row_iterator::RowIterator;
 
 /// The backing file and its cleanup policy.
 #[derive(Debug)]
@@ -247,7 +249,7 @@ impl SurveyData {
     }
 
     /// List of question names in the current instance
-    pub fn questions(&self) -> PolarsResult<Vec<String>> {
+    pub fn question_names(&self) -> PolarsResult<Vec<String>> {
         match self.frame.as_ref() {
             None => Ok(Vec::new()),
             Some(lf) => Ok(lf
@@ -270,7 +272,7 @@ impl SurveyData {
         let mut info = Vec::new();
 
         const MAX_NUM_COLNAME_SHOW: usize = 3;
-        let colnames = self.questions().ok().unwrap_or_default();
+        let colnames = self.question_names().ok().unwrap_or_default();
         let mut colname_repr = colnames[0..colnames.len().min(MAX_NUM_COLNAME_SHOW)]
             .iter()
             .map(|s| format!("{:?}", s))
@@ -290,8 +292,11 @@ impl SurveyData {
     #[cfg(feature = "pyo3")]
     #[inline]
     pub(crate) fn create_data_entry_iterator(&self) -> PyResult<DataEntryIterator> {
-        let df = self.lazy()?.clone().collect().map_err(PyPolarsErr::Polars)?;
-        Ok(DataEntryIterator::new(df))
+        let mut lazy = self.lazy()?.clone();
+        let width = lazy.collect_schema().map_err(PyPolarsErr::Polars)?.len();
+        Ok(DataEntryIterator {
+            rows: RowIterator::new(self.clone(), lazy, width),
+        })
     }
 }
 
@@ -299,21 +304,22 @@ impl SurveyData {
 #[pymethods]
 impl SurveyData {
     /// List of question names in the current instance
-    #[getter(questions)]
-    fn py_get_questions(&self) -> Vec<String> {
-        self.questions().ok().unwrap_or_default()
+    #[getter(question_names)]
+    fn py_get_question_names(&self) -> Vec<String> {
+        self.question_names().ok().unwrap_or_default()
     }
 
     #[getter(num_response)]
     fn py_get_num_response(&self) -> PyResult<usize> {
-        self.num_response().map_err(|err| PyPolarsErr::Polars(err).into())
+        self.num_response()
+            .map_err(|err| PyPolarsErr::Polars(err).into())
     }
 
     fn __repr__(&self) -> PyResult<String> {
         let mut info = Vec::new();
 
         const MAX_NUM_COLNAME_SHOW: usize = 3;
-        let colnames = self.questions().ok().unwrap_or_default();
+        let colnames = self.question_names().ok().unwrap_or_default();
         let mut colname_repr = colnames[0..colnames.len().min(MAX_NUM_COLNAME_SHOW)]
             .iter()
             .map(|s| format!("{:?}", s))
@@ -323,9 +329,12 @@ impl SurveyData {
             colname_repr.push_str(", ...");
         }
         let colname_repr = format!("[{}]", colname_repr);
-        info.push(("questions", colname_repr));
+        info.push(("question_names", colname_repr));
 
-        let num_response = self.num_response().map_err(PyPolarsErr::Polars)?.to_string();
+        let num_response = self
+            .num_response()
+            .map_err(PyPolarsErr::Polars)?
+            .to_string();
         info.push(("num_response", num_response));
 
         let formatted = info
@@ -373,8 +382,10 @@ impl SurveyData {
     ///     polars.DataFrame: The respondent data in Polars format.
     #[pyo3(name = "to_polars")]
     pub fn py_to_polars<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let frame =
-            self.to_polars().map(PyDataFrame).map_err(|err| PyPolarsErr::Polars(err))?;
+        let frame = self
+            .to_polars()
+            .map(PyDataFrame)
+            .map_err(|err| PyPolarsErr::Polars(err))?;
         frame.into_pyobject(py)
     }
 
@@ -410,7 +421,9 @@ impl SurveyData {
 
 impl std::fmt::Debug for SurveyData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SurveyData").field("frame", &"LazyFrame").finish()
+        f.debug_struct("SurveyData")
+            .field("frame", &"LazyFrame")
+            .finish()
     }
 }
 
@@ -419,15 +432,7 @@ impl std::fmt::Debug for SurveyData {
 #[cfg(feature = "pyo3")]
 #[pyclass]
 pub(crate) struct DataEntryIterator {
-    pub df: DataFrame,
-    pub index: usize,
-}
-
-#[cfg(feature = "pyo3")]
-impl DataEntryIterator {
-    pub fn new(df: DataFrame) -> Self {
-        Self { df, index: 0 }
-    }
+    rows: RowIterator,
 }
 
 #[cfg(feature = "pyo3")]
@@ -438,19 +443,7 @@ impl DataEntryIterator {
     }
 
     pub fn __next__<'py>(&mut self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
-        if self.index >= self.df.height() {
-            return Ok(None);
-        }
-
-        let row = self.df.slice(self.index as i64, 1);
-
-        let row = PyDataFrame(row)
-            .into_pyobject(py)?
-            .call_method("to_dicts", (), None)? // convert to list of dictionaries
-            .call_method("__getitem__", (0,).into_pyobject(py)?, None)?; // take the first row
-
-        self.index += 1;
-        Ok(Some(row))
+        self.rows.__next__(py)
     }
 }
 

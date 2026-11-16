@@ -109,14 +109,6 @@ def test_read_file_error_context():
         triple_s.read_datamap(str(path))
 
 
-def test_sss_classic_read(classic):
-    classic
-
-
-def test_sss_xml_read(xml1):
-    xml1
-
-
 def test_question_xml_read_write(xml1, original_tree):
     for question in xml1.record.content:
         question_xml = question.to_xml()
@@ -142,15 +134,9 @@ def assert_eq_questions(a: Question, b: Question):
         assert code_classic == code_xml
 
 
-def test_convert_between_classic_and_xml(classic):
-    for question_classic in classic.record.content:
-        xml_string = question_classic.to_xml()
-        question_xml = triple_s.Question.from_string(xml_string)
-        assert_eq_questions(question_classic, question_xml)
-
-
-def test_question_read_n_write(xml2):
-    for question in xml2.record.content:
+@pytest.mark.parametrize("source", ["classic", "xml2"])
+def test_question_read_n_write(source, request):
+    for question in request.getfixturevalue(source).record.content:
         string = question.to_xml()
         re = Question.from_string(string)
         assert_eq_questions(question, re)

@@ -1,21 +1,18 @@
 Functions
-==========
+=========
 
 Read a survey
--------------------------
+-------------
 
-.. autofunction:: triple_s.read_triple_s(path_datamap, path_data=None) -> Survey
+.. autofunction:: triple_s.read_triple_s(path_datamap: str, path_data: str | None = None) -> Survey
 
-****
+Read a datamap
+--------------
 
-Read survey datamap
---------------------------
+.. autofunction:: triple_s.read_datamap(path_datamap: str) -> Datamap
 
-.. autofunction:: triple_s.read_datamap(path_datamap) -> Datamap
+Read respondent data
+--------------------
 
-****
+.. autofunction:: triple_s.read_data(datamap: Datamap, path_data: str) -> SurveyData
 
-Read survey data
---------------------------
-
-.. autofunction:: triple_s.read_data(path_datamap) -> SurveyData

@@ -123,11 +123,15 @@ impl Response {
     ///
     /// // Get first copy
     /// let label_map_1 = original.response_label_map();
-    /// let label_copy_1 = label_map_1.get(&AnyValue::UInt32(3)).expect("Key not found");
+    /// let label_copy_1 = label_map_1
+    ///     .get(&AnyValue::UInt32(3))
+    ///     .expect("Key not found");
     ///
     /// // Get second copy
     /// let mut label_map_2 = original.response_label_map();
-    /// let mut label_copy_2 = label_map_2.get_mut(&AnyValue::UInt32(3)).expect("Key not found");
+    /// let mut label_copy_2 = label_map_2
+    ///     .get_mut(&AnyValue::UInt32(3))
+    ///     .expect("Key not found");
     ///
     /// // Value of the first and second copy are the same
     /// assert_eq!(label_copy_1.read().as_str(), "Before");
@@ -218,11 +222,19 @@ impl Response {
     /// response.add_value(Code::new_unsigned(1, "Label A", None, Some(0.5)))?;
     ///
     /// // cannot add new code with different variant:
-    /// assert!(response.add_value(Code::new_signed(2, "Label A", None, Some(0.5))).is_err());
+    /// assert!(
+    ///     response
+    ///         .add_value(Code::new_signed(2, "Label A", None, Some(0.5)))
+    ///         .is_err()
+    /// );
     ///
     /// // cannot add new code with same `code` field,
     /// // use `set_value` instaed
-    /// assert!(response.add_value(Code::new_unsigned(1, "Label B", None, Some(0.5))).is_err());
+    /// assert!(
+    ///     response
+    ///         .add_value(Code::new_unsigned(1, "Label B", None, Some(0.5)))
+    ///         .is_err()
+    /// );
     ///
     /// Ok::<(), triple_s::error::InvalidArg>(())
     /// ```
@@ -233,7 +245,12 @@ impl Response {
             Self::validate_code_variant(&sample.read().value(), &key)?;
         };
 
-        if self.values.read().iter().any(|item| item.read().value() == key) {
+        if self
+            .values
+            .read()
+            .iter()
+            .any(|item| item.read().value() == key)
+        {
             return Err(InvalidArg::new(format!(
                 "Cannot append item '{}' because an item with same 'code' attribute already exists. Use 'set_value' to overwrite existing entry.",
                 key.to_text()
@@ -257,7 +274,11 @@ impl Response {
     /// println!("Total amount of values: {}", response.values().len());
     ///
     /// // cannot add new code with different variant:
-    /// assert!(response.set_value(Code::new_signed(2, "Label A", None, Some(0.5))).is_err());
+    /// assert!(
+    ///     response
+    ///         .set_value(Code::new_signed(2, "Label A", None, Some(0.5)))
+    ///         .is_err()
+    /// );
     ///
     /// // overwrites existing item in `Response::values`,
     /// response.set_value(Code::new_unsigned(1, "Label B", None, Some(0.5)))?;
@@ -301,10 +322,14 @@ impl Response {
     ///
     /// Returns an error if any value cannot be converted to `dtype`.
     pub fn cast(&self, dtype: &DataType) -> Result<Self> {
-        let range =
-            self.range().as_ref().map(|range| range.cast(dtype)).transpose().with_context(
-                || "When tryin to conver data type for `range` field.".to_string(),
-            )?;
+        let range = self
+            .range()
+            .as_ref()
+            .map(|range| range.cast(dtype))
+            .transpose()
+            .with_context(|| {
+                "When tryin to conver data type for `range` field.".to_string()
+            })?;
 
         let values = self
             .values()
@@ -452,21 +477,25 @@ impl Response {
         values: RwLockReadGuard<'_, Vec<ArcLock<Code>>>,
     ) -> Result<()> {
         if let Some(range) = range.as_ref() {
-            writer.create_element("values").write_inner_content(|child_writer| {
-                Self::write_range_xml(range, child_writer)?;
-                for value in values.iter() {
-                    value.read().write_xml(child_writer)?;
-                }
-                Ok(())
-            })?;
+            writer
+                .create_element("values")
+                .write_inner_content(|child_writer| {
+                    Self::write_range_xml(range, child_writer)?;
+                    for value in values.iter() {
+                        value.read().write_xml(child_writer)?;
+                    }
+                    Ok(())
+                })?;
             Ok(())
         } else {
-            writer.create_element("values").write_inner_content(|child_writer| {
-                for value in values.iter() {
-                    value.read().write_xml(child_writer)?;
-                }
-                Ok(())
-            })?;
+            writer
+                .create_element("values")
+                .write_inner_content(|child_writer| {
+                    for value in values.iter() {
+                        value.read().write_xml(child_writer)?;
+                    }
+                    Ok(())
+                })?;
             Ok(())
         }
     }
@@ -591,8 +620,12 @@ impl Response {
     }
 
     pub(crate) fn __repr__(&self) -> String {
-        let range =
-            self.range.read().as_ref().map(|item| item.__repr__()).unwrap_or("None".into());
+        let range = self
+            .range
+            .read()
+            .as_ref()
+            .map(|item| item.__repr__())
+            .unwrap_or("None".into());
 
         const MAX_CODES: usize = 5;
 
@@ -752,7 +785,10 @@ impl Response {
     #[staticmethod]
     #[pyo3(name = "from_dict")]
     pub(crate) fn py_from_dict(content: Bound<'_, PyDict>) -> PyResult<Self> {
-        let range = content.get_item("range")?.map(DataRange::from_py_any).transpose()?;
+        let range = content
+            .get_item("range")?
+            .map(DataRange::from_py_any)
+            .transpose()?;
 
         let values = content
             .get_item("values")?
@@ -1546,7 +1582,8 @@ impl AnyValueExt for AnyValue<'static> {
                 (Self::Float64(a), Self::Float64(b)) => {
                     self.validate()?;
                     other.validate()?;
-                    a.partial_cmp(b).ok_or(InvalidArg::new("Cannot compare float NaN values."))
+                    a.partial_cmp(b)
+                        .ok_or(InvalidArg::new("Cannot compare float NaN values."))
                 }
 
                 (Self::StringOwned(_), Self::StringOwned(_)) => Err(InvalidArg::new(
@@ -2042,7 +2079,9 @@ mod test {
             let label =
                 instance.with_value_read(index, |code| code.label().value().to_string());
             assert_eq!(label, Some(correct.label().value().to_string()));
-            let item_got = instance.with_value_read(index, |val| val.deepcopy()).unwrap();
+            let item_got = instance
+                .with_value_read(index, |val| val.deepcopy())
+                .unwrap();
             assert_eq!(correct.value().clone(), item_got.value().clone());
             assert_eq!(correct.label().deepcopy(), item_got.label().deepcopy());
             assert_eq!(correct.filter().clone(), item_got.filter().clone());
@@ -2112,7 +2151,9 @@ mod test {
             Vec::new(),
         );
         let mut writer = Writer::new(Vec::new());
-        response.write_xml(&mut writer, QuestionType::Character).unwrap();
+        response
+            .write_xml(&mut writer, QuestionType::Character)
+            .unwrap();
         let content = String::from_utf8(writer.into_inner()).unwrap();
         assert_eq!(normalize_xml(&content), normalize_xml("<size>20</size>"));
     }
@@ -2121,7 +2162,11 @@ mod test {
     fn test_write_character_response_error() {
         let response = Response::new(None, Vec::new());
         let mut writer = Writer::new(Vec::new());
-        assert!(response.write_xml(&mut writer, QuestionType::Character).is_err());
+        assert!(
+            response
+                .write_xml(&mut writer, QuestionType::Character)
+                .is_err()
+        );
     }
 
     #[test]
@@ -2139,7 +2184,9 @@ mod test {
                 let response =
                     Response::new(range, vec![Code::new_unsigned(3, "Other", None, None)]);
                 let mut writer = Writer::new(Vec::new());
-                response.write_xml(&mut writer, question_type.clone()).unwrap();
+                response
+                    .write_xml(&mut writer, question_type.clone())
+                    .unwrap();
                 let content = String::from_utf8(writer.into_inner()).unwrap();
                 assert_eq!(normalize_xml(&content), normalize_xml(correct));
             }
@@ -2251,110 +2298,174 @@ mod test {
     #[test]
     fn test_value_cast_u32() {
         assert_eq!(
-            AnyValue::Int32(3).try_strict_cast(&DataType::UInt32).unwrap(),
+            AnyValue::Int32(3)
+                .try_strict_cast(&DataType::UInt32)
+                .unwrap(),
             AnyValue::UInt32(3)
         );
         assert_eq!(
-            AnyValue::UInt32(3).try_strict_cast(&DataType::UInt32).unwrap(),
+            AnyValue::UInt32(3)
+                .try_strict_cast(&DataType::UInt32)
+                .unwrap(),
             AnyValue::UInt32(3)
         );
         assert_eq!(
-            AnyValue::StringOwned("3".into()).try_strict_cast(&DataType::UInt32).unwrap(),
+            AnyValue::StringOwned("3".into())
+                .try_strict_cast(&DataType::UInt32)
+                .unwrap(),
             AnyValue::UInt32(3)
         );
         assert_eq!(
-            AnyValue::Float64(3.000).try_strict_cast(&DataType::UInt32).unwrap(),
+            AnyValue::Float64(3.000)
+                .try_strict_cast(&DataType::UInt32)
+                .unwrap(),
             AnyValue::UInt32(3)
         );
 
-        assert!(AnyValue::Int32(-1).try_strict_cast(&DataType::UInt32).is_err());
-        assert_eq!(
-            AnyValue::Float64(3.0001).try_strict_cast(&DataType::UInt32).unwrap(),
-            AnyValue::UInt32(3)
+        assert!(
+            AnyValue::Int32(-1)
+                .try_strict_cast(&DataType::UInt32)
+                .is_err()
         );
-        assert!(AnyValue::StringOwned("".into()).try_strict_cast(&DataType::UInt32).is_err());
         assert_eq!(
-            AnyValue::StringOwned("3.00".into()).try_strict_cast(&DataType::UInt32).unwrap(),
+            AnyValue::Float64(3.0001)
+                .try_strict_cast(&DataType::UInt32)
+                .unwrap(),
             AnyValue::UInt32(3)
         );
         assert!(
-            AnyValue::StringOwned("what".into()).try_strict_cast(&DataType::UInt32).is_err()
+            AnyValue::StringOwned("".into())
+                .try_strict_cast(&DataType::UInt32)
+                .is_err()
+        );
+        assert_eq!(
+            AnyValue::StringOwned("3.00".into())
+                .try_strict_cast(&DataType::UInt32)
+                .unwrap(),
+            AnyValue::UInt32(3)
         );
         assert!(
-            AnyValue::StringOwned("hi".into()).try_strict_cast(&DataType::UInt32).is_err()
+            AnyValue::StringOwned("what".into())
+                .try_strict_cast(&DataType::UInt32)
+                .is_err()
+        );
+        assert!(
+            AnyValue::StringOwned("hi".into())
+                .try_strict_cast(&DataType::UInt32)
+                .is_err()
         );
     }
 
     #[test]
     fn test_value_cast_i32() {
         assert_eq!(
-            AnyValue::Int32(-3).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::Int32(-3)
+                .try_strict_cast(&DataType::Int32)
+                .unwrap(),
             AnyValue::Int32(-3)
         );
         assert_eq!(
-            AnyValue::Int32(3).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::Int32(3)
+                .try_strict_cast(&DataType::Int32)
+                .unwrap(),
             AnyValue::Int32(3)
         );
         assert_eq!(
-            AnyValue::UInt32(3).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::UInt32(3)
+                .try_strict_cast(&DataType::Int32)
+                .unwrap(),
             AnyValue::Int32(3)
         );
         assert_eq!(
-            AnyValue::Float64(3.00).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::Float64(3.00)
+                .try_strict_cast(&DataType::Int32)
+                .unwrap(),
             AnyValue::Int32(3)
         );
         assert_eq!(
-            AnyValue::StringOwned("3".into()).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::StringOwned("3".into())
+                .try_strict_cast(&DataType::Int32)
+                .unwrap(),
             AnyValue::Int32(3)
         );
         assert_eq!(
-            AnyValue::StringOwned("-3".into()).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::StringOwned("-3".into())
+                .try_strict_cast(&DataType::Int32)
+                .unwrap(),
             AnyValue::Int32(-3)
         );
 
         assert_eq!(
-            AnyValue::Float64(-3.01).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::Float64(-3.01)
+                .try_strict_cast(&DataType::Int32)
+                .unwrap(),
             AnyValue::Int32(-3)
         );
         assert_eq!(
-            AnyValue::Float64(3.01).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::Float64(3.01)
+                .try_strict_cast(&DataType::Int32)
+                .unwrap(),
             AnyValue::Int32(3)
         );
         assert_eq!(
-            AnyValue::Float64(3.01).try_strict_cast(&DataType::Int32).unwrap(),
-            AnyValue::Int32(3)
-        );
-        assert!(AnyValue::StringOwned("".into()).try_strict_cast(&DataType::Int32).is_err());
-        assert_eq!(
-            AnyValue::StringOwned("3.00".into()).try_strict_cast(&DataType::Int32).unwrap(),
+            AnyValue::Float64(3.01)
+                .try_strict_cast(&DataType::Int32)
+                .unwrap(),
             AnyValue::Int32(3)
         );
         assert!(
-            AnyValue::StringOwned("what".into()).try_strict_cast(&DataType::Int32).is_err()
+            AnyValue::StringOwned("".into())
+                .try_strict_cast(&DataType::Int32)
+                .is_err()
         );
-        assert!(AnyValue::StringOwned("hi".into()).try_strict_cast(&DataType::Int32).is_err());
+        assert_eq!(
+            AnyValue::StringOwned("3.00".into())
+                .try_strict_cast(&DataType::Int32)
+                .unwrap(),
+            AnyValue::Int32(3)
+        );
+        assert!(
+            AnyValue::StringOwned("what".into())
+                .try_strict_cast(&DataType::Int32)
+                .is_err()
+        );
+        assert!(
+            AnyValue::StringOwned("hi".into())
+                .try_strict_cast(&DataType::Int32)
+                .is_err()
+        );
     }
 
     #[test]
     fn test_value_cast_float() {
         assert_eq!(
-            AnyValue::Int32(-3).try_strict_cast(&DataType::Float64).unwrap(),
+            AnyValue::Int32(-3)
+                .try_strict_cast(&DataType::Float64)
+                .unwrap(),
             AnyValue::Float64(-3.00)
         );
         assert_eq!(
-            AnyValue::Int32(3).try_strict_cast(&DataType::Float64).unwrap(),
+            AnyValue::Int32(3)
+                .try_strict_cast(&DataType::Float64)
+                .unwrap(),
             AnyValue::Float64(3.00)
         );
         assert_eq!(
-            AnyValue::UInt32(3).try_strict_cast(&DataType::Float64).unwrap(),
+            AnyValue::UInt32(3)
+                .try_strict_cast(&DataType::Float64)
+                .unwrap(),
             AnyValue::Float64(3.00)
         );
         assert_eq!(
-            AnyValue::StringOwned("3.0".into()).try_strict_cast(&DataType::Float64).unwrap(),
+            AnyValue::StringOwned("3.0".into())
+                .try_strict_cast(&DataType::Float64)
+                .unwrap(),
             AnyValue::Float64(3.00)
         );
         assert_eq!(
-            AnyValue::StringOwned("3".into()).try_strict_cast(&DataType::Float64).unwrap(),
+            AnyValue::StringOwned("3".into())
+                .try_strict_cast(&DataType::Float64)
+                .unwrap(),
             AnyValue::Float64(3.00)
         );
         assert_eq!(
@@ -2364,37 +2475,53 @@ mod test {
             AnyValue::Float64(-3.00)
         );
         assert_eq!(
-            AnyValue::Float64(3.1415926).try_strict_cast(&DataType::Float64).unwrap(),
+            AnyValue::Float64(3.1415926)
+                .try_strict_cast(&DataType::Float64)
+                .unwrap(),
             AnyValue::Float64(3.1415926)
         );
         assert_eq!(
-            AnyValue::Float64(-3.1415926).try_strict_cast(&DataType::Float64).unwrap(),
+            AnyValue::Float64(-3.1415926)
+                .try_strict_cast(&DataType::Float64)
+                .unwrap(),
             AnyValue::Float64(-3.1415926)
         );
 
-        assert!(AnyValue::StringOwned("".into()).try_strict_cast(&DataType::Float64).is_err());
+        assert!(
+            AnyValue::StringOwned("".into())
+                .try_strict_cast(&DataType::Float64)
+                .is_err()
+        );
         assert!(
             AnyValue::StringOwned("what".into())
                 .try_strict_cast(&DataType::Float64)
                 .is_err()
         );
         assert!(
-            AnyValue::StringOwned("hi".into()).try_strict_cast(&DataType::Float64).is_err()
+            AnyValue::StringOwned("hi".into())
+                .try_strict_cast(&DataType::Float64)
+                .is_err()
         );
     }
 
     #[test]
     fn test_value_cast_string() {
         assert_eq!(
-            AnyValue::Int32(-3).try_strict_cast(&DataType::String).unwrap(),
+            AnyValue::Int32(-3)
+                .try_strict_cast(&DataType::String)
+                .unwrap(),
             AnyValue::StringOwned("-3".into())
         );
         assert_eq!(
-            AnyValue::UInt32(3).try_strict_cast(&DataType::String).unwrap(),
+            AnyValue::UInt32(3)
+                .try_strict_cast(&DataType::String)
+                .unwrap(),
             AnyValue::StringOwned("3".into())
         );
         assert_eq!(
-            AnyValue::Float64(3.5).try_strict_cast(&DataType::String).unwrap(),
+            AnyValue::Float64(3.5)
+                .try_strict_cast(&DataType::String)
+                .unwrap(),
             AnyValue::StringOwned("3.5".into())
         );
         assert_eq!(

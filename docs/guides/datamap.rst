@@ -46,8 +46,11 @@ remove survey questions:
 
 .. code-block:: python
 
-   datamap.add_question(q1)
-   datamap.remove_question(q2)
+   from triple_s import Location, Question
+
+   question = Question("Q1", "single", location=Location(1))
+   datamap.record.add_question(question)
+   removed = datamap.record.remove_question("Q1")
 
 
 Components

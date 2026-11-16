@@ -404,7 +404,10 @@ mod tests {
                 .expect(format!("Failed to get `range_start` from text: '{}'", text).as_str())
                 .as_str();
 
-            let cap_end = captured.name("range_end").map(|s| s.as_str()).unwrap_or_default();
+            let cap_end = captured
+                .name("range_end")
+                .map(|s| s.as_str())
+                .unwrap_or_default();
 
             assert_eq!(cap_start, start);
             assert_eq!(cap_end, end);

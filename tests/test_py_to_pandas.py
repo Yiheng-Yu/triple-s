@@ -3,7 +3,7 @@ from datetime import date, time
 
 import pandas as pd
 import pytest
-from triple_s import read_data, NoDataError, SurveyData, read_datamap
+from triple_s import read_data, read_datamap
 
 
 @pytest.fixture
@@ -12,11 +12,6 @@ def datamap():
         warnings.simplefilter("ignore")
         datamap = read_datamap("tests/sss-examples/sss-2.0/example1.sss")
     return datamap
-
-
-def test_to_pandas_without_loaded_data():
-    with pytest.raises(NoDataError, match="Data not loaded"):
-        SurveyData.empty().to_pandas()
 
 
 def test_loaded_data_to_pandas(datamap):

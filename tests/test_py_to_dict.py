@@ -1,19 +1,6 @@
 import pytest
 from triple_s import Variant, Text
 
-def assert_dictionary_equal(self, other):
-    for key, value_self in self.items():
-        value_other = other.get(key)
-        assert type(value_self) == type(value_other)
-        
-        if isinstance(value_self, dict):
-            assert_dictionary_equal(value_self, value_other)
-        elif isinstance(value_self, (list, tuple)):
-            for item_self in value_self:
-                has_equal = any(item_self == item_other for item_other in value_other)
-                assert has_equal, f"Assertion failed: \nself: {value_self}\n other: {value_other}"
-        else:
-            assert value_self == value_other
 
 # =============================================================================
 # Variants
