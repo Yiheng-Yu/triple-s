@@ -109,6 +109,7 @@ impl SurveyData {
     }
 
     /// Get the [`LazyFrame`] of the underlying survey data.
+    /// 
     #[inline]
     pub fn lazy(&self) -> Result<&LazyFrame, NoDataError> {
         self.frame.as_ref().ok_or(NoDataError {})
@@ -303,6 +304,7 @@ impl SurveyData {
     #[inline]
     pub(crate) fn create_data_entry_iterator(&self) -> PyResult<DataEntryIterator> {
         let mut lazy = self.lazy()?.clone();
+
         let width = lazy.collect_schema().map_err(PyPolarsErr::Polars)?.len();
         Ok(DataEntryIterator {
             rows: RowIterator::new(self.clone(), lazy, width),

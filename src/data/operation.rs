@@ -19,10 +19,13 @@ pub(crate) fn frequency_counts(
     name: Option<&str>,
 ) -> PolarsResult<LazyFrame> {
     let mut to_count = frame.select([col(column_name)]);
-    if matches!(
-        to_count.collect_schema()?.try_get(column_name)?,
-        DataType::List(_)
-    ) {
+    
+    let mut datatype = to_count
+        .collect_schema()?
+        .try_get(column_name)?
+        .clone();
+
+    if let DataType::List(inner) = datatype.clone() {
         to_count = to_count.explode(
             cols([column_name]),
             ExplodeOptions {
@@ -30,12 +33,15 @@ pub(crate) fn frequency_counts(
                 keep_nulls: true,
             },
         );
-    }
+
+        datatype = *inner;
+    };
 
     Ok(to_count
         .filter(col(column_name).is_not_null())
         .group_by([col(column_name)])
         .agg([len().alias(name.unwrap_or("count"))])
+        .select([col(column_name).cast(datatype)])
         .sort(
             [column_name],
             SortMultipleOptions::default()
@@ -56,6 +62,8 @@ pub(crate) fn count_not_null(column: &Column, name: &str) -> PolarsResult<DataFr
 }
 
 /// This function returns a lazyframe to be collected later (basically needs to add text labels)
+/// 
+/// This function DOES NOT output a overall frequency_count of the `target` column
 ///
 /// Inputs:
 /// - target: sidebreak
@@ -65,21 +73,6 @@ pub(crate) fn create_crosstab(
     target: &str,
     group_by: &str,
 ) -> PolarsResult<LazyFrame> {
-    // create base sizes
-    let base_size = frequency_counts(original.clone(), group_by, Some("Base"))?
-        .with_column(col(group_by).cast(DataType::String))
-        .collect()?
-        .transpose(
-            Some(target),
-            Some(either::Either::Left(group_by.to_string())),
-        )?;
-
-    let overall = frequency_counts(
-        original.clone().select([col(target)]),
-        target,
-        Some("__total"),
-    )?;
-
     // create cross tabs
     let lf = original
         .clone()
@@ -119,29 +112,73 @@ pub(crate) fn create_crosstab(
             "_".into(),
             polars::frame::PivotColumnNaming::Auto,
         )
-        .sort([target], SortMultipleOptions::default());
+        .sort(
+            [target], 
+            SortMultipleOptions::default()
+                .with_order_descending(false)
+        );
+    Ok(pivot)
+    // // create base row
+    // let base_size_row = frequency_counts(
+    //     original.clone(),
+    //     group_by,
+    //     None,
+    //     // Some("Base")
+    // )?
+    //     .with_column(col(group_by).cast(DataType::String))
+    //     .collect()?
+    //     .transpose(
+    //         Some(target),
+    //         Some(either::Either::Left(group_by.to_string())),
+    //     )?;
 
-    let summary = overall.join(
-        pivot,
-        [col(target)],
-        [col(target)],
-        JoinArgs::new(JoinType::Left),
-    );
+    // // if !count_total {
+    // Ok(concat(
+    //     [base_size_row.lazy(), pivot],
+    //     UnionArgs {
+    //         diagonal: true,
+    //         from_partitioned_ds: true,
+    //         parallel: true,
+    //         rechunk: true,
+    //         to_supertypes: true,
+    //         strict: true,
+    //         maintain_order: true,
+    //     },
+    // )?
+    // .with_simplify_expr(true))
 
-    Ok(concat(
-        [base_size.lazy(), summary],
-        UnionArgs {
-            diagonal: true,
-            from_partitioned_ds: true,
-            parallel: true,
-            rechunk: true,
-            to_supertypes: true,
-            strict: true,
-            maintain_order: false,
-        },
-    )?
-    .select([
-        col("__total").alias("Total"),
-        all().exclude_cols(["__total"]).as_expr(),
-    ]))
+    // } else {
+
+    //     // Add in row base sizes
+    //     let overall = frequency_counts(
+    //         original.clone().select([col(target)]),
+    //         target,
+    //         Some("__total"),
+    //     )?;
+
+    //     let summary = overall.join(
+    //         pivot,
+    //         [col(target)],
+    //         [col(target)],
+    //         JoinArgs::new(JoinType::Left),
+    //     );
+
+    //     Ok(concat(
+    //         [base_size_row.lazy(), summary],
+    //         UnionArgs {
+    //             diagonal: true,
+    //             from_partitioned_ds: true,
+    //             parallel: true,
+    //             rechunk: true,
+    //             to_supertypes: true,
+    //             strict: true,
+    //             maintain_order: false,
+    //         },
+    //     )?
+    //     .select([
+    //         col("__total").alias("Total"),
+    //         all().exclude_cols(["__total"]).as_expr(),
+    //     ])
+    //     .with_simplify_expr(true))
+    // }
 }

@@ -315,6 +315,51 @@ impl Survey {
     ///
     /// Inputs:
     /// - row: the question name of the rows
+    /// - column: list of columns to group by
+    ///
+    pub fn crosstab2(&self, row: &str, columns: &[&str]) -> PolarsResult<DataFrame> {
+        let original = self.data().lazy()?.clone();
+        
+        let row_total = operation::frequency_counts(
+            original.clone().select([col(row)]),
+            row,
+            Some(format!("{} - Total", row).as_str())
+        )?;
+        let crosstabs = columns.iter().try_fold(
+            row_total,
+            |left, &col_name| {
+                let right = operation::create_crosstab(&original,row,col_name)?;
+                let right = self.label_output_column(right, col_name)?;
+
+                Ok::<LazyFrame, PolarsError>(left.join(
+                    right,
+                    [col(row)],
+                    [col(row)],
+                    JoinArgs {
+                        how: JoinType::Full,
+                        validation: JoinValidation::OneToOne,
+                        suffix: None,
+                        slice: None,
+                        nulls_equal: true,
+                        coalesce: JoinCoalesce::CoalesceColumns,
+                        maintain_order: MaintainOrderJoin::Left,
+                        build_side: None
+                    },
+                ))
+            })?;
+        
+        crosstabs.collect()
+
+        // self.label_output_row(crosstabs, row)?
+        //     .with_simplify_expr(true)
+        //     .with_comm_subexpr_elim(true)
+        //     .collect()
+    }
+
+    /// Gets a [topline table](https://en.wikipedia.org/wiki/Contingency_table) for a given question (`row`) with another question (`column`) as the header.
+    ///
+    /// Inputs:
+    /// - row: the question name of the rows
     /// - column: topnbreak used for group by
     ///
     /// Returns:
@@ -341,24 +386,53 @@ impl Survey {
     /// ```
     pub fn crosstab(&self, row: &str, column: &str) -> PolarsResult<DataFrame> {
         let result = operation::create_crosstab(self.data().lazy()?, row, column)?;
+
         // We then append row and column labels
         // column label
-        let column_label = self
-            .datamap()
-            .get(column)
-            .ok_or(QuestionNotFound::new(column))?
-            .response_label_map();
-        let (col_old, col_new): (Vec<String>, Vec<String>) = column_label
-            .iter()
-            .map(|(id, label)| (id.to_string(), label.read().clone()))
-            .unzip();
-        let result = result.rename(col_old, col_new, false);
+        let result = self.label_output_column(result, column)?;
 
-        // row label
+        // And finally, append row labels
+        let result = self.label_output_row(result, row)?;
+
+        // output
+        result.collect()
+    }
+
+    #[inline(always)]
+    fn label_output_column(
+        &self,
+        result: LazyFrame,
+        question_name: &str,
+    ) -> PolarsResult<LazyFrame> {
+        let lookup = self
+            .datamap()
+            .get(question_name)
+            .ok_or(QuestionNotFound::new(question_name))?
+            .response_label_map();
+
+        let (old, new): (Vec<String>, Vec<String>) = lookup
+            .iter()
+            .map(|(id, label)| {
+                (
+                    id.to_string(),
+                    format!("{} - {}", question_name, label.read().as_str()),
+                )
+            })
+            .unzip();
+
+        Ok(result.rename(old, new, false))
+    }
+
+    #[inline(always)]
+    fn label_output_row(
+        &self,
+        result: LazyFrame,
+        question_name: &str,
+    ) -> PolarsResult<LazyFrame> {
         let (row_old, row_new): (Vec<AnyValue<'static>>, Vec<String>) = self
             .datamap()
-            .get(row)
-            .ok_or(QuestionNotFound::new(row))?
+            .get(question_name)
+            .ok_or(QuestionNotFound::new(question_name))?
             .response_label_map()
             .iter()
             .map(|(id, label)| (id.clone(), label.read().to_string()))
@@ -366,22 +440,21 @@ impl Survey {
         let row_old = Series::from_any_values("old".into(), &row_old, true)?;
         let row_new = Series::new("new".into(), row_new);
 
-        let result = result
-            .with_columns([col(row)
+        Ok(result
+            .with_columns([col(question_name)
                 .replace_strict(
                     lit(row_old.clone()),
                     lit(row_new),
-                    Some(lit("Base")), // TODO!
+
+                    Some(col(question_name).cast(DataType::String)),
                     Some(DataType::String),
                 )
+                .fill_null(lit("Null"))
                 .alias("label")])
             .select([
-                col("label").alias(row),
-                all().exclude_cols([row, "label"]).as_expr(),
-            ])
-            .collect()?; // TODO: don't need to collect() here since we can append more crosstab tables in future?
-
-        Ok(result)
+                col("label").alias(question_name),
+                all().exclude_cols([question_name, "label"]).as_expr(),
+            ]))
     }
 }
 
@@ -753,7 +826,7 @@ impl Survey {
     ///
     /// Kwrags:
     ///     format ('pandas' | 'polars' | None, *optional*):
-    ///         Which dataframe library this function should return, 
+    ///         Which dataframe library this function should return,
     ///         default to be consistent with the `dataframe_format` attribute of the current instance (`Survey.dataframe_format`).
     ///
     /// Examples:
@@ -798,7 +871,7 @@ impl Survey {
     ///     │ Emacs                       ┆ 424   ┆ 118                      ┆ 43      ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
     ///     └─────────────────────────────┴───────┴──────────────────────────┴─────────┴───┴────────┴──────────┴─────────┴──────┘
     ///     ```
-    ///     
+    ///
     #[pyo3(
         name = "crosstab", 
         signature=(row: "str", column: "str", format: "'polars'|'pandas'|None"=None)
@@ -815,7 +888,7 @@ impl Survey {
         let format = format
             .map(|value| DataFrameFormat::from_py_any(value))
             .transpose()?
-            .unwrap_or(self.dataframe_format());
+            .unwrap_or(self.config().py_dataframe_format.clone());
 
         match format {
             DataFrameFormat::Polars => PyDataFrame(polars_frame).into_bound_py_any(py),

@@ -1556,7 +1556,8 @@ class Survey:
 
         Kwrags:
             format ('pandas' | 'polars' | None, *optional*):
-                Which dataframe library this function should return, default `polars`
+                Which dataframe library this function should return, 
+                default to be consistent with the `dataframe_format` attribute of the current instance (`Survey.dataframe_format`).
 
         Examples:
 
@@ -1774,7 +1775,16 @@ class Survey:
 @final
 class SurveyData:
     """
-    Respondent data with a lazy query plan and an optional backing cache.
+    Respondent data with an optional backing cache.
+
+    This is more or less just a very thin wrapper around  a Polars LazyFrame instance
+    with a cache management by rust's [`tempfile`] library.
+
+    You can access the raw data via `to_polars()` method call should you wish to.
+    You should also be able to call `to_panads()` method to dump the raw data if you were using python.
+
+    The data exported will simply be a dataframe of the raw survey data, with each column being the data for each of the question,
+    multi-choice questions are presented as column of lists (i.e., column of `[[1,2,3,], Nan, [3,5], ...]`).
     """
     def __iter__(self, /) -> Any: ...
     def __repr__(self, /) -> str: ...

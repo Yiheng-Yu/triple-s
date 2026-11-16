@@ -90,24 +90,29 @@ fn test_read_stack_overflow_survey() {
     println!("Reading survey data");
     let survey = read_stack_overflow();
 
-    println!("Data loaded");
-    // println!("{:#?}", survey.question_names());
+    println!("Data loaded. Question names:");
+    println!("{:#?}", survey.question_names());
 
     println!("running crosstab");
-    let row = "DevIDEAdmired";
+    // let row = "DevIDEAdmired";
+    let row = "JobSat";
     let topbreak = "Country";
 
-    let res = survey.crosstab(row, topbreak).unwrap();
+    let res = survey.crosstab2(row, &[topbreak, "AIUse"]).unwrap();
     println!("Crosstab:");
+    unsafe {
+        std::env::set_var("POLARS_FMT_MAX_ROWS", "100");
+    }
+
     println!("{:?}", res);
 
-    println!("Base size:");
-    let base = survey
-        .get_question_data(topbreak)
-        .unwrap()
-        .value_counts(Some("count"))
-        .unwrap();
-    println!("{:?}", base);
+    // println!("Base size:");
+    // let base = survey
+    //     .get_question_data(topbreak)
+    //     .unwrap()
+    //     .value_counts(Some("count"))
+    //     .unwrap();
+    // println!("{:?}", base);
 }
 
 #[test]

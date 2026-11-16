@@ -149,6 +149,8 @@ mod data;
 mod datamap;
 mod survey;
 
+mod analysis;
+
 pub mod error;
 pub use data::config;
 
