@@ -94,12 +94,12 @@ impl QuestionData {
         &mut self.question
     }
 
-    /// Get the lookup table for items in the [`Question::response::values()`] field,
-    /// formatted as: { [`Code::value`]: [`Code::label()`] }
+    /// Get the lookup table for items in the [`Question::response()::values()`] field,
+    /// formatted as: { [`Code::value()`]: [`Code::label()`] }
     ///
     /// This method returns a `Arc<RwLock<String>>` for the code label text, this means mutating
     /// code label elsewhere will the hashmap returned from this function. Details on this mutation
-    /// behaviour can be found in the documentation in [`Response::response_label_map`].
+    /// behaviour can be found in the documentation in [`Response::response_label_map()`].
     #[allow(clippy::mutable_key_type)] // can only be string, float, or int
     pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
         self.question.response_label_map()
@@ -152,7 +152,7 @@ impl QuestionData {
 
     /// Count unique values of this Series and a column "counts" with dtype IdxType
     ///
-    /// This function basically calls [`polars::Series::value_counts`] under the hood, apart from multi-choice
+    /// This function basically calls [`polars::series::value_counts`] under the hood, apart from multi-choice
     /// questions ([`QuestionData::question_type()`] is [`QuestionType::Multiple`]),
     /// where the choice for each respondant is counted individually.
     ///
@@ -226,7 +226,8 @@ impl QuestionData {
         concat([base_size.lazy(), value_counts.lazy()], concat_args)?.collect()
     }
 
-    /// Checks if `other` is comes from the same [`Survey`] as `self`.
+    /// Checks if `other` is comes from the same survey as `self`.
+    /// 
     pub fn is_same_survey(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.data, &other.data)
     }
