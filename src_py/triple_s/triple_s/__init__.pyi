@@ -1813,7 +1813,7 @@ class SurveyData:
     @property
     def num_response(self, /) -> int: ...
     @property
-    def questions(self, /) -> list[str]:
+    def question_names(self, /) -> list[str]:
         """
         List of question names in the current instance
         """

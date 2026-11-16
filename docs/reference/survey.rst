@@ -32,6 +32,7 @@ Attributes
 
 .. autoattribute:: Survey.response_display
    :annotation: : str
+
 Properties
 -----------
 
