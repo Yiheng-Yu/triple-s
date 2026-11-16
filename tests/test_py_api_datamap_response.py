@@ -1,5 +1,5 @@
 import pytest
-from triple_s import Response, Code, DataRange
+from triple_s import Response, Code, DataRange, Text
 
 
 @pytest.fixture
@@ -186,3 +186,82 @@ def test_response_getitem_slice_shares_codes(response):
     assert result[1].score == 4.5
     result.pop()
     assert len(response.values) == 3
+
+
+@pytest.mark.parametrize("factory, value", [
+    (Code.unsigned, 2), (Code.signed, -2), (Code.float, 2.5), (Code.string, "A"),
+])
+def test_code_factory_fields_and_mutation(factory, value):
+    code = factory(value, label="Label", filter="Q1", score=1.5)
+    assert code.value == value
+    assert code.label == Text("Label")
+    assert code.filter == "Q1"
+    assert code.score == 1.5
+    code.score = -2.5
+    assert code.score == -2.5
+    code.score = code.filter = None
+    assert code.score is code.filter is None
+    code.label = Text("Updated")
+    assert code.label.value == "Updated"
+    default = factory(value)
+    assert default.label == Text("")
+    assert default.filter is default.score is None
+
+
+def test_code_direct_construction_is_unsupported():
+    with pytest.raises(NotImplementedError):
+        Code(1, None, None, None)
+
+
+@pytest.mark.parametrize("factory, value, lookup, missing", [
+    (Code.unsigned, 2, 2.0, "2"),
+    (Code.signed, -2, -2.0, "-2"),
+    (Code.float, 2.0, 2, "2"),
+    (Code.string, "2", "2", 2),
+])
+def test_response_get_value_lookup_and_shared_mutation(factory, value, lookup, missing):
+    response = Response(values=[factory(value, "Original")])
+    found = response.get_value(lookup)
+    assert found.value == value
+    assert response.get_value(missing) is None
+    found.label = "Updated"
+    assert response[0].label.value == "Updated"
+    assert Response().get_value(lookup) is None
+
+
+@pytest.mark.parametrize("value", [None, [], {}, object()])
+def test_response_get_value_rejects_invalid_types(response, value):
+    with pytest.raises(TypeError, match="str, int, or float"):
+        response.get_value(value)
+
+
+@pytest.mark.parametrize("as_objects", [False, True])
+def test_response_from_dict_range_and_mixed_codes(as_objects):
+    bounds = DataRange.unsigned(0, 5) if as_objects else {"start": 0, "end": 5}
+    response = Response.from_dict({
+        "range": bounds,
+        "values": [Code.unsigned(1, "One"), {"value": 2, "label": "Two"}],
+    })
+    assert response.range == DataRange.unsigned(0, 5)
+    assert isinstance(response.values, tuple)
+    assert [code.value for code in response.values] == [1, 2]
+    assert response.response_label == {1: Text("One"), 2: Text("Two")}
+    empty = Response.from_dict({})
+    assert empty.range is None
+    assert empty.values == ()
+    assert empty.response_label == {}
+
+
+@pytest.mark.parametrize("content", [{"range": "invalid"}, {"values": None},
+                                      {"values": [42]}])
+def test_response_from_dict_rejects_invalid_children(content):
+    with pytest.raises(TypeError):
+        Response.from_dict(content)
+
+
+def test_response_label_map_returns_independent_text(response):
+    labels = response.response_label
+    labels[1].value = "Changed copy"
+    labels.pop(2)
+    assert response[0].label.value == "haha"
+    assert response.response_label[2].value == "yes"
