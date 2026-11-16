@@ -24,8 +24,17 @@ use crate::{
     utils::{ArcLock, lock_it_up},
 };
 
-#[cfg_attr(any(not(feature = "pyo3"), doc), doc = include_str!("./doc/survey_rs.md"))]
-#[cfg_attr(all(feature = "pyo3", not(doc)), doc = include_str!("./doc/survey_py.md"))]
+// rust docstring
+#[cfg_attr(
+    any(not(feature = "pyo3"), doc), 
+    doc = include_str!("./doc/survey_rs.md")
+)]
+// pyo3 docstring
+#[cfg_attr(
+    all(feature = "pyo3", not(doc)), 
+    doc = include_str!("./doc/survey_py.md")
+)]
+// pyo3 signatures
 #[cfg_attr(
     all(feature = "pyo3", not(doc)),
     doc = r###"

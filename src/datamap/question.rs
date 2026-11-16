@@ -259,8 +259,6 @@ impl DeepCopy for Question {
     }
 }
 
-/// # Fields
-///
 /// ---
 impl Question {
     /// Index of a question in `<record>`, this corresponds to the `ident` attribute of a `<variable>` node in trile-s xml.
