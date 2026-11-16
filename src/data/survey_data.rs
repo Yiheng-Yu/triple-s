@@ -272,7 +272,7 @@ impl SurveyData {
         let mut info = Vec::new();
 
         const MAX_NUM_COLNAME_SHOW: usize = 3;
-        let colnames = self.questions().ok().unwrap_or_default();
+        let colnames = self.question_names().ok().unwrap_or_default();
         let mut colname_repr = colnames[0..colnames.len().min(MAX_NUM_COLNAME_SHOW)]
             .iter()
             .map(|s| format!("{:?}", s))

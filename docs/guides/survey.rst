@@ -71,7 +71,9 @@ To switch between values and labels:
    print(next( survey.iter_rows()))
 
 Note:
+
    Responses returned by iteration or indexing are copies of the original data. Modifying them does not change the survey's underlying data.
+   
    .. code-block:: python
 
       response = survey[0]
