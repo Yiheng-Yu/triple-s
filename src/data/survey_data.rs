@@ -11,11 +11,11 @@ use pyo3::prelude::*;
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 use tempfile::TempPath;
 
+#[cfg(feature = "pyo3")]
+use super::row_iterator::RowIterator;
 use crate::error::{InvalidArg, NoDataError};
 #[cfg(feature = "pyo3")]
 use crate::utils::polars_to_pandas;
-#[cfg(feature = "pyo3")]
-use super::row_iterator::RowIterator;
 
 /// The backing file and its cleanup policy.
 #[derive(Debug)]
@@ -36,7 +36,16 @@ impl CacheDir {
     }
 }
 
-/// Respondent data with a lazy query plan and an optional backing cache.
+/// Respondent data with an optional backing cache.
+///
+/// This is more or less just a very thin wrapper around  a Polars LazyFrame instance
+/// with a cache management by rust's [`tempfile`] library.
+///
+/// You can access the raw data via `to_polars()` method call should you wish to.
+/// You should also be able to call `to_panads()` method to dump the raw data if you were using python.
+///
+/// The data exported will simply be a dataframe of the raw survey data, with each column being the data for each of the question,
+/// multi-choice questions are presented as column of lists (i.e., column of `[[1,2,3,], Nan, [3,5], ...]`).
 #[cfg_attr(
     feature = "pyo3",
     pyclass(module = "triple_s", name = "SurveyData", from_py_object)
@@ -293,6 +302,7 @@ impl SurveyData {
     #[inline]
     pub(crate) fn create_data_entry_iterator(&self) -> PyResult<DataEntryIterator> {
         let mut lazy = self.lazy()?.clone();
+
         let width = lazy.collect_schema().map_err(PyPolarsErr::Polars)?.len();
         Ok(DataEntryIterator {
             rows: RowIterator::new(self.clone(), lazy, width),

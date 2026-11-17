@@ -44,7 +44,14 @@ Attributes
 Methods
 -------
 
-.. automethod:: QuestionData.value_counts(name: str | None = 'count', format: str | triple_s.config.DataFrameFormat | None = None) -> polars.DataFrame | pandas.DataFrame
+.. py:method:: QuestionData.value_counts(name: str | None = 'count', format: str | triple_s.config.DataFrameFormat | None = None) -> polars.DataFrame | pandas.DataFrame
+
+   Get a quick summary for this question:
+
+   .. code-block:: python
+
+      counts = survey["Q2"].value_counts(name="answers")
+      print(counts)
 
 .. automethod:: QuestionData.to_polars(response_label: bool | None = None) -> polars.Series
 

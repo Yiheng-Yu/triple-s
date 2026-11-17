@@ -13,7 +13,8 @@ use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGua
 use polars::frame::row::Row;
 #[cfg(feature = "pyo3")]
 use pyo3::{
-    IntoPyObjectExt, exceptions,
+    IntoPyObjectExt,
+    exceptions,
     prelude::*,
     types::{PyDict, PySlice, PyTuple},
 };
@@ -377,7 +378,8 @@ impl Record {
         Ok(Box::new(crate::datamap::parsing::parallel_rows(
             records,
             move |(index, row)| {
-                let row = row.with_context(|| format!("When reading CSV record {}", index + 1))?;
+                let row =
+                    row.with_context(|| format!("When reading CSV record {}", index + 1))?;
                 crate::datamap::parsing::parse_csv(&parsers, &row)
             },
         )))
@@ -491,7 +493,8 @@ impl Record {
         }
 
         // Validate the assembled record once.
-        let record = String::from_utf8(output).context("Invalid UTF-8 in fixed-width record")?;
+        let record =
+            String::from_utf8(output).context("Invalid UTF-8 in fixed-width record")?;
 
         // Consume optional separators without trimming meaningful spaces.
         if reader.fill_buf()?.first() == Some(&b'\r') {

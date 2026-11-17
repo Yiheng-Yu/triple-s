@@ -32,11 +32,7 @@ use crate::{
 use crate::{
     QuestionType,
     config::ResponseDisplay,
-    data::{
-        config::Config,
-        operation::{count_not_null, frequency_counts},
-        survey_data::SurveyData,
-    },
+    data::{config::Config, operation::frequency_counts, survey_data::SurveyData},
     datamap::Question,
     utils::ArcLock,
 };
@@ -94,12 +90,12 @@ impl QuestionData {
         &mut self.question
     }
 
-    /// Get the lookup table for items in the [`Question::response::values()`] field,
-    /// formatted as: { [`Code::value`]: [`Code::label()`] }
+    /// Get the lookup table for items in the [`Question::response()::values()`] field,
+    /// formatted as: { [`Code::value()`]: [`Code::label()`] }
     ///
     /// This method returns a `Arc<RwLock<String>>` for the code label text, this means mutating
     /// code label elsewhere will the hashmap returned from this function. Details on this mutation
-    /// behaviour can be found in the documentation in [`Response::response_label_map`].
+    /// behaviour can be found in the documentation in [`Response::response_label_map()`].
     #[allow(clippy::mutable_key_type)] // can only be string, float, or int
     pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
         self.question.response_label_map()
@@ -152,7 +148,7 @@ impl QuestionData {
 
     /// Count unique values of this Series and a column "counts" with dtype IdxType
     ///
-    /// This function basically calls [`polars::Series::value_counts`] under the hood, apart from multi-choice
+    /// This function basically calls [`polars::series::value_counts`] under the hood, apart from multi-choice
     /// questions ([`QuestionData::question_type()`] is [`QuestionType::Multiple`]),
     /// where the choice for each respondant is counted individually.
     ///
@@ -186,47 +182,44 @@ impl QuestionData {
         let raw_data = self.to_value_column()?;
 
         // First get base sizes (total of not-null values)
-        let base_size = count_not_null(&raw_data, column_name)?;
+        // let base_size = count_not_null(&raw_data, column_name)?;
 
         // Then we do `value_counts`
-        let mut value_counts = frequency_counts(
+        let result = frequency_counts(
             DataFrame::new(raw_data.len(), vec![raw_data])?.lazy(),
             &question_name,
             Some(column_name),
-        )?
-        .collect()?;
+            true,
+        )?;
 
         // append data label
-        let label_map = self.response_label_map();
-        let labels = value_counts
-            .column(&question_name)?
-            .as_materialized_series()
+        let (row_old, row_new): (Vec<AnyValue<'static>>, Vec<String>) = self
+            .datamap()
+            .response_label_map()
             .iter()
-            .map(|value| {
-                if value.is_nan() | value.is_null() {
-                    Some("*null*".into())
-                } else {
-                    label_map.get(&value).map(|val| val.read().to_string())
-                }
-            })
-            .collect::<Vec<Option<String>>>();
-
-        value_counts.insert_column(1, Series::new("label".into(), labels).into())?;
-
-        // putting everything together
-        let concat_args = UnionArgs {
-            parallel: true,
-            rechunk: true,
-            to_supertypes: true,
-            diagonal: true,
-            strict: false,
-            from_partitioned_ds: true,
-            maintain_order: true,
-        };
-        concat([base_size.lazy(), value_counts.lazy()], concat_args)?.collect()
+            .map(|(id, label)| (id.clone(), label.read().to_string()))
+            .unzip();
+        let row_old = Series::from_any_values("old".into(), &row_old, true)?;
+        let row_new = Series::new("new".into(), row_new);
+        
+        result
+        .with_columns([col(&question_name)
+            .replace_strict(
+                lit(row_old.clone()),
+                lit(row_new),
+                Some(col(&question_name).cast(DataType::String)),
+                Some(DataType::String),
+            )
+            .fill_null(lit("Null"))
+            .alias("label")])
+        .select([
+            col("label").alias(&question_name),
+            all().exclude_cols([&question_name, "label"]).as_expr(),
+        ])
+        .collect()
     }
 
-    /// Checks if `other` is comes from the same [`Survey`] as `self`.
+    /// Checks if `other` is comes from the same survey as `self`.
     pub fn is_same_survey(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.data, &other.data)
     }
@@ -418,7 +411,9 @@ impl QuestionData {
                     .collect::<PyResult<Vec<Option<NaiveTime>>>>()?;
                 PyTuple::new(py, iterator)
             }
-            DataType::List(inner) if matches!(inner.as_ref(), DataType::UInt32 | DataType::String) => {
+            DataType::List(inner)
+                if matches!(inner.as_ref(), DataType::UInt32 | DataType::String) =>
+            {
                 let values = series
                     .iter()
                     .map(|s| anyvalue_to_python(py, s))

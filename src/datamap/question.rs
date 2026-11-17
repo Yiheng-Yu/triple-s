@@ -191,13 +191,16 @@ impl QuestionOptions {
 
 /// A survey variable, represented by a `<variable>` element in Triple-S XML.
 #[cfg_attr(
-    not(feature = "pyo3"),
+    any(not(feature = "pyo3"), doc),
     doc = include_str!("../doc/datamap_question_rs.md")
 )]
 #[cfg_attr(
-    feature = "pyo3",
-    pyclass(module = "triple_s", name = "Question", from_py_object),
+    all(feature = "pyo3", not(doc)),
     doc = include_str!("../doc/datamap_question_py.md")
+)]
+#[cfg_attr(
+    feature = "pyo3",
+    pyclass(module = "triple_s", name = "Question", from_py_object)
 )]
 #[derive(Debug)]
 pub struct Question {
@@ -256,11 +259,9 @@ impl DeepCopy for Question {
     }
 }
 
-/// # Fields
-///
 /// ---
 impl Question {
-    /// Returns the variable's `ident` attribute.
+    /// Index of a question in `<record>`, this corresponds to the `ident` attribute of a `<variable>` node in trile-s xml.
     pub fn index(&self) -> &u32 {
         &self.index
     }
@@ -287,7 +288,7 @@ impl Question {
         self.name.read().clone()
     }
 
-    /// Returns a write guard for updating the question name.
+    /// A writable access of quesiton name
     ///
     /// # Example:
     /// ```rust
@@ -359,7 +360,7 @@ impl Question {
     /// `spread` field controls how to parse response data of questions with
     /// multi-choice reponses.
     ///
-    ///  For more information on how this was done, please check the relevant
+    /// For more information on how this was done, please check the relevant
     /// documentation of [`Spread`] struct.
     pub fn spread(&self) -> &Option<Spread> {
         &self.spread
@@ -408,7 +409,8 @@ impl Question {
         self.filter.write()
     }
 
-    /// Returns the optional code format: `numeric` or `literal`.
+    /// Corresponds to the `use` attribute of a `<variable>` node, also used for parsing
+    /// data for single-choice questions.
     ///
     /// Please refer to the documentation of [`CodeFormat`] for more details.
     pub fn format(&self) -> RwLockReadGuard<'_, Option<CodeFormat>> {
@@ -432,8 +434,10 @@ impl Question {
     }
 
     /// Returns the optional role declared by the `use` attribute.
-    /// `serial` identifies records, while `weight` supplies their analysis
-    /// weights.
+    ///
+    /// Can have two possible values:
+    ///
+    /// `serial` identifies records, while `weight` supplies their analysis weights.
     pub fn usage(&self) -> RwLockReadGuard<'_, Option<Usage>> {
         self.usage.read()
     }
@@ -503,7 +507,7 @@ impl Question {
     /// Get the lookup table for items in the [`Question::response::values()`] field,
     /// formatted as: { [`Code::value`]: [`Code::label()`] }
     ///
-    /// This method returns a Arc<RwLock<String>> for the code label text, this means mutating
+    /// This method returns a `Arc<RwLock<String>>` for the code label text, this means mutating
     /// code label elsewhere will the hashmap returned from this function. Details on this mutation
     /// behaviour can be found in the documentation in [`Response::response_label_map`].
     #[allow(clippy::module_inception)]

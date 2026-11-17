@@ -1545,7 +1545,7 @@ class Survey:
             Survey: The constructed Survey instance.
         """
     def __repr__(self, /) -> str: ...
-    def crosstab(self, /, row: "str", column: "str", format: "'polars'|'pandas'|None" = None) -> Any:
+    def crosstab(self, /, row: "str", column: "list[str]" = None, show_row_total: "bool" = None, show_column_total: "bool" = None, format: "'polars'|'pandas'|None" = None) -> Any:
         """
         Create a `topline table <https://en.wikipedia.org/wiki/Contingency_table>`_ for a question in the survey.
         
@@ -1554,52 +1554,58 @@ class Survey:
             column (str): name of the question for topline
         
         Kwrags:
+            show_row_total (bool *optional*): 
+                Toogle on to show total sizes for the `row`
+                Default True
+            
+            show_column_total (bool *optional*): 
+                Toggle on to show total size for each column.
+                Defaul tRUE
+            
             format ('pandas' | 'polars' | None, *optional*):
-                Which dataframe library this function should return, default `polars`
+                Which dataframe library this function should return,
+                default to be consistent with the `dataframe_format` attribute of the current instance (`Survey.dataframe_format`).
         
         Examples:
         
-            Compare IDE admired by country
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            Compare AI usage by respondent age
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         
             Using stack overflow 2026 survey data as an example, suppose you want to look at the IDE people admire by each country..
-            
+        
             We starts with reading the data:
-            
+        
             .. code-block:: python
-                
+        
                 >>> from triple_s import read_triple_s
                 >>> survey = read_triple_s("stackoverflow_2026.sss", "stackoverflow_2026.asc")
-            
-            
+        
+        
             Then use `Survey.crosstab()` method to get the data:
-             
+        
             .. code-block:: python
-            
-                >>> survey.crosstab("DevIDEAdmired", "Country")
-            
+        
+                >>> survey.crosstab("Age", ["AIFreq_1"], show_row_total=True, show_column_total=True)
+        
             This would give you a table that looks like:
             
             ```text
-            ┌─────────────────────────────┬───────┬──────────────────────────┬─────────┬───┬────────┬──────────┬─────────┬──────┐
-            │ DevIDEAdmired               ┆ Total ┆ United States of America ┆ Germany ┆ … ┆ Zambia ┆ Zimbabwe ┆ Nomadic ┆ NA   │
-            │ ---                         ┆ ---   ┆ ---                      ┆ ---     ┆   ┆ ---    ┆ ---      ┆ ---     ┆ ---  │
-            │ str                         ┆ u32   ┆ u32                      ┆ u32     ┆   ┆ u32    ┆ u32      ┆ u32     ┆ u32  │
-            ╞═════════════════════════════╪═══════╪══════════════════════════╪═════════╪═══╪════════╪══════════╪═════════╪══════╡
-            │ Base                        ┆ null  ┆ 4755                     ┆ 1983    ┆ … ┆ 6      ┆ 10       ┆ 43      ┆ 9533 │
-            │ Jupyter Notebook/JupyterLab ┆ 669   ┆ 168                      ┆ 56      ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
-            │ PhpStorm                    ┆ 383   ┆ 44                       ┆ 51      ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
-            │ Cursor                      ┆ 649   ┆ 139                      ┆ 31      ┆ … ┆ 0      ┆ 0        ┆ 1       ┆ 0    │
-            │ NetBeans                    ┆ 85    ┆ 9                        ┆ 6       ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
-            │ …                           ┆ …     ┆ …                        ┆ …       ┆ … ┆ …      ┆ …        ┆ …       ┆ …    │
-            │ Replit                      ┆ 69    ┆ 13                       ┆ 2       ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
-            │ Vim                         ┆ 1996  ┆ 539                      ┆ 213     ┆ … ┆ 0      ┆ 0        ┆ 2       ┆ 0    │
-            │ IntelliJ IDEA               ┆ 1705  ┆ 315                      ┆ 247     ┆ … ┆ 0      ┆ 0        ┆ 1       ┆ 0    │
-            │ CLion                       ┆ 322   ┆ 64                       ┆ 39      ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
-            │ Emacs                       ┆ 424   ┆ 118                      ┆ 43      ┆ … ┆ 0      ┆ 0        ┆ 0       ┆ 0    │
-            └─────────────────────────────┴───────┴──────────────────────────┴─────────┴───┴────────┴──────────┴─────────┴──────┘
+            ┌────────────────────┬─────────────┬──────────────────┬─────────────────────────────────┬───────────────┬───────────────────┐
+            │ Age                ┆ Age - Total ┆ AIFreq_1 - Daily ┆ AIFreq_1 - Monthly or Infreque… ┆ AIFreq_1 - NA ┆ AIFreq_1 - Weekly │
+            │ ---                ┆ ---         ┆ ---              ┆ ---                             ┆ ---           ┆ ---               │
+            │ str                ┆ u32         ┆ u32              ┆ u32                             ┆ u32           ┆ u32               │
+            ╞════════════════════╪═════════════╪══════════════════╪═════════════════════════════════╪═══════════════╪═══════════════════╡
+            │ Null               ┆ 30903       ┆ 8403             ┆ 712                             ┆ 19472         ┆ 2316              │
+            │ Under 18 years old ┆ 969         ┆ 62               ┆ 33                              ┆ 830           ┆ 44                │
+            │ 18-24 years old    ┆ 4944        ┆ 809              ┆ 106                             ┆ 3760          ┆ 269               │
+            │ 25-34 years old    ┆ 9267        ┆ 2489             ┆ 165                             ┆ 5956          ┆ 657               │
+            │ 35-44 years old    ┆ 8522        ┆ 2809             ┆ 195                             ┆ 4860          ┆ 658               │
+            │ 45-54 years old    ┆ 4198        ┆ 1437             ┆ 112                             ┆ 2256          ┆ 393               │
+            │ 55-64 years old    ┆ 1829        ┆ 581              ┆ 67                              ┆ 980           ┆ 201               │
+            │ 65 years or older  ┆ 822         ┆ 178              ┆ 29                              ┆ 534           ┆ 81                │
+            │ Prefer not to say  ┆ 352         ┆ 38               ┆ 5                               ┆ 296           ┆ 13                │
+            └────────────────────┴─────────────┴──────────────────┴─────────────────────────────────┴───────────────┴───────────────────┘
             ```
-            
         """
     @property
     def data(self, /) -> SurveyData:
@@ -1773,7 +1779,16 @@ class Survey:
 @final
 class SurveyData:
     """
-    Respondent data with a lazy query plan and an optional backing cache.
+    Respondent data with an optional backing cache.
+    
+    This is more or less just a very thin wrapper around  a Polars LazyFrame instance
+    with a cache management by rust's [`tempfile`] library.
+    
+    You can access the raw data via `to_polars()` method call should you wish to.
+    You should also be able to call `to_panads()` method to dump the raw data if you were using python.
+    
+    The data exported will simply be a dataframe of the raw survey data, with each column being the data for each of the question,
+    multi-choice questions are presented as column of lists (i.e., column of `[[1,2,3,], Nan, [3,5], ...]`).
     """
     def __iter__(self, /) -> Any: ...
     def __repr__(self, /) -> str: ...
