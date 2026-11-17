@@ -913,24 +913,23 @@ impl Question {
                     AnyValue::UInt32(data.parse()?)
                 }
             }
-            QuestionType::Multiple => {
-                let values = self.parse_multiple_data(data)?;
-                self.validate_multiple_read(&values)?;
-                let mut values: Vec<u32> = values.into_iter().collect();
-                values.sort_unstable();
-                AnyValue::List(Series::new("".into(), values))
-            }
+            QuestionType::Multiple => self.parse_multiple_data(data)?,
         })
     }
 
     /// parsing multi-code data
     ///
     /// this being an indipendent function because it's bit complicated.
-    fn parse_multiple_data(&self, data: &str) -> Result<HashSet<u32>> {
-        match self.spread() {
+    pub(crate) fn parse_multiple_data(&self, data: &str) -> Result<AnyValue<'static>> {
+        let data_read: HashSet<u32> = match self.spread() {
             None => Self::parse_binary_multiple(data),
             Some(spread) => Self::parse_subfields_multiple(spread, data),
-        }
+        }?;
+
+        let series = UInt32Chunked::from_iter_values("".into(), data_read.into_iter())
+            .sort(false)
+            .into_series();
+        Ok(AnyValue::List(series))
     }
 
     fn parse_binary_multiple(data: &str) -> Result<HashSet<u32>> {
@@ -981,39 +980,39 @@ impl Question {
         }
     }
 
-    fn validate_multiple_read(&self, raw_data: &HashSet<u32>) -> Result<()> {
-        let available = self
-            .response()
-            .values()
-            .iter()
-            .map(|item| {
-                let value = item.read().value().clone();
-                match value {
-                    AnyValue::UInt32(value) => Ok(value),
-                    _ => Err(error::TypeMismatch::new(format!(
-                        "Expect `unsignede integer` value type, got: `{:?}`",
-                        value
-                    )))
-                    .with_context(|| {
-                        format!("When trying to extract data for question `{}`", self.name())
-                    }),
-                }
-            })
-            .collect::<Result<HashSet<u32>>>()?;
+    // fn validate_multiple_read(&self, raw_data: &HashSet<u32>) -> Result<()> {
+    //     let available = self
+    //         .response()
+    //         .values()
+    //         .iter()
+    //         .map(|item| {
+    //             let value = item.read().value().clone();
+    //             match value {
+    //                 AnyValue::UInt32(value) => Ok(value),
+    //                 _ => Err(error::TypeMismatch::new(format!(
+    //                     "Expect `unsignede integer` value type, got: `{:?}`",
+    //                     value
+    //                 )))
+    //                 .with_context(|| {
+    //                     format!("When trying to extract data for question `{}`", self.name())
+    //                 }),
+    //             }
+    //         })
+    //         .collect::<Result<HashSet<u32>>>()?;
 
-        // validate raw data
-        let diff = raw_data.difference(&available).collect::<Vec<&u32>>();
-        if !diff.is_empty() {
-            let message = format!(
-                "Found unidentified code {:?} for question {}",
-                diff,
-                self.name()
-            );
-            Err(InvalidArg::new(message).into())
-        } else {
-            Ok(())
-        }
-    }
+    //     // validate raw data
+    //     let diff = raw_data.difference(&available).collect::<Vec<&u32>>();
+    //     if !diff.is_empty() {
+    //         let message = format!(
+    //             "Found unidentified code {:?} for question {}",
+    //             diff,
+    //             self.name()
+    //         );
+    //         Err(InvalidArg::new(message).into())
+    //     } else {
+    //         Ok(())
+    //     }
+    // }
 }
 
 /// <hr />

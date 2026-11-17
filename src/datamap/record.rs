@@ -323,6 +323,7 @@ impl Record {
         }
     }
 
+    #[inline(always)]
     fn parsing_plan(&self) -> Result<Vec<FixedWidthParser>> {
         self.content
             .read()

@@ -37,9 +37,11 @@ impl FixedWidthParser {
     #[inline]
     fn parse(&self, field: &str) -> Result<AnyValue<'static>> {
         if let Some(question) = &self.multiple {
-            question
-                .parse_question_value(field)
-                .map(AnyValue::into_static)
+            question.parse_multiple_data(field)
+            // question.parse_multiple_data(field)
+            // question
+            //     .parse_question_value(field)
+            //     .map(AnyValue::into_static)
         } else {
             parse_cell_value(field, &self.question_type, self.is_literal).map_err(Into::into)
         }
