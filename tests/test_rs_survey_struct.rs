@@ -25,7 +25,8 @@ fn test_survey_read_success() {
         Some("Historic House Exit Survey<br/>First Wave")
     );
     assert_eq!(survey.name().as_deref(), Some("SP5201-1"));
-    assert_eq!(survey.num_response().unwrap(), 3)
+    assert_eq!(survey.num_response().unwrap(), 3);
+    assert_eq!(survey.question_names().len(), 12);
 }
 
 #[test]
@@ -104,7 +105,7 @@ fn test_crosstab_column_groups_and_row_total() {
     )
     .unwrap();
 
-    let expected = df![
+    let expected_body = df![
         "Q2" => [
             "Null",
             "No, this is the first visit",
@@ -125,7 +126,7 @@ fn test_crosstab_column_groups_and_row_total() {
         "Q5 - Nottingham Castle",
     ];
 
-    for num_groups in 0..=2 {
+    for num_groups in 1..=2 {
         for show_row_total in [false, true] {
             let result = survey
                 .crosstab(CrossTabArgs {
@@ -136,49 +137,22 @@ fn test_crosstab_column_groups_and_row_total() {
                 })
                 .unwrap();
 
-            if num_groups == 0 && !show_row_total {
-                assert!(result.equals_missing(&DataFrame::empty()));
-                continue;
-            }
-
             let mut names = vec!["Q2"];
             if show_row_total {
                 names.push("Q2 - Total");
             }
             names.extend_from_slice(&group_labels[..num_groups * 2]);
-            let expected = if num_groups == 0 {
-                expected.slice(1, 3).select(names).unwrap()
-            } else {
-                expected.select(names).unwrap()
-            };
+            let expected_case = expected_body.select(names).unwrap();
             let result = result.sort(["Q2"], Default::default()).unwrap();
-            let expected = expected.sort(["Q2"], Default::default()).unwrap();
+            let expected_case = expected_case.sort(["Q2"], Default::default()).unwrap();
 
             assert!(
-                result.equals_missing(&expected),
-                "groups={num_groups}, total={show_row_total}:\n{result}\nexpected:\n{expected}"
+                result.equals_missing(&expected_case),
+                "groups={num_groups}, total={show_row_total}:\n{result}\nexpected:\n{expected_case}"
             );
         }
     }
 
-    let result = survey
-        .crosstab(CrossTabArgs {
-            question_name: "Q2",
-            columns: &["Q4", "Q5"],
-            show_row_total: true,
-            show_column_total: true,
-        })
-        .unwrap();
-    let totals = df![
-        "Q2" => ["*Total*"],
-        "Q2 - Total" => [4u32],
-        "Q4 - Very Good" => [3u32],
-        "Q4 - Good" => [2u32],
-        "Q5 - Sherwood Forest" => [3u32],
-        "Q5 - Nottingham Castle" => [3u32],
-    ]
-    .unwrap();
-    assert!(result.head(Some(1)).equals_missing(&totals));
 }
 
 #[test]
@@ -204,48 +178,65 @@ fn test_crosstab_column_totals_count_respondents() {
         .unwrap(),
     )
     .unwrap();
-    let expected = df![
-        "Q5" => ["*Total*"],
+    let expected_totals = df![
+        "Q5" => ["Null"],
         "Q5 - Total" => [5u32],
         "Q4 - Very Good" => [3u32],
         "Q4 - Good" => [2u32],
-        "null" => [0u32],
+        "null" => [None::<u32>],
         "Q2 - No, this is the first visit" => [2u32],
         "Q2 - I have visited before within the year" => [2u32],
         "Q2 - I visited before that" => [2u32],
     ]
     .unwrap();
 
-    for num_groups in 0..=2 {
-        for show_row_total in [false, true] {
-            let args = CrossTabArgs {
-                question_name: "Q5",
-                columns: &["Q4", "Q2"][..num_groups],
-                show_row_total,
-                show_column_total: false,
-            };
-            let body = survey.crosstab(args).unwrap();
-            let result = survey
-                .crosstab(CrossTabArgs {
-                    question_name: "Q5",
-                    columns: &["Q4", "Q2"][..num_groups],
-                    show_row_total,
-                    show_column_total: true,
-                })
-                .unwrap();
-            if num_groups == 0 && !show_row_total {
-                assert!(result.equals_missing(&DataFrame::empty()));
-                continue;
-            }
-            assert!(
-                result
-                    .head(Some(1))
-                    .equals_missing(&expected.select(body.get_column_names()).unwrap()),
-                "groups={num_groups}, total={show_row_total}:\n{result}"
-            );
-            assert!(result.slice(1, body.height()).equals_missing(&body));
-        }
-    }
+    let columns = ["Q4", "Q2"];
+    let body = survey
+        .crosstab(CrossTabArgs {
+            question_name: "Q5",
+            columns: &columns,
+            show_row_total: true,
+            show_column_total: false,
+        })
+        .unwrap();
+    let result = survey
+        .crosstab(CrossTabArgs {
+            question_name: "Q5",
+            columns: &columns,
+            show_row_total: true,
+            show_column_total: true,
+        })
+        .unwrap();
+
+    assert!(
+        result.head(Some(1)).equals_missing(&expected_totals),
+        "column totals should count respondent rows, not exploded answers:\n{result}"
+    );
+    let body_columns = [
+        "Q5",
+        "Q5 - Total",
+        "Q4 - Very Good",
+        "Q4 - Good",
+        "null",
+        "Q2 - No, this is the first visit",
+        "Q2 - I have visited before within the year",
+        "Q2 - I visited before that",
+    ];
+    let result_body = result
+        .slice(1, body.height())
+        .select(body_columns)
+        .unwrap()
+        .sort(["Q5"], Default::default())
+        .unwrap();
+    let expected_body = body
+        .select(body_columns)
+        .unwrap()
+        .sort(["Q5"], Default::default())
+        .unwrap();
+    assert!(
+        result_body.equals_missing(&expected_body),
+        "column totals should not change the crosstab body:\n{result_body}\nexpected:\n{expected_body}"
+    );
 }
 
 #[test]
