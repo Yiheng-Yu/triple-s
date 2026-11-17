@@ -235,11 +235,12 @@ where
             .into_par_iter()
             .map(&parse)
             .collect();
-
-            if let Some(index) = rows.iter().position(Result::is_err) {
+        
+        if let Some(index) = rows.iter().position(Result::is_err) {
             rows.truncate(index + 1);
             finished = true;
         }
+
         Some(rows)
     })
     .flatten()
