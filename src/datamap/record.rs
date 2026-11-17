@@ -9,6 +9,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressIterator, ProgressStyle};
 use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
 use polars::frame::row::Row;
 #[cfg(feature = "pyo3")]
@@ -317,9 +318,16 @@ impl Record {
             }
         }
 
+        let progress = ProgressBar::new_spinner()
+            .with_style(
+                ProgressStyle::with_template("{spinner:.cyan} Reading: {pos} responses")
+                    .unwrap(),
+            )
+            .with_finish(indicatif::ProgressFinish::WithMessage("Done".into()));
+
         match data_format {
-            DataFormat::Fixed => self.scan_fixed_width(reader),
-            DataFormat::Csv => self.scan_csv(reader),
+            DataFormat::Fixed => self.scan_fixed_width(reader, Some(progress)),
+            DataFormat::Csv => self.scan_csv(reader, Some(progress)),
         }
     }
 
@@ -335,6 +343,7 @@ impl Record {
     fn scan_fixed_width(
         &self,
         mut reader: BufReader<TextReader<BufReader<File>>>,
+        progress: Option<ProgressBar>,
     ) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>>>> {
         let parsers = self.parsing_plan()?;
         let width = parsers
@@ -360,15 +369,22 @@ impl Record {
                 }
             }
         });
-        Ok(Box::new(crate::datamap::parsing::parallel_rows(
-            records,
-            move |row| crate::datamap::parsing::parse_fixed(&parsers, &row?),
-        )))
+
+        let iterator = crate::datamap::parsing::parallel_rows(records, move |row| {
+            crate::datamap::parsing::parse_fixed(&parsers, &row?)
+        });
+
+        if let Some(pbar) = progress {
+            Ok(Box::new(iterator.progress_with(pbar)))
+        } else {
+            Ok(Box::new(iterator))
+        }
     }
 
     fn scan_csv(
         &self,
         reader: BufReader<TextReader<BufReader<File>>>,
+        progress: Option<ProgressBar>,
     ) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>>>> {
         let parsers = self.parsing_plan()?;
         let records = csv::ReaderBuilder::new()
@@ -377,14 +393,17 @@ impl Record {
             .from_reader(reader)
             .into_records()
             .enumerate();
-        Ok(Box::new(crate::datamap::parsing::parallel_rows(
-            records,
-            move |(index, row)| {
-                let row =
-                    row.with_context(|| format!("When reading CSV record {}", index + 1))?;
-                crate::datamap::parsing::parse_csv(&parsers, &row)
-            },
-        )))
+
+        let iterator = crate::datamap::parsing::parallel_rows(records, move |(index, row)| {
+            let row = row.with_context(|| format!("When reading CSV record {}", index + 1))?;
+            crate::datamap::parsing::parse_csv(&parsers, &row)
+        });
+
+        if let Some(pbar) = progress {
+            Ok(Box::new(iterator.progress_with(pbar)))
+        } else {
+            Ok(Box::new(iterator))
+        }
     }
 
     /// Validate an `.asc` or `.csv` file against the record's questions and skip setting.

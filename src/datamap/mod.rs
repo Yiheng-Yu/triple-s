@@ -12,8 +12,6 @@ mod parsing;
 
 use std::{fs::File, path::Path};
 
-// use rayon::prelude::*;
-use indicatif::{ParallelProgressIterator, ProgressBar, ProgressIterator, ProgressStyle};
 use polars::{
     frame::row::{AnyValueBuffer, Row},
     prelude::*,
@@ -80,18 +78,10 @@ pub fn read_data(datamap: &Datamap, path_data: impl AsRef<Path>) -> PolarsResult
     let mut writer = ParquetWriter::new(parquet_file).batched(&schema)?;
     let mut batch_buffer = Vec::with_capacity(BATCH_SIZE);
 
-    let progress = ProgressBar::new_spinner()
-        .with_style(
-            ProgressStyle::with_template(
-                "{spinner:.cyan} Reading: {pos} responses"
-            ).unwrap()
-        )
-        .with_finish(indicatif::ProgressFinish::WithMessage("Done".into()));
     let row_scan = record
         .scan_data_file(path_data, &data_format)
         .map_err(|err| PolarsError::ComputeError(format!("{:?}", err).into()))
-        .with_context(|| format!("When trying to read data from: '{}'", path_string))? //;
-        .progress_with(progress);
+        .with_context(|| format!("When trying to read data from: '{}'", path_string))?;
 
     for row in row_scan {
         let row = row

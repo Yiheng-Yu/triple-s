@@ -119,6 +119,7 @@ where
             Some(row)
         }));
     }
+
     let mut finished = false;
     Either::Right(
         std::iter::from_fn(move || {
@@ -130,11 +131,8 @@ where
             if batch.is_empty() {
                 return None;
             }
-            let mut rows: Vec<_> = if batch.len() < 32 {
-                batch.into_iter().map(&parse).collect()
-            } else {
-                batch.into_par_iter().map(&parse).collect()
-            };
+
+            let mut rows: Vec<_> = batch.into_par_iter().map(&parse).collect();
             if let Some(index) = rows.iter().position(Result::is_err) {
                 rows.truncate(index + 1);
                 finished = true;

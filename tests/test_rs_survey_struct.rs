@@ -152,7 +152,6 @@ fn test_crosstab_column_groups_and_row_total() {
             );
         }
     }
-
 }
 
 #[test]
