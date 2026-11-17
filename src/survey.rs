@@ -609,8 +609,7 @@ impl Survey {
             .with_check_order(true)
             .with_simplify_expr(true)
             .with_comm_subexpr_elim(true)
-            .with_comm_subplan_elim(true)
-            .with_streaming(true);
+            .with_comm_subplan_elim(true);
         let iterator = RowIterator::new(source, transformed, width);
         Py::new(py, iterator)
     }
