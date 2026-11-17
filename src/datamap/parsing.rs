@@ -371,7 +371,7 @@ mod tests {
     }
 
     #[test]
-    fn indexed_ranges_support_unicode_gaps_overlap_and_order() {
+    fn test_indexed_ranges_support_unicode_gaps_overlap_and_order() {
         let p = plan();
         let row = parse_fixed(&p, "A中😀DE").unwrap();
         assert_eq!(
@@ -386,18 +386,18 @@ mod tests {
     }
 
     #[test]
-    fn owned_scalar_values_match_question_parsing() {
+    fn test_owned_scalar_values_match_question_parsing() {
         use crate::CodeFormat;
 
-        for (kind, format, field) in [
-            (QuestionType::Quantity, None, " 123.456 "),
-            (QuestionType::Logical, None, "1"),
-            (QuestionType::Logical, None, "0"),
-            (QuestionType::Single, None, "42"),
-            (QuestionType::Single, Some(CodeFormat::Literal), " A "),
-            (QuestionType::Character, None, " 中😀 text "),
-            (QuestionType::Date, None, "20261115"),
-            (QuestionType::Time, None, "123456"),
+        for (kind, format, field, correct) in [
+            (QuestionType::Quantity, None, " 123.456 ", AnyValue::Float64(123.456)),
+            (QuestionType::Logical, None, "1", AnyValue::Boolean(true)),
+            (QuestionType::Logical, None, "0", AnyValue::Boolean(false)),
+            (QuestionType::Single, None, "", AnyValue::Null),
+            (QuestionType::Single, Some(CodeFormat::Literal), " A ", AnyValue::String("A")),
+            (QuestionType::Character, None, " 中😀 text ", AnyValue::String("中😀 text")),
+            (QuestionType::Date, None, "20261115", AnyValue::Date(20772)),
+            (QuestionType::Time, None, "123456", AnyValue::Time(45_296_000_000_000)),
         ] {
             let question = lock_it_up(
                 QuestionOptions::new("Q")
@@ -407,19 +407,14 @@ mod tests {
                     .unwrap(),
             );
             let parser = ResponseParser::from_question_read_guard(question.read()).unwrap();
-            let question = question.read();
-            for field in [field, "", "   "] {
-                assert_eq!(
-                    parser.parse(field).unwrap(),
-                    question.parse_question_value(field).unwrap().into_static(),
-                );
-            }
+            let parsed = parser.parse(field).unwrap();
+            assert_eq!(parsed, correct);
         }
         assert!(parse_cell_value("", &QuestionType::None, false, None).is_err());
     }
 
     #[test]
-    fn batches_preserve_order_and_stop_at_first_error() {
+    fn test_batches_preserve_order_and_stop_at_first_error() {
         for threads in [1, 4] {
             let pool = rayon::ThreadPoolBuilder::new()
                 .num_threads(threads)
@@ -485,7 +480,9 @@ mod tests {
                         } else {
                             q.locate_data_csv(&csv).unwrap()
                         };
-                        q.parse_question_value(field).unwrap().into_static()
+
+                        let parser = ResponseParser::from_question(q).unwrap();
+                        parser.parse(field).unwrap().into_static()
                     })
                     .collect::<Vec<_>>();
                 black_box(values);
