@@ -9,7 +9,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use indicatif::{ParallelProgressIterator, ProgressBar, ProgressIterator, ProgressStyle};
+use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
 use polars::frame::row::Row;
 #[cfg(feature = "pyo3")]
@@ -27,7 +27,7 @@ use strum::{EnumIter, EnumString};
 use crate::utils::{extract_indicies, get_type_name, normalize_py_index, py_value_error};
 use crate::{
     Question,
-    datamap::parsing::FixedWidthParser,
+    datamap::parsing::ResponseParser,
     error::{self, InvalidArg},
     prelude::{DeepCopy, Flag},
     utils::{ArcLock, TextReader, lock_it_up},
@@ -332,11 +332,11 @@ impl Record {
     }
 
     #[inline(always)]
-    fn parsing_plan(&self) -> Result<Vec<FixedWidthParser>> {
+    fn parsing_plan(&self) -> Result<Vec<ResponseParser>> {
         self.content
             .read()
             .iter()
-            .map(|question| FixedWidthParser::from_question(question.read()))
+            .map(|question| ResponseParser::from_question_read_guard(question.read()))
             .collect()
     }
 
@@ -352,6 +352,7 @@ impl Record {
             .max()
             .context("Cannot determine record width: no questions")?;
         anyhow::ensure!(width > 0, "Record width must be positive");
+
         let mut finished = false;
         let records = std::iter::from_fn(move || {
             if finished {

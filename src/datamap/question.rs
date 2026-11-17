@@ -17,11 +17,7 @@ use quick_xml::{events::BytesText, writer::Writer};
 use strum::{AsRefStr, EnumIter, EnumString};
 
 use crate::{
-    EventLog,
-    datamap::{Code, Response, Text},
-    error::{self, DataReadError, InternalError, InvalidArg, RangeError},
-    prelude::{DeepCopy, *},
-    utils::{ArcLock, lock_it_up},
+    EventLog, datamap::{Code, Response, Text, parsing::{ResponseParser, parse_cell_value}}, error::{self, DataReadError, InternalError, InvalidArg, RangeError}, prelude::{DeepCopy, *}, utils::{ArcLock, lock_it_up},
 };
 #[cfg(feature = "pyo3")]
 use crate::{
@@ -837,182 +833,21 @@ impl Question {
         Ok(data)
     }
 
-    // fn extract_string_chars(text: &str, range: std::ops::Range<usize>) -> Option<&str> {
-    //     let start = text.char_indices()
-    //         .map(|(i, _)| i)
-    //         .chain(std::iter::once(text.len()))
-    //         .nth(range.start);
-    //     todo!()
-    // }
-
     /// validate one line of respondant data from a '.asc' file
     pub(crate) fn validate_asc_entry(&self, row: &str) -> Result<()> {
         let data = self.locate_data_asc(row)?;
-        let _ = self.parse_question_value(data).with_context(|| {
-            format!(
-                "When trying to validate data for question '{}'",
-                self.name()
-            )
-        })?;
+        let parser = ResponseParser::from_question(&self)?;
+        let _ = parser.parse(data)?;
         Ok(())
     }
 
     /// validate one line of respondant data from a '.csv' file
     pub(crate) fn validate_csv_entry(&self, row: &csv::StringRecord) -> Result<()> {
         let data = self.locate_data_csv(row)?;
-        let _ = self.parse_question_value(data).with_context(|| {
-            format!(
-                "When trying to validate data for question '{}'",
-                self.name()
-            )
-        })?;
+        let parser = ResponseParser::from_question(&self)?;
+        let _ = parser.parse(data)?;
         Ok(())
     }
-
-    /// Parse an extracted fixed-width field or decoded CSV field.
-    pub(crate) fn parse_question_value<'a>(&self, data: &'a str) -> Result<AnyValue<'a>> {
-        let data = data.trim();
-        let question_type = self.question_type.read().to_owned();
-
-        Ok(match question_type {
-            QuestionType::Character => AnyValue::String(data),
-            QuestionType::None => {
-                return Err(DataReadError(
-                    "Unable to parse data with question type `None`".into(),
-                )
-                .into());
-            }
-            _ if data.is_empty() => AnyValue::Null,
-            QuestionType::Quantity => AnyValue::Float64(data.parse()?),
-            QuestionType::Logical => AnyValue::Boolean(match data.parse::<usize>()? {
-                0 => false,
-                1 => true,
-                _ => {
-                    return Err(DataReadError(format!(
-                        "Unable to parse boolean data from input: `{data}`",
-                    ))
-                    .into());
-                }
-            }),
-            QuestionType::Date => AnyValue::Date(
-                NaiveDate::parse_from_str(data, "%Y%m%d")?
-                    .signed_duration_since(NaiveDate::from_ymd_opt(1970, 1, 1).unwrap())
-                    .num_days() as i32,
-            ),
-            QuestionType::Time => {
-                let time = NaiveTime::parse_from_str(data, "%H%M%S")?;
-                AnyValue::Time(
-                    time.num_seconds_from_midnight() as i64 * 1_000_000_000
-                        + time.nanosecond() as i64,
-                )
-            }
-            QuestionType::Single => {
-                if self.format().as_ref().is_some_and(|val| val.is_literal()) {
-                    AnyValue::String(data)
-                } else {
-                    AnyValue::UInt32(data.parse()?)
-                }
-            }
-            QuestionType::Multiple => self.parse_multiple_data(data)?,
-        })
-    }
-
-    /// parsing multi-code data
-    ///
-    /// this being an indipendent function because it's bit complicated.
-    pub(crate) fn parse_multiple_data(&self, data: &str) -> Result<AnyValue<'static>> {
-        let data_read: HashSet<u32> = match self.spread() {
-            None => Self::parse_binary_multiple(data),
-            Some(spread) => Self::parse_subfields_multiple(spread, data),
-        }?;
-
-        let series = UInt32Chunked::from_iter_values("".into(), data_read.into_iter())
-            .sort(false)
-            .into_series();
-        Ok(AnyValue::List(series))
-    }
-
-    fn parse_binary_multiple(data: &str) -> Result<HashSet<u32>> {
-        let mut response: HashSet<u32> = HashSet::new();
-        for (index, chr) in data.chars().enumerate() {
-            match chr {
-                '0' => Ok(()),
-                '1' => {
-                    response.insert(index as u32 + 1);
-                    Ok(())
-                }
-                _ => Err(DataReadError(format!(
-                    "Invalid multiple-choice response '{}' at position {}: expected '0' or \
-                     '1'.",
-                    chr,
-                    index + 1,
-                ))),
-            }?;
-        }
-        Ok(response)
-    }
-
-    fn parse_subfields_multiple(spread: &Spread, data: &str) -> Result<HashSet<u32>> {
-        let mut response: HashSet<u32> = HashSet::new();
-        match *spread.width() {
-            Some(width) => {
-                for chunk in data.as_bytes().chunks(width as usize) {
-                    let value = std::str::from_utf8(chunk)?.trim();
-                    let code = value.parse::<u32>()?;
-                    if code != 0 {
-                        response.insert(code);
-                    }
-                }
-                Ok(response)
-            }
-            None => {
-                let num_response = *spread.subfield() as usize;
-                let chunk_size = data.len().div_ceil(num_response);
-                for chunk in data.as_bytes().chunks(chunk_size) {
-                    let value = std::str::from_utf8(chunk)?.trim();
-                    let code = value.parse::<u32>()?;
-                    if code != 0 {
-                        response.insert(code);
-                    }
-                }
-                Ok(response)
-            }
-        }
-    }
-
-    // fn validate_multiple_read(&self, raw_data: &HashSet<u32>) -> Result<()> {
-    //     let available = self
-    //         .response()
-    //         .values()
-    //         .iter()
-    //         .map(|item| {
-    //             let value = item.read().value().clone();
-    //             match value {
-    //                 AnyValue::UInt32(value) => Ok(value),
-    //                 _ => Err(error::TypeMismatch::new(format!(
-    //                     "Expect `unsignede integer` value type, got: `{:?}`",
-    //                     value
-    //                 )))
-    //                 .with_context(|| {
-    //                     format!("When trying to extract data for question `{}`", self.name())
-    //                 }),
-    //             }
-    //         })
-    //         .collect::<Result<HashSet<u32>>>()?;
-
-    //     // validate raw data
-    //     let diff = raw_data.difference(&available).collect::<Vec<&u32>>();
-    //     if !diff.is_empty() {
-    //         let message = format!(
-    //             "Found unidentified code {:?} for question {}",
-    //             diff,
-    //             self.name()
-    //         );
-    //         Err(InvalidArg::new(message).into())
-    //     } else {
-    //         Ok(())
-    //     }
-    // }
 }
 
 /// <hr />
