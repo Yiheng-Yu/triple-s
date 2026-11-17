@@ -1,6 +1,12 @@
 use polars::prelude::AnyValue;
 use triple_s::{
-    Datamap, QuestionOptions, QuestionType, Survey, read_data, read_datamap, read_triple_s,
+    Datamap,
+    QuestionOptions,
+    QuestionType,
+    Survey,
+    read_data,
+    read_datamap,
+    read_triple_s,
 };
 
 const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";

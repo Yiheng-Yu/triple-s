@@ -110,7 +110,7 @@ impl Response {
 
     /// Get the lookup table for items in the [`Response::values()`] field, as: { [`Code::value`]: [`Code::label()`] }
     ///
-    /// This method returns a Arc<RwLock<String>> for the code label text, this means mutating
+    /// This method returns a `Arc<RwLock<String>>` for the code label text, this means mutating
     /// code label elsewhere will the hashmap returned from this function.
     ///
     /// # Example: Shared mutation of response label mapping

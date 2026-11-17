@@ -1,11 +1,12 @@
 //! Immutable parsing plans shared by fixed-width and CSV batch workers.
-use crate::{Question, datamap::QuestionType, prelude::DeepCopy};
 use anyhow::{Context, Result};
 use chrono::{NaiveDate, NaiveTime, Timelike};
 use either::Either;
 use parking_lot::RwLockReadGuard;
 use polars::{frame::row::Row, prelude::*};
 use rayon::prelude::*;
+
+use crate::{Question, datamap::QuestionType, prelude::DeepCopy};
 
 #[derive(Debug)]
 pub(crate) struct FixedWidthParser {

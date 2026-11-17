@@ -5,11 +5,53 @@ Survey Data
 Get quick summaries for questions in a survey
 ----------------------------------------------
 
-Use ``value_counts()`` to get a quick summary for a survey question:
+You can use :meth:`~triple_s.QuestionData.value_counts` to get a quick
+summary for a survey question:
 
 .. code-block:: python
 
-    >>> survey["Q1"].value_counts(name="Count")
+   counts = survey["Q2"].value_counts(name="Count")
+   print(counts.to_dicts())
+
+
+Get cross tabs for a survey question
+------------------------------------
+
+Suppose you want to look at ``Q2`` by ``Q4``. You can simply pass the row
+question and a list of column questions to ``crosstab()``:
+
+.. code-block:: python
+
+   table = survey.crosstab("Q2", ["Q4"])
+   print(table)
+
+Or, to look at several questions at once:
+
+.. code-block:: python
+
+   combined = survey.crosstab("Q2", ["Q4", "Q5"])
+
+
+Both totals are shown by default. You can switch them on or off separately:
+
+.. code-block:: python
+
+   # Keep the row-total column, but hide the first totals row.
+   table = survey.crosstab(
+       "Q2", ["Q4"], show_row_total=True, show_column_total=False,
+   )
+
+   # Keep the first totals row, but hide the row-total column.
+   table = survey.crosstab(
+       "Q2", ["Q4"], show_row_total=False, show_column_total=True,
+   )
+
+If you want a pandas dataframe instead, you can set the output format for
+this call:
+
+.. code-block:: python
+
+   pandas_table = survey.crosstab("Q2", ["Q4"], format="pandas")
 
 
 Working with Hugging Face Datasets

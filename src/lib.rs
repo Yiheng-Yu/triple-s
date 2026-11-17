@@ -149,6 +149,8 @@ mod data;
 mod datamap;
 mod survey;
 
+mod analysis;
+
 pub mod error;
 pub use data::config;
 
@@ -157,6 +159,7 @@ mod utils;
 
 use std::path::Path;
 
+pub use analysis::CrossTabArgs;
 use anyhow::Result;
 pub use data::{QuestionData, SurveyData};
 pub use datamap::{

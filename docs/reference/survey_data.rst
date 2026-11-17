@@ -19,7 +19,7 @@ Properties
 .. autoattribute:: SurveyData.num_response
    :annotation: : int
 
-   Total amount of questions in a SurveyData instance.
+   Total number of respondents in a SurveyData instance.
 
 
 Methods

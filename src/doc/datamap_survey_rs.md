@@ -30,7 +30,7 @@ guards before requesting write access to the same metadata.
 
 # Read a datamap and access questions
 
-[`read_datamap`] reads Triple-S Classic or XML definitions without
+[`triple_s::read_datamap`] reads Triple-S Classic or XML definitions without
 loading respondent data, even when the record references a data file.
 
 ```no_run
@@ -50,7 +50,7 @@ Use [`Datamap::record`] to access the full record.
 
 # Load and export respondent data
 
-Call [`read_data`]. The extension
+Call [`triple_s::read_data`]. The extension
 selects fixed-width (`.asc`) or CSV (`.csv`) parsing, using the record's
 question definitions. CSV fields use question locations.
 
@@ -66,9 +66,9 @@ let frame = data.to_polars()?;
 # Ok::<(), anyhow::Error>(())
 ```
 
-Loading returns a [`SurveyData`] backed by a temporary Parquet cache.
+Loading returns a [`triple_s::SurveyData`] backed by a temporary Parquet cache.
 
-To read both files into a survey, use [`read_triple_s`] instead.
+To read both files into a survey, use [`triple_s::read_triple_s`] instead.
 
 # Export the datamap
 

@@ -1,5 +1,5 @@
 use polars::prelude::*;
-use triple_s::{Survey, SurveyData, config::ResponseDisplay, read_triple_s};
+use triple_s::{CrossTabArgs, Survey, SurveyData, config::ResponseDisplay, read_triple_s};
 
 const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
 const PATH_DATAFILE_V2_0: &str = "tests/sss-examples/sss-2.0/example1.asc";
@@ -86,19 +86,192 @@ fn test_value_display_label_not_found() {
 }
 
 #[test]
+fn test_crosstab_column_groups_and_row_total() {
+    let survey = get_survey_struct();
+    *survey.data_mut() = SurveyData::from_polars(
+        df![
+            "Q2" => [Some(0u32), Some(0), Some(1), Some(2), None],
+            "Q4" => [1u32, 2, 1, 2, 1],
+            "Q5" => [
+                Series::new("".into(), [1u32, 2]),
+                Series::new("".into(), [2u32]),
+                Series::new("".into(), [1u32]),
+                Series::new("".into(), [2u32]),
+                Series::new("".into(), [1u32]),
+            ],
+        ]
+        .unwrap(),
+    )
+    .unwrap();
+
+    let expected = df![
+        "Q2" => [
+            "Null",
+            "No, this is the first visit",
+            "I have visited before within the year",
+            "I visited before that",
+        ],
+        "Q2 - Total" => [None, Some(2u32), Some(1), Some(1)],
+        "Q4 - Very Good" => [1u32, 1, 1, 0],
+        "Q4 - Good" => [0u32, 1, 0, 1],
+        "Q5 - Sherwood Forest" => [1u32, 1, 1, 0],
+        "Q5 - Nottingham Castle" => [0u32, 2, 0, 1],
+    ]
+    .unwrap();
+    let group_labels = [
+        "Q4 - Very Good",
+        "Q4 - Good",
+        "Q5 - Sherwood Forest",
+        "Q5 - Nottingham Castle",
+    ];
+
+    for num_groups in 0..=2 {
+        for show_row_total in [false, true] {
+            let result = survey
+                .crosstab(CrossTabArgs {
+                    question_name: "Q2",
+                    columns: &["Q4", "Q5"][..num_groups],
+                    show_row_total,
+                    show_column_total: false,
+                })
+                .unwrap();
+
+            if num_groups == 0 && !show_row_total {
+                assert!(result.equals_missing(&DataFrame::empty()));
+                continue;
+            }
+
+            let mut names = vec!["Q2"];
+            if show_row_total {
+                names.push("Q2 - Total");
+            }
+            names.extend_from_slice(&group_labels[..num_groups * 2]);
+            let expected = if num_groups == 0 {
+                expected.slice(1, 3).select(names).unwrap()
+            } else {
+                expected.select(names).unwrap()
+            };
+            let result = result.sort(["Q2"], Default::default()).unwrap();
+            let expected = expected.sort(["Q2"], Default::default()).unwrap();
+
+            assert!(
+                result.equals_missing(&expected),
+                "groups={num_groups}, total={show_row_total}:\n{result}\nexpected:\n{expected}"
+            );
+        }
+    }
+
+    let result = survey
+        .crosstab(CrossTabArgs {
+            question_name: "Q2",
+            columns: &["Q4", "Q5"],
+            show_row_total: true,
+            show_column_total: true,
+        })
+        .unwrap();
+    let totals = df![
+        "Q2" => ["*Total*"],
+        "Q2 - Total" => [4u32],
+        "Q4 - Very Good" => [3u32],
+        "Q4 - Good" => [2u32],
+        "Q5 - Sherwood Forest" => [3u32],
+        "Q5 - Nottingham Castle" => [3u32],
+    ]
+    .unwrap();
+    assert!(result.head(Some(1)).equals_missing(&totals));
+}
+
+#[test]
+fn test_crosstab_column_totals_count_respondents() {
+    let survey = get_survey_struct();
+    let multiple = Series::new(
+        "Q5".into(),
+        [
+            Some(Series::new("".into(), [1u32, 2])),
+            Some(Series::new("".into(), [1u32])),
+            Some(Series::new("".into(), Vec::<u32>::new())),
+            Some(Series::new("".into(), [2u32])),
+            None,
+            Some(Series::new("".into(), [1u32])),
+        ],
+    );
+    *survey.data_mut() = SurveyData::from_polars(
+        df![
+            "Q5" => multiple,
+            "Q4" => [Some(1u32), Some(1), Some(1), Some(2), Some(2), None],
+            "Q2" => [0u32, 0, 1, 1, 2, 2],
+        ]
+        .unwrap(),
+    )
+    .unwrap();
+    let expected = df![
+        "Q5" => ["*Total*"],
+        "Q5 - Total" => [5u32],
+        "Q4 - Very Good" => [3u32],
+        "Q4 - Good" => [2u32],
+        "null" => [0u32],
+        "Q2 - No, this is the first visit" => [2u32],
+        "Q2 - I have visited before within the year" => [2u32],
+        "Q2 - I visited before that" => [2u32],
+    ]
+    .unwrap();
+
+    for num_groups in 0..=2 {
+        for show_row_total in [false, true] {
+            let args = CrossTabArgs {
+                question_name: "Q5",
+                columns: &["Q4", "Q2"][..num_groups],
+                show_row_total,
+                show_column_total: false,
+            };
+            let body = survey.crosstab(args).unwrap();
+            let result = survey
+                .crosstab(CrossTabArgs {
+                    question_name: "Q5",
+                    columns: &["Q4", "Q2"][..num_groups],
+                    show_row_total,
+                    show_column_total: true,
+                })
+                .unwrap();
+            if num_groups == 0 && !show_row_total {
+                assert!(result.equals_missing(&DataFrame::empty()));
+                continue;
+            }
+            assert!(
+                result
+                    .head(Some(1))
+                    .equals_missing(&expected.select(body.get_column_names()).unwrap()),
+                "groups={num_groups}, total={show_row_total}:\n{result}"
+            );
+            assert!(result.slice(1, body.height()).equals_missing(&body));
+        }
+    }
+}
+
+#[test]
 fn test_read_stack_overflow_survey() {
     println!("Reading survey data");
     let survey = read_stack_overflow();
 
-    println!("Data loaded");
-    // println!("{:#?}", survey.question_names());
+    println!("Data loaded. Question names:");
+    println!("{:#?}", survey.question_names());
 
     println!("running crosstab");
-    let row = "DevIDEAdmired";
-    let topbreak = "Country";
+    let row = "Age";
+    let topbreak = "AIFreq_1";
 
-    let res = survey.crosstab(row, topbreak).unwrap();
+    let res = survey
+        .crosstab(CrossTabArgs {
+            question_name: row,
+            columns: &[topbreak], //"JobEaseAI_1"],
+            show_row_total: true,
+            show_column_total: true,
+        })
+        .unwrap();
     println!("Crosstab:");
+    unsafe {
+        std::env::set_var("POLARS_FMT_MAX_ROWS", "100");
+    }
     println!("{:?}", res);
 
     println!("Base size:");

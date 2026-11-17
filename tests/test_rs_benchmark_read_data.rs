@@ -1,6 +1,7 @@
 //! Run `cargo test --release --test test_rs_benchmark_read_data -- --ignored --nocapture`.
 //! Includes decoding, parsing, DataFrame conversion, and temporary Parquet writes.
 use std::{hint::black_box, io::Write, time::Instant};
+
 use triple_s::{Datamap, QuestionOptions, QuestionType, read_data};
 
 const ROWS: usize = 50_000;

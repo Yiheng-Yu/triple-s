@@ -116,6 +116,30 @@ Polars Series:
 Editing the returned Series does not update the survey. You can assign new
 data with ``survey.data = new_data``; existing question views will read from it.
 
+Get cross tabs for a survey question
+------------------------------------
+
+You can use :meth:`~triple_s.Survey.crosstab` to look at one question's answers
+by another question. For example, to look at ``Q2`` by ``Q4``:
+
+.. code-block:: python
+
+   table = survey.crosstab("Q2", ["Q4"])
+   print(table)
+
+You can also pass several questions as columns:
+
+.. code-block:: python
+
+   table = survey.crosstab("Q2", ["Q4", "Q5"])
+
+This gives you the column groups side by side, with names such as
+``Q4 - Good``.
+
+If you want a pandas dataframe instead, simply add ``format="pandas"``.
+Otherwise, the output follows ``survey.dataframe_format``. See the
+:doc:`Survey Data recipes <../recipes/survey_data>` for more examples.
+
 Next steps
 ----------
 
