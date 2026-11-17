@@ -397,7 +397,10 @@ impl SurveyInfo {
             .transpose()?
             .unwrap_or("None".into());
         Ok(format!(
-            "SurveyInfo(\n    version={version},\n    name={name},\n    title={title},\n    date={date},\n    time={time},\n    origin={origin},\n    user={user},\n    style={style},\n    language_options={language_options},\n    mode_options={mode_options},\n    standard={standard},\n)"
+            "SurveyInfo(\n    version={version},\n    name={name},\n    title={title},\n    \
+             date={date},\n    time={time},\n    origin={origin},\n    user={user},\n    \
+             style={style},\n    language_options={language_options},\n    \
+             mode_options={mode_options},\n    standard={standard},\n)"
         ))
     }
 

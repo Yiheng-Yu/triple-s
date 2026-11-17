@@ -60,7 +60,8 @@ fn benchmark_read_data(extension: &str, rows: usize, rounds: usize) {
         samples.sort();
         let median = samples[samples.len() / 2].as_secs_f64();
         println!(
-            "{extension}: {rows} rows x {COLUMNS} fields, {threads} workers: median {median:.4}s ({:.0} rows/s), {rounds} rounds",
+            "{extension}: {rows} rows x {COLUMNS} fields, {threads} workers: median \
+             {median:.4}s ({:.0} rows/s), {rounds} rounds",
             rows as f64 / median
         );
     }

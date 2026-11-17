@@ -224,7 +224,8 @@ impl Record {
         {
             Some(previous) => {
                 log::warn!(
-                    "A question named `{}` already exists. The existing question will be replaced with the new one.",
+                    "A question named `{}` already exists. The existing question will be \
+                     replaced with the new one.",
                     question.name()
                 );
 
@@ -557,13 +558,14 @@ impl Record {
                 } else if let Ok(value) = bound.extract::<&str>() {
                     value
                         .parse::<DataFormat>()
-                        .with_context(||
+                        .with_context(|| {
                             format!(
-                                "Expect to triple_s.DataFormat instance or one of {:?}, got: '{}'.",
+                                "Expect to triple_s.DataFormat instance or one of {:?}, got: \
+                                 '{}'.",
                                 DataFormat::available_options(),
                                 value
                             )
-                        )
+                        })
                         .map_err(|err| exceptions::PyValueError::new_err(format!("{err:#}")))?
                 } else {
                     let type_name = get_type_name(bound)?;
@@ -695,7 +697,8 @@ impl Record {
         } else {
             let type_name = index.get_type().name()?.extract::<String>()?;
             Err(exceptions::PyTypeError::new_err(format!(
-                "`index` must be question index (as `int`) or question name (as `str`), found: {}",
+                "`index` must be question index (as `int`) or question name (as `str`), \
+                 found: {}",
                 type_name
             )))
         }
@@ -800,29 +803,29 @@ impl Record {
             .get_item("data_format")?
             .map(|item| {
                 if let Ok(item) = item.extract::<Option<String>>() {
-                    item.map(|val|
+                    item.map(|val| {
                         DataFormat::from_str(&val)
-                            .with_context(||
+                            .with_context(|| {
                                 format!(
                                     "Expect to be one of: {:?}",
                                     DataFormat::available_options()
                                 )
-                            )
-                            .map_err(|err| exceptions::PyValueError::new_err(format!("{:?}", err)))
-                    ).transpose()
+                            })
+                            .map_err(|err| {
+                                exceptions::PyValueError::new_err(format!("{:?}", err))
+                            })
+                    })
+                    .transpose()
                 } else if let Ok(val) = item.extract::<DataFormat>() {
                     Ok(Some(val))
                 } else {
                     let type_name = get_type_name(&item)?;
-                    Err(
-                        exceptions::PyTypeError::new_err(
-                            format!(
-                                "Expect value of 'data_format' key to be one of {:?}, NoneType or `DataFormat` instance, got '{}'",
-                                DataFormat::available_options(),
-                                type_name
-                            )
-                        )
-                    )
+                    Err(exceptions::PyTypeError::new_err(format!(
+                        "Expect value of 'data_format' key to be one of {:?}, NoneType or \
+                         `DataFormat` instance, got '{}'",
+                        DataFormat::available_options(),
+                        type_name
+                    )))
                 }
             })
             .transpose()?

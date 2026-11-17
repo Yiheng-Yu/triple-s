@@ -52,14 +52,18 @@ impl DataFrameFormat {
         if let Ok(value) = value.extract::<DataFrameFormat>() {
             Ok(value)
         } else if let Ok(value) = value.extract::<String>() {
-            DataFrameFormat::from_str(&value)
-                .map_err(|_| exceptions::PyValueError::new_err(format!(
-                    "Expect input to be one of ['pandas', 'polars'] or DataFrameFormat instance, got: '{}'", value
-                )))
+            DataFrameFormat::from_str(&value).map_err(|_| {
+                exceptions::PyValueError::new_err(format!(
+                    "Expect input to be one of ['pandas', 'polars'] or DataFrameFormat \
+                     instance, got: '{}'",
+                    value
+                ))
+            })
         } else {
             let type_name = get_type_name(&value)?;
             Err(exceptions::PyTypeError::new_err(format!(
-                "Expect input to be one of ['pandas', 'polars'] or DataFrameFormat instance, got: '{}'",
+                "Expect input to be one of ['pandas', 'polars'] or DataFrameFormat instance, \
+                 got: '{}'",
                 type_name
             )))
         }
@@ -125,14 +129,18 @@ impl ResponseDisplay {
         if let Ok(value) = value.extract::<ResponseDisplay>() {
             Ok(value)
         } else if let Ok(value) = value.extract::<String>() {
-            Self::from_str(&value)
-                .map_err(|_| exceptions::PyValueError::new_err(format!(
-                    "Expect input to be one of ['value', 'label'] or `ResponseDisplay` instance, got: '{}'", value
-                )))
+            Self::from_str(&value).map_err(|_| {
+                exceptions::PyValueError::new_err(format!(
+                    "Expect input to be one of ['value', 'label'] or `ResponseDisplay` \
+                     instance, got: '{}'",
+                    value
+                ))
+            })
         } else {
             let type_name = get_type_name(&value)?;
             Err(exceptions::PyTypeError::new_err(format!(
-                "Expect input to be one of ['value', 'label'] or `ResponseDisplay` instance, got: '{}'",
+                "Expect input to be one of ['value', 'label'] or `ResponseDisplay` instance, \
+                 got: '{}'",
                 type_name
             )))
         }

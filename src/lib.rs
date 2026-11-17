@@ -145,15 +145,12 @@
 //! assert_eq!(original.value(), "A".to_string());
 //! ```
 
-mod data;
-mod datamap;
-mod survey;
-
 mod analysis;
-
+mod data;
+pub mod datamap;
 pub mod error;
+mod survey;
 pub use data::config;
-
 mod prelude;
 mod utils;
 
@@ -163,7 +160,6 @@ pub use analysis::CrossTabArgs;
 use anyhow::Result;
 pub use data::{QuestionData, SurveyData};
 pub use datamap::{
-    Datamap,
     question::{
         self,
         CodeFormat,
@@ -174,10 +170,13 @@ pub use datamap::{
         Spread,
         Usage,
     },
-    read::{read_datamap, read_from_reader, read_from_string},
     read_data,
+    read_datamap,
+    read_from_reader,
+    read_from_string,
     record::{self, DataFormat, Record},
     response::{self, Code, DataRange, Response},
+    survey_datamap::Datamap,
     survey_info::{self, SurveyInfo, Version},
     text::{self, Mode, Text, Variant},
 };

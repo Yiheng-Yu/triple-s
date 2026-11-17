@@ -156,7 +156,8 @@ fn test_crosstab_column_groups_and_row_total() {
 
             assert!(
                 result.equals_missing(&expected),
-                "groups={num_groups}, total={show_row_total}:\n{result}\nexpected:\n{expected}"
+                "groups={num_groups}, \
+                 total={show_row_total}:\n{result}\nexpected:\n{expected}"
             );
         }
     }

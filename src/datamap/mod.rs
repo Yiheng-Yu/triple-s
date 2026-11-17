@@ -1,8 +1,10 @@
+#![doc = include_str!("../doc/datamap_survey_rs.md")]
+
 pub mod question;
-pub mod read;
+pub(crate) mod read;
 pub mod record;
 pub mod response;
-pub mod survey_datamap;
+pub(crate) mod survey_datamap;
 pub mod survey_info;
 pub mod text;
 
@@ -14,12 +16,13 @@ use polars::{
     frame::row::{AnyValueBuffer, Row},
     prelude::*,
 };
-pub use question::{Location, Question, QuestionType, Spread, Usage};
-pub use record::DataFormat;
-pub use response::{Code, Response};
+pub(crate) use question::{Location, Question, QuestionType, Spread, Usage};
+pub use read::{read_datamap, read_from_reader, read_from_string};
+pub(crate) use record::DataFormat;
+pub(crate) use response::{Code, Response};
 pub use survey_datamap::Datamap;
 use tempfile::NamedTempFile;
-pub use text::{Text, Variant};
+pub(crate) use text::{Text, Variant};
 
 use crate::data::SurveyData;
 

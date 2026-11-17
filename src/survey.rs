@@ -849,11 +849,11 @@ impl Survey {
     ///     column (str): name of the question for topline
     ///
     /// Kwrags:
-    ///     show_row_total (bool *optional*): 
+    ///     show_row_total (bool *optional*):
     ///         Toogle on to show total sizes for the `row`
     ///         Default True
     ///     
-    ///     show_column_total (bool *optional*): 
+    ///     show_column_total (bool *optional*):
     ///         Toggle on to show total size for each column.
     ///         Defaul tRUE
     ///     
@@ -901,7 +901,6 @@ impl Survey {
     ///     │ Prefer not to say  ┆ 352         ┆ 38               ┆ 5                               ┆ 296           ┆ 13                │
     ///     └────────────────────┴─────────────┴──────────────────┴─────────────────────────────────┴───────────────┴───────────────────┘
     ///     ```
-    /// 
     #[pyo3(
         name = "crosstab",
         signature=(

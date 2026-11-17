@@ -201,22 +201,22 @@ impl QuestionData {
             .unzip();
         let row_old = Series::from_any_values("old".into(), &row_old, true)?;
         let row_new = Series::new("new".into(), row_new);
-        
+
         result
-        .with_columns([col(&question_name)
-            .replace_strict(
-                lit(row_old.clone()),
-                lit(row_new),
-                Some(col(&question_name).cast(DataType::String)),
-                Some(DataType::String),
-            )
-            .fill_null(lit("Null"))
-            .alias("label")])
-        .select([
-            col("label").alias(&question_name),
-            all().exclude_cols([&question_name, "label"]).as_expr(),
-        ])
-        .collect()
+            .with_columns([col(&question_name)
+                .replace_strict(
+                    lit(row_old.clone()),
+                    lit(row_new),
+                    Some(col(&question_name).cast(DataType::String)),
+                    Some(DataType::String),
+                )
+                .fill_null(lit("Null"))
+                .alias("label")])
+            .select([
+                col("label").alias(&question_name),
+                all().exclude_cols([&question_name, "label"]).as_expr(),
+            ])
+            .collect()
     }
 
     /// Checks if `other` is comes from the same survey as `self`.
@@ -293,11 +293,15 @@ impl QuestionData {
         match &err {
             PolarsError::ExprContext { error, expr } if expr.contains(".replace_strict") => {
                 if expr.contains(").replace_strict") {
-                    PolarsError::ComputeError(format!(
-                        "Question '{}' contains response values with no matching label, expect to be one of: {}",
-                        question_name,
-                        unique_keys.fmt_list()
-                    ).into())
+                    PolarsError::ComputeError(
+                        format!(
+                            "Question '{}' contains response values with no matching label, \
+                             expect to be one of: {}",
+                            question_name,
+                            unique_keys.fmt_list()
+                        )
+                        .into(),
+                    )
                 } else {
                     err
                 }

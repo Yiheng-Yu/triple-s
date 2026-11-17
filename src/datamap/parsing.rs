@@ -6,7 +6,7 @@ use parking_lot::RwLockReadGuard;
 use polars::{frame::row::Row, prelude::*};
 use rayon::prelude::*;
 
-use crate::{Question, datamap::QuestionType, prelude::DeepCopy};
+use crate::{Question, datamap::QuestionType};
 
 #[derive(Debug)]
 pub(crate) struct FixedWidthParser {
@@ -29,7 +29,7 @@ impl FixedWidthParser {
             start: range.start,
             end: range.end,
             is_literal: question.format().as_ref().is_some_and(|f| f.is_literal()),
-            multiple: (question_type == QuestionType::Multiple).then(|| question.deepcopy()),
+            multiple: (question_type == QuestionType::Multiple).then(|| question.clone()),
             question_type,
         })
     }
@@ -185,13 +185,16 @@ fn parse_cell_value(
             match value {
                 0 => Ok(AnyValue::Boolean(false)),
                 1 => Ok(AnyValue::Boolean(true)),
-                _ => return Err(PolarsError::InvalidOperation(
-                    format!(
-                        "Error raised when trying to convert '{}' to boolean. Expect '0' or '1'",
-                        data,
-                    )
-                    .into(),
-                )),
+                _ => {
+                    return Err(PolarsError::InvalidOperation(
+                        format!(
+                            "Error raised when trying to convert '{}' to boolean. Expect '0' \
+                             or '1'",
+                            data,
+                        )
+                        .into(),
+                    ));
+                }
             }
         }
         &QuestionType::Date => {
@@ -368,7 +371,7 @@ mod tests {
             let plans: Vec<_> = questions
                 .iter()
                 .map(|q| {
-                    let q = lock_it_up(q.deepcopy());
+                    let q = lock_it_up(q.clone());
                     FixedWidthParser::from_question(q.read()).unwrap()
                 })
                 .collect();

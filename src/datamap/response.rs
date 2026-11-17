@@ -252,7 +252,8 @@ impl Response {
             .any(|item| item.read().value() == key)
         {
             return Err(InvalidArg::new(format!(
-                "Cannot append item '{}' because an item with same 'code' attribute already exists. Use 'set_value' to overwrite existing entry.",
+                "Cannot append item '{}' because an item with same 'code' attribute already \
+                 exists. Use 'set_value' to overwrite existing entry.",
                 key.to_text()
             )));
         }
@@ -555,7 +556,8 @@ impl Response {
     ) -> Result<(), InvalidArg> {
         if sample.dtype() != incoming.dtype() {
             Err(InvalidArg::new(format!(
-                "Code value must have the same Polars data type as existing codes; got {incoming:?}, existing {sample:?}"
+                "Code value must have the same Polars data type as existing codes; got \
+                 {incoming:?}, existing {sample:?}"
             )))
         } else {
             Ok(())
@@ -936,7 +938,8 @@ impl Code {
 
             _ => {
                 let err_message = format!(
-                    "Expect input to be one of [`Int32`, `UInt32`, `Float64`, `StringOwned`, `String`] variant of `AnyValue` enum, got: `{:?}`",
+                    "Expect input to be one of [`Int32`, `UInt32`, `Float64`, `StringOwned`, \
+                     `String`] variant of `AnyValue` enum, got: `{:?}`",
                     value
                 );
                 Err(TypeMismatch::new(err_message))
@@ -1151,14 +1154,15 @@ impl Code {
     pub fn cast(&self, dtype: &DataType) -> Result<Self> {
         let mut copy = self.deepcopy();
 
-        let new_value = anyhow::Context::with_context(
-            self.value().try_strict_cast(dtype),
-            || format!(
-                "When trying to convert data type for [ `Code` ] instance with 'code' value '{}'",
-                self.value().to_text()
-            ),
-        )?
-        .into_static();
+        let new_value =
+            anyhow::Context::with_context(self.value().try_strict_cast(dtype), || {
+                format!(
+                    "When trying to convert data type for [ `Code` ] instance with 'code' \
+                     value '{}'",
+                    self.value().to_text()
+                )
+            })?
+            .into_static();
 
         copy.set_value(new_value)?;
         Ok(copy)
@@ -1215,7 +1219,8 @@ impl Code {
             "  To create new Code instance, use one of the following:",
             "  For Single/ Multiple/ Date/ Time, use 'Code.unsigned(..)', ",
             "  For Singe response question of `literal` code format, use 'Code.string(..)",
-            "  For quantity type of questions, use one of 'Code.float(..)' or 'Code.integer(..)'.",
+            "  For quantity type of questions, use one of 'Code.float(..)' or \
+             'Code.integer(..)'.",
         ];
 
         Err(exceptions::PyNotImplementedError::new_err(
@@ -1590,13 +1595,15 @@ impl AnyValueExt for AnyValue<'static> {
                     "Cannot compare values between `string` values.",
                 )),
                 _ => Err(InvalidArg::new(format!(
-                    "Can only compare pairs of `AnyValue` instances of the same kind. Got: self: [{:?}] | other: [{:?}]",
+                    "Can only compare pairs of `AnyValue` instances of the same kind. Got: \
+                     self: [{:?}] | other: [{:?}]",
                     self, other
                 ))),
             }
         } else {
             Err(InvalidArg::new(format!(
-                "Can only compare pairs of `AnyValue` instances of the same kind. Got: self: [{:?}] | other: [{:?}]",
+                "Can only compare pairs of `AnyValue` instances of the same kind. Got: self: \
+                 [{:?}] | other: [{:?}]",
                 self, other
             )))
         }
@@ -1734,11 +1741,14 @@ impl DataRange {
     /// Ok::<(), triple_s::error::InvalidArg>(())
     /// ```
     pub fn set_start(&mut self, new: AnyValue<'static>) -> Result<(), InvalidArg> {
-        let ordering = new.try_cmp(&self.end.read())
-            .map_err(|_| InvalidArg::new(format!(
-                "Can only update `start` from variants of the same kind. Got: self: [{:?}] | other: [{:?}]",
-                self.start.read(), new
-            )))?;
+        let ordering = new.try_cmp(&self.end.read()).map_err(|_| {
+            InvalidArg::new(format!(
+                "Can only update `start` from variants of the same kind. Got: self: [{:?}] | \
+                 other: [{:?}]",
+                self.start.read(),
+                new
+            ))
+        })?;
 
         match ordering {
             Ordering::Greater => Err(InvalidArg::new(format!(
@@ -1772,11 +1782,14 @@ impl DataRange {
     /// Ok::<(), triple_s::error::InvalidArg>(())
     /// ```
     pub fn set_end(&mut self, new: AnyValue<'static>) -> Result<(), InvalidArg> {
-        let ordering = new.try_cmp(&self.start.read())
-            .map_err(|_| InvalidArg::new(format!(
-                "Can only update `end` from variants of the same kind. Got: self: [{:?}] | other: [{:?}]",
-                self.end.read(), new
-            )))?;
+        let ordering = new.try_cmp(&self.start.read()).map_err(|_| {
+            InvalidArg::new(format!(
+                "Can only update `end` from variants of the same kind. Got: self: [{:?}] | \
+                 other: [{:?}]",
+                self.end.read(),
+                new
+            ))
+        })?;
 
         match ordering {
             Ordering::Less => Err(InvalidArg::new(format!(
@@ -1852,7 +1865,8 @@ impl DataRange {
         let message = [
             "Cannot create new DataRange instance without defining data type first.",
             "  To create new DataRange instance, use one of the following:",
-            "  'DataRange.signed(start, end)', 'DataRange.unsigned(start, end)', 'DataRange.float(start, end)'.",
+            "  'DataRange.signed(start, end)', 'DataRange.unsigned(start, end)', \
+             'DataRange.float(start, end)'.",
         ];
 
         Err(exceptions::PyNotImplementedError::new_err(

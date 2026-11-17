@@ -1,3 +1,4 @@
+//! Datamap for questions in a survey, corresponds to the `<variable>` tag.
 #![doc = include_str!("../doc/datamap_question_rs.md")]
 
 use std::{
@@ -676,13 +677,22 @@ impl Question {
         match (current_type, new_type_cloned) {
             (QuestionType::Single, QuestionType::Multiple) => {
                 if Some(&CodeFormat::Literal) == self.format.read().as_ref() {
-                    return Err(InvalidArg::new("Cannot convert 'single' Question with 'literal' format into question type 'multiple'!. 'literal' format is exclusively used for question type ['single', None]."))
-                        .with_context(|| format!("Error raised when trying to update question type for question {}", self.name()));
+                    return Err(InvalidArg::new(
+                        "Cannot convert 'single' Question with 'literal' format into \
+                         question type 'multiple'!. 'literal' format is exclusively used for \
+                         question type ['single', None].",
+                    ))
+                    .with_context(|| {
+                        format!(
+                            "Error raised when trying to update question type for question {}",
+                            self.name()
+                        )
+                    });
                 };
                 *self.question_type.write() = QuestionType::Multiple;
                 Ok(())
             }
-            (_, _) => {
+            (..) => {
                 *self.question_type.write() = new_type;
                 Ok(())
             }
@@ -933,7 +943,8 @@ impl Question {
                     Ok(())
                 }
                 _ => Err(DataReadError(format!(
-                    "Invalid multiple-choice response '{}' at position {}: expected '0' or '1'.",
+                    "Invalid multiple-choice response '{}' at position {}: expected '0' or \
+                     '1'.",
                     chr,
                     index + 1,
                 ))),
@@ -1391,7 +1402,13 @@ impl Question {
             value
         } else if let Ok(value) = question_type.extract::<&str>() {
             QuestionType::from_str(value)
-                .with_context(|| format!("Expect 'question_type' to be one of the `QuestionType` flags, or one of: {:?}", QuestionType::available_options()))
+                .with_context(|| {
+                    format!(
+                        "Expect 'question_type' to be one of the `QuestionType` flags, or \
+                         one of: {:?}",
+                        QuestionType::available_options()
+                    )
+                })
                 .map_err(py_value_error)?
         } else {
             let type_name = get_type_name(&question_type)?;
@@ -1503,7 +1520,8 @@ impl Question {
                 } else {
                     let type_name = get_type_name(question_type)?;
                     let message = format!(
-                        "Expect to be triple_s.QuestionType variant or one of these strings: {:?}, got: '{}'",
+                        "Expect to be triple_s.QuestionType variant or one of these strings: \
+                         {:?}, got: '{}'",
                         QuestionType::available_options(),
                         type_name
                     );
@@ -1962,7 +1980,9 @@ impl Question {
                 } else {
                     let type_name = get_type_name(&value)?;
                     let error_message = format!(
-                        "Invalida input type when trying to parse 'response' for question '{}': Expect value of 'response' key to be NoneType, dictionary or `Response` instance, got: '{}'",
+                        "Invalida input type when trying to parse 'response' for question \
+                         '{}': Expect value of 'response' key to be NoneType, dictionary or \
+                         `Response` instance, got: '{}'",
                         instance.name(),
                         type_name
                     );
