@@ -3,7 +3,8 @@ use std::{collections::HashSet, range::Range};
 
 use anyhow::{Context, Result};
 use chrono::{NaiveDate, NaiveTime, Timelike};
-use either::Either;
+
+// use either::Either;
 use parking_lot::RwLockReadGuard;
 use polars::{frame::row::Row, prelude::*};
 use rayon::prelude::*;
@@ -105,21 +106,39 @@ pub(crate) fn parse_fixed(parsers: &[ResponseParser], row: &str) -> Result<Row<'
     };
     // A fallible collect cannot use the iterator's exact length to reserve space.
     // Reserve once rather than repeatedly reallocating wide respondent rows.
-    let mut values = Vec::with_capacity(parsers.len());
-    for parser in parsers {
-        let field = if ascii {
-            row.get(parser.start..parser.end)
-        } else {
-            offsets
-                .get(parser.start)
-                .zip(offsets.get(parser.end))
-                .and_then(|(&start, &end)| row.get(start..end))
-        }
-        .with_context(|| {
-            format!("Invalid data range for question '{}'", parser.question_name)
-        })?;
-        values.push(parser.parse(field)?);
-    }
+    // let mut values = Vec::with_capacity(parsers.len());
+
+    let values = parsers.par_iter()
+        .map(|parser| {
+            let field = if ascii {
+                    row.get(parser.start..parser.end)
+                } else {
+                    offsets
+                        .get(parser.start)
+                        .zip(offsets.get(parser.end))
+                        .and_then(|(&start, &end)| row.get(start..end))
+                }
+                .ok_or(PolarsError::ColumnNotFound(
+                    format!("Invalid data range for question '{}'", parser.question_name).into()
+                ))?;
+
+                parser.parse(field)
+        })
+        .collect::<PolarsResult<Vec<_>>>()?;
+    // for parser in parsers {
+    //     let field = if ascii {
+    //         row.get(parser.start..parser.end)
+    //     } else {
+    //         offsets
+    //             .get(parser.start)
+    //             .zip(offsets.get(parser.end))
+    //             .and_then(|(&start, &end)| row.get(start..end))
+    //     }
+    //     .with_context(|| {
+    //         format!("Invalid data range for question '{}'", parser.question_name)
+    //     })?;
+    //     values.push(parser.parse(field)?);
+    // }
     Ok(Row(values))
 }
 
@@ -127,22 +146,57 @@ pub(crate) fn parse_csv(
     parsers: &[ResponseParser],
     row: &csv::StringRecord,
 ) -> Result<Row<'static>> {
-    let mut values = Vec::with_capacity(parsers.len());
-    for parser in parsers {
-        let field = row.get(parser.start).with_context(|| {
-            format!(
-                "Missing CSV field for question '{}': requires field {} ({} fields present)",
-                parser.question_name,
-                parser.start + 1,
-                row.len(),
-            )
-        })?;
-        values.push(parser.parse(field)?);
-    }
+    // let mut values = Vec::with_capacity(parsers.len());
+
+    let values = parsers.par_iter()
+        .map(|parser| {
+            let field = row.get(parser.start)
+            .ok_or(PolarsError::ColumnNotFound(
+                format!(
+                    "Missing CSV field for question '{}': requires field {} ({} fields present)",
+                    parser.question_name,
+                    parser.start + 1,
+                    row.len(),
+                ).into()
+            ))?;
+            parser.parse(field)
+        })
+        .collect::<PolarsResult<Vec<_>>>()?;
+
+    // for parser in parsers {
+    //     let field = row.get(parser.start).with_context(|| {
+    //         format!(
+    //             "Missing CSV field for question '{}': requires field {} ({} fields present)",
+    //             parser.question_name,
+    //             parser.start + 1,
+    //             row.len(),
+    //         )
+    //     })?;
+    //     values.push(parser.parse(field)?);
+    // }
     Ok(Row(values))
 }
 
-/// Bounded, ordered batches. Small inputs avoid Rayon scheduling overhead.
+// pub(crate) fn parse_rows_single_thread<I, F>(
+//     mut records: I,
+//     parse: F,
+// ) -> impl Iterator<Item = Result<Row<'static>>>
+// where
+//     I: Iterator,
+//     I::Item: Send,
+//     F: Fn(I::Item) -> Result<Row<'static>> + Sync,
+// {
+//     let mut finished = false;
+//     std::iter::from_fn(move || {
+//         if finished {
+//             return None;
+//         }
+//         let row = parse(records.next()?);
+//         finished = row.is_err();
+//         Some(row)
+//     })
+// }
+
 pub(crate) fn parallel_rows<I, F>(
     mut records: I,
     parse: F,
@@ -152,38 +206,44 @@ where
     I::Item: Send,
     F: Fn(I::Item) -> Result<Row<'static>> + Sync,
 {
-    if rayon::current_num_threads() == 1 {
-        let mut finished = false;
-        return Either::Left(std::iter::from_fn(move || {
-            if finished {
-                return None;
-            }
-            let row = parse(records.next()?);
-            finished = row.is_err();
-            Some(row)
-        }));
-    }
+    // if rayon::current_num_threads() == 1 {
+    //     let mut finished = false;
+    //     return Either::Left(std::iter::from_fn(move || {
+    //         if finished {
+    //             return None;
+    //         }
+    //         let row = parse(records.next()?);
+    //         finished = row.is_err();
+    //         Some(row)
+    //     }));
+    // }
 
     let mut finished = false;
-    Either::Right(
-        std::iter::from_fn(move || {
-            if finished {
-                return None;
-            }
-            let mut batch = Vec::with_capacity(1024);
-            batch.extend(records.by_ref().take(1024));
-            if batch.is_empty() {
-                return None;
-            }
-            let mut rows: Vec<_> = batch.into_par_iter().map(&parse).collect();
+    // Either::Right(
+    std::iter::from_fn(move || {
+        if finished {
+            return None;
+        }
+        let mut batch = Vec::with_capacity(1024);
+        batch.extend(records.by_ref().take(1024));
+        
+        if batch.is_empty() {
+            return None;
+        }
+        
+        let mut rows: Vec<_> = batch
+            .into_par_iter()
+            .map(&parse)
+            .collect();
+
             if let Some(index) = rows.iter().position(Result::is_err) {
-                rows.truncate(index + 1);
-                finished = true;
-            }
-            Some(rows)
-        })
-        .flatten(),
-    )
+            rows.truncate(index + 1);
+            finished = true;
+        }
+        Some(rows)
+    })
+    .flatten()
+    // )
 }
 
 pub(crate) fn parse_cell_value(
