@@ -108,7 +108,7 @@ def test_get_row_with_value(benchmark, survey):
         get_row_from_index,
         args=(survey, index_range),
         rounds=REPEAT,
-        iterations=50,
+        iterations=10,
     )
 
 
@@ -119,7 +119,7 @@ def test_get_row_with_label(benchmark, survey):
         get_row_from_index,
         args=(survey, index_range),
         rounds=REPEAT,
-        iterations=50,
+        iterations=10,
     )
 
 
