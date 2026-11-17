@@ -2,13 +2,12 @@
 #![doc = include_str!("../doc/datamap_question_rs.md")]
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     range::Range,
     str::FromStr,
 };
 
 use anyhow::{Context, Result};
-use chrono::{NaiveDate, NaiveTime, Timelike};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
@@ -17,7 +16,11 @@ use quick_xml::{events::BytesText, writer::Writer};
 use strum::{AsRefStr, EnumIter, EnumString};
 
 use crate::{
-    EventLog, datamap::{Code, Response, Text, parsing::{ResponseParser, parse_cell_value}}, error::{self, DataReadError, InternalError, InvalidArg, RangeError}, prelude::{DeepCopy, *}, utils::{ArcLock, lock_it_up},
+    EventLog, 
+    datamap::{Code, Response, Text, parsing::ResponseParser}, 
+    error::{self, InternalError, InvalidArg, RangeError}, 
+    prelude::{DeepCopy, *}, 
+    utils::{ArcLock, lock_it_up},
 };
 #[cfg(feature = "pyo3")]
 use crate::{

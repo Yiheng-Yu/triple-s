@@ -11,7 +11,7 @@ use rayon::prelude::*;
 use crate::{Question, Spread, datamap::QuestionType, error::DataReadError};
 
 #[derive(Debug)]
-struct SubfieldArgs {
+pub(crate) struct SubfieldArgs {
     pub width: Option<u32>,
     pub subfields: usize,
 }
@@ -487,6 +487,7 @@ mod tests {
                     .collect::<Vec<_>>();
                 black_box(values);
             }
+
             eprintln!("{format} legacy sequential: {:?}", start.elapsed());
             for threads in [1, 4] {
                 let pool = rayon::ThreadPoolBuilder::new()
