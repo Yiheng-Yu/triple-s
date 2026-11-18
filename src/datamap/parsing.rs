@@ -1,7 +1,7 @@
 //! Immutable parsing plans shared by fixed-width and CSV batch workers.
 use std::{collections::HashSet, range::Range};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime, Timelike};
 
 // use either::Either;
@@ -104,9 +104,7 @@ pub(crate) fn parse_fixed(parsers: &[ResponseParser], row: &str) -> Result<Row<'
             .chain(std::iter::once(row.len()))
             .collect()
     };
-    // A fallible collect cannot use the iterator's exact length to reserve space.
-    // Reserve once rather than repeatedly reallocating wide respondent rows.
-    // let mut values = Vec::with_capacity(parsers.len());
+    // Keep worker results in question order before choosing the first error.
 
     let values = parsers.par_iter()
         .map(|parser| {
@@ -118,12 +116,14 @@ pub(crate) fn parse_fixed(parsers: &[ResponseParser], row: &str) -> Result<Row<'
                         .zip(offsets.get(parser.end))
                         .and_then(|(&start, &end)| row.get(start..end))
                 }
-                .ok_or(PolarsError::ColumnNotFound(
+                .ok_or_else(|| PolarsError::ColumnNotFound(
                     format!("Invalid data range for question '{}'", parser.question_name).into()
                 ))?;
 
                 parser.parse(field)
         })
+        .collect::<Vec<_>>()
+        .into_iter()
         .collect::<PolarsResult<Vec<_>>>()?;
     // for parser in parsers {
     //     let field = if ascii {
@@ -146,12 +146,12 @@ pub(crate) fn parse_csv(
     parsers: &[ResponseParser],
     row: &csv::StringRecord,
 ) -> Result<Row<'static>> {
-    // let mut values = Vec::with_capacity(parsers.len());
+    // Keep worker results in question order before choosing the first error.
 
     let values = parsers.par_iter()
         .map(|parser| {
             let field = row.get(parser.start)
-            .ok_or(PolarsError::ColumnNotFound(
+            .ok_or_else(|| PolarsError::ColumnNotFound(
                 format!(
                     "Missing CSV field for question '{}': requires field {} ({} fields present)",
                     parser.question_name,
@@ -161,6 +161,8 @@ pub(crate) fn parse_csv(
             ))?;
             parser.parse(field)
         })
+        .collect::<Vec<_>>()
+        .into_iter()
         .collect::<PolarsResult<Vec<_>>>()?;
 
     // for parser in parsers {
@@ -354,9 +356,10 @@ pub(crate) fn parse_cell_value(
             let data_read = data_read
                 .map_err(|err| PolarsError::ComputeError(format!("{:#?}", err).into()))?;
 
-            let series = UInt32Chunked::from_iter_values("".into(), data_read.into_iter())
-                .sort(false)
-                .into_series();
+            // Sort locally so parsing workers don't switch to Polars' thread pool.
+            let mut values: Vec<_> = data_read.into_iter().collect();
+            values.sort_unstable();
+            let series = UInt32Chunked::from_vec("".into(), values).into_series();
             Ok(AnyValue::List(series))
         }
     }

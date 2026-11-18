@@ -439,7 +439,10 @@ impl Record {
 
                     content
                         .par_iter()
-                        .try_for_each(|item| item.read().validate_csv_entry(&row))
+                        .map(|item| item.read().validate_csv_entry(&row))
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .collect::<Result<()>>()
                         .with_context(|| {
                             format!("When trying to extract data from line {}", index)
                         })?;
@@ -453,7 +456,10 @@ impl Record {
                     let line = line?;
                     content
                         .par_iter()
-                        .try_for_each(|item| item.read().validate_asc_entry(&line))
+                        .map(|item| item.read().validate_asc_entry(&line))
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .collect::<Result<()>>()
                         .with_context(|| {
                             format!("When trying to extract data from line {}", index)
                         })?;

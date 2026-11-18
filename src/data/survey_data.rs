@@ -252,7 +252,13 @@ impl SurveyData {
     /// ```
     pub fn num_response(&self) -> PolarsResult<usize> {
         match self.frame.as_ref() {
-            Some(lf) => Ok(lf.clone().collect()?.height()),
+            Some(lf) => lf
+                .clone()
+                .select([len()])
+                .collect()?
+                .column("len")?
+                .get(0)?
+                .try_extract(),
             None => Ok(0),
         }
     }

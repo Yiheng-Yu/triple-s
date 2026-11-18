@@ -25,7 +25,7 @@ def test_load_csv_example(datamap):
     assert result["Q1.b"].iloc[0] == time(11, 20)
     assert result["Q2"].tolist() == [0, 2, 1]
     assert result["Q3"].tolist() == [[1, 3, 5, 9], [2], [1, 2, 9]]
-    assert result["Q3.a"].tolist() == ["Nottingham Goose Fair", "", '"Heritage" Zone']
+    assert result["Q3.a"].tolist() == ["Nottingham Goose Fair", pd.NA, '"Heritage" Zone']
     assert result["Q4"].tolist() == [2, 9, 1]
     assert result["Q5"].tolist() == [[1, 5], [2], [2, 9]]
     assert result["Q6"].tolist() == [25, 100, 999]
@@ -35,6 +35,24 @@ def test_load_csv_example(datamap):
     assert result["Q8"].iloc[2] == "C"
     assert result["WT"].tolist() == pytest.approx([1.131, 0.9921, 1.0089])
     assert data.to_polars().shape == (3, 12)
+
+
+def test_csv_multiple_choice_batches(tmp_path, datamap):
+    with open(
+        "tests/sss-examples/sss-2.0/example2.csv", encoding="utf-8", newline=""
+    ) as source:
+        header, first, *_ = csv.reader(source)
+
+    path = tmp_path / "responses.csv"
+    with path.open("w", encoding="utf-8", newline="") as output:
+        writer = csv.writer(output)
+        writer.writerow(header)
+        writer.writerows([first] * 2048)
+
+    result = read_data(datamap, str(path)).to_polars()
+    assert result.shape == (2048, 12)
+    assert result["Q3"].to_list() == [[1, 3, 5, 9]] * 2048
+    assert result["Q5"].to_list() == [[1, 5]] * 2048
 
 
 @pytest.mark.parametrize("skip", [0, 1, 2])

@@ -32,7 +32,7 @@ use crate::{
 use crate::{
     QuestionType,
     config::ResponseDisplay,
-    data::{config::Config, operation::frequency_counts, survey_data::SurveyData},
+    data::{config::Config, survey_data::SurveyData},
     datamap::Question,
     utils::ArcLock,
 };
@@ -180,17 +180,30 @@ impl QuestionData {
         let question_name = self.name();
         let column_name = name.unwrap_or("count");
         let raw_data = self.to_value_column()?;
-
-        // First get base sizes (total of not-null values)
-        // let base_size = count_not_null(&raw_data, column_name)?;
-
-        // Then we do `value_counts`
-        let result = frequency_counts(
-            DataFrame::new(raw_data.len(), vec![raw_data])?.lazy(),
-            &question_name,
-            Some(column_name),
-            true,
-        )?;
+        // Count respondents before exploding multiple-choice answers.
+        let base_size = (raw_data.len() - raw_data.null_count()) as IdxSize;
+        let values = if matches!(raw_data.dtype(), DataType::List(_)) {
+            raw_data.explode(ExplodeOptions {
+                empty_as_null: true,
+                keep_nulls: true,
+            })?
+        } else {
+            raw_data
+        };
+        let counts = values
+            .drop_nulls()
+            .as_materialized_series()
+            .value_counts(false, false, column_name.into(), false)?
+            .sort(
+                [&question_name],
+                SortMultipleOptions::default().with_multithreaded(false),
+            )?;
+        let mut result = DataFrame::new(1, vec![
+            Column::full_null(question_name.clone().into(), 1, values.dtype()),
+            Column::new(column_name.into(), [base_size]),
+        ])?;
+        result.vstack_mut(&counts)?;
+        let result = result.lazy();
 
         // append data label
         let (row_old, row_new): (Vec<AnyValue<'static>>, Vec<String>) = self

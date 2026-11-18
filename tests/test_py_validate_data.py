@@ -107,3 +107,30 @@ def test_replacement_does_not_accept_invalid_numeric_values(tmp_path, extension)
         record.validate_data(str(path))
     with pytest.raises(ValueError, match="invalid float literal"):
         read_data(Datamap.from_dict({"record": record}), str(path))
+
+
+@pytest.mark.parametrize("extension", ["asc", "csv"])
+@pytest.mark.parametrize("operation", ["read", "validate"])
+@pytest.mark.parametrize("invalid", ["missing", "value"])
+def test_parallel_errors_follow_question_order(tmp_path, extension, operation, invalid):
+    # The first question is deliberately after the others in the data file.
+    record = Record.from_dict(
+        {
+            "content": [
+                Question(f"Q{position}", "quantity", location=Location(position))
+                for position in [4, 2, 3]
+            ]
+        }
+    )
+    path = tmp_path / f"responses.{extension}"
+    separator = "," if extension == "csv" else ""
+    fields = ["1"] if invalid == "missing" else ["1", "x", "y", "z"]
+    path.write_text(separator.join(fields) + "\n")
+    datamap = Datamap.from_dict({"record": record})
+
+    for _ in range(20):
+        with pytest.raises(ValueError, match="question 'Q4'"):
+            if operation == "read":
+                read_data(datamap, str(path))
+            else:
+                record.validate_data(str(path))

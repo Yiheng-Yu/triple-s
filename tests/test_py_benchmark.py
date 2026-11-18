@@ -1,4 +1,5 @@
 import random
+from itertools import islice
 
 import pytest
 from triple_s import read_triple_s
@@ -14,7 +15,7 @@ REPEAT = 100
 MAX_ROW_ITER = 250
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def survey():
     return read_triple_s(PATH_SSS_EXAMPLE_STACK_OVERFLOW, PATH_CSV_EXAMPLE_STACK_OVERFLOW)
 
@@ -29,7 +30,8 @@ def read_stack_overflow_survey():
 def test_read_triple_s_from_csv(benchmark):
     benchmark.pedantic(
         read_stack_overflow_survey,
-        iterations=3,
+        iterations=1,
+        rounds=3,
     )
 
 
@@ -42,12 +44,16 @@ def test_read_sss_example_asc(benchmark):
 
 
 # =============================================================================
-# Export to polars/ pandas
+# Export to Polars
 # =============================================================================
 
 
 def dump_to_polars(survey):
-    return survey.data.to_polars()
+    return survey.to_polars()
+
+
+def test_dump_raw_data_to_polars(benchmark, survey):
+    _ = benchmark(survey.data.to_polars)
 
 
 def test_dump_to_polars_response_value(benchmark, survey):
@@ -66,28 +72,22 @@ def test_dump_to_polars_response_label(benchmark, survey):
 
 
 def iter_rows_with_value(survey):
-    survey.response_display = "value"
-    for index, row in enumerate(survey.iter_rows()):
-        if index <= MAX_ROW_ITER:
-            _ = row
-        else:
-            return
+    for row in islice(survey.iter_rows(), MAX_ROW_ITER):
+        _ = row
 
 
 def test_iter_rows_with_value(benchmark, survey):
+    survey.response_display = "value"
     _ = benchmark(iter_rows_with_value, survey)
 
 
 def iter_rows_with_label(survey):
+    for row in islice(survey.iter_rows(), MAX_ROW_ITER):
+        _ = row
+
+
+def test_iter_rows_with_label(benchmark, survey):
     survey.response_display = "label"
-    for index, row in enumerate(survey.iter_rows()):
-        if index <= MAX_ROW_ITER:
-            _ = row
-        else:
-            return
-
-
-def test_iter_rows_with_labbel(benchmark, survey):
     _ = benchmark(iter_rows_with_label, survey)
 
 
@@ -108,7 +108,7 @@ def test_get_row_with_value(benchmark, survey):
         get_row_from_index,
         args=(survey, index_range),
         rounds=REPEAT,
-        iterations=10,
+        iterations=1,
     )
 
 
@@ -119,12 +119,12 @@ def test_get_row_with_label(benchmark, survey):
         get_row_from_index,
         args=(survey, index_range),
         rounds=REPEAT,
-        iterations=10,
+        iterations=1,
     )
 
 
 # =============================================================================
-# Iter by column
+# Iterate all raw rows and question views
 # =============================================================================
 
 

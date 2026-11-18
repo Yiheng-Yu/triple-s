@@ -288,6 +288,22 @@ def test_value_counts_values_labels_and_nulls(survey, question, values, expected
     assert survey[question].value_counts().to_dicts() == expected
 
 
+@pytest.mark.parametrize("question, values, dtype, base", [
+    ("choice", [], pl.UInt32, 0),
+    ("choice", [None, None], pl.UInt32, 0),
+    ("multi", [], pl.List(pl.UInt32), 0),
+    ("multi", [None, None], pl.List(pl.UInt32), 0),
+    ("multi", [[], [], None], pl.List(pl.UInt32), 2),
+])
+def test_value_counts_without_selected_answers(survey, question, values, dtype, base):
+    survey.data = SurveyData.from_polars(
+        pl.DataFrame({question: pl.Series(values, dtype=dtype)})
+    )
+    assert survey[question].value_counts().to_dicts() == [
+        {question: "Null", "count": base}
+    ]
+
+
 @pytest.mark.parametrize("format", ["polars", "pandas", config.DataFrameFormat.Polars, config.DataFrameFormat.Pandas])
 def test_value_counts_format_and_count_name(survey, format):
     question = survey["choice"]
