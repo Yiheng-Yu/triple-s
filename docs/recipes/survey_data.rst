@@ -132,6 +132,39 @@ Both totals are shown by default. You can switch them on or off separately:
        "Q2", ["Q4"], show_row_total=False, show_column_total=True,
    )
 
+Return proportions instead of counts
+************************************
+
+Set ``normalise=True`` to return relative frequencies normalised to 1.0,
+using each column's total:
+
+.. code-block:: python
+
+   table = survey.crosstab("Q2", ["Q4"], normalise=True)
+   print(table.to_dicts())
+
+.. code-block:: text
+
+   [{'label': 'Total', 'total': 4.0, 'Q4 - North': 2.0, 'Q4 - South': 2.0},
+    {'label': 'Yes', 'total': 0.5, 'Q4 - North': 0.5, 'Q4 - South': 0.5},
+    {'label': 'No', 'total': 0.5, 'Q4 - North': 0.5, 'Q4 - South': 0.5}]
+
+This gives you proportions such as ``0.5`` for 50%, with the original
+counts in the first row. Count columns become floating-point columns;
+response codes and labels stay unchanged. The default, ``normalise=False``,
+returns counts.
+
+You can hide the totals row without changing the proportions:
+
+.. code-block:: python
+
+   table = survey.crosstab(
+       "Q2", ["Q4"], normalise=True, show_column_total=False,
+   )
+
+For multiple-choice row questions, the proportions can add up to more
+than 1.0 because each selection is counted separately.
+
 If you want a pandas dataframe instead, you can set the output format for
 this call:
 

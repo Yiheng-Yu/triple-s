@@ -325,7 +325,8 @@ impl Survey {
     ///         question_name: "Age",
     ///         columns: &["AIFreq_1", ],
     ///         show_row_total: true,
-    ///         show_column_total: true
+    ///         show_column_total: true,
+    ///         normalise: false,
     ///     },
     ///     LabelOptions {
     ///         include_response_codes: false,
@@ -370,14 +371,16 @@ impl Survey {
         let first = match headers.next() {
             None => DataFrame::empty().lazy(),
             Some(&first) => {
-                let tab =
-                    operation::create_crosstab(&original, question_name, first, args.show_column_total)?;
+                let tab = operation::create_crosstab(
+                    &original, question_name, first, args.show_column_total, args.normalise,
+                )?;
                 self.label_output_column(tab, first)?
             }
         };
         let mut output = headers.try_fold(first, |left, &colname| {
-            let right =
-                operation::create_crosstab(&original, question_name, colname, args.show_column_total)?;
+            let right = operation::create_crosstab(
+                &original, question_name, colname, args.show_column_total, args.normalise,
+            )?;
             let right = self.label_output_column(right, colname)?;
             Ok::<LazyFrame, PolarsError>(left.join(
                 right,
@@ -403,6 +406,7 @@ impl Survey {
                 question_name,
                 Some(label_options.col_count.unwrap_or(LabelOptions::COUNT)),
                 args.show_column_total,
+                args.normalise,
             )?
             .join(
                 output,
@@ -842,6 +846,8 @@ impl Survey {
     /// You can compare one question's answers by one or more other questions.
     /// Response labels are always shown. For multiple-choice questions, each
     /// selected response is counted separately.
+    /// Set ``normalise=True`` to return proportions instead of counts, keeping
+    /// the first row as total counts.
     ///
     /// Args:
     ///     row (str): Name of the question to show as rows.
@@ -874,6 +880,10 @@ impl Survey {
     ///         Choose a Polars or pandas dataframe, using a string or a
     ///         ``config.DataFrameFormat`` member. Default ``None`` follows
     ///         ``survey.dataframe_format`` without changing that setting.
+    ///     normalise (bool, *optional*):
+    ///         Return counts as relative frequencies normalised to 1.0, using
+    ///         each column's total. The first row keeps the original total counts.
+    ///         For example, ``0.75`` represents 75%. Default ``False``.
     ///
     /// Returns:
     ///     polars.DataFrame | pandas.DataFrame: Row labels, optional question and code
@@ -883,6 +893,9 @@ impl Survey {
     ///     You can pass ``None`` for any keyword option to use its default.
     ///     Missing answers are excluded from response counts. Empty multiple-choice
     ///     lists count towards the overall respondent total but add no selections.
+    ///     Normalised results use floating-point columns. Totals are used as
+    ///     denominators even when ``show_column_total=False``. For multiple-choice
+    ///     row questions, proportions can add up to more than 1.0.
     ///
     /// Examples:
     ///     Suppose ``Q2`` asks "Do you cycle to work?" and ``Q4`` records the region.
@@ -913,6 +926,7 @@ impl Survey {
             include_response_codes: "bool" = false,
             include_question_name: "bool" = false,
             output: "'polars'|'pandas'|DataFrameFormat"=None,
+            normalise: "bool"=false,
         )
     )]
     fn py_crosstab<'py>(
@@ -928,6 +942,7 @@ impl Survey {
         include_response_codes: Option<bool>,
         include_question_name: Option<bool>,
         output: Option<Bound<'py, PyAny>>,
+        normalise: Option<bool>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let columns: Vec<&str> = column
             .as_deref()
@@ -952,6 +967,7 @@ impl Survey {
             columns: &columns,
             show_row_total: show_row_total.unwrap_or(true),
             show_column_total: show_column_total.unwrap_or(true),
+            normalise: normalise.unwrap_or(false),
         };
         let frame = self.crosstab(arguments, label_options)
             .map_err(PyPolarsErr::Polars)?;

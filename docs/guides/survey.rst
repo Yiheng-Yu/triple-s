@@ -136,6 +136,16 @@ You can also pass several questions as columns:
    table = survey.crosstab("Q2", ["Q4", "Q5"])
 
 
+Normalise counts
+~~~~~~~~~~~~~~~~
+
+You can return counts as relative frequencies normalised to the column total:
+
+.. code-block:: python
+
+   table = survey.crosstab("Q2", ["Q4"], normalise=True)
+
+
 Include response codes and question names
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
