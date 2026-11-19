@@ -494,7 +494,8 @@ mod tests {
             let parsed = parser.parse(field).unwrap();
             assert_eq!(parsed, correct);
         }
-        assert!(parse_cell_value("", &QuestionType::None, false, None).is_err());
+        assert_eq!(parse_cell_value("", &QuestionType::None, false, None).unwrap(), AnyValue::Null);
+        assert!(parse_cell_value("value", &QuestionType::None, false, None).is_err());
     }
 
     #[test]

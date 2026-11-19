@@ -62,4 +62,4 @@ Methods
 
 .. automethod:: Survey.to_pandas(response_label: bool | None = None) -> pandas.DataFrame
 
-.. automethod:: Survey.crosstab(row: str, column: list[str] | None = None, show_row_total: bool | None = None, show_column_total: bool | None = None, colname_stats: str | None = 'total', colname_label: str | None = 'label', colname_code: str | None = 'code', include_response_codes: bool | None = False, include_question_name: bool | None = False, output: str | triple_s.config.DataFrameFormat | None = None) -> polars.DataFrame | pandas.DataFrame
+.. automethod:: Survey.crosstab(row: str, column: list[str] | None = None, show_row_total: bool | None = None, show_column_total: bool | None = None, colname_stats: str | None = 'total', colname_label: str | None = 'label', colname_code: str | None = 'code', include_response_codes: bool | None = False, include_question_name: bool | None = False, output: str | triple_s.config.DataFrameFormat | None = None, normalise: bool | None = False) -> polars.DataFrame | pandas.DataFrame

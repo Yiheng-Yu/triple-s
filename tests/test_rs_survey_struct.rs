@@ -116,16 +116,15 @@ fn test_crosstab_column_groups_and_row_total() {
 
     let expected_body = df![
         "label" => [
-            "Total",
             "No, this is the first visit",
             "I have visited before within the year",
             "I visited before that",
         ],
-        "total" => [None, Some(2u32), Some(1), Some(1)],
-        "Q4 - Very Good" => [1u32, 1, 1, 0],
-        "Q4 - Good" => [0u32, 1, 0, 1],
-        "Q5 - Sherwood Forest" => [1u32, 1, 1, 0],
-        "Q5 - Nottingham Castle" => [0u32, 2, 0, 1],
+        "total" => [2u32, 1, 1],
+        "Q4 - Very Good" => [1u32, 1, 0],
+        "Q4 - Good" => [1u32, 0, 1],
+        "Q5 - Sherwood Forest" => [1u32, 1, 0],
+        "Q5 - Nottingham Castle" => [2u32, 0, 1],
     ]
     .unwrap();
     let group_labels = [
@@ -143,6 +142,7 @@ fn test_crosstab_column_groups_and_row_total() {
                     columns: &["Q4", "Q5"][..num_groups],
                     show_row_total,
                     show_column_total: false,
+                    normalise: false,
                 }, LabelOptions::default())
                 .unwrap();
 
@@ -200,6 +200,7 @@ fn test_crosstab_label_options() {
                         columns: &["Q4"],
                         show_row_total: true,
                         show_column_total: true,
+                        normalise: false,
                     },
                     LabelOptions::new()
                         .with_include_question_name(true)
@@ -214,6 +215,64 @@ fn test_crosstab_label_options() {
             assert!(result.equals_missing(&expected), "{result}\nexpected:\n{expected}");
         }
     }
+}
+
+#[test]
+fn test_crosstab_normalise() -> PolarsResult<()> {
+    let survey = get_survey_struct();
+    *survey.data_mut() = SurveyData::from_polars(df![
+        "Q2" => [0u32, 1, 1],
+        "Q4" => [1u32, 1, 2],
+        "Q5" => [
+            Series::new("".into(), [1u32, 2]),
+            Series::new("".into(), [1u32]),
+            Series::new("".into(), [2u32]),
+        ],
+    ]?)?;
+
+    for num_groups in 1..=2 {
+        for show_row_total in [false, true] {
+            for show_column_total in [false, true] {
+                let mut expected = df![
+                    "response" => [None, Some(0u32), Some(1)],
+                    "answer" => [
+                        "Total", "No, this is the first visit", "I have visited before within the year",
+                    ],
+                    "base" => [3.0, 1.0 / 3.0, 2.0 / 3.0],
+                    "Q4 - Very Good" => [2.0, 0.5, 0.5],
+                    "Q4 - Good" => [1.0, 0.0, 1.0],
+                    "Q5 - Sherwood Forest" => [2.0, 0.5, 0.5],
+                    "Q5 - Nottingham Castle" => [2.0, 0.5, 0.5],
+                ]?;
+                if !show_row_total {
+                    expected.drop_in_place("base")?;
+                }
+                if num_groups == 1 {
+                    expected.drop_in_place("Q5 - Sherwood Forest")?;
+                    expected.drop_in_place("Q5 - Nottingham Castle")?;
+                }
+                if !show_column_total {
+                    expected = expected.slice(1, 2);
+                }
+                let result = survey.crosstab(
+                    AnalysisOptions {
+                        question_name: "Q2",
+                        columns: &["Q4", "Q5"][..num_groups],
+                        show_row_total,
+                        show_column_total,
+                        normalise: true,
+                    },
+                    LabelOptions::new()
+                        .with_include_response_codes(true)
+                        .with_col_code(Some("response"))
+                        .with_col_label(Some("answer"))
+                        .with_col_count(Some("base")),
+                )?;
+                assert!(result.equals_missing(&expected), "{result}\nexpected:\n{expected}");
+            }
+        }
+    }
+    Ok(())
 }
 
 #[test]
@@ -258,6 +317,7 @@ fn test_crosstab_column_totals_count_respondents() {
             columns: &columns,
             show_row_total: true,
             show_column_total: false,
+            normalise: false,
         }, LabelOptions::default())
         .unwrap();
     let result = survey
@@ -266,6 +326,7 @@ fn test_crosstab_column_totals_count_respondents() {
             columns: &columns,
             show_row_total: true,
             show_column_total: true,
+            normalise: false,
         }, LabelOptions::default())
         .unwrap();
 
@@ -318,6 +379,7 @@ fn test_read_stack_overflow_survey() {
             columns: &[topbreak], //"JobEaseAI_1"],
             show_row_total: true,
             show_column_total: true,
+            normalise: false,
         },
 
         LabelOptions {
