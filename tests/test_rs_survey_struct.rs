@@ -112,13 +112,13 @@ fn test_crosstab_column_groups_and_row_total() {
     .unwrap();
 
     let expected_body = df![
-        "Q2" => [
-            "Null",
+        "label" => [
+            "Total",
             "No, this is the first visit",
             "I have visited before within the year",
             "I visited before that",
         ],
-        "Q2 - Total" => [None, Some(2u32), Some(1), Some(1)],
+        "total" => [None, Some(2u32), Some(1), Some(1)],
         "Q4 - Very Good" => [1u32, 1, 1, 0],
         "Q4 - Good" => [0u32, 1, 0, 1],
         "Q5 - Sherwood Forest" => [1u32, 1, 1, 0],
@@ -143,19 +143,72 @@ fn test_crosstab_column_groups_and_row_total() {
                 }, LabelOptions::default())
                 .unwrap();
 
-            let mut names = vec!["Q2"];
+            let mut names = vec!["label"];
             if show_row_total {
-                names.push("Q2 - Total");
+                names.push("total");
             }
             names.extend_from_slice(&group_labels[..num_groups * 2]);
             let expected_case = expected_body.select(names).unwrap();
-            let result = result.sort(["Q2"], Default::default()).unwrap();
-            let expected_case = expected_case.sort(["Q2"], Default::default()).unwrap();
+            let result = result.sort(["label"], Default::default()).unwrap();
+            let expected_case = expected_case.sort(["label"], Default::default()).unwrap();
 
             assert!(
                 result.equals_missing(&expected_case),
                 "groups={num_groups}, total={show_row_total}:\n{result}\nexpected:\n{expected_case}"
             );
+        }
+    }
+}
+
+#[test]
+fn test_crosstab_label_options() {
+    let survey = get_survey_struct();
+    *survey.data_mut() = SurveyData::from_polars(
+        df!["Q2" => [0u32, 1, 1], "Q4" => [1u32, 1, 2]].unwrap(),
+    )
+    .unwrap();
+
+    for (question, code, label, total) in [
+        ("question", "code", "label", "total"),
+        ("item", "value", "answer", "n"),
+    ] {
+        for fill_question_name in [false, true] {
+            let expected = df![
+                question => if fill_question_name {
+                    [Some("Q2"), Some("Q2"), Some("Q2")]
+                } else {
+                    [Some("Q2"), None, None]
+                },
+                code => [None, Some(0u32), Some(1)],
+                label => [
+                    "Total",
+                    "No, this is the first visit",
+                    "I have visited before within the year",
+                ],
+                total => [3u32, 1, 2],
+                "Q4 - Very Good" => [2u32, 1, 1],
+                "Q4 - Good" => [1u32, 0, 1],
+            ]
+            .unwrap();
+            let result = survey
+                .crosstab(
+                    AnalysisOptions {
+                        question_name: "Q2",
+                        columns: &["Q4"],
+                        show_row_total: true,
+                        show_column_total: true,
+                    },
+                    LabelOptions::new()
+                        .with_include_question_name(true)
+                        .with_fill_question_name_column(fill_question_name)
+                        .with_include_code_value(true)
+                        .with_col_question_name(Some(question))
+                        .with_col_code(Some(code))
+                        .with_col_label(Some(label))
+                        .with_col_count(Some(total)),
+                )
+                .unwrap();
+            assert!(result.equals_missing(&expected), "{result}\nexpected:\n{expected}");
         }
     }
 }
@@ -184,8 +237,8 @@ fn test_crosstab_column_totals_count_respondents() {
     )
     .unwrap();
     let expected_totals = df![
-        "Q5" => ["Null"],
-        "Q5 - Total" => [5u32],
+        "label" => ["Total"],
+        "total" => [5u32],
         "Q4 - Very Good" => [3u32],
         "Q4 - Good" => [2u32],
         "null" => [None::<u32>],
@@ -218,8 +271,8 @@ fn test_crosstab_column_totals_count_respondents() {
         "column totals should count respondent rows, not exploded answers:\n{result}"
     );
     let body_columns = [
-        "Q5",
-        "Q5 - Total",
+        "label",
+        "total",
         "Q4 - Very Good",
         "Q4 - Good",
         "null",
@@ -231,12 +284,12 @@ fn test_crosstab_column_totals_count_respondents() {
         .slice(1, body.height())
         .select(body_columns)
         .unwrap()
-        .sort(["Q5"], Default::default())
+        .sort(["label"], Default::default())
         .unwrap();
     let expected_body = body
         .select(body_columns)
         .unwrap()
-        .sort(["Q5"], Default::default())
+        .sort(["label"], Default::default())
         .unwrap();
     assert!(
         result_body.equals_missing(&expected_body),
@@ -256,12 +309,19 @@ fn test_read_stack_overflow_survey() {
     let topbreak = "AIFreq_1";
 
     let res = survey
-        .crosstab(AnalysisOptions {
+        .crosstab(
+            AnalysisOptions {
             question_name: row,
             columns: &[topbreak], //"JobEaseAI_1"],
             show_row_total: true,
             show_column_total: true,
-        }, LabelOptions::default())
+        },
+
+        LabelOptions {
+            include_code_value: true,
+            ..Default::default()
+        }
+    )
         .unwrap();
     println!("Crosstab:");
     unsafe {

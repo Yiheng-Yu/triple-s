@@ -2,6 +2,7 @@
 
 use polars::prelude::*;
 
+
 /// Count unique values of this Series and a column "counts" with dtype IdxType
 ///
 /// This function basically calls [`polars::Series::value_counts`] under the hood, apart from multi-choice
@@ -69,6 +70,18 @@ pub(crate) fn frequency_counts(
         Ok(to_count)
     }
 }
+
+
+
+// pub(crate) fn value_counts_by(
+//     original: &LazyFrame,
+//     target: &str,
+//     group_by: &str
+// ) -> LazyFrame {
+//     original.clone()
+//         .group_by([col(group_by)])
+//         .agg([col(target).value_counts(true, true, VALUE_COUNTS.into(), false)])
+// }
 
 /// This function returns a lazyframe to be collected later (basically needs to add text labels)
 ///

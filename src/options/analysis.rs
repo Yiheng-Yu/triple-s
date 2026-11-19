@@ -120,6 +120,19 @@ impl<'a> LabelOptions<'a> {
         self
     }
 
+    /// Creates a new column
+    pub fn question_name_column(&self, question_name: &str) -> Expr {
+        let colname = self.col_question_name.unwrap_or(Self::QUESTION);
+        if self.fill_question_name_column {
+            lit(question_name.to_string())
+                .alias(colname)
+        } else {
+            lit(question_name.to_string())
+                .extend_constant(lit(NULL), len().sub(lit(1)))
+                .alias(colname)
+        }
+    }
+
     /// Convert current configuration to polars expression
     pub fn into_expression(&self, question_name: &'a str) -> Vec<Expr> {
         let mut columns = Vec::new();
@@ -132,12 +145,8 @@ impl<'a> LabelOptions<'a> {
             columns.push(qname_column.alias(name));
         }
 
-        if self.include_question_name & !self.fill_question_name_column {
-            let name = self.col_question_name.unwrap_or(Self::QUESTION);
-            let qname_column = lit(question_name.to_string())
-                .extend_constant(lit(NULL), len().sub(lit(1)))
-                .alias(name);
-            columns.push(qname_column.alias(name));
+        if self.include_question_name {
+            columns.push(self.question_name_column(question_name));
         }
 
         // append response code column? or not

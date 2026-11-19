@@ -184,7 +184,7 @@ def test_analysis_rejects_invalid_format(survey, method, format, error):
         elif method == "response_label_map":
             survey.response_label_map(format=format)
         else:
-            survey["choice"].value_counts(format=format)
+            survey["choice"].value_counts(output=format)
 
 
 @pytest.mark.parametrize("method", ["crosstab", "value_counts"])
@@ -258,18 +258,18 @@ def test_response_label_map_format_overrides_default(survey, format):
             "choice",
             [1, 1, 2, None],
             [
-                {"choice": "Null", "count": 3},
-                {"choice": "Yes", "count": 2},
-                {"choice": "No", "count": 1},
+                {"label": "Total", "total": 3},
+                {"label": "Yes", "total": 2},
+                {"label": "No", "total": 1},
             ],
         ),
         (
             "multi",
             [[1, 2], [2], [], None],
             [
-                {"multi": "Null", "count": 3},
-                {"multi": "One", "count": 1},
-                {"multi": "Two", "count": 2},
+                {"label": "Total", "total": 3},
+                {"label": "One", "total": 1},
+                {"label": "Two", "total": 2},
             ],
         ),
     ],
@@ -295,31 +295,38 @@ def test_value_counts_values_labels_and_nulls(survey, question, values, expected
     ("multi", [None, None], pl.List(pl.UInt32), 0),
     ("multi", [[], [], None], pl.List(pl.UInt32), 2),
 ])
-def test_value_counts_without_selected_answers(survey, question, values, dtype, base):
+@pytest.mark.parametrize("include_code_value", [False, True])
+def test_value_counts_without_selected_answers(survey, question, values, dtype, base, include_code_value):
     survey.data = SurveyData.from_polars(
         pl.DataFrame({question: pl.Series(values, dtype=dtype)})
     )
-    assert survey[question].value_counts().to_dicts() == [
-        {question: "Null", "count": base}
-    ]
+    expected = {"label": "Total", "total": base}
+    if include_code_value:
+        expected["code"] = None
+    assert survey[question].value_counts(include_code_value=include_code_value).to_dicts() == [expected]
 
 
-@pytest.mark.parametrize("format", ["polars", "pandas", config.DataFrameFormat.Polars, config.DataFrameFormat.Pandas])
-def test_value_counts_format_and_count_name(survey, format):
+@pytest.mark.parametrize("output", ["polars", "pandas", config.DataFrameFormat.Polars, config.DataFrameFormat.Pandas])
+def test_value_counts_output_and_column_names(survey, output):
+    survey.dataframe_format = "polars" if output in ("pandas", config.DataFrameFormat.Pandas) else "pandas"
     question = survey["choice"]
-    survey.dataframe_format = "pandas"
-    result = question.value_counts(name="answers", format=format)
+    result = question.value_counts(
+        include_question_name=True, include_code_value=True, colname_stats="answers",
+        colname_label="answer", colname_code="value", output=output,
+    )
     expected = pl.DataFrame(
         {
-            "choice": ["Null", "Yes", "No"],
+            "question": ["choice", None, None],
+            "value": [None, 1, 2],
+            "answer": ["Total", "Yes", "No"],
             "answers": [4, 2, 2],
         }
     )
-    if format in ("pandas", config.DataFrameFormat.Pandas):
+    if output in ("pandas", config.DataFrameFormat.Pandas):
         assert isinstance(result, pd.DataFrame)
         result = pl.from_pandas(result)
     assert_frame_equal(result, expected, check_dtypes=False)
-    assert question.dataframe_format == "pandas"
+    assert question.dataframe_format == survey.dataframe_format
 
 
 @pytest.mark.parametrize("kind, first, second", [
@@ -333,7 +340,71 @@ def test_value_counts_temporal_columns(kind, first, second):
     data = SurveyData.from_polars(pl.DataFrame({"Q1": [first, first, second, None]}))
     result = Survey(datamap, data)["Q1"].value_counts()
     assert result.to_dicts() == [
-        {"Q1": "Null", "count": 3},
-        {"Q1": first.isoformat(), "count": 2},
-        {"Q1": second.isoformat(), "count": 1},
+        {"label": "Total", "total": 3},
+        {"label": first.isoformat(), "total": 2},
+        {"label": second.isoformat(), "total": 1},
+    ]
+
+
+@pytest.mark.parametrize("question, labels", [("choice", ["Yes", "No"]), ("multi", ["One", "Two"])])
+@pytest.mark.parametrize("include_question_name", [False, True])
+@pytest.mark.parametrize("include_code_value", [False, True])
+def test_value_counts_optional_columns(survey, question, labels, include_question_name, include_code_value):
+    columns = {}
+    if include_question_name:
+        columns["question"] = pl.Series([question, None, None])
+    if include_code_value:
+        columns["code"] = pl.Series([None, 1, 2], dtype=pl.UInt32)
+    columns["label"] = pl.Series(["Total", *labels])
+    columns["total"] = pl.Series([4, 2, 2], dtype=pl.UInt32)
+    result = survey[question].value_counts(include_question_name=include_question_name, include_code_value=include_code_value)
+    assert_frame_equal(result, pl.DataFrame(columns))
+
+
+@pytest.mark.parametrize("output, expected_type", [("polars", pl.DataFrame), ("pandas", pd.DataFrame)])
+def test_value_counts_uses_survey_default_output(survey, output, expected_type):
+    survey.dataframe_format = output
+    question = survey["choice"]
+    assert isinstance(question.value_counts(), expected_type)
+    assert isinstance(question.value_counts(output=None), expected_type)
+
+
+@pytest.mark.parametrize("option", ["include_question_name", "include_code_value", "colname_stats", "colname_label", "colname_code"])
+def test_value_counts_none_options_use_defaults(survey, option):
+    question = survey["choice"]
+    kwargs = {"include_question_name": True, "include_code_value": True} if option.startswith("colname_") else {}
+    assert_frame_equal(
+        question.value_counts(**{**kwargs, option: None}),
+        question.value_counts(**kwargs),
+    )
+
+
+@pytest.mark.parametrize("option", ["include_question_name", "include_code_value"])
+@pytest.mark.parametrize("value", ["yes", []])
+def test_value_counts_rejects_invalid_flags(survey, option, value):
+    with pytest.raises(TypeError):
+        survey["choice"].value_counts(**{option: value})
+
+
+@pytest.mark.parametrize("option", ["colname_stats", "colname_label", "colname_code"])
+@pytest.mark.parametrize("value", [42, []])
+def test_value_counts_rejects_invalid_column_names(survey, option, value):
+    with pytest.raises(TypeError):
+        survey["choice"].value_counts(**{option: value})
+
+
+@pytest.mark.parametrize("option", ["name", "format"])
+def test_value_counts_rejects_old_keywords(survey, option):
+    with pytest.raises(TypeError, match="unexpected keyword argument"):
+        survey["choice"].value_counts(**{option: "answers"})
+
+
+def test_value_counts_unlabelled_codes(survey):
+    survey.data = SurveyData.from_polars(pl.DataFrame({
+        "choice": pl.Series([3, 1, 3, None], dtype=pl.UInt32),
+    }))
+    assert survey["choice"].value_counts(include_code_value=True).to_dicts() == [
+        {"code": None, "label": "Total", "total": 3},
+        {"code": 1, "label": "Yes", "total": 1},
+        {"code": 3, "label": "3", "total": 2},
     ]

@@ -188,7 +188,7 @@ impl QuestionData {
     /// │ ---  ┆ ---                       ┆ ---   │
     /// │ u64  ┆ str                       ┆ u64   │
     /// ╞══════╪═══════════════════════════╪═══════╡
-    /// │ null ┆ *Total*                   ┆ 3     │
+    /// │ null ┆ Total                     ┆ 3     │
     /// │ 1    ┆ Sherwood � Forest         ┆ 2     │
     /// │ 2    ┆ Nottingham � Castle       ┆ 2     │
     /// │ 3    ┆ "Friar � Tuck" Restaurant ┆ 1     │
@@ -566,14 +566,35 @@ impl QuestionData {
 
     /// Count unique values of this question data.
     ///
-    /// This function basically calls ``poalrs.Series.value_counts`` under the hood, apart from multi-choice
-    /// where the choice for each respondant is counted individually.
+    /// This calls ``polars.Series.value_counts`` under the hood. For multiple-choice
+    /// questions, each selected response is counted individually. The first row,
+    /// labelled ``Total``, counts respondents with non-null answers, including empty lists.
     ///
     /// Keyword Args:
-    ///     name (str, *optional*):
+    ///
+    ///     colname_stats (str, *optional*):
     ///         Give the resulting count column a specific name (same as `polars.Series.value_counts`)
-    ///         Default `'count'`
-    ///     format ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
+    ///         Default `'total'`
+    ///
+    ///     colname_label (str, *optional*):
+    ///         Column name for the response label column.
+    ///         Default `'label'`
+    ///
+    ///     colname_code (str, *optional*):
+    ///         Column name for the response code column.
+    ///         Default `'code'`
+    /// 
+    ///     include_question_name (bool, *optional*):
+    ///         Include a ``question`` column with the question name in the first row
+    ///         and nulls in the remaining rows.
+    ///         Default `False`
+    ///
+    ///     include_code_value (bool, *optional*):
+    ///         Include the original response values in a separate column.
+    ///         The total row has a null code value.
+    ///         Default `False`
+    ///
+    ///     output ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
     ///         'polars' | DataFrameFormat.Polars: polars.DataFrame
     ///         'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
     ///
@@ -585,22 +606,40 @@ impl QuestionData {
     #[pyo3(
         name = "value_counts", 
         signature=(
-            name: "str" = "count",
-            format: "'polars'|'pandas'|DataFrameFormat" = None
+            colname_stats: "str" = "total",
+            colname_label: "str" = "label",
+            colname_code: "str" = "code",
+            include_code_value: "bool" = false,
+            include_question_name: "bool" = false,
+            output: "'polars'|'pandas'|DataFrameFormat" = None
         )
     )]
     fn py_value_counts<'py>(
         &self,
         py: Python<'py>,
-        name: Option<&str>,
-        format: Option<Bound<'py, PyAny>>,
+        colname_stats: Option<&str>,
+        colname_label: Option<&str>,
+        colname_code: Option<&str>,
+        include_code_value: Option<bool>,
+        include_question_name: Option<bool>,
+        output: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let options = LabelOptions::new().with_col_count(name);
+        let options = LabelOptions::new()
+            .with_include_question_name(include_question_name.unwrap_or(false))
+            .with_include_code_value(include_code_value.unwrap_or(false))
+            // think this would be easier for the user and makes documentation less confusing
+            // as the user can just call `ffill()` to fill nan values with question name
+            // should they want to.
+            .with_fill_question_name_column(false)
+            .with_col_count(colname_stats)
+            .with_col_label(colname_label)
+            .with_col_code(colname_code);
 
-        let result = self.value_counts(options).map_err(PyPolarsErr::Polars)?;
+        let result = self.value_counts(options)
+            .map_err(PyPolarsErr::Polars)?;
 
         // prep output
-        let format = format
+        let format = output
             .map(|value| DataFrameFormat::from_py_any(value))
             .transpose()?
             .unwrap_or(self.config.py_dataframe_format.clone());

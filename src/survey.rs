@@ -357,16 +357,16 @@ impl Survey {
     /// └────────────────────┴─────────────┴──────────────────┴─────────────────────────────────┴───────────────┴───────────────────┘
     /// ```
     pub fn crosstab(
-        &self, 
-        args: AnalysisOptions<'_>, 
-        label_options: LabelOptions<'_>
+        &self,
+        args: AnalysisOptions<'_>,
+        label_options: LabelOptions<'_>,
     ) -> PolarsResult<DataFrame> {
         // prep
         let question_name = args.question_name;
         let original = self.data().lazy()?.clone();
 
         // get crosstab for columns
-        let mut headers = args.columns.into_iter();
+        let mut headers = args.columns.iter();
         let first = match headers.next() {
             None => DataFrame::empty().lazy(),
             Some(&first) => {
@@ -401,8 +401,7 @@ impl Survey {
             output = operation::frequency_counts(
                 original.clone(),
                 question_name,
-                None,
-                // Some(label_options.col_count.unwrap_or(LabelOptions::COUNT)),
+                Some(label_options.col_count.unwrap_or(LabelOptions::COUNT)),
                 args.show_column_total,
             )?
             .join(
@@ -422,33 +421,27 @@ impl Survey {
             );
         };
 
-        // take a record of column names (to be used later)
-        let summary_columns = output
-            .collect_schema()?;
-        let summary_columns = summary_columns
-            .iter_names()
-            .map(|colname| col(colname.as_str()));
+        // Select question name, response code, response label, then counts.
+        let mut columns = Vec::new();
+        if label_options.include_question_name {
+            columns.push(label_options.question_name_column(question_name));
+        }
+        if label_options.include_code_value {
+            columns.push(
+                col(question_name).alias(label_options.col_code_value.unwrap_or(LabelOptions::CODE)),
+            );
+        }
 
-        // Update response labels
-        let response_label_map = self.datamap()
+        let response_label_map = self
+            .datamap()
             .get(question_name)
             .ok_or(QuestionNotFound::new(question_name))?
             .response_label_map();
-        let response_label_replace = label_options.match_response_label(
-            question_name, 
-            response_label_map
-        )?;
-        let output = output.with_column(response_label_replace);
+        columns.push(label_options.match_response_label(question_name, response_label_map)?);
+        columns.push(all().exclude_cols([question_name]).as_expr());
 
-        // Final formatting (column rename, add question name etc.,)
-        let format_exprs = label_options
-            .into_expression(&question_name)
-            .into_iter()
-            .chain(summary_columns)
-            .collect::<Vec<Expr>>();
-
-        // sort order & output
-        output.select(format_exprs)
+        output
+            .select(columns)
             .with_simplify_expr(true)
             .with_comm_subexpr_elim(true)
             .collect()
@@ -478,39 +471,6 @@ impl Survey {
 
         Ok(result.rename(old, new, false))
     }
-
-    // #[inline(always)]
-    // fn label_output_row(
-    //     &self,
-    //     result: LazyFrame,
-    //     question_name: &str,
-    // ) -> PolarsResult<LazyFrame> {
-    //     let (row_old, row_new): (Vec<AnyValue<'static>>, Vec<String>) = self
-    //         .datamap()
-    //         .get(question_name)
-    //         .ok_or(QuestionNotFound::new(question_name))?
-    //         .response_label_map()
-    //         .iter()
-    //         .map(|(id, label)| (id.clone(), label.read().to_string()))
-    //         .unzip();
-    //     let row_old = Series::from_any_values("old".into(), &row_old, true)?;
-    //     let row_new = Series::new("new".into(), row_new);
-
-    //     Ok(result
-    //         .with_columns([col(question_name)
-    //             .replace_strict(
-    //                 lit(row_old.clone()),
-    //                 lit(row_new),
-    //                 Some(col(question_name).cast(DataType::String)),
-    //                 Some(DataType::String),
-    //             )
-    //             .fill_null(lit("Null"))
-    //             .alias("label")])
-    //         .select([
-    //             col("label").alias(question_name),
-    //             all().exclude_cols([question_name, "label"]).as_expr(),
-    //         ]))
-    // }
 }
 
 /// Pyo3 implementations
@@ -801,7 +761,7 @@ impl Survey {
     /// ```
     ///
     /// Keyword Args:
-    ///     format ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
+    ///     output ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
     ///         'polars' | DataFrameFormat.Polars: polars.DataFrame
     ///         'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
     ///
@@ -809,17 +769,19 @@ impl Survey {
     ///             consistent with the survey.dataframe_format
     /// Returns:
     ///     polars.DataFrame | pandas.DataFrame: Value counts with response labels.
-    #[pyo3(name="response_label_map", signature=(format: "'polars'|'pandas'|None"=None))]
+    #[pyo3(name="response_label_map", signature=(
+        output: "'polars'|'pandas'|None"=None
+    ))]
     fn py_get_response_label_map<'py>(
         &self,
         py: Python<'py>,
-        format: Option<Bound<'py, PyAny>>,
+        output: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let polars_frame = self
             .response_label_map()
             .map_err(|err| PyPolarsErr::Polars(err))?;
 
-        let format = format
+        let format = output
             .map(|value| DataFrameFormat::from_py_any(value))
             .transpose()?
             .unwrap_or(self.config.read().py_dataframe_format.clone());
@@ -890,7 +852,7 @@ impl Survey {
     ///         Toggle on to show total size for each column.
     ///         Defaul tRUE
     ///     
-    ///     format ('pandas' | 'polars' | None, *optional*):
+    ///     output ('pandas' | 'polars' | None, *optional*):
     ///         Which dataframe library this function should return,
     ///         default to be consistent with the `dataframe_format` attribute of the current instance (`Survey.dataframe_format`).
     ///
@@ -941,7 +903,7 @@ impl Survey {
             column: "list[str]"=None,
             show_row_total: "bool"=None,
             show_column_total: "bool"=None,
-            format: "'polars'|'pandas'|None"=None
+            output: "'polars'|'pandas'|None"=None,
         )
     )]
     fn py_crosstab<'py>(
@@ -951,7 +913,7 @@ impl Survey {
         column: Option<Vec<String>>,
         show_row_total: Option<bool>,
         show_column_total: Option<bool>,
-        format: Option<Bound<'py, PyAny>>,
+        output: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let columns: Vec<&str> = column
             .as_deref()
@@ -969,7 +931,7 @@ impl Survey {
         let frame = self.crosstab(arguments, LabelOptions::default())
             .map_err(PyPolarsErr::Polars)?;
 
-        match format
+        match output
             .map(|value| DataFrameFormat::from_py_any(value))
             .transpose()?
             .unwrap_or(self.config().py_dataframe_format.clone())

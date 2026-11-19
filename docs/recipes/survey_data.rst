@@ -5,13 +5,74 @@ Survey Data
 Get quick summaries for questions in a survey
 ----------------------------------------------
 
-You can use :meth:`~triple_s.QuestionData.value_counts` to get a quick
-summary for a survey question:
+You can use :meth:`~triple_s.QuestionData.value_counts` to count the
+answers for a survey question. Suppose ``Q2`` asks "Do you cycle to work?",
+with codes ``1`` for "Yes" and ``2`` for "No", and the answers are
+``[1, 1, 2, None]``:
 
 .. code-block:: python
 
-   counts = survey["Q2"].value_counts(name="Count")
+   counts = survey["Q2"].value_counts()
    print(counts.to_dicts())
+
+.. code-block:: text
+
+   [{'label': 'Total', 'total': 3},
+    {'label': 'Yes', 'total': 2},
+    {'label': 'No', 'total': 1}]
+
+The first row counts the three respondents who answered. Missing answers
+are excluded. Labels are shown even if ``survey.response_display`` is
+``"value"``.
+
+You can include the question name and response codes, and rename the columns:
+
+.. code-block:: python
+
+   counts = survey["Q2"].value_counts(
+       include_question_name=True,
+       include_code_value=True,
+       colname_stats="answers",
+       colname_label="answer",
+       colname_code="value",
+   )
+   print(counts.to_dicts())
+
+.. code-block:: text
+
+   [{'question': 'Q2', 'value': None, 'answer': 'Total', 'answers': 3},
+    {'question': None, 'value': 1, 'answer': 'Yes', 'answers': 2},
+    {'question': None, 'value': 2, 'answer': 'No', 'answers': 1}]
+
+The question name appears only in the first row. You can fill the remaining
+rows with ``counts.with_columns(pl.col("question").forward_fill())``, using
+``import polars as pl``, if you want the name on every row.
+
+For a multiple-choice question, each selected response is counted separately.
+For example, if ``Q3`` asks which ways people travel, with ``1`` for "Bus"
+and ``2`` for "Bike", answers ``[[1, 2], [2], [], None]`` give you:
+
+.. code-block:: python
+
+   print(survey["Q3"].value_counts().to_dicts())
+
+.. code-block:: text
+
+   [{'label': 'Total', 'total': 3},
+    {'label': 'Bus', 'total': 1},
+    {'label': 'Bike', 'total': 2}]
+
+The empty list counts towards the respondent total, but adds no selections.
+
+The result uses the question's inherited dataframe format by default.
+You can choose a different format for this call with ``output``:
+
+.. code-block:: python
+
+   pandas_counts = survey["Q2"].value_counts(output="pandas")
+
+You can also pass ``config.DataFrameFormat.Pandas`` or
+``config.DataFrameFormat.Polars``, using ``from triple_s import config``.
 
 
 Get cross tabs for a survey question
