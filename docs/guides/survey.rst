@@ -139,15 +139,12 @@ You can also pass several questions as columns:
 Normalise counts
 ~~~~~~~~~~~~~~~~
 
-You can return counts as relative frequencies normalised to 1.0:
+You can return counts as relative frequencies normalised to the column total:
 
 .. code-block:: python
 
    table = survey.crosstab("Q2", ["Q4"], normalise=True)
 
-Each response count is divided by its column total, so ``0.75`` represents
-75%. The first row keeps the total counts. You can hide that row with
-``show_column_total=False`` and the proportions stay the same.
 
 Include response codes and question names
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
