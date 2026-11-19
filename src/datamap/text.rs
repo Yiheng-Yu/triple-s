@@ -541,12 +541,14 @@ impl Text {
                     && !input_variants.is_instance_of::<PyTuple>()
                 {
                     return Err(PyTypeError::new_err(format!(
-                        "Expect value of `variants` be list/ tuple of dictionaries or Variant instance, got: '{}'",
+                        "Expect value of `variants` be list/ tuple of dictionaries or \
+                         Variant instance, got: '{}'",
                         type_name
                     )));
                 };
 
-                let variants = input_variants.try_iter()?
+                let variants = input_variants
+                    .try_iter()?
                     .map(|item| {
                         let item = item?;
                         if let Ok(variant) = item.extract::<Variant>() {
@@ -556,7 +558,8 @@ impl Text {
                         } else {
                             let type_name = get_type_name(&item)?;
                             Err(PyTypeError::new_err(format!(
-                                "Expect items in `variants` to be dictionary or Variant instance, got: '{}'",
+                                "Expect items in `variants` to be dictionary or Variant \
+                                 instance, got: '{}'",
                                 type_name
                             )))
                         }
@@ -1043,21 +1046,26 @@ impl Variant {
         mode: Option<Bound<'_, PyAny>>,
         language: Option<&str>,
     ) -> PyResult<Self> {
-        let mode = mode.map(|val| {
-            if let Ok(val) = val.extract::<Mode>() {
-                Ok(val)
-            } else if let Ok(val) = val.extract::<&str>() {
-                Mode::from_str(val).map_err(|_| exceptions::PyValueError::new_err(format!(
-                    "Expect to be one of ['analysis', 'interview', None] or `Mode` instance, got: '{}'",
-                    val
-                )))
-            } else {
-                let type_name = get_type_name(&val)?;
-                Err(exceptions::PyTypeError::new_err(format!(
-                    "Expect to be one of ['analysis', 'interview'] or `Mode` instance, got: '{}'",
-                    type_name
-                )))
-            }
+        let mode = mode
+            .map(|val| {
+                if let Ok(val) = val.extract::<Mode>() {
+                    Ok(val)
+                } else if let Ok(val) = val.extract::<&str>() {
+                    Mode::from_str(val).map_err(|_| {
+                        exceptions::PyValueError::new_err(format!(
+                            "Expect to be one of ['analysis', 'interview', None] or `Mode` \
+                             instance, got: '{}'",
+                            val
+                        ))
+                    })
+                } else {
+                    let type_name = get_type_name(&val)?;
+                    Err(exceptions::PyTypeError::new_err(format!(
+                        "Expect to be one of ['analysis', 'interview'] or `Mode` instance, \
+                         got: '{}'",
+                        type_name
+                    )))
+                }
             })
             .transpose()?;
         let language = language
@@ -1197,21 +1205,28 @@ impl Variant {
             .ok_or(missing_key_err("value"))?
             .extract::<String>()?;
 
-        let mode = content.get_item("mode")?
+        let mode = content
+            .get_item("mode")?
             .map(|mode| {
                 if mode.is_none() {
                     Ok(None)
                 } else if let Ok(val) = mode.extract::<Mode>() {
                     Ok(Some(val))
                 } else if let Ok(val) = mode.extract::<&str>() {
-                    Mode::from_str(val).map_err(|_| exceptions::PyValueError::new_err(format!(
-                        "Expect to be one of ['analysis', 'interview', None] or `Mode` instance, got: '{}'",
-                        val
-                    ))).map(Some)
+                    Mode::from_str(val)
+                        .map_err(|_| {
+                            exceptions::PyValueError::new_err(format!(
+                                "Expect to be one of ['analysis', 'interview', None] or \
+                                 `Mode` instance, got: '{}'",
+                                val
+                            ))
+                        })
+                        .map(Some)
                 } else {
                     let type_name = get_type_name(&mode)?;
                     Err(exceptions::PyTypeError::new_err(format!(
-                        "Expect to be one of ['analysis', 'interview'] or `Mode` instance, got: '{}'",
+                        "Expect to be one of ['analysis', 'interview'] or `Mode` instance, \
+                         got: '{}'",
                         type_name
                     )))
                 }

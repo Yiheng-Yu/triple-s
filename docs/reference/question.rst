@@ -58,7 +58,9 @@ Methods
 
 .. automethod:: Question.to_xml() -> str
 
-****
+.. raw:: html
+
+    <hr>
 
 Location
 --------
@@ -85,7 +87,9 @@ Methods
 
 .. automethod:: Location.from_dict(value: dict) -> Location
 
-****
+.. raw:: html
+
+    <hr>
 
 Spread
 ------
@@ -102,7 +106,9 @@ Methods
 ^^^^^^^
 .. automethod:: Spread.from_dict(value) -> Spread
 
-****
+.. raw:: html
+
+    <hr>
 
 Response
 --------
@@ -133,7 +139,9 @@ Methods
 
 .. automethod:: Response.from_dict(content: dict) -> Response
 
-****
+.. raw:: html
+
+    <hr>
 
 DataRange
 ---------
@@ -160,7 +168,9 @@ Methods
 
 .. automethod:: DataRange.from_dict(content: dict) -> DataRange
 
-****
+.. raw:: html
+
+    <hr>
 
 Code
 ----

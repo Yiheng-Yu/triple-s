@@ -1,5 +1,5 @@
-pub mod classic;
-pub mod xml;
+pub(crate) mod classic;
+pub(crate) mod xml;
 use std::{
     collections::HashMap,
     fs::File,
@@ -183,7 +183,8 @@ where
 
         if parts.len() > 2 {
             let error = BadLine::new(format!(
-                "Unable to parse range from text '{}', there seems to be more than one delimiter ('TO') init.",
+                "Unable to parse range from text '{}', there seems to be more than one \
+                 delimiter ('TO') init.",
                 text
             ));
             return Err(error.into());
@@ -620,9 +621,9 @@ impl QuestionBuilder {
                             subfield: Some("value/size".to_string()),
                             kind: error::WarningKind::DataLocation,
                             message: format!(
-                                "Field 'size' ({}) exceeds the width defined in question's data location ({}).",
-                                size,
-                                width
+                                "Field 'size' ({}) exceeds the width defined in question's \
+                                 data location ({}).",
+                                size, width
                             ),
                         });
                     }

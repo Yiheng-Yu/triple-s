@@ -157,7 +157,7 @@ impl SurveyData {
 
         let path_buf = cache.to_path_buf()?;
         let path = PlRefPath::try_from_path(path_buf.as_path())?;
-        let lazyframe = LazyFrame::scan_parquet(path, args)?;
+        let lazyframe = LazyFrame::scan_parquet(path, args)?.with_row_estimate(true); // important for caching
 
         Ok(Self {
             frame: Some(lazyframe),
@@ -179,7 +179,8 @@ impl SurveyData {
         sink.collect()?;
 
         // Create a new LazyFrame that uses the cached parquet as backend
-        let frame = LazyFrame::scan_parquet(target, ScanArgsParquet::default())?;
+        let frame = LazyFrame::scan_parquet(target, ScanArgsParquet::default())?
+            .with_row_estimate(true);
 
         Ok(Self {
             frame: Some(frame),
@@ -203,7 +204,7 @@ impl SurveyData {
         };
 
         let path = PlRefPath::try_from_path(cache.as_ref())?;
-        let frame = LazyFrame::scan_parquet(path, args)?;
+        let frame = LazyFrame::scan_parquet(path, args)?.with_row_estimate(true);
 
         Ok(Self {
             frame: Some(frame),
@@ -252,7 +253,13 @@ impl SurveyData {
     /// ```
     pub fn num_response(&self) -> PolarsResult<usize> {
         match self.frame.as_ref() {
-            Some(lf) => Ok(lf.clone().collect()?.height()),
+            Some(lf) => lf
+                .clone()
+                .select([len()])
+                .collect()?
+                .column("len")?
+                .get(0)?
+                .try_extract(),
             None => Ok(0),
         }
     }

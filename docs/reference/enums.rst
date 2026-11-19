@@ -31,8 +31,10 @@ Methods
 
 .. automethod:: Version.available_options() -> list[str]
 
-****
+.. raw:: html
 
+    <hr>
+    
 QuestionType
 ------------
 

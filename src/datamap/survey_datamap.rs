@@ -286,7 +286,8 @@ impl Datamap {
                 } else {
                     let type_name = get_type_name(&value)?;
                     return Err(exceptions::PyTypeError::new_err(format!(
-                        "Expect `survey_info` to be a dictionary or `SurveyInfo` instance, got: '{type_name}'"
+                        "Expect `survey_info` to be a dictionary or `SurveyInfo` instance, \
+                         got: '{type_name}'"
                     )));
                 }
             }
@@ -303,7 +304,8 @@ impl Datamap {
                 } else {
                     let type_name = get_type_name(&value)?;
                     return Err(exceptions::PyTypeError::new_err(format!(
-                        "Expect `record` to be a dictionary or [ `Record` ] instance, got: '{type_name}'"
+                        "Expect `record` to be a dictionary or [ `Record` ] instance, got: \
+                         '{type_name}'"
                     )));
                 }
             }
@@ -501,7 +503,8 @@ pub mod test {
         let xml = survey.to_xml().unwrap();
         assert_eq!(
             xml,
-            "<sss version=\"1.2\">\n  <survey>\n    <record ident=\"V\">\n    </record>\n  </survey>\n</sss>"
+            "<sss version=\"1.2\">\n  <survey>\n    <record ident=\"V\">\n    </record>\n  \
+             </survey>\n</sss>"
         );
         let mut buffer = [0_u8; 1];
         let mut writer = quick_xml::Writer::new(&mut buffer[..]);

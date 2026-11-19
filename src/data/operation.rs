@@ -2,6 +2,7 @@
 
 use polars::prelude::*;
 
+
 /// Count unique values of this Series and a column "counts" with dtype IdxType
 ///
 /// This function basically calls [`polars::Series::value_counts`] under the hood, apart from multi-choice
@@ -70,6 +71,18 @@ pub(crate) fn frequency_counts(
     }
 }
 
+
+
+// pub(crate) fn value_counts_by(
+//     original: &LazyFrame,
+//     target: &str,
+//     group_by: &str
+// ) -> LazyFrame {
+//     original.clone()
+//         .group_by([col(group_by)])
+//         .agg([col(target).value_counts(true, true, VALUE_COUNTS.into(), false)])
+// }
+
 /// This function returns a lazyframe to be collected later (basically needs to add text labels)
 ///
 /// This function DOES NOT output a overall frequency_count of the `target` column
@@ -104,8 +117,9 @@ pub(crate) fn create_crosstab(
             ExplodeOptions {
                 empty_as_null: false,
                 keep_nulls: false,
-            },
-        );
+            }
+        )
+        .filter(col(target).is_not_null());
     let original_dtype = lf.collect_schema()?.try_get(target)?.clone();
 
     let columns = lf
@@ -135,7 +149,6 @@ pub(crate) fn create_crosstab(
         );
 
     // create base row
-    // let base_size_expr =
     if show_column_base {
         let base_size_row = frequency_counts(original.clone(), group_by, None, false)?
             .with_column(col(group_by).cast(DataType::String))
@@ -152,7 +165,7 @@ pub(crate) fn create_crosstab(
                 to_supertypes: true,
                 strict: true,
                 maintain_order: true,
-            },
+            }
         )
     } else {
         Ok(pivot)

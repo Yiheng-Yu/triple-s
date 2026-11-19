@@ -94,8 +94,11 @@ def test_question_data_pandas_export(survey, name):
 
 
 @pytest.mark.parametrize("name", ["Q2", "Q3", "Q8"])
-def test_question_data_label_exports(survey, name):
-    question = survey[name]
+@pytest.mark.parametrize("access", ["index", "iterator"])
+def test_question_data_label_exports(survey, name, access):
+    question = survey[name] if access == "index" else next(
+        question for question in survey.iter_questions() if question.name == name
+    )
     labels = question.response_label
     raw = question.to_list()
     expected = [
@@ -111,12 +114,43 @@ def test_question_data_label_exports(survey, name):
         pl.Series(name, expected).to_pandas(use_pyarrow_extension_array=True),
     )
     survey.response_display = "label"
-    assert list(question) == expected
-    assert question.data == tuple(expected)
-    assert question[0] == expected[0]
+    assert question.response_display == "value"
+    assert list(question) == raw
+    assert question.data == tuple(raw)
+    assert question[0] == raw[0]
+    labelled_question = survey[name] if access == "index" else next(
+        question for question in survey.iter_questions() if question.name == name
+    )
+    assert labelled_question.response_display == "label"
+    assert list(labelled_question) == expected
+    assert labelled_question.data == tuple(expected)
+    assert labelled_question[0] == expected[0]
+    survey.response_display = "value"
+    assert labelled_question.response_display == "label"
+    assert list(labelled_question) == expected
     # Question export methods default to raw values, independently of the survey setting.
     assert question.to_list() == raw
     assert question.to_list(response_label=False) == raw
+
+
+@pytest.mark.parametrize("access", ["index", "iterator"])
+@pytest.mark.parametrize("output, expected_type, other_output, other_type", [
+    ("pandas", pd.DataFrame, "polars", pl.DataFrame),
+    ("polars", pl.DataFrame, "pandas", pd.DataFrame),
+])
+def test_question_data_copies_output_format_at_creation(
+    survey, access, output, expected_type, other_output, other_type,
+):
+    survey.dataframe_format = output
+    question = survey["Q2"] if access == "index" else next(
+        question for question in survey.iter_questions() if question.name == "Q2"
+    )
+    survey.dataframe_format = other_output
+    assert question.dataframe_format == output
+    assert isinstance(question.value_counts(), expected_type)
+    assert isinstance(question.value_counts(output=other_output), other_type)
+    assert question.dataframe_format == output
+    assert survey.dataframe_format == other_output
 
 
 @pytest.mark.parametrize("index", [3, -4, 100, -100])

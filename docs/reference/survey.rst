@@ -52,7 +52,7 @@ Methods
 
 .. automethod:: Survey.has_data() -> bool
 
-.. automethod:: Survey.response_label_map(format: str | triple_s.config.DataFrameFormat | None = None) -> polars.DataFrame | pandas.DataFrame
+.. automethod:: Survey.response_label_map(output: str | triple_s.config.DataFrameFormat | None = None) -> polars.DataFrame | pandas.DataFrame
 
 .. automethod:: Survey.iter_rows() -> Iterator[dict[str, object]]
 
@@ -62,11 +62,4 @@ Methods
 
 .. automethod:: Survey.to_pandas(response_label: bool | None = None) -> pandas.DataFrame
 
-.. py:method:: Survey.crosstab(row: str, column: list[str] | None = None, show_row_total: bool | None = None, show_column_total: bool | None = None, format: str | triple_s.config.DataFrameFormat | None = None) -> polars.DataFrame | pandas.DataFrame
-
-   Get a cross tab for a question in the survey. You can use one or more questions as the columns:
-
-   .. code-block:: python
-
-      table = survey.crosstab("Q2", ["Q4"])
-      combined = survey.crosstab("Q2", ["Q4", "Q5"])
+.. automethod:: Survey.crosstab(row: str, column: list[str] | None = None, show_row_total: bool | None = None, show_column_total: bool | None = None, colname_stats: str | None = 'total', colname_label: str | None = 'label', colname_code: str | None = 'code', include_response_codes: bool | None = False, include_question_name: bool | None = False, output: str | triple_s.config.DataFrameFormat | None = None) -> polars.DataFrame | pandas.DataFrame

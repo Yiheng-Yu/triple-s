@@ -146,24 +146,19 @@
 //! ```
 
 mod data;
-mod datamap;
-mod survey;
-
-mod analysis;
-
+pub mod datamap;
 pub mod error;
-pub use data::config;
+pub mod options;
+mod survey;
 
 mod prelude;
 mod utils;
 
 use std::path::Path;
 
-pub use analysis::CrossTabArgs;
 use anyhow::Result;
 pub use data::{QuestionData, SurveyData};
 pub use datamap::{
-    Datamap,
     question::{
         self,
         CodeFormat,
@@ -174,14 +169,18 @@ pub use datamap::{
         Spread,
         Usage,
     },
-    read::{read_datamap, read_from_reader, read_from_string},
     read_data,
+    read_datamap,
+    read_from_reader,
+    read_from_string,
     record::{self, DataFormat, Record},
     response::{self, Code, DataRange, Response},
+    survey_datamap::Datamap,
     survey_info::{self, SurveyInfo, Version},
     text::{self, Mode, Text, Variant},
 };
 use error::EventLog;
+pub use options::{AnalysisOptions, LabelOptions};
 pub use prelude::DeepCopy;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -252,7 +251,7 @@ mod triple_s {
     #[pymodule]
     pub mod config {
         #[pymodule_export]
-        pub use crate::config::{DataFrameFormat, ResponseDisplay};
+        pub use crate::options::{DataFrameFormat, ResponseDisplay};
     }
 
     /// Read triple-s datamap
@@ -266,9 +265,11 @@ mod triple_s {
     pub fn py_read_datamap(py: Python<'_>, path_datamap: &str) -> PyResult<Datamap> {
         let input = std::fs::File::open(path_datamap)?;
 
-        let (survey, read_log) = read_from_reader(std::io::BufReader::new(input))
-            .with_context(|| format!("When reading '{}'", path_datamap))?;
-
+        let read_result = py.detach(|| {
+            read_from_reader(std::io::BufReader::new(input))
+                .with_context(|| format!("When reading '{}'", path_datamap))
+        });
+        let (survey, read_log) = read_result?;
         if read_log.warnings.len() > 0 {
             read_log.print_warning_summary(py, &format!("Reading '{path_datamap}'"))?
         };
@@ -293,8 +294,12 @@ mod triple_s {
             path_data:"str"=None
         )
     )]
-    pub fn py_read_triple_s(path_datamap: &str, path_data: Option<&str>) -> PyResult<Survey> {
-        read_triple_s(path_datamap, path_data).map_err(|err| err.into())
+    pub fn py_read_triple_s(
+        py: Python<'_>,
+        path_datamap: &str,
+        path_data: Option<&str>,
+    ) -> PyResult<Survey> {
+        py.detach(|| read_triple_s(path_datamap, path_data).map_err(|err| err.into()))
     }
 
     /// Reads .asc or .csv datafile with datamap provided.
@@ -312,9 +317,15 @@ mod triple_s {
             path_data: "str"
         )
     )]
-    pub fn py_read_data(datamap: Datamap, path_data: &str) -> PyResult<SurveyData> {
-        crate::datamap::read_data(&datamap, path_data)
-            .map_err(|err| crate::utils::py_value_error(err.into()))
+    pub fn py_read_data(
+        py: Python<'_>,
+        datamap: Datamap,
+        path_data: &str,
+    ) -> PyResult<SurveyData> {
+        py.detach(|| {
+            crate::datamap::read_data(&datamap, path_data)
+                .map_err(|err| crate::utils::py_value_error(err.into()))
+        })
     }
 
     #[pymodule_init]
