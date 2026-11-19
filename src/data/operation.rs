@@ -135,7 +135,6 @@ pub(crate) fn create_crosstab(
         );
 
     // create base row
-    // let base_size_expr =
     if show_column_base {
         let base_size_row = frequency_counts(original.clone(), group_by, None, false)?
             .with_column(col(group_by).cast(DataType::String))
@@ -152,7 +151,7 @@ pub(crate) fn create_crosstab(
                 to_supertypes: true,
                 strict: true,
                 maintain_order: true,
-            },
+            }
         )
     } else {
         Ok(pivot)

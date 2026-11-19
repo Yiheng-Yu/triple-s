@@ -248,7 +248,6 @@ fn test_crosstab_column_totals_count_respondents() {
 fn test_read_stack_overflow_survey() {
     println!("Reading survey data");
     let survey = read_stack_overflow();
-
     println!("Data loaded. Question names:");
     println!("{:#?}", survey.question_names());
 
@@ -287,7 +286,7 @@ fn test_value_counts() {
 
     let options = LabelOptions::new()
         .with_include_code_value(true)
-        .with_code_col(Some("HAHA"))
+        .with_col_code(Some("HAHA"))
         .with_include_code_value(true)
         .with_include_question_name(true)
         .with_fill_question_name_column(true);

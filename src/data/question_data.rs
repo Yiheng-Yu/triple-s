@@ -218,7 +218,7 @@ impl QuestionData {
         };
 
         // stacking base size and value counts together
-        let colname_stats = options.count_col.unwrap_or("total");
+        let colname_stats = options.col_count.unwrap_or("total");
         let counts = values
             .drop_nulls()
             .as_materialized_series()
@@ -595,7 +595,7 @@ impl QuestionData {
         name: Option<&str>,
         format: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let options = LabelOptions::new().with_count_col(name);
+        let options = LabelOptions::new().with_col_count(name);
 
         let result = self.value_counts(options).map_err(PyPolarsErr::Polars)?;
 

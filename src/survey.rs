@@ -361,7 +361,7 @@ impl Survey {
         args: AnalysisOptions<'_>, 
         label_options: LabelOptions<'_>
     ) -> PolarsResult<DataFrame> {
-
+        // prep
         let question_name = args.question_name;
         let original = self.data().lazy()?.clone();
 
@@ -421,6 +421,15 @@ impl Survey {
             );
         };
 
+        // take a record of column names (to be used later)
+
+        let summary_columns = output
+            .collect_schema()?;
+
+        let summary_columns = summary_columns
+            .iter_names()
+            .map(|colname| col(colname.as_str()));
+
         // Update response labels
         let response_label_map = self.datamap()
             .get(question_name)
@@ -431,9 +440,16 @@ impl Survey {
             response_label_map
         )?;
         let output = output.with_column(response_label_replace);
-        // let output = self.label_output_row(output, question_name)?;
 
-        output
+        // Final formatting (column rename, add question name etc.,)
+        let format_exprs = label_options
+            .into_expression(&question_name)
+            .into_iter()
+            .chain(summary_columns)
+            .collect::<Vec<Expr>>();
+
+        // sort order & output
+        output.select(format_exprs)
             .with_simplify_expr(true)
             .with_comm_subexpr_elim(true)
             .collect()
@@ -464,38 +480,38 @@ impl Survey {
         Ok(result.rename(old, new, false))
     }
 
-    #[inline(always)]
-    fn label_output_row(
-        &self,
-        result: LazyFrame,
-        question_name: &str,
-    ) -> PolarsResult<LazyFrame> {
-        let (row_old, row_new): (Vec<AnyValue<'static>>, Vec<String>) = self
-            .datamap()
-            .get(question_name)
-            .ok_or(QuestionNotFound::new(question_name))?
-            .response_label_map()
-            .iter()
-            .map(|(id, label)| (id.clone(), label.read().to_string()))
-            .unzip();
-        let row_old = Series::from_any_values("old".into(), &row_old, true)?;
-        let row_new = Series::new("new".into(), row_new);
+    // #[inline(always)]
+    // fn label_output_row(
+    //     &self,
+    //     result: LazyFrame,
+    //     question_name: &str,
+    // ) -> PolarsResult<LazyFrame> {
+    //     let (row_old, row_new): (Vec<AnyValue<'static>>, Vec<String>) = self
+    //         .datamap()
+    //         .get(question_name)
+    //         .ok_or(QuestionNotFound::new(question_name))?
+    //         .response_label_map()
+    //         .iter()
+    //         .map(|(id, label)| (id.clone(), label.read().to_string()))
+    //         .unzip();
+    //     let row_old = Series::from_any_values("old".into(), &row_old, true)?;
+    //     let row_new = Series::new("new".into(), row_new);
 
-        Ok(result
-            .with_columns([col(question_name)
-                .replace_strict(
-                    lit(row_old.clone()),
-                    lit(row_new),
-                    Some(col(question_name).cast(DataType::String)),
-                    Some(DataType::String),
-                )
-                .fill_null(lit("Null"))
-                .alias("label")])
-            .select([
-                col("label").alias(question_name),
-                all().exclude_cols([question_name, "label"]).as_expr(),
-            ]))
-    }
+    //     Ok(result
+    //         .with_columns([col(question_name)
+    //             .replace_strict(
+    //                 lit(row_old.clone()),
+    //                 lit(row_new),
+    //                 Some(col(question_name).cast(DataType::String)),
+    //                 Some(DataType::String),
+    //             )
+    //             .fill_null(lit("Null"))
+    //             .alias("label")])
+    //         .select([
+    //             col("label").alias(question_name),
+    //             all().exclude_cols([question_name, "label"]).as_expr(),
+    //         ]))
+    // }
 }
 
 /// Pyo3 implementations
