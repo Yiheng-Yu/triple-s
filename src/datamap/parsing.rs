@@ -3,7 +3,6 @@ use std::{collections::HashSet, range::Range};
 
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime, Timelike};
-
 use either::Either;
 use parking_lot::RwLockReadGuard;
 use polars::{frame::row::Row, prelude::*};
@@ -40,7 +39,7 @@ impl ResponseParser {
         range: Range<usize>,
         is_literal: bool,
         question_type: QuestionType,
-        spread: Option<&Spread>
+        spread: Option<&Spread>,
     ) -> Result<Self> {
         anyhow::ensure!(range.start <= range.end, "Invalid question range");
         let subfield_args = match &question_type {
@@ -57,7 +56,7 @@ impl ResponseParser {
             end: range.end,
             is_literal: is_literal,
             question_type: question_type,
-            subfield_args: subfield_args
+            subfield_args: subfield_args,
         })
     }
 
@@ -106,21 +105,25 @@ pub(crate) fn parse_fixed(parsers: &[ResponseParser], row: &str) -> Result<Row<'
     };
     // Keep worker results in question order before choosing the first error.
 
-    let values = parsers.par_iter()
+    let values = parsers
+        .par_iter()
         .map(|parser| {
             let field = if ascii {
-                    row.get(parser.start..parser.end)
-                } else {
-                    offsets
-                        .get(parser.start)
-                        .zip(offsets.get(parser.end))
-                        .and_then(|(&start, &end)| row.get(start..end))
-                }
-                .ok_or_else(|| PolarsError::ColumnNotFound(
-                    format!("Invalid data range for question '{}'", parser.question_name).into()
-                ))?;
+                row.get(parser.start..parser.end)
+            } else {
+                offsets
+                    .get(parser.start)
+                    .zip(offsets.get(parser.end))
+                    .and_then(|(&start, &end)| row.get(start..end))
+            }
+            .ok_or_else(|| {
+                PolarsError::ColumnNotFound(
+                    format!("Invalid data range for question '{}'", parser.question_name)
+                        .into(),
+                )
+            })?;
 
-                parser.parse(field)
+            parser.parse(field)
         })
         .collect::<Vec<_>>()
         .into_iter()
@@ -228,16 +231,13 @@ where
             }
             let mut batch = Vec::with_capacity(1024);
             batch.extend(records.by_ref().take(1024));
-            
+
             if batch.is_empty() {
                 return None;
             }
-            
-            let mut rows: Vec<_> = batch
-                .into_par_iter()
-                .map(&parse)
-                .collect();
-            
+
+            let mut rows: Vec<_> = batch.into_par_iter().map(&parse).collect();
+
             if let Some(index) = rows.iter().position(Result::is_err) {
                 rows.truncate(index + 1);
                 finished = true;
@@ -245,7 +245,7 @@ where
 
             Some(rows)
         })
-        .flatten()
+        .flatten(),
     )
 }
 
@@ -454,14 +454,34 @@ mod tests {
         use crate::CodeFormat;
 
         for (kind, format, field, correct) in [
-            (QuestionType::Quantity, None, " 123.456 ", AnyValue::Float64(123.456)),
+            (
+                QuestionType::Quantity,
+                None,
+                " 123.456 ",
+                AnyValue::Float64(123.456),
+            ),
             (QuestionType::Logical, None, "1", AnyValue::Boolean(true)),
             (QuestionType::Logical, None, "0", AnyValue::Boolean(false)),
             (QuestionType::Single, None, "", AnyValue::Null),
-            (QuestionType::Single, Some(CodeFormat::Literal), " A ", AnyValue::String("A")),
-            (QuestionType::Character, None, " 中😀 text ", AnyValue::String("中😀 text")),
+            (
+                QuestionType::Single,
+                Some(CodeFormat::Literal),
+                " A ",
+                AnyValue::String("A"),
+            ),
+            (
+                QuestionType::Character,
+                None,
+                " 中😀 text ",
+                AnyValue::String("中😀 text"),
+            ),
             (QuestionType::Date, None, "20261115", AnyValue::Date(20772)),
-            (QuestionType::Time, None, "123456", AnyValue::Time(45_296_000_000_000)),
+            (
+                QuestionType::Time,
+                None,
+                "123456",
+                AnyValue::Time(45_296_000_000_000),
+            ),
         ] {
             let question = lock_it_up(
                 QuestionOptions::new("Q")

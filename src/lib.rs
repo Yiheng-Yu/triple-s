@@ -150,7 +150,7 @@ mod data;
 pub mod datamap;
 pub mod error;
 mod survey;
-pub use data::config;
+pub use data::options;
 mod prelude;
 mod utils;
 
@@ -251,7 +251,7 @@ mod triple_s {
     #[pymodule]
     pub mod config {
         #[pymodule_export]
-        pub use crate::config::{DataFrameFormat, ResponseDisplay};
+        pub use crate::options::{DataFrameFormat, ResponseDisplay};
     }
 
     /// Read triple-s datamap

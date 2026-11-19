@@ -1,5 +1,5 @@
 use polars::prelude::*;
-use triple_s::{CrossTabArgs, Survey, SurveyData, config::ResponseDisplay, read_triple_s};
+use triple_s::{CrossTabArgs, Survey, SurveyData, options::ResponseDisplay, read_triple_s};
 
 const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
 const PATH_DATAFILE_V2_0: &str = "tests/sss-examples/sss-2.0/example1.asc";
@@ -265,10 +265,12 @@ fn test_read_stack_overflow_survey() {
     println!("{:?}", res);
 
     println!("Base size:");
+    let options = CrossTabArgs::new()
+        .include_code_value(true);
     let base = survey
         .get_question_data(topbreak)
         .unwrap()
-        .value_counts(Some("count"))
+        .value_counts(options)
         .unwrap();
     println!("{:?}", base);
 }
@@ -277,6 +279,9 @@ fn test_read_stack_overflow_survey() {
 fn test_value_counts() {
     let survey = get_survey_struct();
     let question = survey.get_question_data("Q3").unwrap();
-    let stats = question.value_counts(None).unwrap();
+
+    let options = CrossTabArgs::new()
+        .include_code_value(true);
+    let stats = question.value_counts(options).unwrap();
     println!("{:?}", stats)
 }

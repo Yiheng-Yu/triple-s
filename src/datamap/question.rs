@@ -1,11 +1,7 @@
 //! Datamap for questions in a survey, corresponds to the `<variable>` tag.
 #![doc = include_str!("../doc/datamap_question_rs.md")]
 
-use std::{
-    collections::HashMap,
-    range::Range,
-    str::FromStr,
-};
+use std::{collections::HashMap, range::Range, str::FromStr};
 
 use anyhow::{Context, Result};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
@@ -16,10 +12,10 @@ use quick_xml::{events::BytesText, writer::Writer};
 use strum::{AsRefStr, EnumIter, EnumString};
 
 use crate::{
-    EventLog, 
-    datamap::{Code, Response, Text, parsing::ResponseParser}, 
-    error::{self, InternalError, InvalidArg, RangeError}, 
-    prelude::{DeepCopy, *}, 
+    EventLog,
+    datamap::{Code, Response, Text, parsing::ResponseParser},
+    error::{self, InternalError, InvalidArg, RangeError},
+    prelude::{DeepCopy, *},
     utils::{ArcLock, lock_it_up},
 };
 #[cfg(feature = "pyo3")]
@@ -1408,7 +1404,10 @@ impl Question {
     /// `None`. A string updates the existing text; a `Text` object replaces
     /// it.
     #[setter(label)]
-    fn py_set_label<'py>(&mut self, label: Option<&Bound<'py, PyAny>>) -> PyResult<()> {
+    pub(crate) fn py_set_label<'py>(
+        &mut self,
+        label: Option<&Bound<'py, PyAny>>,
+    ) -> PyResult<()> {
         if let Some(bound) = label {
             if let Ok(string) = bound.extract::<String>() {
                 *self.label.value_mut() = string;

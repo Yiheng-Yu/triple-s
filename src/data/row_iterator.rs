@@ -35,8 +35,7 @@ impl RowIterator {
             lazy,
             rows: None,
             index: 0,
-            buffer_rows: INITIAL_BUFFER_ROWS
-                .min((INITIAL_BUFFER_CELLS / width.max(1)).max(1)),
+            buffer_rows: INITIAL_BUFFER_ROWS.min((INITIAL_BUFFER_CELLS / width.max(1)).max(1)),
             max_buffer_rows: MAX_BUFFER_ROWS.min((MAX_BUFFER_CELLS / width.max(1)).max(1)),
             final_buffer: false,
             finished: false,
@@ -87,7 +86,8 @@ impl RowIterator {
                         if self.final_buffer {
                             self.finish();
                         } else {
-                            self.buffer_rows = (self.buffer_rows * 2).min(self.max_buffer_rows);
+                            self.buffer_rows =
+                                (self.buffer_rows * 2).min(self.max_buffer_rows);
                         }
                     }
                 }

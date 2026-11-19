@@ -12,14 +12,14 @@ use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
 #[cfg(feature = "pyo3")]
 use crate::{
     SurveyInfo,
-    config::{DataFrameFormat, ResponseDisplay},
     data::row_iterator::RowIterator,
+    options::{DataFrameFormat, ResponseDisplay},
     prelude::*,
     utils::{get_type_name, normalize_py_index, polars_to_pandas},
 };
 use crate::{
     analysis::CrossTabArgs,
-    data::{QuestionData, SurveyData, config::Config, operation},
+    data::{QuestionData, SurveyData, operation, options::DisplayOptions},
     datamap::Datamap,
     error::QuestionNotFound,
     utils::{ArcLock, lock_it_up},
@@ -57,7 +57,7 @@ Returns:
 pub struct Survey {
     datamap: Datamap,
     data: ArcLock<SurveyData>,
-    config: ArcLock<Config>,
+    config: ArcLock<DisplayOptions>,
 }
 
 /// Fields
@@ -112,12 +112,12 @@ impl Survey {
     }
 
     /// Configuration options
-    pub fn config(&self) -> RwLockReadGuard<'_, Config> {
+    pub fn config(&self) -> RwLockReadGuard<'_, DisplayOptions> {
         self.config.read()
     }
 
     /// Mutable view of survey configuration options
-    pub fn config_mut(&mut self) -> RwLockWriteGuard<'_, Config> {
+    pub fn config_mut(&mut self) -> RwLockWriteGuard<'_, DisplayOptions> {
         self.config.write()
     }
 
@@ -194,7 +194,7 @@ impl Survey {
         Self {
             datamap,
             data: lock_it_up(data),
-            config: lock_it_up(Config::default()),
+            config: lock_it_up(DisplayOptions::default()),
         }
     }
 
@@ -227,7 +227,7 @@ impl Survey {
         Some(QuestionData::new(
             Arc::clone(&self.data),
             question,
-            Arc::clone(&self.config),
+            self.config.read().clone(),
         ))
     }
 
@@ -525,11 +525,11 @@ impl Survey {
         };
         content.append(&mut question_repr);
 
-        // Config: dataframe library
+        // DisplayOptions: dataframe library
         let dataframe_format = self.config().py_dataframe_format.to_string();
         content.push(("dataframe_format", format!("{:?}", dataframe_format)));
 
-        // Config: return label or value
+        // DisplayOptions: return label or value
         let response_display = self.config().response_display.to_string();
         content.push(("response_display", format!("{:?}", response_display)));
 
@@ -973,7 +973,7 @@ impl QuestionDataIterator {
         let instance = QuestionData::new(
             Arc::clone(&self.survey.data),
             question,
-            Arc::clone(&self.survey.config),
+            self.survey.config().clone(),
         );
 
         self.index += 1;
