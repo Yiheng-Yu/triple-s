@@ -223,7 +223,7 @@ impl Survey {
         Some(QuestionData::new(
             Arc::clone(&self.data),
             question,
-            self.config.read().clone(),
+            Arc::clone(&self.config),
         ))
     }
 
@@ -328,7 +328,7 @@ impl Survey {
     ///         show_column_total: true
     ///     },
     ///     LabelOptions {
-    ///         include_code_value: false,
+    ///         include_response_codes: false,
     ///         include_question_name: false,
     ///         ..Default::default()
     ///     }
@@ -426,7 +426,7 @@ impl Survey {
         if label_options.include_question_name {
             columns.push(label_options.question_name_column(question_name));
         }
-        if label_options.include_code_value {
+        if label_options.include_response_codes {
             columns.push(
                 col(question_name).alias(label_options.col_code_value.unwrap_or(LabelOptions::CODE)),
             );
@@ -837,65 +837,69 @@ impl Survey {
         polars_to_pandas(df, py)
     }
 
-    /// Create a `topline table <https://en.wikipedia.org/wiki/Contingency_table>`_ for a question in the survey.
+    /// Create a cross tab for a question in the survey.
+    ///
+    /// You can compare one question's answers by one or more other questions.
+    /// Response labels are always shown. For multiple-choice questions, each
+    /// selected response is counted separately.
     ///
     /// Args:
-    ///     row (str): name of the question to analyse
-    ///     column (str): name of the question for topline
+    ///     row (str): Name of the question to show as rows.
+    ///     column (list[str], *optional*): Names of the questions to show as columns.
+    ///         Pass at least one question. For counts of a single question,
+    ///         you can use ``survey[row].value_counts()``.
     ///
-    /// Kwrags:
-    ///     show_row_total (bool *optional*):
-    ///         Toogle on to show total sizes for the `row`
-    ///         Default True
-    ///     
-    ///     show_column_total (bool *optional*):
-    ///         Toggle on to show total size for each column.
-    ///         Defaul tRUE
-    ///     
-    ///     output ('pandas' | 'polars' | None, *optional*):
-    ///         Which dataframe library this function should return,
-    ///         default to be consistent with the `dataframe_format` attribute of the current instance (`Survey.dataframe_format`).
+    /// Keyword Args:
+    ///     show_row_total (bool, *optional*):
+    ///         Include the overall count column for the row question. Default ``True``.
+    ///     show_column_total (bool, *optional*):
+    ///         Include the first row of totals. Each column shows its response count,
+    ///         and the overall count shows respondents with non-null row answers.
+    ///         Default ``True``.
+    ///     colname_stats (str, *optional*):
+    ///         Name of the overall count column. Used when ``show_row_total=True``.
+    ///         Default ``'total'``.
+    ///     colname_label (str, *optional*):
+    ///         Name of the row-response label column. Default ``'label'``.
+    ///     colname_code (str, *optional*):
+    ///         Name of the row-response code column. Used when
+    ///         ``include_response_codes=True``. Default ``'code'``.
+    ///     include_response_codes (bool, *optional*):
+    ///         Include the original row-response values in a separate column.
+    ///         The total row has a null code value. Default ``False``.
+    ///     include_question_name (bool, *optional*):
+    ///         Include a ``question`` column with the row question's name in the
+    ///         first displayed row and nulls in the remaining rows. Default ``False``.
+    ///     output ('polars' | 'pandas' | DataFrameFormat, *optional*):
+    ///         Choose a Polars or pandas dataframe, using a string or a
+    ///         ``config.DataFrameFormat`` member. Default ``None`` follows
+    ///         ``survey.dataframe_format`` without changing that setting.
+    ///
+    /// Returns:
+    ///     polars.DataFrame | pandas.DataFrame: Row labels, optional question and code
+    ///         columns, and counts grouped by the column questions' response labels.
+    ///
+    /// Note:
+    ///     You can pass ``None`` for any keyword option to use its default.
+    ///     Missing answers are excluded from response counts. Empty multiple-choice
+    ///     lists count towards the overall respondent total but add no selections.
     ///
     /// Examples:
-    ///
-    ///     Compare AI usage by respondent age
-    ///     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    ///
-    ///     Using stack overflow 2026 survey data as an example, suppose you want to look at the IDE people admire by each country..
-    ///
-    ///     We starts with reading the data:
+    ///     Suppose ``Q2`` asks "Do you cycle to work?" and ``Q4`` records the region.
+    ///     You can compare the answers by region and include the response codes:
     ///
     ///     .. code-block:: python
     ///
-    ///         >>> from triple_s import read_triple_s
-    ///         >>> survey = read_triple_s("stackoverflow_2026.sss", "stackoverflow_2026.asc")
+    ///         table = survey.crosstab(
+    ///             "Q2", ["Q4"], include_response_codes=True,
+    ///             include_question_name=True, colname_stats="answers",
+    ///         )
+    ///         print(table)
     ///
-    ///
-    ///     Then use `Survey.crosstab()` method to get the data:
-    ///
-    ///     .. code-block:: python
-    ///
-    ///         >>> survey.crosstab("Age", ["AIFreq_1"], show_row_total=True, show_column_total=True)
-    ///
-    ///     This would give you a table that looks like:
-    ///     
-    ///     ```text
-    ///     ┌────────────────────┬─────────────┬──────────────────┬─────────────────────────────────┬───────────────┬───────────────────┐
-    ///     │ Age                ┆ Age - Total ┆ AIFreq_1 - Daily ┆ AIFreq_1 - Monthly or Infreque… ┆ AIFreq_1 - NA ┆ AIFreq_1 - Weekly │
-    ///     │ ---                ┆ ---         ┆ ---              ┆ ---                             ┆ ---           ┆ ---               │
-    ///     │ str                ┆ u32         ┆ u32              ┆ u32                             ┆ u32           ┆ u32               │
-    ///     ╞════════════════════╪═════════════╪══════════════════╪═════════════════════════════════╪═══════════════╪═══════════════════╡
-    ///     │ Null               ┆ 30903       ┆ 8403             ┆ 712                             ┆ 19472         ┆ 2316              │
-    ///     │ Under 18 years old ┆ 969         ┆ 62               ┆ 33                              ┆ 830           ┆ 44                │
-    ///     │ 18-24 years old    ┆ 4944        ┆ 809              ┆ 106                             ┆ 3760          ┆ 269               │
-    ///     │ 25-34 years old    ┆ 9267        ┆ 2489             ┆ 165                             ┆ 5956          ┆ 657               │
-    ///     │ 35-44 years old    ┆ 8522        ┆ 2809             ┆ 195                             ┆ 4860          ┆ 658               │
-    ///     │ 45-54 years old    ┆ 4198        ┆ 1437             ┆ 112                             ┆ 2256          ┆ 393               │
-    ///     │ 55-64 years old    ┆ 1829        ┆ 581              ┆ 67                              ┆ 980           ┆ 201               │
-    ///     │ 65 years or older  ┆ 822         ┆ 178              ┆ 29                              ┆ 534           ┆ 81                │
-    ///     │ Prefer not to say  ┆ 352         ┆ 38               ┆ 5                               ┆ 296           ┆ 13                │
-    ///     └────────────────────┴─────────────┴──────────────────┴─────────────────────────────────┴───────────────┴───────────────────┘
-    ///     ```
+    ///     This gives you ``question``, ``code``, ``label``, and ``answers`` columns,
+    ///     followed by columns such as ``Q4 - North`` and ``Q4 - South``.
+    ///     You can hide the first totals row with ``show_column_total=False``,
+    ///     or request a pandas dataframe with ``output="pandas"``.
     #[pyo3(
         name = "crosstab",
         signature=(
@@ -903,7 +907,12 @@ impl Survey {
             column: "list[str]"=None,
             show_row_total: "bool"=None,
             show_column_total: "bool"=None,
-            output: "'polars'|'pandas'|None"=None,
+            colname_stats: "str" = "total",
+            colname_label: "str" = "label",
+            colname_code: "str" = "code",
+            include_response_codes: "bool" = false,
+            include_question_name: "bool" = false,
+            output: "'polars'|'pandas'|DataFrameFormat"=None,
         )
     )]
     fn py_crosstab<'py>(
@@ -913,6 +922,11 @@ impl Survey {
         column: Option<Vec<String>>,
         show_row_total: Option<bool>,
         show_column_total: Option<bool>,
+        colname_stats: Option<&str>,
+        colname_label: Option<&str>,
+        colname_code: Option<&str>,
+        include_response_codes: Option<bool>,
+        include_question_name: Option<bool>,
         output: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let columns: Vec<&str> = column
@@ -922,13 +936,24 @@ impl Survey {
             .map(String::as_str)
             .collect();
 
+        let label_options = LabelOptions::new()
+            .with_include_question_name(include_question_name.unwrap_or(false))
+            .with_include_response_codes(include_response_codes.unwrap_or(false))
+            // think this would be easier for the user and makes documentation less confusing
+            // as the user can just call `ffill()` to fill nan values with question name
+            // should they want to.
+            .with_fill_question_name_column(false)
+            .with_col_count(colname_stats)
+            .with_col_label(colname_label)
+            .with_col_code(colname_code);
+
         let arguments = AnalysisOptions {
             question_name: row,
             columns: &columns,
             show_row_total: show_row_total.unwrap_or(true),
             show_column_total: show_column_total.unwrap_or(true),
         };
-        let frame = self.crosstab(arguments, LabelOptions::default())
+        let frame = self.crosstab(arguments, label_options)
             .map_err(PyPolarsErr::Polars)?;
 
         match output
@@ -969,7 +994,7 @@ impl QuestionDataIterator {
         let instance = QuestionData::new(
             Arc::clone(&self.survey.data),
             question,
-            self.survey.config().clone(),
+            Arc::clone(&self.survey.config),
         );
 
         self.index += 1;

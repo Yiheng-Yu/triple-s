@@ -24,7 +24,7 @@ pub struct AnalysisOptions<'a> {
 pub struct LabelOptions<'a> {
     /// Toggle on to include a column of code values for each response item
     /// Used only for single/ multi-choice questions
-    pub include_code_value: bool,
+    pub include_response_codes: bool,
 
     /// Toggle on to add a column that shows the question name
     pub include_question_name: bool,
@@ -35,7 +35,7 @@ pub struct LabelOptions<'a> {
     /// Column name for the question name column, default "question", only used when `include_question_name` is `true`
     pub col_question_name: Option<&'a str>,
 
-    /// Column name for the response code column, default "code", only used when `include_code_value` is `true`
+    /// Column name for the response code column, default "code", only used when `include_response_codes` is `true`
     pub col_code_value: Option<&'a str>,
 
     /// Column name for the response label column, default "label"
@@ -48,7 +48,7 @@ pub struct LabelOptions<'a> {
 impl<'a> Default for LabelOptions<'a> {
     fn default() -> Self {
         Self {
-            include_code_value: false,
+            include_response_codes: false,
             include_question_name: false,
             fill_question_name_column: false,
             col_question_name: Some(Self::QUESTION),
@@ -79,8 +79,8 @@ impl<'a> LabelOptions<'a> {
 
     /// Toggle on to include a column of code values for each response item
     /// Used only for single/ multi-choice questions
-    pub fn with_include_code_value(mut self, value: bool) -> Self {
-        self.include_code_value = value;
+    pub fn with_include_response_codes(mut self, value: bool) -> Self {
+        self.include_response_codes = value;
         self
     }
 
@@ -102,7 +102,7 @@ impl<'a> LabelOptions<'a> {
         self
     }
 
-    /// Column name for the response code column, default Self::CODE, only used when `include_code_value` is `true`
+    /// Column name for the response code column, default Self::CODE, only used when `include_response_codes` is `true`
     pub fn with_col_code(mut self, value: Option<&'a str>) -> Self {
         self.col_code_value = value;
         self
@@ -150,7 +150,7 @@ impl<'a> LabelOptions<'a> {
         }
 
         // append response code column? or not
-        if self.include_code_value {
+        if self.include_response_codes {
             let name = self.col_code_value.unwrap_or(Self::CODE);
             columns.push(col(question_name).alias(name));
         }

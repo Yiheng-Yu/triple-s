@@ -133,10 +133,27 @@ You can also pass several questions as columns:
 
    table = survey.crosstab("Q2", ["Q4", "Q5"])
 
-This gives you the column groups side by side, with names such as
-``Q4 - Good``.
 
-If you want a pandas dataframe instead, simply add ``format="pandas"``.
+Include response codes and question names
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You can include the row-response codes and question name, and give the
+overall count column a name:
+
+.. code-block:: python
+
+   table = survey.crosstab(
+       "Q2", 
+       ["Q4"], 
+       include_response_codes=True,
+       include_question_name=True, 
+       colname_stats="answers",
+   )
+
+This adds ``code`` and ``question`` columns. The question name appears only
+in the first displayed row; the remaining rows contain nulls.
+
+If you want a pandas dataframe instead, simply add ``output="pandas"``.
 Otherwise, the output follows ``survey.dataframe_format``. See the
 :doc:`Survey Data recipes <../recipes/survey_data>` for more examples.
 

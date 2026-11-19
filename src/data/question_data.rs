@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 #[cfg(feature = "pyo3")]
 use chrono::{NaiveDate, NaiveTime};
+use parking_lot::RwLockReadGuard;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
@@ -50,7 +51,7 @@ Raises:
 #[derive(Clone)]
 pub struct QuestionData {
     data: ArcLock<SurveyData>,
-    config: SurveyOptions,
+    config: ArcLock<SurveyOptions>,
     question: Question,
 }
 
@@ -124,9 +125,9 @@ impl QuestionData {
         self.question.response_label_map()
     }
 
-    /// Configuration options
-    pub fn config(&self) -> &SurveyOptions {
-        &self.config
+    /// Read access to shared survey configuration options.
+    pub fn config(&self) -> RwLockReadGuard<'_, SurveyOptions> {
+        self.config.read()
     }
 }
 
@@ -138,7 +139,7 @@ impl QuestionData {
     pub(crate) fn new(
         data: ArcLock<SurveyData>,
         question: Question,
-        config: SurveyOptions,
+        config: ArcLock<SurveyOptions>,
     ) -> Self {
         Self {
             data,
@@ -582,6 +583,7 @@ impl QuestionData {
     ///
     ///     colname_code (str, *optional*):
     ///         Column name for the response code column.
+    ///         Only used when `include_response_codes` is `True`.
     ///         Default `'code'`
     /// 
     ///     include_question_name (bool, *optional*):
@@ -589,9 +591,8 @@ impl QuestionData {
     ///         and nulls in the remaining rows.
     ///         Default `False`
     ///
-    ///     include_code_value (bool, *optional*):
+    ///     include_response_codes (bool, *optional*):
     ///         Include the original response values in a separate column.
-    ///         The total row has a null code value.
     ///         Default `False`
     ///
     ///     output ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
@@ -609,7 +610,7 @@ impl QuestionData {
             colname_stats: "str" = "total",
             colname_label: "str" = "label",
             colname_code: "str" = "code",
-            include_code_value: "bool" = false,
+            include_response_codes: "bool" = false,
             include_question_name: "bool" = false,
             output: "'polars'|'pandas'|DataFrameFormat" = None
         )
@@ -620,13 +621,13 @@ impl QuestionData {
         colname_stats: Option<&str>,
         colname_label: Option<&str>,
         colname_code: Option<&str>,
-        include_code_value: Option<bool>,
+        include_response_codes: Option<bool>,
         include_question_name: Option<bool>,
         output: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let options = LabelOptions::new()
             .with_include_question_name(include_question_name.unwrap_or(false))
-            .with_include_code_value(include_code_value.unwrap_or(false))
+            .with_include_response_codes(include_response_codes.unwrap_or(false))
             // think this would be easier for the user and makes documentation less confusing
             // as the user can just call `ffill()` to fill nan values with question name
             // should they want to.
@@ -642,7 +643,7 @@ impl QuestionData {
         let format = output
             .map(|value| DataFrameFormat::from_py_any(value))
             .transpose()?
-            .unwrap_or(self.config.py_dataframe_format.clone());
+            .unwrap_or(self.config().py_dataframe_format.clone());
         match format {
             DataFrameFormat::Polars => PyDataFrame(result).into_bound_py_any(py),
             DataFrameFormat::Pandas => polars_to_pandas(result, py),

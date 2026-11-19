@@ -201,7 +201,7 @@ fn test_crosstab_label_options() {
                     LabelOptions::new()
                         .with_include_question_name(true)
                         .with_fill_question_name_column(fill_question_name)
-                        .with_include_code_value(true)
+                        .with_include_response_codes(true)
                         .with_col_question_name(Some(question))
                         .with_col_code(Some(code))
                         .with_col_label(Some(label))
@@ -318,7 +318,7 @@ fn test_read_stack_overflow_survey() {
         },
 
         LabelOptions {
-            include_code_value: true,
+            include_response_codes: true,
             ..Default::default()
         }
     )
@@ -330,7 +330,7 @@ fn test_read_stack_overflow_survey() {
     println!("{:?}", res);
 
     println!("Base size:");
-    let options = LabelOptions::new().with_include_code_value(true);
+    let options = LabelOptions::new().with_include_response_codes(true);
     let base = survey
         .get_question_data(topbreak)
         .unwrap()
@@ -345,9 +345,9 @@ fn test_value_counts() {
     let question = survey.get_question_data("Q3").unwrap();
 
     let options = LabelOptions::new()
-        .with_include_code_value(true)
+        .with_include_response_codes(true)
         .with_col_code(Some("HAHA"))
-        .with_include_code_value(true)
+        .with_include_response_codes(true)
         .with_include_question_name(true)
         .with_fill_question_name_column(true);
     let stats = question.value_counts(options).unwrap();

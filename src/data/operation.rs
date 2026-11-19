@@ -118,7 +118,8 @@ pub(crate) fn create_crosstab(
                 empty_as_null: false,
                 keep_nulls: false,
             },
-        );
+        )
+        .filter(col(target).is_not_null());
     let original_dtype = lf.collect_schema()?.try_get(target)?.clone();
 
     let columns = lf
