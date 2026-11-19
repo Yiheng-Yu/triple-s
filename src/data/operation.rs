@@ -71,18 +71,6 @@ pub(crate) fn frequency_counts(
     }
 }
 
-
-
-// pub(crate) fn value_counts_by(
-//     original: &LazyFrame,
-//     target: &str,
-//     group_by: &str
-// ) -> LazyFrame {
-//     original.clone()
-//         .group_by([col(group_by)])
-//         .agg([col(target).value_counts(true, true, VALUE_COUNTS.into(), false)])
-// }
-
 /// This function returns a lazyframe to be collected later (basically needs to add text labels)
 ///
 /// This function DOES NOT output a overall frequency_count of the `target` column
