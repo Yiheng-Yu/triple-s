@@ -64,6 +64,9 @@ fn test_value_display_success() {
     assert_eq!(series_value.dtype(), &DataType::UInt32);
 
     survey.config_mut().response_display = ResponseDisplay::Label;
+    assert_eq!(question.config().response_display, ResponseDisplay::Value);
+    assert_eq!(question.to_series().unwrap().dtype(), &DataType::UInt32);
+    let question = survey.get_question_data("Q2").unwrap();
     assert_eq!(question.config().response_display, ResponseDisplay::Label);
     let series_label = question.to_series().unwrap();
     assert_eq!(series_label.dtype(), &DataType::String)

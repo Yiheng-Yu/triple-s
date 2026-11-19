@@ -105,8 +105,10 @@ Use a question name to get a shared :class:`triple_s.QuestionData` view:
    print(survey.datamap["Q2"].label)
    print(answers.to_polars())
 
-The view stays connected to the survey's data. ``to_polars()`` returns a
-Polars Series:
+The view stays connected to the survey's data. It copies the current
+``response_display`` and ``dataframe_format`` settings when you create it;
+later changes to the survey's settings leave existing views unchanged.
+``to_polars()`` returns a Polars Series:
 
 .. code-block:: python
 

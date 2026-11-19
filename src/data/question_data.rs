@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 #[cfg(feature = "pyo3")]
 use chrono::{NaiveDate, NaiveTime};
-use parking_lot::RwLockReadGuard;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
@@ -51,7 +50,7 @@ Raises:
 #[derive(Clone)]
 pub struct QuestionData {
     data: ArcLock<SurveyData>,
-    config: ArcLock<SurveyOptions>,
+    config: SurveyOptions,
     question: Question,
 }
 
@@ -125,9 +124,9 @@ impl QuestionData {
         self.question.response_label_map()
     }
 
-    /// Read access to shared survey configuration options.
-    pub fn config(&self) -> RwLockReadGuard<'_, SurveyOptions> {
-        self.config.read()
+    /// Configuration options copied from the survey when this view was created.
+    pub fn config(&self) -> &SurveyOptions {
+        &self.config
     }
 }
 
@@ -139,7 +138,7 @@ impl QuestionData {
     pub(crate) fn new(
         data: ArcLock<SurveyData>,
         question: Question,
-        config: ArcLock<SurveyOptions>,
+        config: SurveyOptions,
     ) -> Self {
         Self {
             data,
@@ -643,7 +642,7 @@ impl QuestionData {
         let format = output
             .map(|value| DataFrameFormat::from_py_any(value))
             .transpose()?
-            .unwrap_or(self.config().py_dataframe_format.clone());
+            .unwrap_or(self.config.py_dataframe_format.clone());
         match format {
             DataFrameFormat::Polars => PyDataFrame(result).into_bound_py_any(py),
             DataFrameFormat::Pandas => polars_to_pandas(result, py),

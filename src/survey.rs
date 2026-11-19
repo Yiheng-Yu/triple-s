@@ -223,7 +223,7 @@ impl Survey {
         Some(QuestionData::new(
             Arc::clone(&self.data),
             question,
-            Arc::clone(&self.config),
+            self.config.read().clone(),
         ))
     }
 
@@ -994,7 +994,7 @@ impl QuestionDataIterator {
         let instance = QuestionData::new(
             Arc::clone(&self.survey.data),
             question,
-            Arc::clone(&self.survey.config),
+            self.survey.config().clone(),
         );
 
         self.index += 1;

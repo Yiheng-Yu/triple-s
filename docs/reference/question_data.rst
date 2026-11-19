@@ -31,12 +31,12 @@ Attributes
 .. autoattribute:: QuestionData.dataframe_format
    :annotation: : str
 
-   Inherited from the parent survey.
+   Copied from the parent survey when this view is created.
 
 .. autoattribute:: QuestionData.response_display
    :annotation: : str
 
-   Inherited from the parent survey.
+   Copied from the parent survey when this view is created.
 
 .. autoattribute:: QuestionData.response_label
    :annotation: : dict[int | float | str, Text]
