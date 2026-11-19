@@ -1573,13 +1573,15 @@ class Survey:
             Survey: The constructed Survey instance.
         """
     def __repr__(self, /) -> str: ...
-    def crosstab(self, /, row: "str", column: "list[str]" = None, show_row_total: "bool" = None, show_column_total: "bool" = None, colname_stats: "str" = "total", colname_label: "str" = "label", colname_code: "str" = "code", include_response_codes: "bool" = False, include_question_name: "bool" = False, output: "'polars'|'pandas'|DataFrameFormat" = None) -> Any:
+    def crosstab(self, /, row: "str", column: "list[str]" = None, show_row_total: "bool" = None, show_column_total: "bool" = None, colname_stats: "str" = "total", colname_label: "str" = "label", colname_code: "str" = "code", include_response_codes: "bool" = False, include_question_name: "bool" = False, output: "'polars'|'pandas'|DataFrameFormat" = None, normalise: "bool" = False) -> Any:
         """
         Create a cross tab for a question in the survey.
         
         You can compare one question's answers by one or more other questions.
         Response labels are always shown. For multiple-choice questions, each
         selected response is counted separately.
+        Set ``normalise=True`` to return proportions instead of counts, keeping
+        the first row as total counts.
         
         Args:
             row (str): Name of the question to show as rows.
@@ -1612,6 +1614,10 @@ class Survey:
                 Choose a Polars or pandas dataframe, using a string or a
                 ``config.DataFrameFormat`` member. Default ``None`` follows
                 ``survey.dataframe_format`` without changing that setting.
+            normalise (bool, *optional*):
+                Return counts as relative frequencies normalised to 1.0, using
+                each column's total. The first row keeps the original total counts.
+                For example, ``0.75`` represents 75%. Default ``False``.
         
         Returns:
             polars.DataFrame | pandas.DataFrame: Row labels, optional question and code
@@ -1621,6 +1627,9 @@ class Survey:
             You can pass ``None`` for any keyword option to use its default.
             Missing answers are excluded from response counts. Empty multiple-choice
             lists count towards the overall respondent total but add no selections.
+            Normalised results use floating-point columns. Totals are used as
+            denominators even when ``show_column_total=False``. For multiple-choice
+            row questions, proportions can add up to more than 1.0.
         
         Examples:
             Suppose ``Q2`` asks "Do you cycle to work?" and ``Q4`` records the region.

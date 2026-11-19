@@ -131,6 +131,79 @@ def test_crosstab_none_total_flags_use_defaults(survey):
     )
 
 
+@pytest.mark.parametrize("row, column, labels, first, second", [
+    ("choice", "group", ["Yes", "No"], [0.5, 0.5], [0.5, 0.5]),
+    ("multi", "group", ["One", "Two"], [1.0, 0.5], [0.0, 0.5]),
+    ("choice", "multi", ["Yes", "No"], [0.5, 0.5], [1.0, 0.0]),
+])
+@pytest.mark.parametrize("show_row_total", [False, True])
+@pytest.mark.parametrize("show_column_total", [False, True])
+def test_crosstab_normalise(survey, row, column, labels, first, second, show_row_total, show_column_total):
+    group_labels = ["North", "South"] if column == "group" else ["One", "Two"]
+    expected = pl.DataFrame({
+        "question": [row, None, None],
+        "value": pl.Series([None, 1, 2], dtype=pl.UInt32),
+        "answer": ["Total", *labels],
+        "answers": [4.0, 0.5, 0.5],
+        f"{column} - {group_labels[0]}": [2.0, *first],
+        f"{column} - {group_labels[1]}": [2.0, *second],
+    })
+    if not show_row_total:
+        expected = expected.drop("answers")
+    if not show_column_total:
+        expected = expected.slice(1).with_columns(pl.Series("question", [row, None]))
+    result = survey.crosstab(
+        row, [column], normalise=True, show_row_total=show_row_total,
+        show_column_total=show_column_total, include_response_codes=True,
+        include_question_name=True, colname_stats="answers", colname_label="answer", colname_code="value",
+    )
+    assert_frame_equal(result, expected)
+
+
+@pytest.mark.parametrize("output", ["polars", "pandas", config.DataFrameFormat.Polars, config.DataFrameFormat.Pandas])
+def test_crosstab_normalise_multiple_groups_and_output(survey, output):
+    survey.dataframe_format = "polars" if output in ("pandas", config.DataFrameFormat.Pandas) else "pandas"
+    expected = pl.DataFrame({
+        "label": ["Total", "Yes", "No"],
+        "total": [4.0, 0.5, 0.5],
+        "group - North": [2.0, 0.5, 0.5],
+        "group - South": [2.0, 0.5, 0.5],
+        "multi - One": [2.0, 0.5, 0.5],
+        "multi - Two": [2.0, 1.0, 0.0],
+    })
+    result = survey.crosstab("choice", ["group", "multi"], normalise=True, output=output)
+    if output in ("pandas", config.DataFrameFormat.Pandas):
+        pd.testing.assert_frame_equal(result, expected.to_pandas(use_pyarrow_extension_array=True))
+    else:
+        assert_frame_equal(result, expected)
+
+
+@pytest.mark.parametrize("normalise", [False, None])
+def test_crosstab_normalise_off_uses_counts(survey, normalise):
+    assert_frame_equal(
+        survey.crosstab("choice", ["group"], normalise=normalise),
+        survey.crosstab("choice", ["group"]),
+    )
+
+
+@pytest.mark.parametrize("show_column_total", [False, True])
+def test_crosstab_normalise_without_row_answers(survey, show_column_total):
+    survey.data = SurveyData.from_polars(pl.DataFrame({
+        "choice": pl.Series([None, None, None, None], dtype=pl.UInt32),
+        "group": pl.Series([1, 2, 1, 2], dtype=pl.UInt32),
+    }))
+    expected = pl.DataFrame({
+        "label": ["Total"],
+        "total": [0.0],
+        "group - North": [2.0],
+        "group - South": [2.0],
+    })
+    if not show_column_total:
+        expected = expected.head(0)
+    result = survey.crosstab("choice", ["group"], normalise=True, show_column_total=show_column_total)
+    assert_frame_equal(result, expected)
+
+
 @pytest.mark.parametrize("row, labels", [("choice", ["Yes", "No"]), ("multi", ["One", "Two"])])
 @pytest.mark.parametrize("include_question_name", [False, True])
 @pytest.mark.parametrize("include_response_codes", [False, True])
@@ -222,7 +295,7 @@ def test_crosstab_none_options_use_defaults(survey, option):
     )
 
 
-@pytest.mark.parametrize("flag", ["include_response_codes", "include_question_name"])
+@pytest.mark.parametrize("flag", ["include_response_codes", "include_question_name", "normalise"])
 @pytest.mark.parametrize("value", ["yes", []])
 def test_crosstab_rejects_invalid_display_flags(survey, flag, value):
     with pytest.raises(TypeError):

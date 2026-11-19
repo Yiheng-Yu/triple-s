@@ -17,6 +17,11 @@ pub struct AnalysisOptions<'a> {
     pub show_row_total: bool,
     /// show column total
     pub show_column_total: bool,
+    /// Return counts as relative frequencies normalised to 1.0.
+    ///
+    /// Each response count is divided by its column total. The first row,
+    /// when shown, keeps the original total counts.
+    pub normalise: bool,
 }
 
 /// Options for the labelling summary table outputs (e.g., [`QuestionData::value_counts`], [`Survey::corsstab`])
@@ -61,16 +66,16 @@ impl<'a> Default for LabelOptions<'a> {
 
 impl<'a> LabelOptions<'a> {
     /// default value for field `col_question`
-    pub const QUESTION: &str = "question";
+    pub const QUESTION: &'static str = "question";
 
     /// default value for field `col_code_label`
-    pub const LABEL: &str = "label";
+    pub const LABEL: &'static str = "label";
     
     /// default value for field `col_code_value`
-    pub const CODE: &str = "code";
+    pub const CODE: &'static str = "code";
     
     /// default value for field `col_count`
-    pub const COUNT: &str = "total";
+    pub const COUNT: &'static str = "total";
 
     /// Create new instance with default options
     pub fn new() -> Self {

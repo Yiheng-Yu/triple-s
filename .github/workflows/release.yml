@@ -32,6 +32,12 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@v4
 
+      - name: Install latest stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Show Rust compiler version
+        run: rustc --version
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -50,6 +56,7 @@ jobs:
           SCCACHE_GHA_VERSION: ${{ github.workflow }}-${{ github.job }}-${{ matrix.target }}
         with:
           command: build
+          rust-toolchain: stable
           target: ${{ matrix.target }}
           args: --release --compatibility pypi --out dist
           manylinux: "2_28"
