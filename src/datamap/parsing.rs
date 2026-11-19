@@ -4,7 +4,7 @@ use std::{collections::HashSet, range::Range};
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime, Timelike};
 
-// use either::Either;
+use either::Either;
 use parking_lot::RwLockReadGuard;
 use polars::{frame::row::Row, prelude::*};
 use rayon::prelude::*;
@@ -208,45 +208,45 @@ where
     I::Item: Send,
     F: Fn(I::Item) -> Result<Row<'static>> + Sync,
 {
-    // if rayon::current_num_threads() == 1 {
-    //     let mut finished = false;
-    //     return Either::Left(std::iter::from_fn(move || {
-    //         if finished {
-    //             return None;
-    //         }
-    //         let row = parse(records.next()?);
-    //         finished = row.is_err();
-    //         Some(row)
-    //     }));
-    // }
+    if rayon::current_num_threads() == 1 {
+        let mut finished = false;
+        return Either::Left(std::iter::from_fn(move || {
+            if finished {
+                return None;
+            }
+            let row = parse(records.next()?);
+            finished = row.is_err();
+            Some(row)
+        }));
+    }
 
     let mut finished = false;
-    // Either::Right(
-    std::iter::from_fn(move || {
-        if finished {
-            return None;
-        }
-        let mut batch = Vec::with_capacity(1024);
-        batch.extend(records.by_ref().take(1024));
-        
-        if batch.is_empty() {
-            return None;
-        }
-        
-        let mut rows: Vec<_> = batch
-            .into_par_iter()
-            .map(&parse)
-            .collect();
-        
-        if let Some(index) = rows.iter().position(Result::is_err) {
-            rows.truncate(index + 1);
-            finished = true;
-        }
+    Either::Right(
+        std::iter::from_fn(move || {
+            if finished {
+                return None;
+            }
+            let mut batch = Vec::with_capacity(1024);
+            batch.extend(records.by_ref().take(1024));
+            
+            if batch.is_empty() {
+                return None;
+            }
+            
+            let mut rows: Vec<_> = batch
+                .into_par_iter()
+                .map(&parse)
+                .collect();
+            
+            if let Some(index) = rows.iter().position(Result::is_err) {
+                rows.truncate(index + 1);
+                finished = true;
+            }
 
-        Some(rows)
-    })
-    .flatten()
-    // )
+            Some(rows)
+        })
+        .flatten()
+    )
 }
 
 pub(crate) fn parse_cell_value(
