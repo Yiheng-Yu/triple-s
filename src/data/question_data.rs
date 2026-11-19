@@ -1,8 +1,7 @@
-use std::{collections::HashMap, sync::LazyLock};
+use std::collections::HashMap;
 
 #[cfg(feature = "pyo3")]
 use chrono::{NaiveDate, NaiveTime};
-use parking_lot::RwLockReadGuard;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
@@ -17,7 +16,6 @@ use pyo3_polars::{PyDataFrame, PySeries, error::PyPolarsErr};
 #[cfg(feature = "pyo3")]
 use crate::{
     DataRange,
-    datamap::Text,
     error::InternalError,
     options::DataFrameFormat,
     prelude::*,
@@ -31,9 +29,9 @@ use crate::{
 };
 use crate::{
     QuestionType,
-    data::{options::DisplayOptions, survey_data::SurveyData},
-    datamap::Question,
-    options::{CrossTabOptions, ResponseDisplay},
+    data::survey_data::SurveyData,
+    datamap::{Question, text::Text},
+    options::{LabelOptions, ResponseDisplay, SurveyOptions},
     utils::ArcLock,
 };
 
@@ -52,7 +50,7 @@ Raises:
 #[derive(Clone)]
 pub struct QuestionData {
     data: ArcLock<SurveyData>,
-    config: DisplayOptions,
+    config: SurveyOptions,
     question: Question,
 }
 
@@ -127,7 +125,7 @@ impl QuestionData {
     }
 
     /// Configuration options
-    pub fn config(&self) -> &DisplayOptions {
+    pub fn config(&self) -> &SurveyOptions {
         &self.config
     }
 }
@@ -140,7 +138,7 @@ impl QuestionData {
     pub(crate) fn new(
         data: ArcLock<SurveyData>,
         question: Question,
-        config: DisplayOptions,
+        config: SurveyOptions,
     ) -> Self {
         Self {
             data,
@@ -201,7 +199,7 @@ impl QuestionData {
     ///
     /// _The first row is the total count of not-null values_
     #[allow(clippy::mutable_key_type)]
-    pub fn value_counts(&self, options: CrossTabOptions<'_>) -> PolarsResult<DataFrame> {
+    pub fn value_counts(&self, options: LabelOptions<'_>) -> PolarsResult<DataFrame> {
         let question_name = self.name();
         let raw_data = self.to_value_column()?;
 
@@ -240,96 +238,18 @@ impl QuestionData {
         .lazy();
 
         // get response labels
-        let (row_old, row_new): (Vec<AnyValue<'static>>, Vec<String>) = self
-            .datamap()
-            .response_label_map()
-            .iter()
-            .map(|(id, label)| (id.clone(), label.read().to_string()))
-            .unzip();
-        let row_old = Series::from_any_values("old".into(), &row_old, true)?;
-        let row_new = Series::new("new".into(), row_new);
+        let match_expression =
+            options.match_response_label(&question_name, self.response_label_map())?;
+        let result = result.with_column(match_expression);
 
-        // resplace response labels
-        let colname_resp_label = options.label_col.unwrap_or("label");
-        let result = result.with_columns([col(&question_name)
-            .replace_strict(
-                lit(row_old.clone()),
-                lit(row_new),
-                Some(col(&question_name).cast(DataType::String)),
-                Some(DataType::String),
-            )
-            .fill_null(lit("Null")) // TODO!
-            .alias(colname_resp_label)]);
+        // Fianl formatting: rename column names, add quesiton names etc.,
+        let columns = options.into_expression(&question_name);
 
-        // append response code column? or not
-        let mut columns = Vec::new();
-
-        // Question name column
-        if options.show_question_name & options.fill_question_name_column {
-            let name = options.question_name_col.unwrap_or("question");
-            let qname_column = lit(question_name.clone());
-            columns.push(qname_column.alias(name));
-        }
-
-        if options.show_question_name & !options.fill_question_name_column {
-
-            // only set value of the first cell, replace the rust with Null
-            let to_fill = int_range(lit(0), len(), 1, DataType::Int64);
-            let qname_column = when(to_fill.eq(lit(0)))
-                .then(lit(question_name.clone()))
-                .otherwise(lit(NULL));
-            columns.push(qname_column.alias(name));
-        }
-
-        // Response code column
-        if options.include_code_value {
-            let name = options.code_col.unwrap_or("code");
-            columns.push(col(&question_name).alias(name));
-        }
-
-        // Always include these
-        columns.push(col(colname_resp_label));
-        columns.push(col(colname_stats));
-
-        // final output
-        result.select(columns)
+        result
+            .select(columns)
             .with_simplify_expr(true)
             .with_comm_subplan_elim(true)
             .collect()
-
-        // let result = if !options.include_code_value {
-        //     result.select([
-        //         col(colname_resp_label),
-        //         col(colname_stats)
-        //     ])
-        // } else {
-        //     let colname_resp_code = options.code_col.unwrap_or("code");
-        //     result.select([
-        //         col(&question_name).alias(colname_resp_code),
-        //         col(colname_resp_label),
-        //         col(colname_stats)
-        //     ])
-        // };
-
-        // // append question name column? or not
-        // if options.show_question_name {
-        //     let colname_qname = options.question_name_col.unwrap_or("question");
-        //     let qname_column = if options.fill_question_name_column {
-        //         col(colname_qname)
-        //     } else {
-        //         col(colname_qname)
-        //     };
-
-        //     result.with_column(qname_column)
-        //         .select([
-        //             col(colname_qname),
-        //             all().exclude_cols(colname_qname).as_expr()
-        //         ])
-        //         .collect()
-
-        // } else {
-        //     result.collect()
-        // }
     }
 
     /// Checks if `other` is comes from the same survey as `self`.
@@ -675,7 +595,7 @@ impl QuestionData {
         name: Option<&str>,
         format: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let options = CrossTabOptions::new().with_count_col(name);
+        let options = LabelOptions::new().with_count_col(name);
 
         let result = self.value_counts(options).map_err(PyPolarsErr::Polars)?;
 

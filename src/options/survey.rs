@@ -1,4 +1,5 @@
 //! Configuration options for reading/ exporting/ intereacting with objects
+
 #[cfg(feature = "pyo3")]
 use std::str::FromStr;
 
@@ -13,7 +14,7 @@ use crate::utils::get_type_name;
 
 /// General configurations
 #[derive(Debug, Clone, Default)]
-pub struct DisplayOptions {
+pub struct SurveyOptions {
     /// Specifies the DataFrame library used for Python outputs
     ///
     /// Default `Polars`.
@@ -23,7 +24,7 @@ pub struct DisplayOptions {
     pub response_display: ResponseDisplay,
 }
 
-impl DisplayOptions {
+impl SurveyOptions {
     /// boolean for checking if `response_display == ResponseDisplay::Label`
     pub fn show_response_label(&self) -> bool {
         self.response_display == ResponseDisplay::Label
@@ -156,105 +157,13 @@ impl Flag for ResponseDisplay {
     }
 }
 
-/// Options for running crosstabs (e.g., [`QuestionData::value_counts`], [`Survey::corsstab`])
-#[allow(unused)]
-pub struct CrossTabOptions<'a> {
-    /// Toggle on to include a column of code values for each response item
-    /// Used only for single/ multi-choice questions
-    pub include_code_value: bool,
-
-    /// Toggle on to add a column that shows the question name
-    pub show_question_name: bool,
-
-    /// Toggle on to fill the question name column with name of the question, only used when "show_question_name" is `true`. Default `false`.
-    pub fill_question_name_column: bool,
-
-    /// Column name for the question name column, default "question", only used when `show_question_name` is `true`
-    pub question_name_col: Option<&'a str>,
-
-    /// Column name for the response code column, default "code", only used when `include_code_value` is `true`
-    pub code_col: Option<&'a str>,
-
-    /// Column name for the response label column, default "label"
-    pub label_col: Option<&'a str>,
-
-    /// Column name for the value counts column, default "count" (same as polars)
-    pub count_col: Option<&'a str>,
-}
-
-impl<'a> Default for CrossTabOptions<'a> {
-    fn default() -> Self {
-        Self {
-            include_code_value: false,
-            show_question_name: false,
-            fill_question_name_column: false,
-            question_name_col: Some("question"),
-            count_col: Some("total"),
-            label_col: Some("label"),
-            code_col: Some("code"),
-        }
-    }
-}
-
-#[allow(unused)]
-impl<'a> CrossTabOptions<'a> {
-    /// Create new instance with default options
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Toggle on to include a column of code values for each response item
-    /// Used only for single/ multi-choice questions
-    pub fn with_include_code_value(mut self, value: bool) -> Self {
-        self.include_code_value = value;
-        self
-    }
-
-    /// Toggle on to add a column that shows the question name
-    pub fn with_show_question_name(mut self, value: bool) -> Self {
-        self.show_question_name = value;
-        self
-    }
-
-    /// Toggle on to fill the question name column with name of the question, only used when "show_question_name" is `true`. Default `false`.
-    pub fn with_fill_question_name_column(mut self, value: bool) -> Self {
-        self.fill_question_name_column = value;
-        self
-    }
-
-    /// Column name for the question name column, default "question", only used when `show_question_name` is `true`
-    pub fn with_question_name_col(mut self, value: Option<&'a str>) -> Self {
-        self.question_name_col = value;
-        self
-    }
-
-    /// Column name for the response code column, default "code", only used when `include_code_value` is `true`
-    pub fn with_code_col(mut self, value: Option<&'a str>) -> Self {
-        self.code_col = value;
-        self
-    }
-
-    /// Column name for the response label column, default "label"
-    pub fn with_label_col(mut self, value: Option<&'a str>) -> Self {
-        self.label_col = value;
-        self
-    }
-
-    /// Column name for the value counts column of the question, default "total"
-    pub fn with_count_col(mut self, value: Option<&'a str>) -> Self {
-        self.count_col = value;
-        self
-    }
-}
-
 #[cfg(test)]
 mod test {
-
     use super::*;
 
     #[test]
     fn test_resp_display_eq() {
-        let mut config = DisplayOptions::default();
+        let mut config = SurveyOptions::default();
         config.response_display = ResponseDisplay::Label;
         assert_eq!(config.show_response_label(), true);
 

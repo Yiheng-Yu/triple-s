@@ -18,11 +18,7 @@ use crate::{
     utils::{get_type_name, normalize_py_index, polars_to_pandas},
 };
 use crate::{
-    analysis::CrossTabArgs,
-    data::{QuestionData, SurveyData, operation, options::DisplayOptions},
-    datamap::Datamap,
-    error::QuestionNotFound,
-    utils::{ArcLock, lock_it_up},
+    LabelOptions, data::{QuestionData, SurveyData, operation}, datamap::Datamap, error::QuestionNotFound, options::{AnalysisOptions, SurveyOptions}, utils::{ArcLock, lock_it_up},
 };
 
 // rust docstring
@@ -57,7 +53,7 @@ Returns:
 pub struct Survey {
     datamap: Datamap,
     data: ArcLock<SurveyData>,
-    config: ArcLock<DisplayOptions>,
+    config: ArcLock<SurveyOptions>,
 }
 
 /// Fields
@@ -112,12 +108,12 @@ impl Survey {
     }
 
     /// Configuration options
-    pub fn config(&self) -> RwLockReadGuard<'_, DisplayOptions> {
+    pub fn config(&self) -> RwLockReadGuard<'_, SurveyOptions> {
         self.config.read()
     }
 
     /// Mutable view of survey configuration options
-    pub fn config_mut(&mut self) -> RwLockWriteGuard<'_, DisplayOptions> {
+    pub fn config_mut(&mut self) -> RwLockWriteGuard<'_, SurveyOptions> {
         self.config.write()
     }
 
@@ -194,7 +190,7 @@ impl Survey {
         Self {
             datamap,
             data: lock_it_up(data),
-            config: lock_it_up(DisplayOptions::default()),
+            config: lock_it_up(SurveyOptions::default()),
         }
     }
 
@@ -314,22 +310,29 @@ impl Survey {
 impl Survey {
     /// Gets a [topline table](https://en.wikipedia.org/wiki/Contingency_table) for a given question (`row`) with another question (`column`) as the header.
     ///
-    /// Uses [`CrossTabArgs`] to select the row question, column groups, and optional totals.
+    /// Uses [`AnalysisOptions`] to select the row question, column groups, and optional totals.
     ///
     /// An example output looks like:
     ///
     /// ## Example: looking at respondent age by their AI usage:
     ///
     /// ```ignore
-    /// use triple_s::{read_triple_s, CorssTabArgs};
+    /// use triple_s::{read_triple_s, AnalysisOptions, LabelOptions};
     ///
     /// let survey = read_triple_s("path/to/survey.sss", "path/to/datamap.asc")?;
-    /// let result = survey.corstab(CorssTabArgs {
-    ///     question_name: "Age",
-    ///     columns: &["AIFreq_1", ],
-    ///     show_row_total: true,
-    ///     show_column_total: true
-    /// })?;
+    /// let result = survey.corstab(
+    ///     AnalysisOptions {
+    ///         question_name: "Age",
+    ///         columns: &["AIFreq_1", ],
+    ///         show_row_total: true,
+    ///         show_column_total: true
+    ///     },
+    ///     LabelOptions {
+    ///         include_code_value: false,
+    ///         include_question_name: false,
+    ///         ..Default::default()
+    ///     }
+    /// )?;
     ///
     /// println!("{:?}", result);
     /// ```
@@ -353,8 +356,13 @@ impl Survey {
     /// │ Prefer not to say  ┆ 352         ┆ 38               ┆ 5                               ┆ 296           ┆ 13                │
     /// └────────────────────┴─────────────┴──────────────────┴─────────────────────────────────┴───────────────┴───────────────────┘
     /// ```
-    pub fn crosstab(&self, args: CrossTabArgs<'_>) -> PolarsResult<DataFrame> {
-        let row = args.question_name;
+    pub fn crosstab(
+        &self, 
+        args: AnalysisOptions<'_>, 
+        label_options: LabelOptions<'_>
+    ) -> PolarsResult<DataFrame> {
+
+        let question_name = args.question_name;
         let original = self.data().lazy()?.clone();
 
         // get crosstab for columns
@@ -363,19 +371,18 @@ impl Survey {
             None => DataFrame::empty().lazy(),
             Some(&first) => {
                 let tab =
-                    operation::create_crosstab(&original, row, first, args.show_column_total)?;
+                    operation::create_crosstab(&original, question_name, first, args.show_column_total)?;
                 self.label_output_column(tab, first)?
             }
         };
         let mut output = headers.try_fold(first, |left, &colname| {
             let right =
-                operation::create_crosstab(&original, row, colname, args.show_column_total)?;
+                operation::create_crosstab(&original, question_name, colname, args.show_column_total)?;
             let right = self.label_output_column(right, colname)?;
-
             Ok::<LazyFrame, PolarsError>(left.join(
                 right,
-                [col(row)],
-                [col(row)],
+                [col(question_name)],
+                [col(question_name)],
                 JoinArgs {
                     how: JoinType::Full,
                     validation: JoinValidation::OneToOne,
@@ -393,14 +400,14 @@ impl Survey {
         if args.show_row_total {
             output = operation::frequency_counts(
                 original.clone(),
-                row,
-                Some(&format!("{row} - Total")),
+                question_name,
+                Some(&format!("{question_name} - Total")),
                 args.show_column_total,
             )?
             .join(
                 output,
-                [col(row)],
-                [col(row)],
+                [col(question_name)],
+                [col(question_name)],
                 JoinArgs {
                     how: JoinType::Full,
                     validation: JoinValidation::OneToOne,
@@ -413,7 +420,18 @@ impl Survey {
                 },
             );
         };
-        let output = self.label_output_row(output, row)?;
+
+        // Update response labels
+        let response_label_map = self.datamap()
+            .get(question_name)
+            .ok_or(QuestionNotFound::new(question_name))?
+            .response_label_map();
+        let response_label_replace = label_options.match_response_label(
+            question_name, 
+            response_label_map
+        )?;
+        let output = output.with_column(response_label_replace);
+        // let output = self.label_output_row(output, question_name)?;
 
         output
             .with_simplify_expr(true)
@@ -525,11 +543,11 @@ impl Survey {
         };
         content.append(&mut question_repr);
 
-        // DisplayOptions: dataframe library
+        // SurveyOptions: dataframe library
         let dataframe_format = self.config().py_dataframe_format.to_string();
         content.push(("dataframe_format", format!("{:?}", dataframe_format)));
 
-        // DisplayOptions: return label or value
+        // SurveyOptions: return label or value
         let response_display = self.config().response_display.to_string();
         content.push(("response_display", format!("{:?}", response_display)));
 
@@ -927,13 +945,14 @@ impl Survey {
             .map(String::as_str)
             .collect();
 
-        let arguments = CrossTabArgs {
+        let arguments = AnalysisOptions {
             question_name: row,
             columns: &columns,
             show_row_total: show_row_total.unwrap_or(true),
             show_column_total: show_column_total.unwrap_or(true),
         };
-        let frame = self.crosstab(arguments).map_err(PyPolarsErr::Polars)?;
+        let frame = self.crosstab(arguments, LabelOptions::default())
+            .map_err(PyPolarsErr::Polars)?;
 
         match format
             .map(|value| DataFrameFormat::from_py_any(value))

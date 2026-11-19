@@ -1,5 +1,11 @@
 use polars::prelude::*;
-use triple_s::{CrossTabArgs, Survey, SurveyData, options::ResponseDisplay, read_triple_s};
+use triple_s::{
+    AnalysisOptions,
+    Survey,
+    SurveyData,
+    options::{LabelOptions, ResponseDisplay},
+    read_triple_s,
+};
 
 const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
 const PATH_DATAFILE_V2_0: &str = "tests/sss-examples/sss-2.0/example1.asc";
@@ -129,12 +135,12 @@ fn test_crosstab_column_groups_and_row_total() {
     for num_groups in 1..=2 {
         for show_row_total in [false, true] {
             let result = survey
-                .crosstab(CrossTabArgs {
+                .crosstab(AnalysisOptions {
                     question_name: "Q2",
                     columns: &["Q4", "Q5"][..num_groups],
                     show_row_total,
                     show_column_total: false,
-                })
+                }, LabelOptions::default())
                 .unwrap();
 
             let mut names = vec!["Q2"];
@@ -191,20 +197,20 @@ fn test_crosstab_column_totals_count_respondents() {
 
     let columns = ["Q4", "Q2"];
     let body = survey
-        .crosstab(CrossTabArgs {
+        .crosstab(AnalysisOptions {
             question_name: "Q5",
             columns: &columns,
             show_row_total: true,
             show_column_total: false,
-        })
+        }, LabelOptions::default())
         .unwrap();
     let result = survey
-        .crosstab(CrossTabArgs {
+        .crosstab(AnalysisOptions {
             question_name: "Q5",
             columns: &columns,
             show_row_total: true,
             show_column_total: true,
-        })
+        }, LabelOptions::default())
         .unwrap();
 
     assert!(
@@ -251,12 +257,12 @@ fn test_read_stack_overflow_survey() {
     let topbreak = "AIFreq_1";
 
     let res = survey
-        .crosstab(CrossTabArgs {
+        .crosstab(AnalysisOptions {
             question_name: row,
             columns: &[topbreak], //"JobEaseAI_1"],
             show_row_total: true,
             show_column_total: true,
-        })
+        }, LabelOptions::default())
         .unwrap();
     println!("Crosstab:");
     unsafe {
@@ -265,8 +271,7 @@ fn test_read_stack_overflow_survey() {
     println!("{:?}", res);
 
     println!("Base size:");
-    let options = CrossTabArgs::new()
-        .include_code_value(true);
+    let options = LabelOptions::new().with_include_code_value(true);
     let base = survey
         .get_question_data(topbreak)
         .unwrap()
@@ -280,8 +285,12 @@ fn test_value_counts() {
     let survey = get_survey_struct();
     let question = survey.get_question_data("Q3").unwrap();
 
-    let options = CrossTabArgs::new()
-        .include_code_value(true);
+    let options = LabelOptions::new()
+        .with_include_code_value(true)
+        .with_code_col(Some("HAHA"))
+        .with_include_code_value(true)
+        .with_include_question_name(true)
+        .with_fill_question_name_column(true);
     let stats = question.value_counts(options).unwrap();
     println!("{:?}", stats)
 }

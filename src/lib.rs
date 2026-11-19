@@ -145,18 +145,17 @@
 //! assert_eq!(original.value(), "A".to_string());
 //! ```
 
-mod analysis;
 mod data;
 pub mod datamap;
 pub mod error;
+pub mod options;
 mod survey;
-pub use data::options;
+
 mod prelude;
 mod utils;
 
 use std::path::Path;
 
-pub use analysis::CrossTabArgs;
 use anyhow::Result;
 pub use data::{QuestionData, SurveyData};
 pub use datamap::{
@@ -181,6 +180,7 @@ pub use datamap::{
     text::{self, Mode, Text, Variant},
 };
 use error::EventLog;
+pub use options::{AnalysisOptions, LabelOptions};
 pub use prelude::DeepCopy;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
