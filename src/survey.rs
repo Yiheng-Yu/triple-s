@@ -401,7 +401,8 @@ impl Survey {
             output = operation::frequency_counts(
                 original.clone(),
                 question_name,
-                Some(&format!("{question_name} - Total")),
+                None,
+                // Some(label_options.col_count.unwrap_or(LabelOptions::COUNT)),
                 args.show_column_total,
             )?
             .join(
@@ -422,10 +423,8 @@ impl Survey {
         };
 
         // take a record of column names (to be used later)
-
         let summary_columns = output
             .collect_schema()?;
-
         let summary_columns = summary_columns
             .iter_names()
             .map(|colname| col(colname.as_str()));

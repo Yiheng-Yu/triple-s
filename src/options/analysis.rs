@@ -19,11 +19,6 @@ pub struct AnalysisOptions<'a> {
     pub show_column_total: bool,
 }
 
-const QUESTION: &str = "question";
-const LABEL: &str = "label";
-const CODE: &str = "code";
-const COUNT: &str = "total";
-
 /// Options for the labelling summary table outputs (e.g., [`QuestionData::value_counts`], [`Survey::corsstab`])
 #[allow(unused)]
 pub struct LabelOptions<'a> {
@@ -37,7 +32,7 @@ pub struct LabelOptions<'a> {
     /// Toggle on to fill the question name column with name of the question, only used when "include_question_name" is `true`. Default `false`.
     pub fill_question_name_column: bool,
 
-    /// Column name for the question name column, default QUESTION, only used when `include_question_name` is `true`
+    /// Column name for the question name column, default "question", only used when `include_question_name` is `true`
     pub col_question_name: Option<&'a str>,
 
     /// Column name for the response code column, default "code", only used when `include_code_value` is `true`
@@ -56,15 +51,27 @@ impl<'a> Default for LabelOptions<'a> {
             include_code_value: false,
             include_question_name: false,
             fill_question_name_column: false,
-            col_question_name: Some(QUESTION),
-            col_count: Some(COUNT),
-            col_code_label: Some(LABEL),
-            col_code_value: Some(CODE),
+            col_question_name: Some(Self::QUESTION),
+            col_count: Some(Self::COUNT),
+            col_code_label: Some(Self::LABEL),
+            col_code_value: Some(Self::CODE),
         }
     }
 }
 
 impl<'a> LabelOptions<'a> {
+    /// default value for field `col_question`
+    pub const QUESTION: &str = "question";
+
+    /// default value for field `col_code_label`
+    pub const LABEL: &str = "label";
+    
+    /// default value for field `col_code_value`
+    pub const CODE: &str = "code";
+    
+    /// default value for field `col_count`
+    pub const COUNT: &str = "total";
+
     /// Create new instance with default options
     pub fn new() -> Self {
         Self::default()
@@ -89,19 +96,19 @@ impl<'a> LabelOptions<'a> {
         self
     }
 
-    /// Column name for the question name column, default QUESTION, only used when `include_question_name` is `true`
+    /// Column name for the question name column, default Self::QUESTION, only used when `include_question_name` is `true`
     pub fn with_col_question_name(mut self, value: Option<&'a str>) -> Self {
         self.col_question_name = value;
         self
     }
 
-    /// Column name for the response code column, default CODE, only used when `include_code_value` is `true`
+    /// Column name for the response code column, default Self::CODE, only used when `include_code_value` is `true`
     pub fn with_col_code(mut self, value: Option<&'a str>) -> Self {
         self.col_code_value = value;
         self
     }
 
-    /// Column name for the response label column, default LABEL
+    /// Column name for the response label column, default Self::LABEL
     pub fn with_col_label(mut self, value: Option<&'a str>) -> Self {
         self.col_code_label = value;
         self
@@ -116,17 +123,17 @@ impl<'a> LabelOptions<'a> {
     /// Convert current configuration to polars expression
     pub fn into_expression(&self, question_name: &'a str) -> Vec<Expr> {
         let mut columns = Vec::new();
-        let colname_stats = self.col_count.unwrap_or(COUNT);
+        let colname_stats = self.col_count.unwrap_or(Self::COUNT);
 
         // append question name column? or not
         if self.include_question_name & self.fill_question_name_column {
-            let name = self.col_question_name.unwrap_or(QUESTION);
+            let name = self.col_question_name.unwrap_or(Self::QUESTION);
             let qname_column = lit(question_name.to_string());
             columns.push(qname_column.alias(name));
         }
 
         if self.include_question_name & !self.fill_question_name_column {
-            let name = self.col_question_name.unwrap_or(QUESTION);
+            let name = self.col_question_name.unwrap_or(Self::QUESTION);
             let qname_column = lit(question_name.to_string())
                 .extend_constant(lit(NULL), len().sub(lit(1)))
                 .alias(name);
@@ -135,12 +142,12 @@ impl<'a> LabelOptions<'a> {
 
         // append response code column? or not
         if self.include_code_value {
-            let name = self.col_code_value.unwrap_or(CODE);
+            let name = self.col_code_value.unwrap_or(Self::CODE);
             columns.push(col(question_name).alias(name));
         }
 
         // always include
-        let colname_resp_label = self.col_code_label.unwrap_or(LABEL);
+        let colname_resp_label = self.col_code_label.unwrap_or(Self::LABEL);
 
         columns.push(col(colname_resp_label));
         columns.push(col(colname_stats));
@@ -161,7 +168,7 @@ impl<'a> LabelOptions<'a> {
         let row_old = Series::from_any_values("old".into(), &row_old, true)?;
         let row_new = Series::new("new".into(), row_new);
 
-        let colname_resp_label = self.col_code_label.unwrap_or(LABEL);
+        let colname_resp_label = self.col_code_label.unwrap_or(Self::LABEL);
         Ok(col(question_name)
             .replace_strict(
                 lit(row_old.clone()),
@@ -169,7 +176,7 @@ impl<'a> LabelOptions<'a> {
                 Some(col(question_name).cast(DataType::String)),
                 Some(DataType::String),
             )
-            .fill_null(lit("Total")) // TODO!
+            .fill_null(lit("Total")) // Self::TODO!
             .alias(colname_resp_label))
     }
 }
