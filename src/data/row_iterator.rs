@@ -10,8 +10,10 @@ use super::SurveyData;
 
 // Limit both tall and wide buffers. A single exceptionally wide row is the
 // minimum possible buffer. These limits count cells, not payload bytes.
-const MAX_BUFFER_ROWS: usize = 256;
-const MAX_BUFFER_CELLS: usize = 65_536;
+const INITIAL_BUFFER_ROWS: usize = 256;
+const INITIAL_BUFFER_CELLS: usize = 65_536;
+const MAX_BUFFER_ROWS: usize = 4096;
+const MAX_BUFFER_CELLS: usize = 262_144;
 
 #[pyclass]
 pub(crate) struct RowIterator {
@@ -19,6 +21,7 @@ pub(crate) struct RowIterator {
     rows: Option<Py<PyIterator>>,
     index: i64,
     buffer_rows: usize,
+    max_buffer_rows: usize,
     final_buffer: bool,
     finished: bool,
     // Own the source's temporary-file guard.
@@ -32,7 +35,8 @@ impl RowIterator {
             lazy,
             rows: None,
             index: 0,
-            buffer_rows: MAX_BUFFER_ROWS.min((MAX_BUFFER_CELLS / width.max(1)).max(1)),
+            buffer_rows: INITIAL_BUFFER_ROWS.min((INITIAL_BUFFER_CELLS / width.max(1)).max(1)),
+            max_buffer_rows: MAX_BUFFER_ROWS.min((MAX_BUFFER_CELLS / width.max(1)).max(1)),
             final_buffer: false,
             finished: false,
             _source: source,
@@ -81,6 +85,9 @@ impl RowIterator {
                         self.rows = None;
                         if self.final_buffer {
                             self.finish();
+                        } else {
+                            self.buffer_rows =
+                                (self.buffer_rows * 2).min(self.max_buffer_rows);
                         }
                     }
                 }

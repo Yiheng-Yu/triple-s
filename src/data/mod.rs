@@ -1,4 +1,3 @@
-pub mod config;
 pub(crate) mod operation;
 mod question_data;
 #[cfg(feature = "pyo3")]

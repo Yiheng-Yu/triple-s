@@ -58,7 +58,7 @@ def test_row_iteration_label_toggle(rows_survey):
     assert list(label_iterator) == expected_label_rows
 
 
-@pytest.mark.parametrize("count", [0, 1, 255, 256, 257, 512, 513])
+@pytest.mark.parametrize("count", [0, 1, 255, 256, 257, 512, 513, 1793])
 def test_row_iteration_across_buffers(rows_survey, count):
     base = rows_survey.data.to_polars()
     frame = pl.concat([base] * max(1, (count + 3) // 4), rechunk=False).head(count)
@@ -123,7 +123,8 @@ def test_mutating_a_yielded_row_does_not_change_other_iterators(rows_survey):
     assert next(values) == {"Q2": 1, "Q3": []}
 
 
-def test_wide_row_buffers_preserve_column_order_and_values():
+@pytest.mark.parametrize("count", [50, 300])
+def test_wide_row_buffers_preserve_column_order_and_values(count):
     names = [f"Q{i}" for i in range(3000)]
     datamap = Datamap.from_dict({
         "record": {"content": [
@@ -131,15 +132,15 @@ def test_wide_row_buffers_preserve_column_order_and_values():
             for i, name in enumerate(names)
         ]}
     })
-    values = pl.Series("Q0", range(50), dtype=pl.Float64)
+    values = pl.Series("Q0", range(count), dtype=pl.Float64)
     frame = pl.DataFrame([values.rename(name) for name in names])
     survey = Survey(datamap, data=SurveyData.from_polars(frame))
     for iterator in [iter(survey), iter(survey.data)]:
-        count = 0
+        seen = 0
         for index, row in enumerate(iterator):
             assert len(row) == 3000
             assert row["Q0"] == row["Q2999"] == float(index)
-            if index in (0, 49):
+            if index in (0, count - 1):
                 assert list(row) == names
-            count += 1
-        assert count == 50
+            seen += 1
+        assert seen == count

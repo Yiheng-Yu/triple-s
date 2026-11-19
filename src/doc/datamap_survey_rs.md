@@ -50,7 +50,7 @@ Use [`Datamap::record`] to access the full record.
 
 # Load and export respondent data
 
-Call [`triple_s::read_data`]. The extension
+Call [`read_data`]. The extension
 selects fixed-width (`.asc`) or CSV (`.csv`) parsing, using the record's
 question definitions. CSV fields use question locations.
 
@@ -66,9 +66,9 @@ let frame = data.to_polars()?;
 # Ok::<(), anyhow::Error>(())
 ```
 
-Loading returns a [`triple_s::SurveyData`] backed by a temporary Parquet cache.
+Loading returns a [`SurveyData`] backed by a temporary Parquet cache.
 
-To read both files into a survey, use [`triple_s::read_triple_s`] instead.
+To read both files into a survey, use [`read_triple_s`] instead.
 
 # Export the datamap
 

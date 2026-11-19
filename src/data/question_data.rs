@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 #[cfg(feature = "pyo3")]
 use chrono::{NaiveDate, NaiveTime};
-use parking_lot::RwLockReadGuard;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
@@ -17,9 +16,8 @@ use pyo3_polars::{PyDataFrame, PySeries, error::PyPolarsErr};
 #[cfg(feature = "pyo3")]
 use crate::{
     DataRange,
-    config::DataFrameFormat,
-    datamap::Text,
     error::InternalError,
+    options::DataFrameFormat,
     prelude::*,
     utils::{
         anyvalue_to_python,
@@ -31,9 +29,9 @@ use crate::{
 };
 use crate::{
     QuestionType,
-    config::ResponseDisplay,
-    data::{config::Config, operation::frequency_counts, survey_data::SurveyData},
-    datamap::Question,
+    data::survey_data::SurveyData,
+    datamap::{Question, text::Text},
+    options::{LabelOptions, ResponseDisplay, SurveyOptions},
     utils::ArcLock,
 };
 
@@ -52,7 +50,7 @@ Raises:
 #[derive(Clone)]
 pub struct QuestionData {
     data: ArcLock<SurveyData>,
-    config: ArcLock<Config>,
+    config: SurveyOptions,
     question: Question,
 }
 
@@ -90,6 +88,31 @@ impl QuestionData {
         &mut self.question
     }
 
+    /// Returns the label or original question text.
+    ///
+    /// The text may include language-specific or mode-specific variants.
+    pub fn label(&self) -> &Text {
+        self.question.label()
+    }
+
+    /// Returns a mutable reference for updating the question text and its
+    /// variants.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use triple_s::question::QuestionOptions;
+    ///
+    /// let mut question = QuestionOptions::new("Q1").finish()?;
+    ///
+    /// *question.label_mut().value_mut() = "Updated question".to_string();
+    /// assert_eq!(question.label().value(), "Updated question");
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn label_mut(&mut self) -> &mut Text {
+        self.question.label_mut()
+    }
+
     /// Get the lookup table for items in the [`Question::response()::values()`] field,
     /// formatted as: { [`Code::value()`]: [`Code::label()`] }
     ///
@@ -101,9 +124,9 @@ impl QuestionData {
         self.question.response_label_map()
     }
 
-    /// Configuration options
-    pub fn config(&self) -> RwLockReadGuard<'_, Config> {
-        self.config.read()
+    /// Configuration options copied from the survey when this view was created.
+    pub fn config(&self) -> &SurveyOptions {
+        &self.config
     }
 }
 
@@ -115,7 +138,7 @@ impl QuestionData {
     pub(crate) fn new(
         data: ArcLock<SurveyData>,
         question: Question,
-        config: ArcLock<Config>,
+        config: SurveyOptions,
     ) -> Self {
         Self {
             data,
@@ -149,7 +172,7 @@ impl QuestionData {
     /// Count unique values of this Series and a column "counts" with dtype IdxType
     ///
     /// This function basically calls [`polars::series::value_counts`] under the hood, apart from multi-choice
-    /// questions ([`QuestionData::question_type()`] is [`QuestionType::Multiple`]),
+    /// questions ([`QuestionData::question_type`] is [`QuestionType::Multiple`]),
     /// where the choice for each respondant is counted individually.
     ///
     /// # Arguments
@@ -165,7 +188,7 @@ impl QuestionData {
     /// │ ---  ┆ ---                       ┆ ---   │
     /// │ u64  ┆ str                       ┆ u64   │
     /// ╞══════╪═══════════════════════════╪═══════╡
-    /// │ null ┆ *Total*                   ┆ 3     │
+    /// │ null ┆ Total                     ┆ 3     │
     /// │ 1    ┆ Sherwood � Forest         ┆ 2     │
     /// │ 2    ┆ Nottingham � Castle       ┆ 2     │
     /// │ 3    ┆ "Friar � Tuck" Restaurant ┆ 1     │
@@ -176,47 +199,57 @@ impl QuestionData {
     ///
     /// _The first row is the total count of not-null values_
     #[allow(clippy::mutable_key_type)]
-    pub fn value_counts(&self, name: Option<&str>) -> PolarsResult<DataFrame> {
+    pub fn value_counts(&self, options: LabelOptions<'_>) -> PolarsResult<DataFrame> {
         let question_name = self.name();
-        let column_name = name.unwrap_or("count");
         let raw_data = self.to_value_column()?;
 
-        // First get base sizes (total of not-null values)
-        // let base_size = count_not_null(&raw_data, column_name)?;
+        // Base size
+        let base_size = (raw_data.len() - raw_data.null_count()) as IdxSize;
 
-        // Then we do `value_counts`
-        let result = frequency_counts(
-            DataFrame::new(raw_data.len(), vec![raw_data])?.lazy(),
-            &question_name,
-            Some(column_name),
-            true,
-        )?;
+        // value counts
+        let values = if matches!(raw_data.dtype(), DataType::List(_)) {
+            // Count respondents before exploding multiple-choice answers.
+            raw_data.explode(ExplodeOptions {
+                empty_as_null: true,
+                keep_nulls: true,
+            })?
+        } else {
+            raw_data
+        };
 
-        // append data label
-        let (row_old, row_new): (Vec<AnyValue<'static>>, Vec<String>) = self
-            .datamap()
-            .response_label_map()
-            .iter()
-            .map(|(id, label)| (id.clone(), label.read().to_string()))
-            .unzip();
-        let row_old = Series::from_any_values("old".into(), &row_old, true)?;
-        let row_new = Series::new("new".into(), row_new);
-        
+        // stacking base size and value counts together
+        let colname_stats = options.col_count.unwrap_or("total");
+        let counts = values
+            .drop_nulls()
+            .as_materialized_series()
+            .value_counts(false, false, colname_stats.into(), false)?
+            .sort(
+                [&question_name],
+                SortMultipleOptions::default().with_multithreaded(false),
+            )?;
+        let result = DataFrame::new(
+            1,
+            vec![
+                Column::full_null(question_name.clone().into(), 1, values.dtype()),
+                Column::new(colname_stats.into(), [base_size]),
+            ],
+        )?
+        .vstack(&counts)?
+        .lazy();
+
+        // get response labels
+        let match_expression =
+            options.match_response_label(&question_name, self.response_label_map())?;
+        let result = result.with_column(match_expression);
+
+        // Fianl formatting: rename column names, add quesiton names etc.,
+        let columns = options.into_expression(&question_name);
+
         result
-        .with_columns([col(&question_name)
-            .replace_strict(
-                lit(row_old.clone()),
-                lit(row_new),
-                Some(col(&question_name).cast(DataType::String)),
-                Some(DataType::String),
-            )
-            .fill_null(lit("Null"))
-            .alias("label")])
-        .select([
-            col("label").alias(&question_name),
-            all().exclude_cols([&question_name, "label"]).as_expr(),
-        ])
-        .collect()
+            .select(columns)
+            .with_simplify_expr(true)
+            .with_comm_subplan_elim(true)
+            .collect()
     }
 
     /// Checks if `other` is comes from the same survey as `self`.
@@ -293,11 +326,15 @@ impl QuestionData {
         match &err {
             PolarsError::ExprContext { error, expr } if expr.contains(".replace_strict") => {
                 if expr.contains(").replace_strict") {
-                    PolarsError::ComputeError(format!(
-                        "Question '{}' contains response values with no matching label, expect to be one of: {}",
-                        question_name,
-                        unique_keys.fmt_list()
-                    ).into())
+                    PolarsError::ComputeError(
+                        format!(
+                            "Question '{}' contains response values with no matching label, \
+                             expect to be one of: {}",
+                            question_name,
+                            unique_keys.fmt_list()
+                        )
+                        .into(),
+                    )
                 } else {
                     err
                 }
@@ -342,6 +379,14 @@ impl QuestionData {
     #[getter(label)]
     fn py_get_label(&self) -> Text {
         self.question.label().clone()
+    }
+
+    /// Sets the label from a string or `Text`, or resets it to empty with
+    /// `None`. A string updates the existing text; a `Text` object replaces
+    /// it.
+    #[setter(label)]
+    fn py_set_label<'py>(&mut self, label: Option<&Bound<'py, PyAny>>) -> PyResult<()> {
+        self.question.py_set_label(label)
     }
 
     /// Minimum and maximum values allowed for a quantity response,
@@ -521,14 +566,35 @@ impl QuestionData {
 
     /// Count unique values of this question data.
     ///
-    /// This function basically calls ``poalrs.Series.value_counts`` under the hood, apart from multi-choice
-    /// where the choice for each respondant is counted individually.
+    /// This calls ``polars.Series.value_counts`` under the hood. For multiple-choice
+    /// questions, each selected response is counted individually. The first row,
+    /// labelled ``Total``, counts respondents with non-null answers, including empty lists.
     ///
     /// Keyword Args:
-    ///     name (str, *optional*):
+    ///
+    ///     colname_stats (str, *optional*):
     ///         Give the resulting count column a specific name (same as `polars.Series.value_counts`)
-    ///         Default `'count'`
-    ///     format ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
+    ///         Default `'total'`
+    ///
+    ///     colname_label (str, *optional*):
+    ///         Column name for the response label column.
+    ///         Default `'label'`
+    ///
+    ///     colname_code (str, *optional*):
+    ///         Column name for the response code column.
+    ///         Only used when `include_response_codes` is `True`.
+    ///         Default `'code'`
+    /// 
+    ///     include_question_name (bool, *optional*):
+    ///         Include a ``question`` column with the question name in the first row
+    ///         and nulls in the remaining rows.
+    ///         Default `False`
+    ///
+    ///     include_response_codes (bool, *optional*):
+    ///         Include the original response values in a separate column.
+    ///         Default `False`
+    ///
+    ///     output ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
     ///         'polars' | DataFrameFormat.Polars: polars.DataFrame
     ///         'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
     ///
@@ -540,23 +606,43 @@ impl QuestionData {
     #[pyo3(
         name = "value_counts", 
         signature=(
-            name: "str" = "count",
-            format: "'polars'|'pandas'|DataFrameFormat" = None
+            colname_stats: "str" = "total",
+            colname_label: "str" = "label",
+            colname_code: "str" = "code",
+            include_response_codes: "bool" = false,
+            include_question_name: "bool" = false,
+            output: "'polars'|'pandas'|DataFrameFormat" = None
         )
     )]
     fn py_value_counts<'py>(
         &self,
         py: Python<'py>,
-        name: Option<&str>,
-        format: Option<Bound<'py, PyAny>>,
+        colname_stats: Option<&str>,
+        colname_label: Option<&str>,
+        colname_code: Option<&str>,
+        include_response_codes: Option<bool>,
+        include_question_name: Option<bool>,
+        output: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let result = self.value_counts(name).map_err(PyPolarsErr::Polars)?;
+        let options = LabelOptions::new()
+            .with_include_question_name(include_question_name.unwrap_or(false))
+            .with_include_response_codes(include_response_codes.unwrap_or(false))
+            // think this would be easier for the user and makes documentation less confusing
+            // as the user can just call `ffill()` to fill nan values with question name
+            // should they want to.
+            .with_fill_question_name_column(false)
+            .with_col_count(colname_stats)
+            .with_col_label(colname_label)
+            .with_col_code(colname_code);
+
+        let result = self.value_counts(options)
+            .map_err(PyPolarsErr::Polars)?;
 
         // prep output
-        let format = format
+        let format = output
             .map(|value| DataFrameFormat::from_py_any(value))
             .transpose()?
-            .unwrap_or(self.config.read().py_dataframe_format.clone());
+            .unwrap_or(self.config.py_dataframe_format.clone());
         match format {
             DataFrameFormat::Polars => PyDataFrame(result).into_bound_py_any(py),
             DataFrameFormat::Pandas => polars_to_pandas(result, py),

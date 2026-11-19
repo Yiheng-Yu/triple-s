@@ -44,9 +44,14 @@ def test_survey_index_rejects_invalid_types(survey, index):
     ("response_display", config.ResponseDisplay.Value, "value"),
 ])
 def test_survey_settings_accept_enum_members(survey, field, value, expected):
+    original = getattr(survey, field)
     view = survey["Q2"]
+    iterated_view = next(survey.iter_questions())
     setattr(survey, field, value)
-    assert getattr(survey, field) == getattr(view, field) == expected
+    assert getattr(survey, field) == expected
+    assert getattr(view, field) == getattr(iterated_view, field) == original
+    assert getattr(survey["Q2"], field) == expected
+    assert getattr(next(survey.iter_questions()), field) == expected
 
 
 @pytest.mark.parametrize("field", ["dataframe_format", "response_display"])

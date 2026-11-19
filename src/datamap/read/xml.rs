@@ -248,9 +248,14 @@ where
                             let mut variant = with_attribute("text", start.attributes())?;
                             let text = extract_text(reader, &start)?;
                             variant.value = Some(Arc::from(text));
-                            responses.last_mut()
+                            responses
+                                .last_mut()
                                 .map(|val| val.children.push(variant))
-                                .ok_or(InternalError::new(format!("Parent note for <text> seems to be missing?? Current: {:#?}", builder)))?;
+                                .ok_or(InternalError::new(format!(
+                                    "Parent note for <text> seems to be missing?? Current: \
+                                     {:#?}",
+                                    builder
+                                )))?;
                         }
                         _ => {
                             return Err(InternalError::new(format!(

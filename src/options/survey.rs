@@ -1,4 +1,5 @@
 //! Configuration options for reading/ exporting/ intereacting with objects
+
 #[cfg(feature = "pyo3")]
 use std::str::FromStr;
 
@@ -13,7 +14,7 @@ use crate::utils::get_type_name;
 
 /// General configurations
 #[derive(Debug, Clone, Default)]
-pub struct Config {
+pub struct SurveyOptions {
     /// Specifies the DataFrame library used for Python outputs
     ///
     /// Default `Polars`.
@@ -23,7 +24,7 @@ pub struct Config {
     pub response_display: ResponseDisplay,
 }
 
-impl Config {
+impl SurveyOptions {
     /// boolean for checking if `response_display == ResponseDisplay::Label`
     pub fn show_response_label(&self) -> bool {
         self.response_display == ResponseDisplay::Label
@@ -52,14 +53,18 @@ impl DataFrameFormat {
         if let Ok(value) = value.extract::<DataFrameFormat>() {
             Ok(value)
         } else if let Ok(value) = value.extract::<String>() {
-            DataFrameFormat::from_str(&value)
-                .map_err(|_| exceptions::PyValueError::new_err(format!(
-                    "Expect input to be one of ['pandas', 'polars'] or DataFrameFormat instance, got: '{}'", value
-                )))
+            DataFrameFormat::from_str(&value).map_err(|_| {
+                exceptions::PyValueError::new_err(format!(
+                    "Expect input to be one of ['pandas', 'polars'] or DataFrameFormat \
+                     instance, got: '{}'",
+                    value
+                ))
+            })
         } else {
             let type_name = get_type_name(&value)?;
             Err(exceptions::PyTypeError::new_err(format!(
-                "Expect input to be one of ['pandas', 'polars'] or DataFrameFormat instance, got: '{}'",
+                "Expect input to be one of ['pandas', 'polars'] or DataFrameFormat instance, \
+                 got: '{}'",
                 type_name
             )))
         }
@@ -125,14 +130,18 @@ impl ResponseDisplay {
         if let Ok(value) = value.extract::<ResponseDisplay>() {
             Ok(value)
         } else if let Ok(value) = value.extract::<String>() {
-            Self::from_str(&value)
-                .map_err(|_| exceptions::PyValueError::new_err(format!(
-                    "Expect input to be one of ['value', 'label'] or `ResponseDisplay` instance, got: '{}'", value
-                )))
+            Self::from_str(&value).map_err(|_| {
+                exceptions::PyValueError::new_err(format!(
+                    "Expect input to be one of ['value', 'label'] or `ResponseDisplay` \
+                     instance, got: '{}'",
+                    value
+                ))
+            })
         } else {
             let type_name = get_type_name(&value)?;
             Err(exceptions::PyTypeError::new_err(format!(
-                "Expect input to be one of ['value', 'label'] or `ResponseDisplay` instance, got: '{}'",
+                "Expect input to be one of ['value', 'label'] or `ResponseDisplay` instance, \
+                 got: '{}'",
                 type_name
             )))
         }
@@ -150,12 +159,11 @@ impl Flag for ResponseDisplay {
 
 #[cfg(test)]
 mod test {
-
     use super::*;
 
     #[test]
     fn test_resp_display_eq() {
-        let mut config = Config::default();
+        let mut config = SurveyOptions::default();
         config.response_display = ResponseDisplay::Label;
         assert_eq!(config.show_response_label(), true);
 

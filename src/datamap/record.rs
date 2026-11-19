@@ -9,6 +9,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
 use polars::frame::row::Row;
 #[cfg(feature = "pyo3")]
@@ -26,7 +27,7 @@ use strum::{EnumIter, EnumString};
 use crate::utils::{extract_indicies, get_type_name, normalize_py_index, py_value_error};
 use crate::{
     Question,
-    datamap::parsing::FixedWidthParser,
+    datamap::parsing::ResponseParser,
     error::{self, InvalidArg},
     prelude::{DeepCopy, Flag},
     utils::{ArcLock, TextReader, lock_it_up},
@@ -224,7 +225,8 @@ impl Record {
         {
             Some(previous) => {
                 log::warn!(
-                    "A question named `{}` already exists. The existing question will be replaced with the new one.",
+                    "A question named `{}` already exists. The existing question will be \
+                     replaced with the new one.",
                     question.name()
                 );
 
@@ -316,23 +318,32 @@ impl Record {
             }
         }
 
+        let progress = ProgressBar::new_spinner()
+            .with_style(
+                ProgressStyle::with_template("{spinner:.cyan} Reading: {pos} responses")
+                    .unwrap(),
+            )
+            .with_finish(indicatif::ProgressFinish::WithMessage("Done".into()));
+
         match data_format {
-            DataFormat::Fixed => self.scan_fixed_width(reader),
-            DataFormat::Csv => self.scan_csv(reader),
+            DataFormat::Fixed => self.scan_fixed_width(reader, Some(progress)),
+            DataFormat::Csv => self.scan_csv(reader, Some(progress)),
         }
     }
 
-    fn parsing_plan(&self) -> Result<Vec<FixedWidthParser>> {
+    #[inline(always)]
+    fn parsing_plan(&self) -> Result<Vec<ResponseParser>> {
         self.content
             .read()
             .iter()
-            .map(|question| FixedWidthParser::from_question(question.read()))
+            .map(|question| ResponseParser::from_question_read_guard(question.read()))
             .collect()
     }
 
     fn scan_fixed_width(
         &self,
         mut reader: BufReader<TextReader<BufReader<File>>>,
+        progress: Option<ProgressBar>,
     ) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>>>> {
         let parsers = self.parsing_plan()?;
         let width = parsers
@@ -341,6 +352,7 @@ impl Record {
             .max()
             .context("Cannot determine record width: no questions")?;
         anyhow::ensure!(width > 0, "Record width must be positive");
+
         let mut finished = false;
         let records = std::iter::from_fn(move || {
             if finished {
@@ -358,15 +370,22 @@ impl Record {
                 }
             }
         });
-        Ok(Box::new(crate::datamap::parsing::parallel_rows(
-            records,
-            move |row| crate::datamap::parsing::parse_fixed(&parsers, &row?),
-        )))
+
+        let iterator = crate::datamap::parsing::parallel_rows(records, move |row| {
+            crate::datamap::parsing::parse_fixed(&parsers, &row?)
+        });
+
+        if let Some(pbar) = progress {
+            Ok(Box::new(iterator.progress_with(pbar)))
+        } else {
+            Ok(Box::new(iterator))
+        }
     }
 
     fn scan_csv(
         &self,
         reader: BufReader<TextReader<BufReader<File>>>,
+        progress: Option<ProgressBar>,
     ) -> Result<Box<dyn Iterator<Item = Result<Row<'static>>>>> {
         let parsers = self.parsing_plan()?;
         let records = csv::ReaderBuilder::new()
@@ -375,14 +394,17 @@ impl Record {
             .from_reader(reader)
             .into_records()
             .enumerate();
-        Ok(Box::new(crate::datamap::parsing::parallel_rows(
-            records,
-            move |(index, row)| {
-                let row =
-                    row.with_context(|| format!("When reading CSV record {}", index + 1))?;
-                crate::datamap::parsing::parse_csv(&parsers, &row)
-            },
-        )))
+
+        let iterator = crate::datamap::parsing::parallel_rows(records, move |(index, row)| {
+            let row = row.with_context(|| format!("When reading CSV record {}", index + 1))?;
+            crate::datamap::parsing::parse_csv(&parsers, &row)
+        });
+
+        if let Some(pbar) = progress {
+            Ok(Box::new(iterator.progress_with(pbar)))
+        } else {
+            Ok(Box::new(iterator))
+        }
     }
 
     /// Validate an `.asc` or `.csv` file against the record's questions and skip setting.
@@ -417,7 +439,10 @@ impl Record {
 
                     content
                         .par_iter()
-                        .try_for_each(|item| item.read().validate_csv_entry(&row))
+                        .map(|item| item.read().validate_csv_entry(&row))
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .collect::<Result<()>>()
                         .with_context(|| {
                             format!("When trying to extract data from line {}", index)
                         })?;
@@ -431,7 +456,10 @@ impl Record {
                     let line = line?;
                     content
                         .par_iter()
-                        .try_for_each(|item| item.read().validate_asc_entry(&line))
+                        .map(|item| item.read().validate_asc_entry(&line))
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .collect::<Result<()>>()
                         .with_context(|| {
                             format!("When trying to extract data from line {}", index)
                         })?;
@@ -557,13 +585,14 @@ impl Record {
                 } else if let Ok(value) = bound.extract::<&str>() {
                     value
                         .parse::<DataFormat>()
-                        .with_context(||
+                        .with_context(|| {
                             format!(
-                                "Expect to triple_s.DataFormat instance or one of {:?}, got: '{}'.",
+                                "Expect to triple_s.DataFormat instance or one of {:?}, got: \
+                                 '{}'.",
                                 DataFormat::available_options(),
                                 value
                             )
-                        )
+                        })
                         .map_err(|err| exceptions::PyValueError::new_err(format!("{err:#}")))?
                 } else {
                     let type_name = get_type_name(bound)?;
@@ -695,7 +724,8 @@ impl Record {
         } else {
             let type_name = index.get_type().name()?.extract::<String>()?;
             Err(exceptions::PyTypeError::new_err(format!(
-                "`index` must be question index (as `int`) or question name (as `str`), found: {}",
+                "`index` must be question index (as `int`) or question name (as `str`), \
+                 found: {}",
                 type_name
             )))
         }
@@ -800,29 +830,29 @@ impl Record {
             .get_item("data_format")?
             .map(|item| {
                 if let Ok(item) = item.extract::<Option<String>>() {
-                    item.map(|val|
+                    item.map(|val| {
                         DataFormat::from_str(&val)
-                            .with_context(||
+                            .with_context(|| {
                                 format!(
                                     "Expect to be one of: {:?}",
                                     DataFormat::available_options()
                                 )
-                            )
-                            .map_err(|err| exceptions::PyValueError::new_err(format!("{:?}", err)))
-                    ).transpose()
+                            })
+                            .map_err(|err| {
+                                exceptions::PyValueError::new_err(format!("{:?}", err))
+                            })
+                    })
+                    .transpose()
                 } else if let Ok(val) = item.extract::<DataFormat>() {
                     Ok(Some(val))
                 } else {
                     let type_name = get_type_name(&item)?;
-                    Err(
-                        exceptions::PyTypeError::new_err(
-                            format!(
-                                "Expect value of 'data_format' key to be one of {:?}, NoneType or `DataFormat` instance, got '{}'",
-                                DataFormat::available_options(),
-                                type_name
-                            )
-                        )
-                    )
+                    Err(exceptions::PyTypeError::new_err(format!(
+                        "Expect value of 'data_format' key to be one of {:?}, NoneType or \
+                         `DataFormat` instance, got '{}'",
+                        DataFormat::available_options(),
+                        type_name
+                    )))
                 }
             })
             .transpose()?

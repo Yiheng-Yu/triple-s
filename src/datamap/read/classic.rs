@@ -278,7 +278,8 @@ where
                         {
                             // just in case of future stupid me,,,
                             panic!(
-                                "should not expect 'variable' end tag because it should already be checked earlier on!"
+                                "should not expect 'variable' end tag because it should \
+                                 already be checked earlier on!"
                             )
                         }
                     } else {
@@ -348,17 +349,14 @@ fn get_question_mut(
     current_line_number: usize,
 ) -> Result<&mut QuestionBuilder> {
     let total_len = survey_builder.questions.len();
-    let question_builder = survey_builder.questions
+    let question_builder = survey_builder
+        .questions
         .get_mut(current_index)
-        .ok_or(
-            InternalError::new(
-                format!(
-                    "Index mismatch. Trying to access question [{}] but current survey builder has total of [{}] questions",
-                    current_index,
-                    total_len
-                )
-            )
-        )
+        .ok_or(InternalError::new(format!(
+            "Index mismatch. Trying to access question [{}] but current survey builder has \
+             total of [{}] questions",
+            current_index, total_len
+        )))
         .with_context(|| format!("Error raised when reading line {}", current_line_number))?;
     Ok(question_builder)
 }

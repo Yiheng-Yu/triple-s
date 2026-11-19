@@ -31,12 +31,12 @@ Attributes
 .. autoattribute:: QuestionData.dataframe_format
    :annotation: : str
 
-   Inherited from the parent survey.
+   Copied from the parent survey when this view is created.
 
 .. autoattribute:: QuestionData.response_display
    :annotation: : str
 
-   Inherited from the parent survey.
+   Copied from the parent survey when this view is created.
 
 .. autoattribute:: QuestionData.response_label
    :annotation: : dict[int | float | str, Text]
@@ -44,14 +44,17 @@ Attributes
 Methods
 -------
 
-.. py:method:: QuestionData.value_counts(name: str | None = 'count', format: str | triple_s.config.DataFrameFormat | None = None) -> polars.DataFrame | pandas.DataFrame
+.. py:method:: QuestionData.value_counts(colname_stats: str | None = 'total', colname_label: str | None = 'label', colname_code: str | None = 'code', include_response_codes: bool | None = False, include_question_name: bool | None = False, output: str | triple_s.config.DataFrameFormat | None = None) -> polars.DataFrame | pandas.DataFrame
+   Examples:
 
-   Get a quick summary for this question:
+      To include response codes and give the count column a name:
 
-   .. code-block:: python
+      .. code-block:: python
 
-      counts = survey["Q2"].value_counts(name="answers")
-      print(counts)
+         counts = survey["Q2"].value_counts(
+            include_response_codes=True, colname_stats="answers",
+         )
+         print(counts)
 
 .. automethod:: QuestionData.to_polars(response_label: bool | None = None) -> polars.Series
 
