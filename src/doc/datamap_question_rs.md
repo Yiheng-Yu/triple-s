@@ -80,7 +80,7 @@ let text = question.to_classic()?;
 Classic output omits XML-only attributes such as `usage`.
 
 Respondent data is returned by [`read_data`](crate::read_data); use
-[`SurveyData::to_polars`] to export it.
+[`SurveyData::to_polars`](crate::data::SurveyData) to export it.
 
 
 # Fields

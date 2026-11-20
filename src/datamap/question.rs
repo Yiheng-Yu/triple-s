@@ -9,7 +9,7 @@ use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*, types::PyDict};
 use quick_xml::{events::BytesText, writer::Writer};
-use strum::{AsRefStr, EnumIter, EnumString};
+use strum::{EnumIter, EnumString};
 
 use crate::{
     EventLog,
@@ -500,13 +500,13 @@ impl Question {
         &mut self.response
     }
 
-    /// Get the lookup table for items in the [`Question::response::values()`] field,
+    /// Gather the lookup table for items in the [`Response::values()`] under current instances' [`response()`](Question::response) field,
     /// formatted as: { [`Code::value`]: [`Code::label()`] }
     ///
     /// This method returns a `Arc<RwLock<String>>` for the code label text, this means mutating
     /// code label elsewhere will the hashmap returned from this function. Details on this mutation
     /// behaviour can be found in the documentation in [`Response::response_label_map`].
-    #[allow(clippy::module_inception)]
+    #[allow(clippy::mutable_key_type)]
     pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
         self.response().response_label_map()
     }
@@ -835,7 +835,7 @@ impl Question {
     /// validate one line of respondant data from a '.asc' file
     pub(crate) fn validate_asc_entry(&self, row: &str) -> Result<()> {
         let data = self.locate_data_asc(row)?;
-        let parser = ResponseParser::from_question(&self)?;
+        let parser = ResponseParser::from_question(self)?;
         let _ = parser.parse(data)?;
         Ok(())
     }
@@ -843,7 +843,7 @@ impl Question {
     /// validate one line of respondant data from a '.csv' file
     pub(crate) fn validate_csv_entry(&self, row: &csv::StringRecord) -> Result<()> {
         let data = self.locate_data_csv(row)?;
-        let parser = ResponseParser::from_question(&self)?;
+        let parser = ResponseParser::from_question(self)?;
         let _ = parser.parse(data)?;
         Ok(())
     }
@@ -1268,7 +1268,7 @@ impl Question {
         info.push(("name", single_quote(self.name())));
         info.push((
             "question_type",
-            single_quote(self.question_type.read().as_ref()),
+            single_quote(self.question_type.read().to_string()),
         ));
 
         // main text
@@ -2690,7 +2690,7 @@ impl Usage {
 
 /// type of question
 #[cfg_attr(feature = "pyo3", pyclass(from_py_object))]
-#[derive(Debug, Default, PartialEq, Clone, EnumString, Eq, AsRefStr, EnumIter)]
+#[derive(Debug, Default, PartialEq, Clone, EnumString, Eq, EnumIter)]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
 pub enum QuestionType {
     /// No response values. Used for non-standard note or instruction pages,
@@ -2737,13 +2737,27 @@ impl QuestionType {
     pub fn is_none_type(&self) -> bool {
         matches!(self, Self::None)
     }
+
+    /// convert to str
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            QuestionType::Character => "character",
+            QuestionType::Date => "date",
+            QuestionType::Time => "time",
+            QuestionType::Logical => "logical",
+            QuestionType::Multiple => "multiple",
+            QuestionType::None => "none",
+            QuestionType::Quantity => "quantity",
+            QuestionType::Single => "single",
+        }
+    }
 }
 
 impl Flag for QuestionType {
     fn to_string(&self) -> String {
         match self {
             Self::None => "".into(),
-            _ => self.as_ref().into(),
+            _ => self.as_str().into(),
         }
     }
 }

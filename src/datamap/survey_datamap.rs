@@ -131,7 +131,7 @@ impl Datamap {
     ///
     /// This method will only get response labels from questions of
     /// categorical response type (single choice, multi choice & logical questions).
-    #[allow(clippy::module_inception)]
+    #[allow(clippy::mutable_key_type)]
     pub fn response_label_map(
         &self,
     ) -> HashMap<PlSmallStr, HashMap<AnyValue<'static>, ArcLock<String>>> {

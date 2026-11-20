@@ -21,6 +21,7 @@ napoleon_use_ivar = False
 templates_path = ["_templates"]
 
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+python_maximum_signature_line_length = 80
 
 html_theme = "furo"
 html_static_path = ["_static"]

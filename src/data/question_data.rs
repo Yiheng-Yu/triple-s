@@ -113,12 +113,12 @@ impl QuestionData {
         self.question.label_mut()
     }
 
-    /// Get the lookup table for items in the [`Question::response()::values()`] field,
-    /// formatted as: { [`Code::value()`]: [`Code::label()`] }
+    /// Get the lookup table for items in the [`Response::values`](crate::datamap::response::Response) field of of the [`Question`] instance,
+    /// formatted as: { [`Code::value()`](crate::datamap::response::Code): [`Code::label()`](crate::datamap::response::Code) }
     ///
     /// This method returns a `Arc<RwLock<String>>` for the code label text, this means mutating
     /// code label elsewhere will the hashmap returned from this function. Details on this mutation
-    /// behaviour can be found in the documentation in [`Response::response_label_map()`].
+    /// behaviour can be found in the documentation in [`Response::response_label_map`](crate::datamap::response::Response).
     #[allow(clippy::mutable_key_type)] // can only be string, float, or int
     pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
         self.question.response_label_map()
@@ -171,7 +171,7 @@ impl QuestionData {
 
     /// Count unique values of this Series and a column "counts" with dtype IdxType
     ///
-    /// This function basically calls [`polars::series::value_counts`] under the hood, apart from multi-choice
+    /// This function basically calls `value_counts` method of a [`Series`](polars::prelude::Series) under the hood, apart from multi-choice
     /// questions ([`QuestionData::question_type`] is [`QuestionType::Multiple`]),
     /// where the choice for each respondant is counted individually.
     ///

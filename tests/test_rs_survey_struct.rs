@@ -164,6 +164,41 @@ fn test_crosstab_column_groups_and_row_total() {
 }
 
 #[test]
+fn test_crosstab_same_question_as_row_and_column() {
+    let survey = get_survey_struct();
+    *survey.data_mut() = SurveyData::from_polars(
+        df!["Q2" => [0u32, 1, 1]].unwrap(),
+    )
+    .unwrap();
+
+    let result = survey
+        .crosstab(
+            AnalysisOptions {
+                question_name: "Q2",
+                columns: &["Q2"],
+                show_row_total: true,
+                show_column_total: true,
+                normalise: false,
+            },
+            LabelOptions::default(),
+        )
+        .unwrap();
+    let expected = df![
+        "label" => [
+            "Total",
+            "No, this is the first visit",
+            "I have visited before within the year",
+        ],
+        "total" => [3u32, 1, 2],
+        "Q2 - No, this is the first visit" => [1u32, 1, 0],
+        "Q2 - I have visited before within the year" => [2u32, 0, 2],
+    ]
+    .unwrap();
+
+    assert!(result.equals_missing(&expected), "{result}\nexpected:\n{expected}");
+}
+
+#[test]
 fn test_crosstab_label_options() {
     let survey = get_survey_struct();
     *survey.data_mut() = SurveyData::from_polars(
@@ -369,7 +404,7 @@ fn test_read_stack_overflow_survey() {
     println!("{:#?}", survey.question_names());
 
     println!("running crosstab");
-    let row = "Age";
+    let row = "AIFreq_1";
     let topbreak = "AIFreq_1";
 
     let res = survey
@@ -405,6 +440,24 @@ fn test_read_stack_overflow_survey() {
 }
 
 #[test]
+fn test_crosstab_question_against_itself() {
+    let survey = read_stack_overflow();
+    let result = survey
+        .crosstab(
+            AnalysisOptions {
+                question_name: "AIFreq_1",
+                columns: &["AIFreq_1"],
+                show_row_total: true,
+                show_column_total: true,
+                normalise: false,
+            },
+            LabelOptions::default(),
+        )
+        .unwrap();
+    assert!(result.height() > 0);
+}
+
+#[test]
 fn test_value_counts() {
     let survey = get_survey_struct();
     let question = survey.get_question_data("Q3").unwrap();
@@ -417,4 +470,21 @@ fn test_value_counts() {
         .with_fill_question_name_column(true);
     let stats = question.value_counts(options).unwrap();
     println!("{:?}", stats)
+}
+
+#[test]
+fn test_crosstab() {
+    let survey = read_stack_overflow();
+    let result = survey.quick_summary(
+        Some(&["AIFreq_1"]), 
+        None, 
+        triple_s::options::SkipQType { text: true, numeric: true, datetime: false, single: false, multiple: false }, 
+        false, 
+        LabelOptions::default()
+    )
+    .unwrap();
+
+    for (qname, qdata) in result.into_iter() {
+        println!("Question: {}, shape: {:?}", qname, qdata.shape())
+    }
 }
