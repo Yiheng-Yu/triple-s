@@ -1,5 +1,6 @@
-//! Corresponds to the `<record>` node and its contents.
-//! Uused for string questions inside the survey.
+//! Corresponds to the `<record>` node and its contents. The main content is the [`Record`] struct, which collects of all questions in a survey.
+//! 
+
 #[cfg(feature = "pyo3")]
 use std::str::FromStr;
 use std::{
@@ -88,7 +89,8 @@ impl DataFormat {
     }
 }
 
-/// Content of a datamap
+/// Content of a datamap, corresponds to the `<record>` node of a triple-s xml.
+/// 
 #[cfg_attr(
     feature = "pyo3",
     pyclass(module = "triple_s", name = "Record", skip_from_py_object)

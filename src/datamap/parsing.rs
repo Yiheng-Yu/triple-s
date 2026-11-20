@@ -44,8 +44,8 @@ impl ResponseParser {
         anyhow::ensure!(range.start <= range.end, "Invalid question range");
         let subfield_args = match &question_type {
             QuestionType::Multiple => spread.map(|spread| SubfieldArgs {
-                width: spread.width().clone(),
-                subfields: spread.subfield().clone() as usize,
+                width: *spread.width(),
+                subfields: *spread.subfield() as usize,
             }),
             _ => None,
         };
@@ -54,9 +54,9 @@ impl ResponseParser {
             question_name: name,
             start: range.start,
             end: range.end,
-            is_literal: is_literal,
-            question_type: question_type,
-            subfield_args: subfield_args,
+            is_literal,
+            question_type,
+            subfield_args,
         })
     }
 
@@ -86,8 +86,7 @@ impl ResponseParser {
                 &self.question_type,
                 self.is_literal,
                 self.subfield_args.as_ref(),
-            )
-            .map_err(Into::into),
+            ),
             || format!("When parsing question '{}'", self.question_name),
         )
     }
@@ -260,12 +259,12 @@ pub(crate) fn parse_cell_value(
         return Ok(AnyValue::Null);
     }
 
-    match question_type {
-        &QuestionType::None => Err(PolarsError::ComputeError(
+    match *question_type {
+        QuestionType::None => Err(PolarsError::ComputeError(
             "Unable to parse data with question type `None`".into(),
         )),
-        &QuestionType::Character => Ok(AnyValue::StringOwned(data.into())),
-        &QuestionType::Quantity => {
+        QuestionType::Character => Ok(AnyValue::StringOwned(data.into())),
+        QuestionType::Quantity => {
             let value: f64 = data.parse().map_err(|err| {
                 PolarsError::InvalidOperation(
                     format!(
@@ -277,7 +276,7 @@ pub(crate) fn parse_cell_value(
             })?;
             Ok(AnyValue::Float64(value))
         }
-        &QuestionType::Logical => {
+        QuestionType::Logical => {
             let value = data.parse::<usize>().map_err(|err| {
                 PolarsError::InvalidOperation(
                     format!(
@@ -291,18 +290,18 @@ pub(crate) fn parse_cell_value(
                 0 => Ok(AnyValue::Boolean(false)),
                 1 => Ok(AnyValue::Boolean(true)),
                 _ => {
-                    return Err(PolarsError::InvalidOperation(
+                    Err(PolarsError::InvalidOperation(
                         format!(
                             "Error raised when trying to convert '{}' to boolean. Expect '0' \
                              or '1'",
                             data,
                         )
                         .into(),
-                    ));
+                    ))
                 }
             }
         }
-        &QuestionType::Date => {
+        QuestionType::Date => {
             let value = NaiveDate::parse_from_str(data, "%Y%m%d")
                 .map_err(|err| {
                     PolarsError::InvalidOperation(
@@ -317,7 +316,7 @@ pub(crate) fn parse_cell_value(
                 .num_days() as i32;
             Ok(AnyValue::Date(value))
         }
-        &QuestionType::Time => {
+        QuestionType::Time => {
             let value = NaiveTime::parse_from_str(data, "%H%M%S").map_err(|err| {
                 PolarsError::InvalidOperation(
                     format!(
@@ -332,7 +331,7 @@ pub(crate) fn parse_cell_value(
                 + value.nanosecond() as i64;
             Ok(AnyValue::Time(time))
         }
-        &QuestionType::Single => {
+        QuestionType::Single => {
             if is_literal {
                 Ok(AnyValue::StringOwned(data.into()))
             } else {
@@ -348,7 +347,7 @@ pub(crate) fn parse_cell_value(
                 Ok(AnyValue::UInt32(value))
             }
         }
-        &QuestionType::Multiple => {
+        QuestionType::Multiple => {
             let data_read = match subfield_args.as_ref() {
                 None => parse_binary_multiple(data),
                 Some(args) => parse_subfields_multiple(data, args),

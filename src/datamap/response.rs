@@ -145,7 +145,7 @@ impl Response {
     ///
     /// # Ok::<(), anyhow::Error>(())
     /// ```
-    #[allow(clippy::module_inception)]
+    #[allow(clippy::mutable_key_type)]
     pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
         self.values()
             .iter()

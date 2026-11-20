@@ -1,4 +1,6 @@
 //! Options for running various survey data analysis methods
+use parking_lot::RwLockReadGuard;
+use crate::datamap::{QuestionType, Question};
 
 use std::{collections::HashMap, ops::Sub};
 
@@ -6,15 +8,77 @@ use polars::prelude::*;
 
 use crate::utils::ArcLock;
 
+
+/// Types of questions to skip when running map functions.
+/// 
+/// Default:
+/// 
+/// ```text
+/// SkipQType { 
+///     text: true, 
+///     numeric: true, 
+///     datetime: true, 
+///     single: false, 
+///     multiple: false 
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct SkipQType {
+    /// Skip [`QuestionType::Character`], default `true`
+    pub text: bool,
+    
+    /// Skip [`QuestionType::Quantity`], default `true`
+    pub numeric: bool,
+
+    /// Skip [`QuestionType::Date`] & [`QuestionType::Time`], default `true`
+    pub datetime: bool,
+    
+    /// Skip [`QuestionType::Single`], default `false`
+    pub single: bool,
+    
+    /// Skip [`QuestionType::Multiple`], default `false`
+    pub multiple: bool,
+}
+
+impl Default for SkipQType {
+    fn default() -> Self {
+        Self { 
+            text: true, 
+            numeric: true, 
+            datetime: true, 
+            single: false, 
+            multiple: false 
+        }
+    }
+}
+
+impl SkipQType {
+    /// Checks if the question should be skipped based on its `question_type` field.
+    pub fn should_skip(&self, question: &RwLockReadGuard<'_, Question>) -> bool {
+        match *question.question_type() {
+            QuestionType::None => true,  // always skip
+            QuestionType::Multiple => self.multiple,
+            QuestionType::Date | QuestionType::Time => self.datetime,
+            QuestionType::Logical | QuestionType::Single => self.single,
+            QuestionType::Character => self.text,
+            QuestionType::Quantity => self.numeric,
+        }
+    }
+}
+
+
 /// Arguments for running cross tabs for a particular question in a survey.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AnalysisOptions<'a> {
     /// Name of the question to use as the corsstab rows.
     pub question_name: &'a str,
+    
     /// List of question names to be used as the corsstab columns.
     pub columns: &'a [&'a str],
+    
     /// show row total
     pub show_row_total: bool,
+
     /// show column total
     pub show_column_total: bool,
     /// Return counts as relative frequencies normalised to 1.0.
@@ -24,8 +88,8 @@ pub struct AnalysisOptions<'a> {
     pub normalise: bool,
 }
 
-/// Options for the labelling summary table outputs (e.g., [`QuestionData::value_counts`], [`Survey::corsstab`])
-#[allow(unused)]
+/// Options for the labelling summary table outputs (e.g., [`QuestionData::value_counts`](crate::data::QuestionData), [`Survey::corsstab`](crate::survey::Survey))
+#[derive(Debug, Clone)]
 pub struct LabelOptions<'a> {
     /// Toggle on to include a column of code values for each response item
     /// Used only for single/ multi-choice questions
@@ -170,6 +234,7 @@ impl<'a> LabelOptions<'a> {
 }
 
 impl<'a> LabelOptions<'a> {
+    #[allow(clippy::mutable_key_type)]
     pub(crate) fn match_response_label(
         &'a self,
         question_name: &str,
