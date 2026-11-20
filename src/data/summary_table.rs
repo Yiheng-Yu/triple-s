@@ -8,12 +8,25 @@
 use std::sync::Arc;
 use crate::options::{AnalysisOptions, LabelOptions};
 
+/// Summary table for a specific question
 #[derive(Debug, Clone)]
-pub struct CrossTab {
-    pub question_name: Arc<str>,
-    pub columns: Vec<Arc<str>>,
+pub struct Table {
+    pub target: Analysis,
+    pub operation: Calculate,
 }
 
+/// Operations to do
+#[derive(Debug, Clone)]
+pub enum Calculate {
+    Crosstab,
+}
+
+/// Question to analyse
+#[derive(Debug, Clone)]
+pub struct Analysis {
+    pub question: Arc<str>,
+    pub top: Arc<str>
+}
 
 /// Display options for summary tables
 #[derive(Debug, Clone)]
