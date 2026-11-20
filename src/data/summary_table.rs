@@ -1,8 +1,11 @@
 //! Instructions for running topline tables for a survey struct.
 
+
+#![allow(unused)]
+
 // #[cfg(feature="pyo3")]
 // use pyo3::prelude::*;
-
+use std::sync::Arc;
 use crate::options::{AnalysisOptions, LabelOptions};
 
 #[derive(Debug, Clone)]
@@ -16,16 +19,17 @@ pub struct CrossTab {
 #[derive(Debug, Clone)]
 pub struct TableOptions {
     /// include/ exclude summary stats columns/ header rows/ etc., 
-    pub include: TableInclude,
+    pub include: Include,
 
     /// column names for each of the item 
     pub col_names: ColName,
+
 }
 
 
 /// Controlling rows/ columns to be included/ excluded in the table output
 #[derive(Debug, Clone)]
-pub struct TableInclude {
+pub struct Include {
     pub row_total: bool,
     pub col_total: bool,
     pub question_name: bool,
