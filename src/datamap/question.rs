@@ -9,7 +9,7 @@ use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*, types::PyDict};
 use quick_xml::{events::BytesText, writer::Writer};
-use strum::{AsRefStr, EnumIter, EnumString};
+use strum::{EnumIter, EnumString};
 
 use crate::{
     EventLog,

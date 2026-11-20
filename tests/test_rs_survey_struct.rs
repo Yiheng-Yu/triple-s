@@ -164,6 +164,41 @@ fn test_crosstab_column_groups_and_row_total() {
 }
 
 #[test]
+fn test_crosstab_same_question_as_row_and_column() {
+    let survey = get_survey_struct();
+    *survey.data_mut() = SurveyData::from_polars(
+        df!["Q2" => [0u32, 1, 1]].unwrap(),
+    )
+    .unwrap();
+
+    let result = survey
+        .crosstab(
+            AnalysisOptions {
+                question_name: "Q2",
+                columns: &["Q2"],
+                show_row_total: true,
+                show_column_total: true,
+                normalise: false,
+            },
+            LabelOptions::default(),
+        )
+        .unwrap();
+    let expected = df![
+        "label" => [
+            "Total",
+            "No, this is the first visit",
+            "I have visited before within the year",
+        ],
+        "total" => [3u32, 1, 2],
+        "Q2 - No, this is the first visit" => [1u32, 1, 0],
+        "Q2 - I have visited before within the year" => [2u32, 0, 2],
+    ]
+    .unwrap();
+
+    assert!(result.equals_missing(&expected), "{result}\nexpected:\n{expected}");
+}
+
+#[test]
 fn test_crosstab_label_options() {
     let survey = get_survey_struct();
     *survey.data_mut() = SurveyData::from_polars(
@@ -431,7 +466,7 @@ fn test_crosstab() {
     )
     .unwrap();
 
-    for (qnmae, qdata) in result.into_iter() {
+    for (qname, qdata) in result.into_iter() {
         println!("Question: {}, shape: {:?}", qname, qdata.shape())
     }
 }

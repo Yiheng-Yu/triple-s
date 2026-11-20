@@ -100,13 +100,28 @@ pub(crate) fn create_crosstab(
     show_column_base: bool,
     normalise: bool,
 ) -> PolarsResult<LazyFrame> {
+    let group_by_column = if target == group_by {
+        let schema = original.clone().collect_schema()?;
+        let mut alias = "__triple_s_group_by".to_owned();
+        while schema
+            .iter_names()
+            .any(|name| name.as_str() == alias.as_str())
+        {
+            alias.push('_');
+        }
+        alias
+    } else {
+        group_by.to_owned()
+    };
+    let group_by_column = group_by_column.as_str();
+
     // create cross tabs
     let grouped = original
         .clone()
-        .select([col(target), col(group_by)])
-        .with_columns([concat_list([col(group_by)])?.alias(group_by)])
+        .select([col(target), col(group_by).alias(group_by_column)])
+        .with_columns([concat_list([col(group_by_column)])?.alias(group_by_column)])
         .explode(
-            cols([group_by]),
+            cols([group_by_column]),
             ExplodeOptions {
                 empty_as_null: false,
                 keep_nulls: false,
@@ -127,14 +142,14 @@ pub(crate) fn create_crosstab(
 
     let columns = lf
         .clone()
-        .select([col(group_by)])
+        .select([col(group_by_column)])
         .unique(None, UniqueKeepStrategy::Any)
-        .sort([group_by], Default::default())
+        .sort([group_by_column], Default::default())
         .collect()?;
 
     let pivot = lf
         .pivot(
-            cols([group_by]),
+            cols([group_by_column]),
             Arc::new(columns),
             cols([target]),
             cols([target]),
@@ -154,9 +169,17 @@ pub(crate) fn create_crosstab(
     // create base row
     if show_column_base || normalise {
         let base_size_row = frequency_counts(original.clone(), group_by, None, false, false)?
-            .with_column(col(group_by).cast(DataType::String))
+            .with_column(
+                col(group_by)
+                    .cast(DataType::String)
+                    .alias(group_by_column),
+            )
+            .select([col(group_by_column), col("count")])
             .collect()?
-            .transpose(None, Some(either::Either::Left(group_by.to_string())))?;
+            .transpose(
+                None,
+                Some(either::Either::Left(group_by_column.to_owned())),
+            )?;
 
         let result = concat(
             [base_size_row.lazy(), pivot],
@@ -259,6 +282,34 @@ mod tests {
                     .select(["answer", "1", "2"])?;
                 assert!(result.equals_missing(&expected), "{result}\nexpected:\n{expected}");
             }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_crosstab_same_question() -> PolarsResult<()> {
+        let frame = df!["answer" => [Some(1u32), Some(1), Some(2), None]]?.lazy();
+        for show_total in [false, true] {
+            let result = create_crosstab(&frame, "answer", "answer", show_total, false)?
+                .collect()?
+                .select(["answer", "1", "2"])?;
+            let expected = if show_total {
+                df![
+                    "answer" => [None, Some(1u32), Some(2)],
+                    "1" => [2u32, 2, 0],
+                    "2" => [1u32, 0, 1],
+                ]?
+            } else {
+                df![
+                    "answer" => [Some(1u32), Some(2)],
+                    "1" => [2u32, 0],
+                    "2" => [0u32, 1],
+                ]?
+            };
+            assert!(
+                result.equals_missing(&expected),
+                "show_total={show_total}:\n{result}\nexpected:\n{expected}"
+            );
         }
         Ok(())
     }
