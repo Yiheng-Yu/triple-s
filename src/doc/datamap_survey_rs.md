@@ -1,5 +1,5 @@
-A Triple-S datamap containing survey metadata ([`SurveyInfo`]) and question
-definitions ([`Record`]). Use [`Survey`] to work with a datamap and
+A Triple-S datamap containing survey metadata ([`SurveyInfo`](crate::datamap::survey_info::SurveyInfo)) and question
+definitions ([`Record`](crate::datamap::record::Record)). Use [`Survey`](crate::survey::Survey) to work with a datamap and
 respondent data together.
 
 See the [Triple-S documentation](https://triple-s.org/documentation/manuals/)
@@ -30,7 +30,7 @@ guards before requesting write access to the same metadata.
 
 # Read a datamap and access questions
 
-[`triple_s::read_datamap`] reads Triple-S Classic or XML definitions without
+[`read_datamap`](crate::read_datamap) reads Triple-S Classic or XML definitions without
 loading respondent data, even when the record references a data file.
 
 ```no_run
@@ -43,14 +43,14 @@ if let Some(question) = datamap.get("Q1") {
 # Ok::<(), anyhow::Error>(())
 ```
 
-Question names are case insensitive. [`Datamap::get`] and [`Record::get`] return a
+Question names are case insensitive. [`Datamap::get`] and [`Record::get`](crate::datamap::record::Record) return a
 read guard for the matching question, or `None` if it does not exist.
 
 Use [`Datamap::record`] to access the full record.
 
 # Load and export respondent data
 
-Call [`read_data`]. The extension
+Call [`read_data`](crate::read_data). The extension
 selects fixed-width (`.asc`) or CSV (`.csv`) parsing, using the record's
 question definitions. CSV fields use question locations.
 
@@ -66,9 +66,9 @@ let frame = data.to_polars()?;
 # Ok::<(), anyhow::Error>(())
 ```
 
-Loading returns a [`SurveyData`] backed by a temporary Parquet cache.
+Loading returns a [`SurveyData`](crate::data::SurveyData) backed by a temporary Parquet cache.
 
-To read both files into a survey, use [`read_triple_s`] instead.
+To read both files into a survey, use [`read_triple_s`](crate::read_triple_s) instead.
 
 # Export the datamap
 

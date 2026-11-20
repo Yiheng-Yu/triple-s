@@ -418,3 +418,20 @@ fn test_value_counts() {
     let stats = question.value_counts(options).unwrap();
     println!("{:?}", stats)
 }
+
+#[test]
+fn test_crosstab() {
+    let survey = read_stack_overflow();
+    let result = survey.quick_summary(
+        Some(&["AIFreq_1"]), 
+        None, 
+        triple_s::options::SkipQType { text: true, numeric: true, datetime: false, single: false, multiple: false }, 
+        false, 
+        LabelOptions::default()
+    )
+    .unwrap();
+
+    for (qnmae, qdata) in result.into_iter() {
+        println!("Question: {}, shape: {:?}", qname, qdata.shape())
+    }
+}

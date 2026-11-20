@@ -2,13 +2,23 @@ use std::collections::HashMap;
 #[cfg(feature = "pyo3")]
 use std::sync::Arc;
 
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressIterator, ProgressStyle};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{IntoPyObjectExt, exceptions, prelude::*};
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
+use rayon::prelude::*;
 
+use crate::{
+    LabelOptions,
+    data::{QuestionData, SurveyData, operation},
+    datamap::Datamap,
+    error::QuestionNotFound,
+    options::{AnalysisOptions, SkipQType, SurveyOptions},
+    utils::{ArcLock, lock_it_up},
+};
 #[cfg(feature = "pyo3")]
 use crate::{
     SurveyInfo,
@@ -16,9 +26,6 @@ use crate::{
     options::{DataFrameFormat, ResponseDisplay},
     prelude::*,
     utils::{get_type_name, normalize_py_index, polars_to_pandas},
-};
-use crate::{
-    LabelOptions, data::{QuestionData, SurveyData, operation}, datamap::Datamap, error::QuestionNotFound, options::{AnalysisOptions, SurveyOptions}, utils::{ArcLock, lock_it_up},
 };
 
 // rust docstring
@@ -357,6 +364,7 @@ impl Survey {
     /// │ Prefer not to say  ┆ 352         ┆ 38               ┆ 5                               ┆ 296           ┆ 13                │
     /// └────────────────────┴─────────────┴──────────────────┴─────────────────────────────────┴───────────────┴───────────────────┘
     /// ```
+    #[allow(clippy::mutable_key_type)]
     pub fn crosstab(
         &self,
         args: AnalysisOptions<'_>,
@@ -366,20 +374,36 @@ impl Survey {
         let question_name = args.question_name;
         let original = self.data().lazy()?.clone();
 
+        // Skip the rest if no columns was defined
+        if args.columns.is_empty() {
+            return self
+                .get_question_data(question_name)
+                .ok_or::<PolarsError>(QuestionNotFound::new(question_name).into())?
+                .value_counts(label_options);
+        }
+
         // get crosstab for columns
         let mut headers = args.columns.iter();
         let first = match headers.next() {
             None => DataFrame::empty().lazy(),
             Some(&first) => {
                 let tab = operation::create_crosstab(
-                    &original, question_name, first, args.show_column_total, args.normalise,
+                    &original,
+                    question_name,
+                    first,
+                    args.show_column_total,
+                    args.normalise,
                 )?;
                 self.label_output_column(tab, first)?
             }
         };
         let mut output = headers.try_fold(first, |left, &colname| {
             let right = operation::create_crosstab(
-                &original, question_name, colname, args.show_column_total, args.normalise,
+                &original,
+                question_name,
+                colname,
+                args.show_column_total,
+                args.normalise,
             )?;
             let right = self.label_output_column(right, colname)?;
             Ok::<LazyFrame, PolarsError>(left.join(
@@ -432,7 +456,8 @@ impl Survey {
         }
         if label_options.include_response_codes {
             columns.push(
-                col(question_name).alias(label_options.col_code_value.unwrap_or(LabelOptions::CODE)),
+                col(question_name)
+                    .alias(label_options.col_code_value.unwrap_or(LabelOptions::CODE)),
             );
         }
 
@@ -451,7 +476,9 @@ impl Survey {
             .collect()
     }
 
+    /// Just a quick and dirty function for column text replacement
     #[inline(always)]
+    #[allow(clippy::mutable_key_type)]
     fn label_output_column(
         &self,
         result: LazyFrame,
@@ -474,6 +501,91 @@ impl Survey {
             .unzip();
 
         Ok(result.rename(old, new, false))
+    }
+
+    /// Creates a crosstab table for every selected question in the current instance,
+    /// skipping questions listed in `ignore` and question type defined in `skip_type`.
+    ///
+    /// Returns: [(`question_name`, `corsstab`), ..]
+    /// 
+    /// Arguments:
+    ///
+    /// - `columns`:
+    ///     - List of question names to be used as corsstab columns.
+    ///
+    /// - `ignore`:
+    ///     - list of question names to ignore. This overrides `skip_type`.
+    ///     - i.e., you can skip certain single-choice question even if `skip_type.single` was `false`
+    ///
+    /// - `skip_type`:
+    ///     - Ignore questions of certaion [`QuestionType`](crate::datamap::QuestionType).
+    ///     - The default `skip_type`s are:
+    ///
+    ///     > ```text
+    ///     > SkipQType {
+    ///     >     text: true,
+    ///     >     numeric: true,
+    ///     >     datetime: true,
+    ///     >     single: false,
+    ///     >     multiple: false
+    ///     > }
+    ///     > ```
+    ///
+    /// - `normalise`:
+    ///     - Show percentages instead of counts.
+    ///
+    /// - `label_options`:
+    ///     - Configure how the output should be labelled. For more info please view [`LabelOptions`]'s documentation.
+    ///
+    pub fn quick_summary(
+        &self,
+        columns: Option<&[&str]>,
+        ignore: Option<&[&str]>,
+        skip_type: SkipQType,
+        normalise: bool,
+        label_options: LabelOptions<'_>,
+    ) -> PolarsResult<Vec<(String, DataFrame)>> {
+        let columns = columns.unwrap_or_default();
+        let ignore = ignore.unwrap_or_default();
+
+        let progress_spinner = ProgressBar::new_spinner()
+            .with_style(
+                ProgressStyle::with_template("{spinner:.cyan} Parsing: {pos} tables")
+                    .unwrap(),
+            )
+            .with_finish(indicatif::ProgressFinish::WithMessage("Done".into()));
+
+        self
+            .datamap()
+            .record()
+            .content()
+            .par_iter()
+            .filter_map(|question| {
+                let question = question.read();
+                let question_name = question.name();
+
+                if !ignore.is_empty() & ignore.contains(&question_name.as_str()) {
+                    None
+                } else if skip_type.should_skip(&question) {
+                    None
+                } else {
+                    let args: AnalysisOptions<'_> = AnalysisOptions {
+                        question_name: question_name.as_str(),
+                        columns: columns,
+                        show_row_total: true,
+                        show_column_total: true,
+                        normalise: normalise,
+                    };
+                    let crosstab = self.crosstab(
+                        args, label_options.clone()
+                    )
+                    .map(|df| (question_name, df));
+
+                    Some(crosstab)
+                }
+            })
+            .progress_with(progress_spinner)
+            .collect()
     }
 }
 
@@ -851,35 +963,42 @@ impl Survey {
     ///
     /// Args:
     ///     row (str): Name of the question to show as rows.
-    ///     column (list[str], *optional*): Names of the questions to show as columns.
-    ///         Pass at least one question. For counts of a single question,
-    ///         you can use ``survey[row].value_counts()``.
     ///
     /// Keyword Args:
+    ///     column (list[str], *optional*): Names of the questions to show as columns.
+    ///     
     ///     show_row_total (bool, *optional*):
     ///         Include the overall count column for the row question. Default ``True``.
+    ///     
     ///     show_column_total (bool, *optional*):
     ///         Include the first row of totals. Each column shows its response count,
     ///         and the overall count shows respondents with non-null row answers.
     ///         Default ``True``.
+    ///     
     ///     colname_stats (str, *optional*):
     ///         Name of the overall count column. Used when ``show_row_total=True``.
     ///         Default ``'total'``.
+    ///     
     ///     colname_label (str, *optional*):
     ///         Name of the row-response label column. Default ``'label'``.
+    ///     
     ///     colname_code (str, *optional*):
     ///         Name of the row-response code column. Used when
     ///         ``include_response_codes=True``. Default ``'code'``.
+    ///     
     ///     include_response_codes (bool, *optional*):
     ///         Include the original row-response values in a separate column.
     ///         The total row has a null code value. Default ``False``.
+    ///     
     ///     include_question_name (bool, *optional*):
     ///         Include a ``question`` column with the row question's name in the
     ///         first displayed row and nulls in the remaining rows. Default ``False``.
+    ///     
     ///     output ('polars' | 'pandas' | DataFrameFormat, *optional*):
     ///         Choose a Polars or pandas dataframe, using a string or a
     ///         ``config.DataFrameFormat`` member. Default ``None`` follows
     ///         ``survey.dataframe_format`` without changing that setting.
+    ///     
     ///     normalise (bool, *optional*):
     ///         Return counts as relative frequencies normalised to 1.0, using
     ///         each column's total. The first row keeps the original total counts.
@@ -969,7 +1088,10 @@ impl Survey {
             show_column_total: show_column_total.unwrap_or(true),
             normalise: normalise.unwrap_or(false),
         };
-        let frame = self.crosstab(arguments, label_options)
+
+        // run corsstabs -> use py.detach() to make sure it runs with multithread
+        let frame = py
+            .detach(|| self.crosstab(arguments, label_options))
             .map_err(PyPolarsErr::Polars)?;
 
         match output
@@ -980,6 +1102,154 @@ impl Survey {
             DataFrameFormat::Polars => PyDataFrame(frame).into_bound_py_any(py),
             DataFrameFormat::Pandas => polars_to_pandas(frame, py),
         }
+    }
+
+    /// Creates a crosstab table for every selected question in the current instance,
+    /// skipping questions listed in `ignore` and question type defined in `skip_type`.
+    ///
+    /// Keyword Args:
+    ///     column (list[str], *optional*): Names of the questions to show as columns.
+    ///     
+    ///     ignore (list[str], *optional*): Names of the questions ignore.    
+    /// 
+    ///     normalise (bool, *optional*):
+    ///         Return counts as relative frequencies normalised to 1.0, using
+    ///         each column's total. The first row keeps the original total counts.
+    ///         For example, ``0.75`` represents 75%. Default ``False``.
+    ///     
+    ///     skip_text (bool, *optional*):
+    ///         Toggle on to skip `character` questions. Default `True`.
+    ///     
+    ///     skip_numeric (bool, *optional*):
+    ///         Toggle on to skip `quantity` questions. Default `True`.
+    /// 
+    ///     skip_datetime (bool, *optional*):
+    ///         Toggle on to skip `date` and `time` questions. Default `True`.
+    /// 
+    ///     skip_single (bool, *optional*):
+    ///         Toggle on to skip `single`-choice questions. Default `False`.
+    /// 
+    ///     skip_multiple (bool, *optional*):
+    ///         Toggle on to skip `multi`-choice questions. Default `False`.
+    /// 
+    ///     colname_stats (str, *optional*):
+    ///         Name of the overall count column. Used when ``show_row_total=True``.
+    ///         Default ``'total'``.
+    ///     
+    ///     colname_label (str, *optional*):
+    ///         Name of the row-response label column. Default ``'label'``.
+    ///     
+    ///     colname_code (str, *optional*):
+    ///         Name of the row-response code column. Used when
+    ///         ``include_response_codes=True``. Default ``'code'``.
+    ///     
+    ///     include_response_codes (bool, *optional*):
+    ///         Include the original row-response values in a separate column.
+    ///         The total row has a null code value. Default ``False``.
+    ///     
+    ///     include_question_name (bool, *optional*):
+    ///         Include a ``question`` column with the row question's name in the
+    ///         first displayed row and nulls in the remaining rows. Default ``False``.
+    ///     
+    ///     output ('polars' | 'pandas' | DataFrameFormat, *optional*):
+    ///         Choose a Polars or pandas dataframe, using a string or a
+    ///         ``config.DataFrameFormat`` member. Default ``None`` follows
+    ///         ``survey.dataframe_format`` without changing that setting.
+    ///     
+    ///     normalise (bool, *optional*):
+    ///         Return counts as relative frequencies normalised to 1.0, using
+    ///         each column's total. The first row keeps the original total counts.
+    ///         For example, ``0.75`` represents 75%. Default ``False``.
+    /// 
+    /// Returns:
+    ///     [(String, polars.DataFrame | pandas.DataFrame)]:
+    ///     List of (question_name, crosstab_data)
+    #[pyo3(
+        name = "quick_summary",
+        signature = (
+            columns: "list[str]" = None,
+            ignore: "list[str]" = None,
+            normalise: "bool" = false,
+            skip_text: "bool" = true,
+            skip_numeric: "bool" = true,
+            skip_datetime: "bool" = true,
+            skip_single: "bool" = false,
+            skip_multiple: "bool" = false,
+            colname_stats: "str" = "total",
+            colname_label: "str" = "label",
+            colname_code: "str" = "code",
+            include_response_codes: "bool" = false,
+            include_question_name: "bool" = false,
+            output: "'polars'|'pandas'|DataFrameFormat" = None,
+        )
+    )]
+    fn py_quick_summary<'py>(
+        &self,
+        py: Python<'py>,
+        columns: Option<Vec<String>>,
+        ignore: Option<Vec<String>>,
+        normalise: Option<bool>,
+        skip_text: Option<bool>,
+        skip_numeric: Option<bool>,
+        skip_datetime: Option<bool>,
+        skip_single: Option<bool>,
+        skip_multiple: Option<bool>,
+        colname_stats: Option<&str>,
+        colname_label: Option<&str>,
+        colname_code: Option<&str>,
+        include_response_codes: Option<bool>,
+        include_question_name: Option<bool>,
+        output: Option<Bound<'py, PyAny>>,
+    ) -> PyResult<Vec<(String, Bound<'py, PyAny>)>>{
+        // Default arguments
+        let normalise = normalise.unwrap_or(false);
+
+        let column_names = columns.unwrap_or_default();
+        let columns = column_names
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+
+        let ignored_names = ignore.unwrap_or_default();
+        let ignore = ignored_names
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+
+        let skip_types = SkipQType {
+            text: skip_text.unwrap_or(true),
+            numeric: skip_numeric.unwrap_or(true),
+            datetime: skip_datetime.unwrap_or(true),
+            single: skip_single.unwrap_or(false),
+            multiple: skip_multiple.unwrap_or(false),
+        };
+
+        let label_options = LabelOptions::new()
+            .with_include_question_name(include_question_name.unwrap_or(false))
+            .with_include_response_codes(include_response_codes.unwrap_or(false))
+            .with_fill_question_name_column(false)
+            .with_col_count(colname_stats)
+            .with_col_label(colname_label)
+            .with_col_code(colname_code);
+
+        let format = output
+            .map(|value| DataFrameFormat::from_py_any(value))
+            .transpose()?
+            .unwrap_or(self.config().py_dataframe_format.clone());
+
+        self.quick_summary(
+            Some(&columns), Some(&ignore), skip_types, normalise, label_options
+        )
+        .map_err(PyPolarsErr::Polars)?
+        .into_iter()
+        .map(|(qname, qdata)| {
+            let qdata = match &format {
+                &DataFrameFormat::Polars => PyDataFrame(qdata).into_bound_py_any(py),
+                &DataFrameFormat::Pandas => polars_to_pandas(qdata, py),
+            }?;
+            Ok((qname, qdata))
+        })
+        .collect()
     }
 }
 

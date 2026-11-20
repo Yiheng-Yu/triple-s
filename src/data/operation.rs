@@ -1,4 +1,5 @@
-//! Collects various polars functions to be used here and there
+//! Functions for running various tabulation operations
+//! Mostly used for creating summary tables for the survey data.
 
 use polars::prelude::*;
 
