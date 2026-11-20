@@ -2,7 +2,7 @@ use std::collections::HashMap;
 #[cfg(feature = "pyo3")]
 use std::sync::Arc;
 
-use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle, ProgressIterator};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]

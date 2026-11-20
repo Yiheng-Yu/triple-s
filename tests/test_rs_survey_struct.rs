@@ -404,7 +404,7 @@ fn test_read_stack_overflow_survey() {
     println!("{:#?}", survey.question_names());
 
     println!("running crosstab");
-    let row = "Age";
+    let row = "AIFreq_1";
     let topbreak = "AIFreq_1";
 
     let res = survey
@@ -437,6 +437,24 @@ fn test_read_stack_overflow_survey() {
         .value_counts(options)
         .unwrap();
     println!("{:?}", base);
+}
+
+#[test]
+fn test_crosstab_question_against_itself() {
+    let survey = read_stack_overflow();
+    let result = survey
+        .crosstab(
+            AnalysisOptions {
+                question_name: "AIFreq_1",
+                columns: &["AIFreq_1"],
+                show_row_total: true,
+                show_column_total: true,
+                normalise: false,
+            },
+            LabelOptions::default(),
+        )
+        .unwrap();
+    assert!(result.height() > 0);
 }
 
 #[test]
