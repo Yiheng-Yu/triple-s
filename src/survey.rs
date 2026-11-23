@@ -1034,10 +1034,10 @@ impl Survey {
     /// the first row as total counts.
     ///
     /// Args:
-    ///     row (str): Name of the question to show as rows.
+    ///     row (str): Name of the question to show as rows, case insensitive.
     ///
     /// Keyword Args:
-    ///     column (list[str], *optional*): Names of the questions to show as columns.
+    ///     column (list[str], *optional*): Names of the questions to show as columns, case insensitive.
     ///     
     ///     show_row_total (bool, *optional*):
     ///         Include the overall count column for the row question. Default ``True``.
@@ -1180,9 +1180,9 @@ impl Survey {
     /// skipping questions listed in `ignore` and question type defined in `skip_type`.
     ///
     /// Keyword Args:
-    ///     column (list[str], *optional*): Names of the questions to show as columns.
+    ///     column (list[str], *optional*): Names of the questions to show as columns, case insensitive.
     ///     
-    ///     ignore (list[str], *optional*): Names of the questions ignore.    
+    ///     ignore (list[str], *optional*): Names of the questions ignore, case insensitive.    
     ///
     ///     normalise (bool, *optional*):
     ///         Return counts as relative frequencies normalised to 1.0, using
@@ -1303,13 +1303,13 @@ impl Survey {
             .transpose()?
             .unwrap_or(self.config().py_dataframe_format.clone());
 
-        self.quick_summary(
+        py.detach(|| self.quick_summary(
             Some(&columns),
             Some(&ignore),
             skip_types,
             normalise,
             label_options,
-        )
+        ))
         .map_err(PyPolarsErr::Polars)?
         .into_iter()
         .map(|(qname, qdata)| {
