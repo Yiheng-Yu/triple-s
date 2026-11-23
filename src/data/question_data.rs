@@ -200,6 +200,18 @@ impl QuestionData {
     /// _The first row is the total count of not-null values_
     #[allow(clippy::mutable_key_type)]
     pub fn value_counts(&self, options: LabelOptions<'_>) -> PolarsResult<DataFrame> {
+        // calling `value_counts_internal` instead of putting contents of `value_counts_internal` here
+        // because `value_counts_internal` gets used elsewhere in parallel iterator later.
+        let plan = self.value_counts_internal(options)?;
+        plan.collect()
+    }
+
+    /// Builds query plan for running value_counts() to be collected later
+    /// This is used for multi-threading, internal only.
+    pub(crate) fn value_counts_internal(
+        &self,
+        options: LabelOptions<'_>,
+    ) -> PolarsResult<LazyFrame> {
         let question_name = self.name();
         let raw_data = self.to_value_column()?;
 
@@ -245,11 +257,10 @@ impl QuestionData {
         // Fianl formatting: rename column names, add quesiton names etc.,
         let columns = options.into_expression(&question_name);
 
-        result
+        Ok(result
             .select(columns)
             .with_simplify_expr(true)
-            .with_comm_subplan_elim(true)
-            .collect()
+            .with_comm_subplan_elim(true))
     }
 
     /// Checks if `other` is comes from the same survey as `self`.
@@ -584,7 +595,7 @@ impl QuestionData {
     ///         Column name for the response code column.
     ///         Only used when `include_response_codes` is `True`.
     ///         Default `'code'`
-    /// 
+    ///
     ///     include_question_name (bool, *optional*):
     ///         Include a ``question`` column with the question name in the first row
     ///         and nulls in the remaining rows.
@@ -635,8 +646,7 @@ impl QuestionData {
             .with_col_label(colname_label)
             .with_col_code(colname_code);
 
-        let result = self.value_counts(options)
-            .map_err(PyPolarsErr::Polars)?;
+        let result = self.value_counts(options).map_err(PyPolarsErr::Polars)?;
 
         // prep output
         let format = output

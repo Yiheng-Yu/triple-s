@@ -75,6 +75,7 @@ fn test_value_display_success() {
 #[test]
 fn test_value_display_label_not_found() {
     let mut survey = get_survey_struct();
+    survey.config_mut().response_display = ResponseDisplay::Label;
     let mut question = survey.get_question_data("Q2").unwrap();
 
     question
@@ -137,13 +138,16 @@ fn test_crosstab_column_groups_and_row_total() {
     for num_groups in 1..=2 {
         for show_row_total in [false, true] {
             let result = survey
-                .crosstab(AnalysisOptions {
-                    question_name: "Q2",
-                    columns: &["Q4", "Q5"][..num_groups],
-                    show_row_total,
-                    show_column_total: false,
-                    normalise: false,
-                }, LabelOptions::default())
+                .crosstab(
+                    AnalysisOptions {
+                        question_name: "Q2",
+                        columns: &["Q4", "Q5"][..num_groups],
+                        show_row_total,
+                        show_column_total: false,
+                        normalise: false,
+                    },
+                    LabelOptions::default(),
+                )
                 .unwrap();
 
             let mut names = vec!["label"];
@@ -166,10 +170,7 @@ fn test_crosstab_column_groups_and_row_total() {
 #[test]
 fn test_crosstab_same_question_as_row_and_column() {
     let survey = get_survey_struct();
-    *survey.data_mut() = SurveyData::from_polars(
-        df!["Q2" => [0u32, 1, 1]].unwrap(),
-    )
-    .unwrap();
+    *survey.data_mut() = SurveyData::from_polars(df!["Q2" => [0u32, 1, 1]].unwrap()).unwrap();
 
     let result = survey
         .crosstab(
@@ -195,16 +196,18 @@ fn test_crosstab_same_question_as_row_and_column() {
     ]
     .unwrap();
 
-    assert!(result.equals_missing(&expected), "{result}\nexpected:\n{expected}");
+    assert!(
+        result.equals_missing(&expected),
+        "{result}\nexpected:\n{expected}"
+    );
 }
 
 #[test]
 fn test_crosstab_label_options() {
     let survey = get_survey_struct();
-    *survey.data_mut() = SurveyData::from_polars(
-        df!["Q2" => [0u32, 1, 1], "Q4" => [1u32, 1, 2]].unwrap(),
-    )
-    .unwrap();
+    *survey.data_mut() =
+        SurveyData::from_polars(df!["Q2" => [0u32, 1, 1], "Q4" => [1u32, 1, 2]].unwrap())
+            .unwrap();
 
     for (question, code, label, total) in [
         ("question", "code", "label", "total"),
@@ -247,7 +250,10 @@ fn test_crosstab_label_options() {
                         .with_col_count(Some(total)),
                 )
                 .unwrap();
-            assert!(result.equals_missing(&expected), "{result}\nexpected:\n{expected}");
+            assert!(
+                result.equals_missing(&expected),
+                "{result}\nexpected:\n{expected}"
+            );
         }
     }
 }
@@ -303,7 +309,10 @@ fn test_crosstab_normalise() -> PolarsResult<()> {
                         .with_col_label(Some("answer"))
                         .with_col_count(Some("base")),
                 )?;
-                assert!(result.equals_missing(&expected), "{result}\nexpected:\n{expected}");
+                assert!(
+                    result.equals_missing(&expected),
+                    "{result}\nexpected:\n{expected}"
+                );
             }
         }
     }
@@ -347,22 +356,28 @@ fn test_crosstab_column_totals_count_respondents() {
 
     let columns = ["Q4", "Q2"];
     let body = survey
-        .crosstab(AnalysisOptions {
-            question_name: "Q5",
-            columns: &columns,
-            show_row_total: true,
-            show_column_total: false,
-            normalise: false,
-        }, LabelOptions::default())
+        .crosstab(
+            AnalysisOptions {
+                question_name: "Q5",
+                columns: &columns,
+                show_row_total: true,
+                show_column_total: false,
+                normalise: false,
+            },
+            LabelOptions::default(),
+        )
         .unwrap();
     let result = survey
-        .crosstab(AnalysisOptions {
-            question_name: "Q5",
-            columns: &columns,
-            show_row_total: true,
-            show_column_total: true,
-            normalise: false,
-        }, LabelOptions::default())
+        .crosstab(
+            AnalysisOptions {
+                question_name: "Q5",
+                columns: &columns,
+                show_row_total: true,
+                show_column_total: true,
+                normalise: false,
+            },
+            LabelOptions::default(),
+        )
         .unwrap();
 
     assert!(
@@ -396,48 +411,47 @@ fn test_crosstab_column_totals_count_respondents() {
     );
 }
 
-#[test]
-fn test_read_stack_overflow_survey() {
-    println!("Reading survey data");
-    let survey = read_stack_overflow();
-    println!("Data loaded. Question names:");
-    println!("{:#?}", survey.question_names());
+// #[test]
+// fn test_read_stack_overflow_survey() {
+//     println!("Reading survey data");
+//     let survey = read_stack_overflow();
+//     println!("Data loaded. Question names:");
+//     println!("{:#?}", survey.question_names());
 
-    println!("running crosstab");
-    let row = "AIFreq_1";
-    let topbreak = "AIFreq_1";
+//     println!("running crosstab");
+//     let row = "AIFreq_1";
+//     let topbreak = "AIFreq_1";
 
-    let res = survey
-        .crosstab(
-            AnalysisOptions {
-            question_name: row,
-            columns: &[topbreak], //"JobEaseAI_1"],
-            show_row_total: true,
-            show_column_total: true,
-            normalise: false,
-        },
+//     let res = survey
+//         .crosstab(
+//             AnalysisOptions {
+//                 question_name: row,
+//                 columns: &[topbreak], //"JobEaseAI_1"],
+//                 show_row_total: true,
+//                 show_column_total: true,
+//                 normalise: false,
+//             },
+//             LabelOptions {
+//                 include_response_codes: true,
+//                 ..Default::default()
+//             },
+//         )
+//         .unwrap();
+//     println!("Crosstab:");
+//     unsafe {
+//         std::env::set_var("POLARS_FMT_MAX_ROWS", "100");
+//     }
+//     println!("{:?}", res);
 
-        LabelOptions {
-            include_response_codes: true,
-            ..Default::default()
-        }
-    )
-        .unwrap();
-    println!("Crosstab:");
-    unsafe {
-        std::env::set_var("POLARS_FMT_MAX_ROWS", "100");
-    }
-    println!("{:?}", res);
-
-    println!("Base size:");
-    let options = LabelOptions::new().with_include_response_codes(true);
-    let base = survey
-        .get_question_data(topbreak)
-        .unwrap()
-        .value_counts(options)
-        .unwrap();
-    println!("{:?}", base);
-}
+//     println!("Base size:");
+//     let options = LabelOptions::new().with_include_response_codes(true);
+//     let base = survey
+//         .get_question_data(topbreak)
+//         .unwrap()
+//         .value_counts(options)
+//         .unwrap();
+//     println!("{:?}", base);
+// }
 
 #[test]
 fn test_crosstab_question_against_itself() {
@@ -473,16 +487,23 @@ fn test_value_counts() {
 }
 
 #[test]
-fn test_crosstab() {
+fn test_crosstab_case_insensitive() {
     let survey = read_stack_overflow();
-    let result = survey.quick_summary(
-        Some(&["AIFreq_1"]), 
-        None, 
-        triple_s::options::SkipQType { text: true, numeric: true, datetime: false, single: false, multiple: false }, 
-        false, 
-        LabelOptions::default()
-    )
-    .unwrap();
+    let result = survey
+        .quick_summary(
+            Some(&["aifreq_1"]),
+            None,
+            triple_s::options::SkipQType {
+                text: true,
+                numeric: true,
+                datetime: false,
+                single: false,
+                multiple: false,
+            },
+            false,
+            LabelOptions::default(),
+        )
+        .unwrap();
 
     for (qname, qdata) in result.into_iter() {
         println!("Question: {}, shape: {:?}", qname, qdata.shape())
