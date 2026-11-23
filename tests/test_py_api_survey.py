@@ -121,3 +121,46 @@ def test_set_flag_toggle_response_display_success(survey):
     assert survey.response_display == "label"
     for question in survey.iter_questions():
         assert question.response_display == 'label'
+
+def test_survey_crosstab_input_types(survey):
+    name = "Q2"
+    column = "Q3"
+    _ = survey.crosstab(name, column)
+    _ = survey.crosstab(name, [column])
+
+
+@pytest.mark.parametrize(
+    "column, ignore",
+    [
+        pytest.param(None, ["Q3"], id="(col: None | ignore: list)"),
+        pytest.param("Q2", ["Q3"], id="(col: str | ignore: list)"),
+        pytest.param(["Q2"], ["Q3"], id="(col: list | ignore: list)"),
+        pytest.param(["Q2"], None, id="(col: list | ignore: None)"),
+        pytest.param(["Q2"], "Q3", id="(col: list | ignore: str)"),
+        
+        pytest.param("Q2", "Q3", id="(col: str | ignore: str)"),
+        pytest.param(["Q2", "Q3"], "Q3", id="(col: list[2] | ignore: str)"),
+        pytest.param(["Q2", "Q3"], ["Q2", "Q3"], id="(col: list[2] | ignore: list[2])"),
+        
+    ]
+)
+def test_survey_quick_summary_input_types(survey, column, ignore):
+    _ = survey.quick_summary(columns=column, ignore=ignore)
+
+    
+@pytest.mark.parametrize(
+    "col1, col2",
+    [
+        pytest.param("Q1.a", "Q1.b", id="(original, original)"),
+        pytest.param("Q1.a".lower(), "Q1.b".lower(), id="(lower, lower)"),
+        pytest.param("Q1.a".upper(), "Q1.b".upper(), id="(upper, upper)"),
+    ]
+)
+def test_survey_quick_summary_case_insensitive(survey, col1, col2):
+    _ = survey.quick_summary(col1, col2)
+    
+    
+def test_survey_crosstab_case_insensitive(survey):
+    for name in survey.question_names:
+        _ = survey.crosstab(name.lower(), name.lower())
+        _ = survey.crosstab(name.upper(), name.upper())

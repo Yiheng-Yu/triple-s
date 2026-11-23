@@ -411,6 +411,38 @@ fn test_crosstab_column_totals_count_respondents() {
     );
 }
 
+#[test]
+fn test_crosstab_case_insensitive() {
+    let survey = get_survey_struct();
+    for qname in survey.question_names().into_iter() {
+        let _ = survey.crosstab(
+            AnalysisOptions { 
+                question_name: &qname.to_ascii_lowercase(), 
+                columns: &[&qname.to_ascii_lowercase()], 
+                show_row_total: true, 
+                show_column_total: true, 
+                normalise: false 
+            }, 
+            LabelOptions::default()
+        )
+        .map_err(|err| format!("{:#?}", err))
+        .unwrap();
+
+        let _ = survey.crosstab(
+            AnalysisOptions { 
+                question_name: &qname.to_ascii_uppercase(), 
+                columns: &[&qname.to_ascii_uppercase()], 
+                show_row_total: true, 
+                show_column_total: true, 
+                normalise: false 
+            }, 
+            LabelOptions::default()
+        )
+        .map_err(|err| format!("{:#?}", err))
+        .unwrap();
+    }
+}
+
 // #[test]
 // fn test_read_stack_overflow_survey() {
 //     println!("Reading survey data");
@@ -484,28 +516,4 @@ fn test_value_counts() {
         .with_fill_question_name_column(true);
     let stats = question.value_counts(options).unwrap();
     println!("{:?}", stats)
-}
-
-#[test]
-fn test_crosstab_case_insensitive() {
-    let survey = read_stack_overflow();
-    let result = survey
-        .quick_summary(
-            Some(&["aifreq_1"]),
-            None,
-            triple_s::options::SkipQType {
-                text: true,
-                numeric: true,
-                datetime: false,
-                single: false,
-                multiple: false,
-            },
-            false,
-            LabelOptions::default(),
-        )
-        .unwrap();
-
-    for (qname, qdata) in result.into_iter() {
-        println!("Question: {}, shape: {:?}", qname, qdata.shape())
-    }
 }

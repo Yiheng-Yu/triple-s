@@ -191,6 +191,23 @@ pub(crate) fn extract_indicies<'py>(
     .collect())
 }
 
+#[cfg(feature = "pyo3")]
+pub(crate) fn extract_to_vec_str<'py>(
+    input: &Bound<'py, PyAny>
+) -> PyResult<Vec<String>> {
+    if let Ok(result) = input.extract::<String>() {
+        Ok(vec![result])
+    } else if let Ok(result) = input.extract::<Vec<String>>() {
+        Ok(result)
+    } else {
+        let type_name = get_type_name(&input)?;
+        Err(exceptions::PyTypeError::new_err(format!(
+            "Except input to be of type `str` or `list[str]`, got: '{}'",
+            type_name
+        )))
+    }
+}
+
 /// creates a reader that capacable of reading UTF-8 or BOM-marked UTF-16 as valid UTF-8
 pub(crate) fn create_reader<R: Read>(source: R) -> DecodeReaderBytes<R, Vec<u8>> {
     DecodeReaderBytesBuilder::new()
