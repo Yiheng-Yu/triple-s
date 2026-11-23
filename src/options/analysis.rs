@@ -203,14 +203,14 @@ impl<'a> LabelOptions<'a> {
         let colname_stats = self.col_count.unwrap_or(Self::COUNT);
 
         // append question name column? or not
-        if self.include_question_name & self.fill_question_name_column {
-            let name = self.col_question_name.unwrap_or(Self::QUESTION);
-            let qname_column = lit(question_name.to_string());
-            columns.push(qname_column.alias(name));
-        }
-
         if self.include_question_name {
-            columns.push(self.question_name_column(question_name));
+            if self.fill_question_name_column {
+                let name = self.col_question_name.unwrap_or(Self::QUESTION);
+                let qname_column = lit(question_name.to_string());
+                columns.push(qname_column.alias(name));
+            } else {
+                columns.push(self.question_name_column(question_name));
+            }
         }
 
         // append response code column? or not

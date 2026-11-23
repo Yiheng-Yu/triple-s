@@ -2,7 +2,12 @@ use std::collections::HashMap;
 #[cfg(feature = "pyo3")]
 use std::sync::Arc;
 
-use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
+use indicatif::{
+    ParallelProgressIterator, 
+    ProgressBar, 
+    ProgressIterator, 
+    ProgressStyle
+};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
@@ -370,29 +375,54 @@ impl Survey {
         args: AnalysisOptions<'_>,
         label_options: LabelOptions<'_>,
     ) -> PolarsResult<DataFrame> {
-        // prep
-        let mut original = self.data().lazy()?.clone();
-        let schema_ref = original.collect_schema()?;
+        // We first locate question names and columns to group by
+        let all_question_names = self.question_names();
+        let all_question_names = all_question_names
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<&str>>();
 
-        // find column names, case insensitive
-        let question_name = operation::find_column_name(&schema_ref, args.question_name)?;
+        let question_name = operation::find_column_name(&all_question_names, args.question_name)?;
+        let target_columns = args.columns
+            .into_iter()
+            .map(|colname| operation::find_column_name(&all_question_names, *colname))
+            .collect::<PolarsResult<Vec<&str>>>()?;
+
+        self.crosstab_internal(
+            question_name,
+            &target_columns,
+            args.show_row_total,
+            args.show_column_total,
+            args.normalise,
+            label_options
+        )?.collect()
+    }
+
+    /// Builds lazyframe query plan for getting crosstab to be collected later
+    /// 
+    /// This function expect all input column names to be CASE SENSITIVE
+    fn crosstab_internal<'a>(
+        &self,
+        question_name: &'a str,
+        // target_columns: Vec<&'a str>,
+        target_columns: &'a[&'a str],
+        show_row_total: bool,
+        show_column_total: bool,
+        normalise: bool,
+        label_options: LabelOptions<'a>,
+    ) -> PolarsResult<LazyFrame> {
+        // prep
+        let original = self.data().lazy()?.clone();
+
         // Skip the rest if no columns was defined
-        if args.columns.is_empty() {
+        if target_columns.is_empty() {
             return self
                 .get_question_data(question_name)
                 .ok_or::<PolarsError>(QuestionNotFound::new(question_name).into())?
-                .value_counts(label_options);
+                .value_counts_internal(label_options);
         }
 
-        // find list of column names to group by, case insensitive
-        // this method is O(n^2) but sinec there shouldn't be a lot of columns to group by should be fine i guess
-        let mut headers = args
-            .columns
-            .into_iter()
-            .map(|item| operation::find_column_name(&schema_ref, *item))
-            .collect::<PolarsResult<Vec<&str>>>()?
-            .into_iter();
-
+        let mut headers = target_columns.into_iter();
         // ..then creating crosstabs
         let first = match headers.next() {
             None => DataFrame::empty().lazy(),
@@ -401,8 +431,8 @@ impl Survey {
                     &original,
                     question_name,
                     first,
-                    args.show_column_total,
-                    args.normalise,
+                    show_column_total,
+                    normalise,
                 )?;
                 self.label_output_column(tab, first)?
             }
@@ -412,8 +442,8 @@ impl Survey {
                 &original,
                 question_name,
                 colname,
-                args.show_column_total,
-                args.normalise,
+                show_column_total,
+                normalise,
             )?;
             let right = self.label_output_column(right, colname)?;
             Ok::<LazyFrame, PolarsError>(left.join(
@@ -434,13 +464,13 @@ impl Survey {
         })?;
 
         // row total
-        if args.show_row_total {
+        if show_row_total {
             output = operation::frequency_counts(
                 original.clone(),
                 question_name,
                 Some(label_options.col_count.unwrap_or(LabelOptions::COUNT)),
-                args.show_column_total,
-                args.normalise,
+                show_column_total,
+                normalise,
             )?
             .join(
                 output,
@@ -479,11 +509,10 @@ impl Survey {
         columns.push(label_options.match_response_label(question_name, response_label_map)?);
         columns.push(all().exclude_cols([question_name]).as_expr());
 
-        output
+        Ok(output
             .select(columns)
             .with_simplify_expr(true)
-            .with_comm_subexpr_elim(true)
-            .collect()
+            .with_comm_subexpr_elim(true))
     }
 
     /// Just a quick and dirty function for column text replacement
@@ -554,41 +583,74 @@ impl Survey {
         normalise: bool,
         label_options: LabelOptions<'_>,
     ) -> PolarsResult<Vec<(String, DataFrame)>> {
-        let columns = columns.unwrap_or_default();
-        let ignore = ignore.unwrap_or_default();
 
-        let progress_spinner = ProgressBar::new_spinner()
-            .with_style(
-                ProgressStyle::with_template("{spinner:.cyan} Parsing: {pos} tables").unwrap(),
-            )
-            .with_finish(indicatif::ProgressFinish::WithMessage("Done".into()));
+        // Get name of columns to be processed, case sensitive
+        let question_names = self.question_names();
+        let question_names_ref = question_names
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<&str>>();
 
-        self.datamap()
+        let columns = columns.map(|cols| {
+            cols
+                .iter()
+                .map(|name| operation::find_column_name(&question_names_ref, *name) )
+                .collect::< PolarsResult<Vec<&str>> >()
+        })
+        .transpose()?
+        .unwrap_or_default();
+        
+        let ignore = ignore
+            .map(|cols| {
+                cols
+                .iter()
+                .map(|name| operation::find_column_name(&question_names_ref, *name) )
+                .collect::< PolarsResult<Vec<&str>> >()
+            })
+            .transpose()?
+            .unwrap_or_default();
+
+        // Building queries
+        let queries = self.datamap()
             .record()
             .content()
+            // .iter()
             .par_iter()
             .filter_map(|question| {
                 let question = question.read();
                 let question_name = question.name();
-
                 if !ignore.is_empty() & ignore.contains(&question_name.as_str()) {
                     None
                 } else if skip_type.should_skip(&question) {
                     None
                 } else {
-                    let args: AnalysisOptions<'_> = AnalysisOptions {
-                        question_name: question_name.as_str(),
-                        columns: columns,
-                        show_row_total: true,
-                        show_column_total: true,
-                        normalise: normalise,
-                    };
-                    let crosstab = self
-                        .crosstab(args, label_options.clone())
-                        .map(|df| (question_name, df));
-
-                    Some(crosstab)
+                    Some(
+                        self.crosstab_internal(
+                            &question_name,
+                            &columns,
+                            true,  // show_row_total
+                            true,   // show_column_total
+                            normalise,
+                            label_options.clone()
+                        ).map(|lf| (question_name, lf))
+                    )
                 }
+            })
+            .collect::<PolarsResult<Vec<(String, LazyFrame)>>>()?;
+
+        // Executing query
+        let progress_spinner = ProgressBar::new_spinner()
+            .with_style(
+                ProgressStyle::with_template("{spinner:.cyan} Parsing: {pos} tables").unwrap(),
+            )
+            .with_finish(indicatif::ProgressFinish::WithMessage("Done".into()));
+        
+        queries
+            .into_par_iter()
+            .map(|(qname, lazyframe)| {
+                lazyframe.collect()
+                    .with_context(|| format!("When trying to get summary table for question {:?}", qname.clone()))
+                    .map(|df| (qname, df))
             })
             .progress_with(progress_spinner)
             .collect()

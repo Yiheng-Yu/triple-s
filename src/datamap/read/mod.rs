@@ -17,7 +17,8 @@ use polars::prelude::AnyValue;
 use quick_xml::reader::Reader as XmlReader;
 
 use crate::{
-    DataRange, datamap::{
+    DataRange, 
+    datamap::{
         Code,
         Datamap,
         Location,
@@ -32,7 +33,8 @@ use crate::{
         record::DataFormat,
         response::AnyValueExt,
         survey_info::Version,
-    }, error::{
+    }, 
+    error::{
         self,
         BadLine,
         DuplicatedKey,
@@ -41,7 +43,9 @@ use crate::{
         MissingValueError,
         UnknownAttribute,
         Warning,
-    }, prelude::*, utils::{TextReader, create_reader, lock_it_up, validate_date, validate_time},
+    }, 
+    prelude::*, 
+    utils::{create_reader, lock_it_up, validate_date, validate_time}
 };
 
 #[derive(Debug, PartialEq)]

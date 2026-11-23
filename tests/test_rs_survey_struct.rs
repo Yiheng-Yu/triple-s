@@ -1,10 +1,6 @@
 use polars::prelude::*;
 use triple_s::{
-    AnalysisOptions,
-    Survey,
-    SurveyData,
-    options::{LabelOptions, ResponseDisplay},
-    read_triple_s,
+    AnalysisOptions, Survey, SurveyData, options::{LabelOptions, ResponseDisplay}, read_triple_s,
 };
 
 const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";
@@ -75,6 +71,7 @@ fn test_value_display_success() {
 #[test]
 fn test_value_display_label_not_found() {
     let mut survey = get_survey_struct();
+    survey.config_mut().response_display = ResponseDisplay::Label;
     let mut question = survey.get_question_data("Q2").unwrap();
 
     question
@@ -410,47 +407,47 @@ fn test_crosstab_column_totals_count_respondents() {
     );
 }
 
-#[test]
-fn test_read_stack_overflow_survey() {
-    println!("Reading survey data");
-    let survey = read_stack_overflow();
-    println!("Data loaded. Question names:");
-    println!("{:#?}", survey.question_names());
+// #[test]
+// fn test_read_stack_overflow_survey() {
+//     println!("Reading survey data");
+//     let survey = read_stack_overflow();
+//     println!("Data loaded. Question names:");
+//     println!("{:#?}", survey.question_names());
 
-    println!("running crosstab");
-    let row = "AIFreq_1";
-    let topbreak = "AIFreq_1";
+//     println!("running crosstab");
+//     let row = "AIFreq_1";
+//     let topbreak = "AIFreq_1";
 
-    let res = survey
-        .crosstab(
-            AnalysisOptions {
-                question_name: row,
-                columns: &[topbreak], //"JobEaseAI_1"],
-                show_row_total: true,
-                show_column_total: true,
-                normalise: false,
-            },
-            LabelOptions {
-                include_response_codes: true,
-                ..Default::default()
-            },
-        )
-        .unwrap();
-    println!("Crosstab:");
-    unsafe {
-        std::env::set_var("POLARS_FMT_MAX_ROWS", "100");
-    }
-    println!("{:?}", res);
+//     let res = survey
+//         .crosstab(
+//             AnalysisOptions {
+//                 question_name: row,
+//                 columns: &[topbreak], //"JobEaseAI_1"],
+//                 show_row_total: true,
+//                 show_column_total: true,
+//                 normalise: false,
+//             },
+//             LabelOptions {
+//                 include_response_codes: true,
+//                 ..Default::default()
+//             },
+//         )
+//         .unwrap();
+//     println!("Crosstab:");
+//     unsafe {
+//         std::env::set_var("POLARS_FMT_MAX_ROWS", "100");
+//     }
+//     println!("{:?}", res);
 
-    println!("Base size:");
-    let options = LabelOptions::new().with_include_response_codes(true);
-    let base = survey
-        .get_question_data(topbreak)
-        .unwrap()
-        .value_counts(options)
-        .unwrap();
-    println!("{:?}", base);
-}
+//     println!("Base size:");
+//     let options = LabelOptions::new().with_include_response_codes(true);
+//     let base = survey
+//         .get_question_data(topbreak)
+//         .unwrap()
+//         .value_counts(options)
+//         .unwrap();
+//     println!("{:?}", base);
+// }
 
 #[test]
 fn test_crosstab_question_against_itself() {

@@ -213,15 +213,14 @@ fn normalise_counts(frame: LazyFrame, question: &str) -> LazyFrame {
 /// find column name that matches the target, case insensitive
 /// raises error if target was not found
 pub(crate) fn find_column_name<'a>(
-    schema: &'a Arc<Schema>,
+    all_question_names: &'a [&'a str],
     target: &'a str,
 ) -> PolarsResult<&'a str> {
-    schema
-        .iter_names()
+    all_question_names
+        .iter()
         .find_map(|name| {
-            let to_match = name.as_str();
-            if to_match.eq_ignore_ascii_case(target) {
-                Some(to_match)
+            if name.eq_ignore_ascii_case(target) {
+                Some(*name)
             } else {
                 None
             }
