@@ -147,7 +147,7 @@ def test_survey_crosstab_input_types(survey):
 def test_survey_quick_summary_input_types(survey, column, ignore):
     _ = survey.quick_summary(columns=column, ignore=ignore)
 
-    
+
 @pytest.mark.parametrize(
     "col1, col2",
     [
@@ -173,9 +173,9 @@ def test_survey_crosstab_case_insensitive(survey):
 def survey_dummy():
     df = pl.DataFrame(
         {
-            "a": ["a", "b", "a", "b", "c"],
-            "b": [1, 2, 1, 3, 3],
-            "c": [[5, 4], [4], [1,2], None, [1,2,3]],
+            "QA": ["a", "b", "a", "b", "c"],
+            "QB": [1, 2, 1, 3, 3],
+            "QC": [[5, 4], [4], [1,2], None, [1,2,3]],
         }
     )
     
@@ -193,9 +193,9 @@ def survey_dummy():
         title=None,
         version=None,
         questions=[
-            Question(name="a", question_type="character"),
-            Question(name="b", question_type="single", values=dummy_codes),
-            Question(name="c", question_type="multiple", values=dummy_codes)
+            Question(name="QA", question_type="character"),
+            Question(name="QB", question_type="single", values=dummy_codes),
+            Question(name="QC", question_type="multiple", values=dummy_codes)
         ]
     )
     
@@ -204,10 +204,8 @@ def survey_dummy():
 
 def test_dummy_groupby(survey_dummy):
     print()
-    print(survey_dummy)
-    print(survey_dummy["c"])
     
-    crosstab = survey_dummy.quick_summary("a", "c")
-    for (col, summary) in crosstab:
-        print(col)
-        print(summary)
+    crosstab = survey_dummy.quick_summary("QB")
+    for (qname, summary) in crosstab:
+        print(qname)
+    # print(len(crosstab))
