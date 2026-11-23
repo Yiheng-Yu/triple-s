@@ -289,16 +289,14 @@ pub(crate) fn parse_cell_value(
             match value {
                 0 => Ok(AnyValue::Boolean(false)),
                 1 => Ok(AnyValue::Boolean(true)),
-                _ => {
-                    Err(PolarsError::InvalidOperation(
-                        format!(
-                            "Error raised when trying to convert '{}' to boolean. Expect '0' \
+                _ => Err(PolarsError::InvalidOperation(
+                    format!(
+                        "Error raised when trying to convert '{}' to boolean. Expect '0' \
                              or '1'",
-                            data,
-                        )
-                        .into(),
-                    ))
-                }
+                        data,
+                    )
+                    .into(),
+                )),
             }
         }
         QuestionType::Date => {
@@ -493,7 +491,10 @@ mod tests {
             let parsed = parser.parse(field).unwrap();
             assert_eq!(parsed, correct);
         }
-        assert_eq!(parse_cell_value("", &QuestionType::None, false, None).unwrap(), AnyValue::Null);
+        assert_eq!(
+            parse_cell_value("", &QuestionType::None, false, None).unwrap(),
+            AnyValue::Null
+        );
         assert!(parse_cell_value("value", &QuestionType::None, false, None).is_err());
     }
 

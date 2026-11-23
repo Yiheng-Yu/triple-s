@@ -45,7 +45,7 @@ use crate::{
         Warning,
     },
     prelude::*,
-    utils::{lock_it_up, validate_date, validate_time},
+    utils::{create_reader, lock_it_up, validate_date, validate_time},
 };
 
 #[derive(Debug, PartialEq)]
@@ -89,7 +89,10 @@ pub fn read_datamap(sss_path: impl AsRef<Path>) -> Result<Datamap> {
         .map_err(error::FileReadError::from)
         .with_context(|| format!("When opening '{}'", path.display()))?;
 
-    let (survey, read_log) = read_from_reader(BufReader::new(input))
+    let source = BufReader::new(input);
+    let decoder = create_reader(source);
+    let reader = BufReader::new(decoder);
+    let (survey, read_log) = read_from_reader(reader)
         .with_context(|| format!("When reading '{}'", path.display()))?;
 
     let context = format!("Reading datamap: '{:?}'", path.as_os_str());
@@ -103,8 +106,7 @@ pub fn read_datamap(sss_path: impl AsRef<Path>) -> Result<Datamap> {
 /// create datamap instance from utf-8 string, auto detects file types (sss
 /// classic/ xml)
 pub fn read_from_string(data: impl AsRef<str>) -> Result<Datamap> {
-    let (survey, read_log) = read_from_reader(Cursor::new(data.as_ref().as_bytes()))?;
-
+    let (survey, read_log) = read_from_reader(data.as_ref().as_bytes())?;
     if let Some(summary) = read_log.warning_summary("Reading from string") {
         warn!("{}", summary);
     }
@@ -141,14 +143,16 @@ pub fn read_from_reader<R: BufRead>(mut input: R) -> Result<(Datamap, EventLog)>
             })?
         }
         FileType::Xml => {
-            input.read_to_end(&mut prefix)?;
-            let encoding = quick_xml::encoding::detect_encoding(&prefix)
-                .map(|detected| detected.encoding())
-                .unwrap_or(encoding_rs::UTF_8);
-            let (text, _) = encoding.decode_without_bom_handling(&prefix);
-            let mut reader = XmlReader::from_str(&text);
-            reader.config_mut().trim_text(true);
-            xml::create_survey_builder(reader).with_context(|| {
+            let read_result = {
+                input.read_to_end(&mut prefix)?;
+                let text = std::str::from_utf8(&prefix)?;
+                let mut reader = XmlReader::from_str(text);
+
+                reader.config_mut().trim_text(true);
+                xml::create_survey_builder(reader)
+            };
+
+            read_result.with_context(|| {
                 "trying to create survey builder from the data file".to_string()
             })?
         }

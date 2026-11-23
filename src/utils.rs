@@ -191,6 +191,15 @@ pub(crate) fn extract_indicies<'py>(
     .collect())
 }
 
+/// creates a reader that capacable of reading UTF-8 or BOM-marked UTF-16 as valid UTF-8
+pub(crate) fn create_reader<R: Read>(source: R) -> DecodeReaderBytes<R, Vec<u8>> {
+    DecodeReaderBytesBuilder::new()
+        .encoding(Some(UTF_8))
+        .bom_override(true)
+        .strip_bom(true)
+        .build(source)
+}
+
 /// Streams UTF-8 or BOM-marked UTF-16 as valid UTF-8.
 /// Malformed sequences are replaced with U+FFFD.
 pub(crate) struct TextReader<R: Read>(DecodeReaderBytes<R, Vec<u8>>);

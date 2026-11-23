@@ -3,7 +3,6 @@
 
 use polars::prelude::*;
 
-
 /// Count unique values of this Series and a column "counts" with dtype IdxType
 ///
 /// This function basically calls [`polars::Series::value_counts`] under the hood, apart from multi-choice
@@ -100,28 +99,20 @@ pub(crate) fn create_crosstab(
     show_column_base: bool,
     normalise: bool,
 ) -> PolarsResult<LazyFrame> {
-    let group_by_column = if target == group_by {
-        let schema = original.clone().collect_schema()?;
-        let mut alias = "__triple_s_group_by".to_owned();
-        while schema
-            .iter_names()
-            .any(|name| name.as_str() == alias.as_str())
-        {
-            alias.push('_');
-        }
-        alias
+    // rename the target column
+    let group_by_alais = if target == group_by {
+        format!("__{}__group_by", group_by)
     } else {
         group_by.to_owned()
     };
-    let group_by_column = group_by_column.as_str();
 
     // create cross tabs
     let grouped = original
         .clone()
-        .select([col(target), col(group_by).alias(group_by_column)])
-        .with_columns([concat_list([col(group_by_column)])?.alias(group_by_column)])
+        .select([col(target), col(group_by).alias(&group_by_alais)])
+        .with_columns([concat_list([col(&group_by_alais)])?.alias(&group_by_alais)])
         .explode(
-            cols([group_by_column]),
+            cols([&group_by_alais]),
             ExplodeOptions {
                 empty_as_null: false,
                 keep_nulls: false,
@@ -135,21 +126,21 @@ pub(crate) fn create_crosstab(
             ExplodeOptions {
                 empty_as_null: false,
                 keep_nulls: false,
-            }
+            },
         )
         .filter(col(target).is_not_null());
     let original_dtype = lf.collect_schema()?.try_get(target)?.clone();
 
     let columns = lf
         .clone()
-        .select([col(group_by_column)])
+        .select([col(&group_by_alais)])
         .unique(None, UniqueKeepStrategy::Any)
-        .sort([group_by_column], Default::default())
+        .sort([&group_by_alais], Default::default())
         .collect()?;
 
     let pivot = lf
         .pivot(
-            cols([group_by_column]),
+            cols([&group_by_alais]),
             Arc::new(columns),
             cols([target]),
             cols([target]),
@@ -168,18 +159,21 @@ pub(crate) fn create_crosstab(
 
     // create base row
     if show_column_base || normalise {
-        let base_size_row = frequency_counts(original.clone(), group_by, None, false, false)?
-            .with_column(
-                col(group_by)
-                    .cast(DataType::String)
-                    .alias(group_by_column),
-            )
-            .select([col(group_by_column), col("count")])
-            .collect()?
-            .transpose(
-                None,
-                Some(either::Either::Left(group_by_column.to_owned())),
-            )?;
+        let base_size_row = frequency_counts(
+            original.clone(),
+            group_by, // frequency_counts also calls case_insensitive() so uhh,,
+            None,
+            false,
+            false,
+        )?
+        .with_column(
+            col(group_by) // make colname matching case-insensitive
+                .cast(DataType::String)
+                .alias(&group_by_alais),
+        )
+        .select([col(&group_by_alais), col("count")])
+        .collect()?
+        .transpose(None, Some(either::Either::Left(group_by_alais)))?;
 
         let result = concat(
             [base_size_row.lazy(), pivot],
@@ -191,7 +185,7 @@ pub(crate) fn create_crosstab(
                 to_supertypes: true,
                 strict: true,
                 maintain_order: true,
-            }
+            },
         )?;
         if normalise {
             let result = normalise_counts(result, target);
@@ -208,13 +202,30 @@ pub(crate) fn create_crosstab(
     }
 }
 
+#[inline(always)]
 fn normalise_counts(frame: LazyFrame, question: &str) -> LazyFrame {
     let counts = all().exclude_cols([question]).as_expr();
-    frame.with_columns([
-        when(col(question).is_null())
-            .then(counts.clone())
-            .otherwise(counts.clone().true_div(counts.first())),
-    ])
+    frame.with_columns([when(col(question).is_null())
+        .then(counts.clone())
+        .otherwise(counts.clone().true_div(counts.first()))])
+}
+
+/// find column name that matches the target, case insensitive
+/// raises error if target was not found
+pub(crate) fn find_column_name<'a>(
+    all_question_names: &'a [&'a str],
+    target: &'a str,
+) -> PolarsResult<&'a str> {
+    all_question_names
+        .iter()
+        .find_map(|name| {
+            if name.eq_ignore_ascii_case(target) {
+                Some(*name)
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| PolarsError::ColumnNotFound(target.to_string().into()))
 }
 
 #[cfg(test)]
@@ -229,29 +240,44 @@ mod tests {
                 "answer" => [None, Some(1u32), Some(2)],
                 "total" => [3.0, 2.0 / 3.0, 1.0 / 3.0],
             ]?;
-            let expected = if show_total { expected } else { expected.slice(1, 2) };
-            let result = frequency_counts(frame.clone(), "answer", Some("total"), show_total, true)?
-                .collect()?;
-            assert!(result.equals_missing(&expected), "{result}\nexpected:\n{expected}");
+            let expected = if show_total {
+                expected
+            } else {
+                expected.slice(1, 2)
+            };
+            let result =
+                frequency_counts(frame.clone(), "answer", Some("total"), show_total, true)?
+                    .collect()?;
+            assert!(
+                result.equals_missing(&expected),
+                "{result}\nexpected:\n{expected}"
+            );
         }
         Ok(())
     }
 
     #[test]
     fn test_frequency_counts_normalise_multiple_choices() -> PolarsResult<()> {
-        let answers = Series::new("answer".into(), [
-            Some(Series::new("".into(), [1u32, 2])),
-            Some(Series::new("".into(), [2u32])),
-            Some(Series::new("".into(), Vec::<u32>::new())),
-            None,
-        ]);
-        let result = frequency_counts(df!["answer" => answers]?.lazy(), "answer", None, true, true)?
-            .collect()?;
+        let answers = Series::new(
+            "answer".into(),
+            [
+                Some(Series::new("".into(), [1u32, 2])),
+                Some(Series::new("".into(), [2u32])),
+                Some(Series::new("".into(), Vec::<u32>::new())),
+                None,
+            ],
+        );
+        let result =
+            frequency_counts(df!["answer" => answers]?.lazy(), "answer", None, true, true)?
+                .collect()?;
         let expected = df![
             "answer" => [None, Some(1u32), Some(2)],
             "count" => [3.0, 1.0 / 3.0, 2.0 / 3.0],
         ]?;
-        assert!(result.equals_missing(&expected), "{result}\nexpected:\n{expected}");
+        assert!(
+            result.equals_missing(&expected),
+            "{result}\nexpected:\n{expected}"
+        );
         Ok(())
     }
 
@@ -260,7 +286,8 @@ mod tests {
         let frame = df![
             "answer" => [Some(1u32), Some(1), Some(2), None],
             "group" => [1u32, 2, 1, 2],
-        ]?.lazy();
+        ]?
+        .lazy();
         for normalise in [false, true] {
             for show_total in [false, true] {
                 let expected = if normalise {
@@ -276,11 +303,19 @@ mod tests {
                         "2" => [2u32, 1, 0],
                     ]?
                 };
-                let expected = if show_total { expected } else { expected.slice(1, 2) };
-                let result = create_crosstab(&frame, "answer", "group", show_total, normalise)?
-                    .collect()?
-                    .select(["answer", "1", "2"])?;
-                assert!(result.equals_missing(&expected), "{result}\nexpected:\n{expected}");
+                let expected = if show_total {
+                    expected
+                } else {
+                    expected.slice(1, 2)
+                };
+                let result =
+                    create_crosstab(&frame, "answer", "group", show_total, normalise)?
+                        .collect()?
+                        .select(["answer", "1", "2"])?;
+                assert!(
+                    result.equals_missing(&expected),
+                    "{result}\nexpected:\n{expected}"
+                );
             }
         }
         Ok(())
