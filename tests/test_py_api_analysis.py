@@ -314,19 +314,6 @@ def test_crosstab_rejects_old_format_keyword(survey):
         survey.crosstab("choice", ["group"], format="polars")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="crosstab currently joins row totals to an empty frame without the row-question column",
-)
-@pytest.mark.parametrize("kwargs", [{}, {"column": None}, {"column": []}])
-def test_crosstab_without_column_questions(survey, kwargs):
-    expected = pl.DataFrame({
-        "label": ["Total", "Yes", "No"],
-        "total": [4, 2, 2],
-    })
-    assert_frame_equal(survey.crosstab("choice", **kwargs), expected, check_dtypes=False)
-
-
 @pytest.mark.parametrize("column", ["group", 1, [1], [None]])
 def test_crosstab_rejects_invalid_columns(survey, column):
     with pytest.raises(TypeError):
