@@ -2,12 +2,7 @@ use std::collections::HashMap;
 #[cfg(feature = "pyo3")]
 use std::sync::Arc;
 
-use indicatif::{
-    ParallelProgressIterator, 
-    ProgressBar, 
-    ProgressIterator, 
-    ProgressStyle
-};
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressIterator, ProgressStyle};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
@@ -382,8 +377,10 @@ impl Survey {
             .map(String::as_str)
             .collect::<Vec<&str>>();
 
-        let question_name = operation::find_column_name(&all_question_names, args.question_name)?;
-        let target_columns = args.columns
+        let question_name =
+            operation::find_column_name(&all_question_names, args.question_name)?;
+        let target_columns = args
+            .columns
             .into_iter()
             .map(|colname| operation::find_column_name(&all_question_names, *colname))
             .collect::<PolarsResult<Vec<&str>>>()?;
@@ -394,18 +391,19 @@ impl Survey {
             args.show_row_total,
             args.show_column_total,
             args.normalise,
-            label_options
-        )?.collect()
+            label_options,
+        )?
+        .collect()
     }
 
     /// Builds lazyframe query plan for getting crosstab to be collected later
-    /// 
+    ///
     /// This function expect all input column names to be CASE SENSITIVE
     fn crosstab_internal<'a>(
         &self,
         question_name: &'a str,
         // target_columns: Vec<&'a str>,
-        target_columns: &'a[&'a str],
+        target_columns: &'a [&'a str],
         show_row_total: bool,
         show_column_total: bool,
         normalise: bool,
@@ -583,7 +581,6 @@ impl Survey {
         normalise: bool,
         label_options: LabelOptions<'_>,
     ) -> PolarsResult<Vec<(String, DataFrame)>> {
-
         // Get name of columns to be processed, case sensitive
         let question_names = self.question_names();
         let question_names_ref = question_names
@@ -591,27 +588,27 @@ impl Survey {
             .map(String::as_str)
             .collect::<Vec<&str>>();
 
-        let columns = columns.map(|cols| {
-            cols
-                .iter()
-                .map(|name| operation::find_column_name(&question_names_ref, *name) )
-                .collect::< PolarsResult<Vec<&str>> >()
-        })
-        .transpose()?
-        .unwrap_or_default();
-        
+        let columns = columns
+            .map(|cols| {
+                cols.iter()
+                    .map(|name| operation::find_column_name(&question_names_ref, *name))
+                    .collect::<PolarsResult<Vec<&str>>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
+
         let ignore = ignore
             .map(|cols| {
-                cols
-                .iter()
-                .map(|name| operation::find_column_name(&question_names_ref, *name) )
-                .collect::< PolarsResult<Vec<&str>> >()
+                cols.iter()
+                    .map(|name| operation::find_column_name(&question_names_ref, *name))
+                    .collect::<PolarsResult<Vec<&str>>>()
             })
             .transpose()?
             .unwrap_or_default();
 
         // Building queries
-        let queries = self.datamap()
+        let queries = self
+            .datamap()
             .record()
             .content()
             // .iter()
@@ -628,11 +625,12 @@ impl Survey {
                         self.crosstab_internal(
                             &question_name,
                             &columns,
-                            true,  // show_row_total
-                            true,   // show_column_total
+                            true, // show_row_total
+                            true, // show_column_total
                             normalise,
-                            label_options.clone()
-                        ).map(|lf| (question_name, lf))
+                            label_options.clone(),
+                        )
+                        .map(|lf| (question_name, lf)),
                     )
                 }
             })
@@ -644,12 +642,18 @@ impl Survey {
                 ProgressStyle::with_template("{spinner:.cyan} Parsing: {pos} tables").unwrap(),
             )
             .with_finish(indicatif::ProgressFinish::WithMessage("Done".into()));
-        
+
         queries
             .into_par_iter()
             .map(|(qname, lazyframe)| {
-                lazyframe.collect()
-                    .with_context(|| format!("When trying to get summary table for question {:?}", qname.clone()))
+                lazyframe
+                    .collect()
+                    .with_context(|| {
+                        format!(
+                            "When trying to get summary table for question {:?}",
+                            qname.clone()
+                        )
+                    })
                     .map(|df| (qname, df))
             })
             .progress_with(progress_spinner)

@@ -1,6 +1,10 @@
 use polars::prelude::*;
 use triple_s::{
-    AnalysisOptions, Survey, SurveyData, options::{LabelOptions, ResponseDisplay}, read_triple_s,
+    AnalysisOptions,
+    Survey,
+    SurveyData,
+    options::{LabelOptions, ResponseDisplay},
+    read_triple_s,
 };
 
 const PATH_DATAMAP_V2_0: &str = "tests/sss-examples/sss-2.0/example1.sss";

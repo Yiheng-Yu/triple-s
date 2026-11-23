@@ -17,7 +17,7 @@ use polars::prelude::AnyValue;
 use quick_xml::reader::Reader as XmlReader;
 
 use crate::{
-    DataRange, 
+    DataRange,
     datamap::{
         Code,
         Datamap,
@@ -33,7 +33,7 @@ use crate::{
         record::DataFormat,
         response::AnyValueExt,
         survey_info::Version,
-    }, 
+    },
     error::{
         self,
         BadLine,
@@ -43,9 +43,9 @@ use crate::{
         MissingValueError,
         UnknownAttribute,
         Warning,
-    }, 
-    prelude::*, 
-    utils::{create_reader, lock_it_up, validate_date, validate_time}
+    },
+    prelude::*,
+    utils::{create_reader, lock_it_up, validate_date, validate_time},
 };
 
 #[derive(Debug, PartialEq)]
@@ -106,9 +106,7 @@ pub fn read_datamap(sss_path: impl AsRef<Path>) -> Result<Datamap> {
 /// create datamap instance from utf-8 string, auto detects file types (sss
 /// classic/ xml)
 pub fn read_from_string(data: impl AsRef<str>) -> Result<Datamap> {
-    let (survey, read_log) = read_from_reader(
-        data.as_ref().as_bytes()
-    )?;
+    let (survey, read_log) = read_from_reader(data.as_ref().as_bytes())?;
     if let Some(summary) = read_log.warning_summary("Reading from string") {
         warn!("{}", summary);
     }
@@ -154,7 +152,9 @@ pub fn read_from_reader<R: BufRead>(mut input: R) -> Result<(Datamap, EventLog)>
                 xml::create_survey_builder(reader)
             };
 
-            read_result.with_context(|| "trying to create survey builder from the data file".to_string())?
+            read_result.with_context(|| {
+                "trying to create survey builder from the data file".to_string()
+            })?
         }
     };
     builder.build()
