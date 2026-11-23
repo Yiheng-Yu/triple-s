@@ -1,53 +1,53 @@
 //! Options for running various survey data analysis methods
-use parking_lot::RwLockReadGuard;
-use crate::datamap::{QuestionType, Question};
-
 use std::{collections::HashMap, ops::Sub};
 
+use parking_lot::RwLockReadGuard;
 use polars::prelude::*;
 
-use crate::utils::ArcLock;
-
+use crate::{
+    datamap::{Question, QuestionType},
+    utils::ArcLock,
+};
 
 /// Types of questions to skip when running map functions.
-/// 
+///
 /// Default:
-/// 
+///
 /// ```text
-/// SkipQType { 
-///     text: true, 
-///     numeric: true, 
-///     datetime: true, 
-///     single: false, 
-///     multiple: false 
+/// SkipQType {
+///     text: true,
+///     numeric: true,
+///     datetime: true,
+///     single: false,
+///     multiple: false
 /// }
 /// ```
 #[derive(Debug, Clone)]
 pub struct SkipQType {
     /// Skip [`QuestionType::Character`], default `true`
     pub text: bool,
-    
+
     /// Skip [`QuestionType::Quantity`], default `true`
     pub numeric: bool,
 
     /// Skip [`QuestionType::Date`] & [`QuestionType::Time`], default `true`
     pub datetime: bool,
-    
+
     /// Skip [`QuestionType::Single`], default `false`
     pub single: bool,
-    
+
     /// Skip [`QuestionType::Multiple`], default `false`
     pub multiple: bool,
 }
 
 impl Default for SkipQType {
     fn default() -> Self {
-        Self { 
-            text: true, 
-            numeric: true, 
-            datetime: true, 
-            single: false, 
-            multiple: false 
+        Self {
+            text: true,
+            numeric: true,
+            datetime: true,
+            single: false,
+            multiple: false,
         }
     }
 }
@@ -56,7 +56,7 @@ impl SkipQType {
     /// Checks if the question should be skipped based on its `question_type` field.
     pub fn should_skip(&self, question: &RwLockReadGuard<'_, Question>) -> bool {
         match *question.question_type() {
-            QuestionType::None => true,  // always skip
+            QuestionType::None => true, // always skip
             QuestionType::Multiple => self.multiple,
             QuestionType::Date | QuestionType::Time => self.datetime,
             QuestionType::Logical | QuestionType::Single => self.single,
@@ -66,16 +66,15 @@ impl SkipQType {
     }
 }
 
-
 /// Arguments for running cross tabs for a particular question in a survey.
 #[derive(Debug, Clone)]
 pub struct AnalysisOptions<'a> {
     /// Name of the question to use as the corsstab rows.
     pub question_name: &'a str,
-    
+
     /// List of question names to be used as the corsstab columns.
     pub columns: &'a [&'a str],
-    
+
     /// show row total
     pub show_row_total: bool,
 
@@ -129,17 +128,14 @@ impl<'a> Default for LabelOptions<'a> {
 }
 
 impl<'a> LabelOptions<'a> {
-    /// default value for field `col_question`
-    pub const QUESTION: &'static str = "question";
-
-    /// default value for field `col_code_label`
-    pub const LABEL: &'static str = "label";
-    
     /// default value for field `col_code_value`
     pub const CODE: &'static str = "code";
-    
     /// default value for field `col_count`
     pub const COUNT: &'static str = "total";
+    /// default value for field `col_code_label`
+    pub const LABEL: &'static str = "label";
+    /// default value for field `col_question`
+    pub const QUESTION: &'static str = "question";
 
     /// Create new instance with default options
     pub fn new() -> Self {
@@ -193,8 +189,7 @@ impl<'a> LabelOptions<'a> {
     pub fn question_name_column(&self, question_name: &str) -> Expr {
         let colname = self.col_question_name.unwrap_or(Self::QUESTION);
         if self.fill_question_name_column {
-            lit(question_name.to_string())
-                .alias(colname)
+            lit(question_name.to_string()).alias(colname)
         } else {
             lit(question_name.to_string())
                 .extend_constant(lit(NULL), len().sub(lit(1)))
@@ -259,5 +254,3 @@ impl<'a> LabelOptions<'a> {
             .alias(colname_resp_label))
     }
 }
-
-

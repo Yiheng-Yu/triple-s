@@ -64,7 +64,6 @@ csv = "1.4"
 parking_lot = { version = "0.13", features = ["arc_lock"] }
 quick-xml = { version = "0.42.0", features = ["encoding"] }
 rayon = "1.12.0"
-regex = "1.13.1"
 strum = { version = "0.28", features = ["derive"] }
 pyo3 = { version = "0.29.3", features = [
     "py-clone",
@@ -92,6 +91,7 @@ pyo3-log = { version = "0.13.5", optional = true }
 encoding_rs_io = "0.1.8"
 either = "1.19.0"
 indicatif = { version = "0.18.6", features = ["rayon"] }
+regex = "1.13.2"
 
 [build-dependencies]
 pyo3-build-config = { version = ">=0.29.2", features = [

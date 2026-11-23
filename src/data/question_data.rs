@@ -584,7 +584,7 @@ impl QuestionData {
     ///         Column name for the response code column.
     ///         Only used when `include_response_codes` is `True`.
     ///         Default `'code'`
-    /// 
+    ///
     ///     include_question_name (bool, *optional*):
     ///         Include a ``question`` column with the question name in the first row
     ///         and nulls in the remaining rows.
@@ -635,8 +635,7 @@ impl QuestionData {
             .with_col_label(colname_label)
             .with_col_code(colname_code);
 
-        let result = self.value_counts(options)
-            .map_err(PyPolarsErr::Polars)?;
+        let result = self.value_counts(options).map_err(PyPolarsErr::Polars)?;
 
         // prep output
         let format = output

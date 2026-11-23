@@ -371,9 +371,11 @@ impl Survey {
         label_options: LabelOptions<'_>,
     ) -> PolarsResult<DataFrame> {
         // prep
-        let question_name = args.question_name;
-        let original = self.data().lazy()?.clone();
+        let mut original = self.data().lazy()?.clone();
+        let schema_ref = original.collect_schema()?;
 
+        // find column names, case insensitive
+        let question_name = operation::find_column_name(&schema_ref, args.question_name)?;
         // Skip the rest if no columns was defined
         if args.columns.is_empty() {
             return self
@@ -382,11 +384,19 @@ impl Survey {
                 .value_counts(label_options);
         }
 
-        // get crosstab for columns
-        let mut headers = args.columns.iter();
+        // find list of column names to group by, case insensitive
+        // this method is O(n^2) but sinec there shouldn't be a lot of columns to group by should be fine i guess
+        let mut headers = args
+            .columns
+            .into_iter()
+            .map(|item| operation::find_column_name(&schema_ref, *item))
+            .collect::<PolarsResult<Vec<&str>>>()?
+            .into_iter();
+
+        // ..then creating crosstabs
         let first = match headers.next() {
             None => DataFrame::empty().lazy(),
-            Some(&first) => {
+            Some(first) => {
                 let tab = operation::create_crosstab(
                     &original,
                     question_name,
@@ -397,7 +407,7 @@ impl Survey {
                 self.label_output_column(tab, first)?
             }
         };
-        let mut output = headers.try_fold(first, |left, &colname| {
+        let mut output = headers.try_fold(first, |left, colname| {
             let right = operation::create_crosstab(
                 &original,
                 question_name,
@@ -507,7 +517,7 @@ impl Survey {
     /// skipping questions listed in `ignore` and question type defined in `skip_type`.
     ///
     /// Returns: [(`question_name`, `corsstab`), ..]
-    /// 
+    ///
     /// Arguments:
     ///
     /// - `columns`:
@@ -536,7 +546,6 @@ impl Survey {
     ///
     /// - `label_options`:
     ///     - Configure how the output should be labelled. For more info please view [`LabelOptions`]'s documentation.
-    ///
     pub fn quick_summary(
         &self,
         columns: Option<&[&str]>,
@@ -550,13 +559,11 @@ impl Survey {
 
         let progress_spinner = ProgressBar::new_spinner()
             .with_style(
-                ProgressStyle::with_template("{spinner:.cyan} Parsing: {pos} tables")
-                    .unwrap(),
+                ProgressStyle::with_template("{spinner:.cyan} Parsing: {pos} tables").unwrap(),
             )
             .with_finish(indicatif::ProgressFinish::WithMessage("Done".into()));
 
-        self
-            .datamap()
+        self.datamap()
             .record()
             .content()
             .par_iter()
@@ -576,10 +583,9 @@ impl Survey {
                         show_column_total: true,
                         normalise: normalise,
                     };
-                    let crosstab = self.crosstab(
-                        args, label_options.clone()
-                    )
-                    .map(|df| (question_name, df));
+                    let crosstab = self
+                        .crosstab(args, label_options.clone())
+                        .map(|df| (question_name, df));
 
                     Some(crosstab)
                 }
@@ -1111,7 +1117,7 @@ impl Survey {
     ///     column (list[str], *optional*): Names of the questions to show as columns.
     ///     
     ///     ignore (list[str], *optional*): Names of the questions ignore.    
-    /// 
+    ///
     ///     normalise (bool, *optional*):
     ///         Return counts as relative frequencies normalised to 1.0, using
     ///         each column's total. The first row keeps the original total counts.
@@ -1122,16 +1128,16 @@ impl Survey {
     ///     
     ///     skip_numeric (bool, *optional*):
     ///         Toggle on to skip `quantity` questions. Default `True`.
-    /// 
+    ///
     ///     skip_datetime (bool, *optional*):
     ///         Toggle on to skip `date` and `time` questions. Default `True`.
-    /// 
+    ///
     ///     skip_single (bool, *optional*):
     ///         Toggle on to skip `single`-choice questions. Default `False`.
-    /// 
+    ///
     ///     skip_multiple (bool, *optional*):
     ///         Toggle on to skip `multi`-choice questions. Default `False`.
-    /// 
+    ///
     ///     colname_stats (str, *optional*):
     ///         Name of the overall count column. Used when ``show_row_total=True``.
     ///         Default ``'total'``.
@@ -1160,7 +1166,7 @@ impl Survey {
     ///         Return counts as relative frequencies normalised to 1.0, using
     ///         each column's total. The first row keeps the original total counts.
     ///         For example, ``0.75`` represents 75%. Default ``False``.
-    /// 
+    ///
     /// Returns:
     ///     [(String, polars.DataFrame | pandas.DataFrame)]:
     ///     List of (question_name, crosstab_data)
@@ -1200,21 +1206,15 @@ impl Survey {
         include_response_codes: Option<bool>,
         include_question_name: Option<bool>,
         output: Option<Bound<'py, PyAny>>,
-    ) -> PyResult<Vec<(String, Bound<'py, PyAny>)>>{
+    ) -> PyResult<Vec<(String, Bound<'py, PyAny>)>> {
         // Default arguments
         let normalise = normalise.unwrap_or(false);
 
         let column_names = columns.unwrap_or_default();
-        let columns = column_names
-            .iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>();
+        let columns = column_names.iter().map(String::as_str).collect::<Vec<_>>();
 
         let ignored_names = ignore.unwrap_or_default();
-        let ignore = ignored_names
-            .iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>();
+        let ignore = ignored_names.iter().map(String::as_str).collect::<Vec<_>>();
 
         let skip_types = SkipQType {
             text: skip_text.unwrap_or(true),
@@ -1238,7 +1238,11 @@ impl Survey {
             .unwrap_or(self.config().py_dataframe_format.clone());
 
         self.quick_summary(
-            Some(&columns), Some(&ignore), skip_types, normalise, label_options
+            Some(&columns),
+            Some(&ignore),
+            skip_types,
+            normalise,
+            label_options,
         )
         .map_err(PyPolarsErr::Polars)?
         .into_iter()
