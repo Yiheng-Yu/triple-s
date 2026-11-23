@@ -98,6 +98,12 @@ impl Datamap {
         self.record.get(question_name)
     }
 
+    /// Create polars schema based on the `question_type` of each questions
+    /// in the current records.
+    pub fn schema(&self) -> Schema {
+        self.record().schema()
+    }
+
     /// export content of datamap to triple-s classic string.
     pub fn to_classic(&self) -> Result<String> {
         let mut output = format!("SSS\nVERSION {}\n", self.info().version().to_string());
@@ -245,6 +251,54 @@ impl Datamap {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Datamap {
+    /// Create new Datamap instance
+    ///
+    /// Kwargs:
+    ///     name (str, *optional*):
+    ///         Survey id
+    ///     
+    ///     title (str, *optional*):
+    ///         Survey title
+    ///
+    ///     version (str | float | Version, *optional*):
+    ///         Triple-s version
+    ///
+    ///     questions (List[Question], *optional*):
+    ///         List of `Question` instances
+    ///         Default `[]`
+    #[new]
+    #[pyo3(signature=(
+        name: "str"=None,
+        title: "str"=None,
+        version: "str | float | Version"=None,
+        questions: "list[Question]"=None,
+    ))]
+    fn py_new<'py>(
+        name: Option<String>,
+        title: Option<String>,
+        version: Option<&Bound<'py, PyAny>>,
+        questions: Option<Vec<Question>>,
+    ) -> PyResult<Self> {
+        let version: Version = version
+            .map(Version::try_from)
+            .transpose()?
+            .unwrap_or(Version::V2_0);
+
+        let mut info = SurveyInfo::new(version);
+        *info.title_mut() = title;
+        *info.name_mut() = name;
+
+        let mut instance = Self::empty();
+        *instance.info_mut() = info;
+
+        if let Some(questions) = questions {
+            *instance.record_mut().content_mut() =
+                questions.into_iter().map(lock_it_up).collect::<Vec<_>>();
+        };
+
+        Ok(instance)
+    }
+
     /// Create a datamap from a dictionary that contains keys 'survey_info' and 'record':
     ///
     /// Args:
@@ -258,7 +312,6 @@ impl Datamap {
     ///     Creating new empty :py:class:`Datamap` from dictionary:
     ///
     ///     .. code-block:: python
-    ///
     ///
     ///         from triple_s import Datamap, SurveyInfo, Record
     ///
@@ -351,6 +404,21 @@ impl Datamap {
     #[getter(info)]
     fn py_get_info(&self) -> SurveyInfo {
         self.info().clone()
+    }
+
+    /// (Optional) path to the data file the current datamap ties to.
+    ///
+    /// This corresponds to the href attribute of a <record> element.
+    /// Setting it edits metadata only; use `read_data(datamap, path)` to load respondent data.
+    #[getter(href)]
+    fn py_get_href(&self) -> Option<&str> {
+        self.record().href().clone()
+    }
+
+    #[setter(href)]
+    fn py_set_href(&mut self, href: Option<String>) -> PyResult<()> {
+        self.record_mut()._set_href(href);
+        Ok(())
     }
 
     /// List of question names in the survey
@@ -471,7 +539,7 @@ pub mod test {
         let mut survey = Datamap::new(info);
         *survey.record.ident_mut() = 'V';
         *survey.record.skip_mut() = Some("1".into());
-        *survey.record.href_mut() = Some("a&\"b.csv".into());
+        survey.record_mut()._set_href(Some("a&\"b.csv".into()));
         *survey.record.data_format_mut() = Some(DataFormat::Csv);
         let xml = survey.to_xml().unwrap();
         for expected in [

@@ -303,8 +303,11 @@ impl SurveyBuilder {
 
                 *output.record_mut().skip_mut() =
                     record.attributes.get("skip").map(ToString::to_string);
-                *output.record_mut().href_mut() =
-                    record.attributes.get("href").map(ToString::to_string);
+
+                output
+                    .record_mut()
+                    ._set_href(record.attributes.get("href").map(ToString::to_string));
+
                 *output.record_mut().data_format_mut() = record
                     .attributes
                     .get("format")

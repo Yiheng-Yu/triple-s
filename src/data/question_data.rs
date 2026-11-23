@@ -199,10 +199,7 @@ impl QuestionData {
     ///
     /// _The first row is the total count of not-null values_
     #[allow(clippy::mutable_key_type)]
-    pub fn value_counts(
-        &self, 
-        options: LabelOptions<'_>
-    ) -> PolarsResult<DataFrame> {
+    pub fn value_counts(&self, options: LabelOptions<'_>) -> PolarsResult<DataFrame> {
         // calling `value_counts_internal` instead of putting contents of `value_counts_internal` here
         // because `value_counts_internal` gets used elsewhere in parallel iterator later.
         let plan = self.value_counts_internal(options)?;

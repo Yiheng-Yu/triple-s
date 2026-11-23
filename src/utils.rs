@@ -192,9 +192,7 @@ pub(crate) fn extract_indicies<'py>(
 }
 
 #[cfg(feature = "pyo3")]
-pub(crate) fn extract_to_vec_str<'py>(
-    input: &Bound<'py, PyAny>
-) -> PyResult<Vec<String>> {
+pub(crate) fn extract_to_vec_str<'py>(input: &Bound<'py, PyAny>) -> PyResult<Vec<String>> {
     if let Ok(result) = input.extract::<String>() {
         Ok(vec![result])
     } else if let Ok(result) = input.extract::<Vec<String>>() {

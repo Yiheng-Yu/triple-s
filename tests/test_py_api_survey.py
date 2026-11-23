@@ -1,8 +1,8 @@
-import polars
-import pandas
 
+import pandas
+import polars as pl
 import pytest
-from triple_s import read_data, NoDataError, read_triple_s
+from triple_s import Code, Datamap, NoDataError, Question, Survey, SurveyData, read_data, read_triple_s
 
 PATH_SSS_EXAMPLE_1 = "tests/sss-examples/sss-2.0/example1.sss"
 PATH_DATA = "tests/sss-examples/sss-2.0/example1.asc"
@@ -102,7 +102,7 @@ def test_set_dataframe_format_config_success(survey):
     
     for question in survey.iter_questions():
         assert question.dataframe_format == 'polars'
-        assert type(question.value_counts()) == polars.DataFrame
+        assert type(question.value_counts()) == pl.DataFrame
     
     survey.dataframe_format = 'pandas'
     assert survey.dataframe_format == 'pandas'
@@ -164,3 +164,50 @@ def test_survey_crosstab_case_insensitive(survey):
     for name in survey.question_names:
         _ = survey.crosstab(name.lower(), name.lower())
         _ = survey.crosstab(name.upper(), name.upper())
+        
+
+# ============================================================================= 
+# For testing crosstab-related calculations
+# ============================================================================= 
+@pytest.fixture
+def survey_dummy():
+    df = pl.DataFrame(
+        {
+            "a": ["a", "b", "a", "b", "c"],
+            "b": [1, 2, 1, 3, 3],
+            "c": [[5, 4], [4], [1,2], None, [1,2,3]],
+        }
+    )
+    
+    survey_data = SurveyData.from_polars(df)
+    
+    dummy_codes = [
+        Code.unsigned(1, "Code 1"),
+        Code.unsigned(2, "Code 2"),
+        Code.unsigned(3, "Code 3"),
+        Code.unsigned(4, "Code 4"),
+        Code.unsigned(5, "Code 5"),
+    ]
+    datamap = Datamap(
+        name=None,
+        title=None,
+        version=None,
+        questions=[
+            Question(name="a", question_type="character"),
+            Question(name="b", question_type="single", values=dummy_codes),
+            Question(name="c", question_type="multiple", values=dummy_codes)
+        ]
+    )
+    
+    survey = Survey(datamap, survey_data)
+    return survey
+
+def test_dummy_groupby(survey_dummy):
+    print()
+    print(survey_dummy)
+    print(survey_dummy["c"])
+    
+    crosstab = survey_dummy.quick_summary("a", "c")
+    for (col, summary) in crosstab:
+        print(col)
+        print(summary)

@@ -72,3 +72,35 @@ def test_survey_data_exports_are_independent(frame):
 def test_survey_data_from_polars_rejects_other_types(value):
     with pytest.raises(AttributeError, match="get_columns"):
         SurveyData.from_polars(value)
+
+
+def test_survey_data_from_pandas():
+    df = pd.DataFrame(
+        {
+            "num_legs": [2, 4, 8, 0],
+            "num_wings": [2, 0, 0, 0],
+            "num_specimen_seen": [10, 2, 1, 8],
+        },
+        index=["falcon", "dog", "spider", "fish"],
+    )
+    df.index.name = "animal"
+    data = SurveyData.from_pandas(df, include_index=True)
+    assert (data['animal'].to_pandas() == df.index).all()
+
+
+def test_survey_data_indexing():
+    df = pd.DataFrame(
+        {
+            "num_legs": [2, 4, 8, 0],
+            "num_wings": [2, 0, 0, 0],
+            "num_specimen_seen": [10, 2, 1, 8],
+        },
+        index=["falcon", "dog", "spider", "fish"],
+    )
+    df.index.name = "animal"
+    data = SurveyData.from_pandas(df, include_index=True)
+    
+    assert (data['animal'].to_pandas() == df.index).all()
+    for (index, row) in df.reset_index().iterrows():
+        row = row.to_dict()
+        assert data[index] == row

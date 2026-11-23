@@ -29,6 +29,8 @@ Attributes
 Methods
 ^^^^^^^
 
+.. automethod:: Version.new(value: str | int | float) -> Version
+
 .. automethod:: Version.available_options() -> list[str]
 
 .. raw:: html

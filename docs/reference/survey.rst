@@ -50,17 +50,43 @@ Properties
 Methods
 -------
 
+.. raw:: html
+
+   <div class="separator">Content access</div>
+
 .. automethod:: Survey.has_data() -> bool
 
 .. automethod:: Survey.response_label_map(output: str | triple_s.config.DataFrameFormat | None = None) -> polars.DataFrame | pandas.DataFrame
+
+
+.. raw:: html
+
+   <div class="separator">Iteration & indexing</div>
+
+.. py:method:: Survey.__iter__() -> Iterator[dict[str, object]]
+
+   Iterate each response row by row, same as :meth:`Survey.iter_rows`.
+
+.. py:method:: Survey.__getitem__(index: str | int) -> QuestionData | dict[str, object]
+
+   Accept a question name to return its :class:`QuestionData`, or an integer
+   row index to return that response as a dictionary.
 
 .. automethod:: Survey.iter_rows() -> Iterator[dict[str, object]]
 
 .. automethod:: Survey.iter_questions() -> Iterator[QuestionData]
 
+.. raw:: html
+
+   <div class="separator">Exporting</div>
+
 .. automethod:: Survey.to_polars(response_label: bool | None = None) -> polars.DataFrame
 
 .. automethod:: Survey.to_pandas(response_label: bool | None = None) -> pandas.DataFrame
+
+.. raw:: html
+
+   <div class="separator">Analysing data</div>
 
 .. automethod:: Survey.crosstab(row: str, columns: str | list[str] | None = None, show_row_total: bool | None = None, show_column_total: bool | None = None, colname_stats: str | None = 'total', colname_label: str | None = 'label', colname_code: str | None = 'code', include_response_codes: bool | None = False, include_question_name: bool | None = False, output: str | triple_s.config.DataFrameFormat | None = None, normalise: bool | None = False) -> polars.DataFrame | pandas.DataFrame
 

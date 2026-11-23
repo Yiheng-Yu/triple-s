@@ -21,7 +21,11 @@ use crate::{
 };
 #[cfg(feature = "pyo3")]
 use crate::{
-    SurveyInfo, data::row_iterator::RowIterator, options::{DataFrameFormat, ResponseDisplay}, prelude::*, utils::{extract_to_vec_str, get_type_name, normalize_py_index, polars_to_pandas},
+    SurveyInfo,
+    data::row_iterator::RowIterator,
+    options::{DataFrameFormat, ResponseDisplay},
+    prelude::*,
+    utils::{extract_to_vec_str, get_type_name, normalize_py_index, polars_to_pandas},
 };
 
 // rust docstring
@@ -189,11 +193,28 @@ impl Survey {
 /// ---
 impl Survey {
     /// Create new `Survey` instance
-    pub fn new(datamap: Datamap, data: SurveyData) -> Self {
-        Self {
-            datamap,
-            data: lock_it_up(data),
-            config: lock_it_up(SurveyOptions::default()),
+    pub fn new(datamap: Datamap, data: SurveyData) -> PolarsResult<Self> {
+        if !data.has_data() {
+            Ok(Self {
+                datamap,
+                data: lock_it_up(data),
+                config: lock_it_up(SurveyOptions::default()),
+            })
+        } else {
+            let columns = datamap
+                .schema()
+                .into_iter()
+                .map(|(colname, dtype)| col(colname).cast(dtype))
+                .collect::<Vec<Expr>>();
+
+            let lazyframe = data.lazy().unwrap().clone().with_columns(columns);
+            let data_new = SurveyData::from_lazyframe(lazyframe)?;
+
+            Ok(Self {
+                datamap,
+                data: lock_it_up(data_new),
+                config: lock_it_up(SurveyOptions::default()),
+            })
         }
     }
 
@@ -201,7 +222,7 @@ impl Survey {
     pub fn empty() -> Self {
         let datamap = Datamap::empty();
         let data = SurveyData::empty();
-        Self::new(datamap, data)
+        Self::new(datamap, data).unwrap()
     }
 
     /// List out number of responses loaded
@@ -676,9 +697,9 @@ impl Survey {
     ///     Survey: The constructed Survey instance.
     #[pyo3(signature=(datamap: "Datamap", data: "SurveyData"=None))]
     #[new]
-    fn py_new(datamap: Datamap, data: Option<SurveyData>) -> Self {
+    fn py_new(datamap: Datamap, data: Option<SurveyData>) -> PyResult<Self> {
         let data = data.unwrap_or_default();
-        Self::new(datamap, data)
+        Self::new(datamap, data).map_err(|err| PyPolarsErr::Polars(err).into())
     }
 
     fn __repr__(&self) -> PyResult<String> {
@@ -1132,8 +1153,8 @@ impl Survey {
         output: Option<Bound<'py, PyAny>>,
         normalise: Option<bool>,
     ) -> PyResult<Bound<'py, PyAny>> {
-
-        let column_names = columns.map(extract_to_vec_str)
+        let column_names = columns
+            .map(extract_to_vec_str)
             .transpose()?
             .unwrap_or_default();
         let columns = column_names.iter().map(String::as_str).collect::<Vec<_>>();
@@ -1272,12 +1293,14 @@ impl Survey {
         // Default arguments
         let normalise = normalise.unwrap_or(false);
 
-        let column_names = columns.map(extract_to_vec_str)
+        let column_names = columns
+            .map(extract_to_vec_str)
             .transpose()?
             .unwrap_or_default();
         let columns = column_names.iter().map(String::as_str).collect::<Vec<_>>();
 
-        let ignored_names = ignore.map(extract_to_vec_str)
+        let ignored_names = ignore
+            .map(extract_to_vec_str)
             .transpose()?
             .unwrap_or_default();
         let ignore = ignored_names.iter().map(String::as_str).collect::<Vec<_>>();
@@ -1303,13 +1326,15 @@ impl Survey {
             .transpose()?
             .unwrap_or(self.config().py_dataframe_format.clone());
 
-        py.detach(|| self.quick_summary(
-            Some(&columns),
-            Some(&ignore),
-            skip_types,
-            normalise,
-            label_options,
-        ))
+        py.detach(|| {
+            self.quick_summary(
+                Some(&columns),
+                Some(&ignore),
+                skip_types,
+                normalise,
+                label_options,
+            )
+        })
         .map_err(PyPolarsErr::Polars)?
         .into_iter()
         .map(|(qname, qdata)| {

@@ -219,3 +219,31 @@ body article .highlight.highlight .gp { color: var(--code-meta); }
   color: var(--color-foreground-primary);
   font-weight: 700;
 }
+
+
+/*
+Source - https://stackoverflow.com/a/26634224
+Posted by MatTheCat, modified by community. See post 'Timeline' for change history
+Retrieved 2026-11-23, License - CC BY-SA 4.0
+*/
+.separator {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    width: 100%;
+}
+
+.separator::before,
+.separator::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid currentColor;
+}
+
+.separator:not(:empty)::before {
+    margin-right: .5em;
+}
+
+.separator:not(:empty)::after {
+    margin-left: .5em;
+}

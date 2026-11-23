@@ -11,17 +11,18 @@ use pyo3::{exceptions, prelude::*, types::PyDict};
 use quick_xml::{events::BytesText, writer::Writer};
 use strum::{EnumIter, EnumString};
 
+#[cfg(feature = "pyo3")]
+use crate::{
+    DataRange,
+    error::missing_key_err,
+    utils::{get_type_name, py_value_error, single_quote},
+};
 use crate::{
     EventLog,
     datamap::{Code, Response, Text, parsing::ResponseParser},
     error::{self, InternalError, InvalidArg, RangeError},
     prelude::{DeepCopy, *},
     utils::{ArcLock, lock_it_up},
-};
-#[cfg(feature = "pyo3")]
-use crate::{
-    error::missing_key_err,
-    utils::{get_type_name, py_value_error, single_quote},
 };
 
 /// Creating new question with options given.
@@ -1188,15 +1189,40 @@ impl Question {
     ///
     /// Args:
     ///     name (str): Question name.
-    ///     question_type (QuestionType | str | None): Question type flag or name, or None for no response values.
+    ///     question_type (QuestionType | str, *optional*): Question type flag or name, or None for no response values.
     ///
     /// Keyword Args:
-    ///     label (str | None): Text label. None uses an empty label. Defaults to None.
-    ///     filter (str | None): Response filter expression, or None for no filter. Defaults to None.
-    ///     format (str | None): Code format: "numeric", "literal", or None. Defaults to None.
-    ///     usage (str | None): Variable role: "serial", "weight", or None. Defaults to None.
-    ///     location (Location | None): Fixed-width data location. None uses Location(0, 0). Defaults to None.
-    ///     spread (Spread | None): Multiple-response subfield layout, or None for no spread. Defaults to None.
+    ///     label (str, *optional*):
+    ///         Text label. None uses an empty label.
+    ///         Defaults to None.
+    ///     
+    ///     filter (str, *optional*):
+    ///         Response filter expression, or None for no filter.
+    ///         Defaults to None.
+    ///     
+    ///     format (str, *optional*):
+    ///         Code format: "numeric", "literal", or None.
+    ///         Defaults to None.
+    ///     
+    ///     usage (str, *optional*):
+    ///         Variable role: "serial", "weight", or None.
+    ///         Defaults to None.
+    ///     
+    ///     location (Location, *optional*):
+    ///         Fixed-width data location. None uses Location(0, 0).
+    ///         Defaults to None.
+    ///     
+    ///     spread (Spread, *optional*):
+    ///         Multiple-response subfield layout, or None for no spread.
+    ///         Defaults to None.
+    ///
+    ///     range (DataRange, *optional*):
+    ///         Minimum and maximum values allowed for a quantity response.
+    ///         Defaults to None
+    ///     
+    ///     values (list[Code], *optional*):
+    ///         List of response items.
+    ///         Default `[]`
     ///
     /// Returns:
     ///     Question: The constructed Question instance.
@@ -1216,8 +1242,10 @@ impl Question {
         filter:"str"=None, 
         format:"'numeric'|'literal'|None"=None,
         usage:"'serial'|'weight'|None"=None,
-        location=None,
-        spread=None,
+        location:"Location | None" = None,
+        spread:"Spread | None" = None,
+        range: "DataRange | None" = None,
+        values: "list[code] | None" = None,
     ))]
     fn py_new<'py>(
         name: &str,
@@ -1228,6 +1256,8 @@ impl Question {
         usage: Option<&str>,
         location: Option<Location>,
         spread: Option<Spread>,
+        range: Option<DataRange>,
+        values: Option<Vec<Code>>,
     ) -> PyResult<Self> {
         let question_type = if question_type.is_none() {
             QuestionType::None
@@ -1248,7 +1278,7 @@ impl Question {
             return Err(exceptions::PyTypeError::new_err(type_name));
         };
 
-        Self::new(
+        let mut instance = Self::new(
             name,
             question_type,
             label,
@@ -1258,7 +1288,16 @@ impl Question {
             location,
             spread,
         )
-        .map_err(py_value_error)
+        .map_err(py_value_error)?;
+
+        // Update response-related entries
+        *instance.response_mut().range_mut() = range;
+        if let Some(values) = values {
+            *instance.response_mut().values_mut() =
+                values.into_iter().map(lock_it_up).collect();
+        }
+
+        Ok(instance)
     }
 
     /// Returns a representation containing the question name, type, and label.
@@ -1465,8 +1504,8 @@ impl Question {
     /// Updates data location of the current question.
     ///
     /// Keyword Args:
-    ///     start (int | None): Starting position. None leaves this bound unchanged. Defaults to None.
-    ///     finish (int | None): Finishing position. None leaves this bound unchanged. Defaults to None.
+    ///     start (int, *optional*): Starting position. None leaves this bound unchanged. Defaults to None.
+    ///     finish (int, *optional*): Finishing position. None leaves this bound unchanged. Defaults to None.
     ///
     /// Returns:
     ///     None: This method updates or validates the existing object in place.
@@ -1923,7 +1962,7 @@ Args:
     start (int): Starting position, using Triple-S 1-based indexing.
 
 Keyword Args:
-    finish (int | None): Inclusive finishing position. None uses start. Defaults to None.
+    finish (int, *optional*): Inclusive finishing position. None uses start. Defaults to None.
 
 Returns:
     Location: The constructed Location instance.
@@ -2108,7 +2147,7 @@ impl Location {
     ///     start (int): Starting position, using Triple-S 1-based indexing.
     ///
     /// Keyword Args:
-    ///     finish (int | None): Inclusive finishing position. None uses start. Defaults to None.
+    ///     finish (int, *optional*): Inclusive finishing position. None uses start. Defaults to None.
     ///
     /// Returns:
     ///     Location: The constructed Location instance.
@@ -2318,7 +2357,7 @@ Args:
     num_subfields (int): Number of response subfields.
 
 Keyword Args:
-    subfield_width (int | None): Width of each subfield, or None to leave it unspecified. Defaults to None.
+    subfield_width (int, *optional*): Width of each subfield, or None to leave it unspecified. Defaults to None.
 
 Returns:
     Spread: The constructed Spread instance.
@@ -2437,7 +2476,7 @@ impl Spread {
     ///     num_subfields (int): Number of response subfields.
     ///
     /// Keyword Args:
-    ///     subfield_width (int | None): Width of each subfield, or None to leave it unspecified. Defaults to None.
+    ///     subfield_width (int, *optional*): Width of each subfield, or None to leave it unspecified. Defaults to None.
     ///
     /// Returns:
     ///     Spread: The constructed Spread instance.

@@ -46,13 +46,25 @@ Properties
 Methods
 ^^^^^^^
 
-.. automethod:: Question.copy() -> Question
+.. raw:: html
 
-.. automethod:: Question.set_location(start: int | None = None, finish: int | None = None) -> None
+   <div class="separator">Create instance</div>
 
 .. automethod:: Question.from_string(question_fragment: str) -> Question
 
 .. automethod:: Question.from_dict(content: dict) -> Question
+
+.. raw:: html
+
+   <div class="separator">Mutation</div>
+
+.. automethod:: Question.copy() -> Question
+
+.. automethod:: Question.set_location(start: int | None = None, finish: int | None = None) -> None
+
+.. raw:: html
+
+   <div class="separator">Exporting</div>
 
 .. automethod:: Question.to_classic() -> str
 
@@ -85,6 +97,10 @@ Properties
 Methods
 -------
 
+.. raw:: html
+
+   <div class="separator">Create instance</div>
+
 .. automethod:: Location.from_dict(value: dict) -> Location
 
 .. raw:: html
@@ -104,6 +120,11 @@ Attributes
 
 Methods
 ^^^^^^^
+
+.. raw:: html
+
+   <div class="separator">Create instance</div>
+
 .. automethod:: Spread.from_dict(value) -> Spread
 
 .. raw:: html
@@ -131,11 +152,27 @@ Attributes
 Methods
 ^^^^^^^
 
+.. raw:: html
+
+   <div class="separator">Response code access & indexing</div>
+
+.. py:method:: Response.__getitem__(index: int | slice) -> Code | tuple[Code, ...]
+
+   Return a response code at an integer index or a tuple of codes for a slice.
+
 .. automethod:: Response.get_value(value: int | float | str) -> Code | None
+
+.. raw:: html
+
+   <div class="separator">Mutation</div>
 
 .. automethod:: Response.add_value(value: Code) -> None
 
 .. automethod:: Response.set_value(value: Code) -> None
+
+.. raw:: html
+
+   <div class="separator">Create instance</div>
 
 .. automethod:: Response.from_dict(content: dict) -> Response
 
@@ -159,6 +196,10 @@ Attributes
 
 Methods
 ^^^^^^^
+
+.. raw:: html
+
+   <div class="separator">Create instance</div>
 
 .. automethod:: DataRange.unsigned(start: int, end: int) -> DataRange
 
@@ -195,8 +236,9 @@ Attributes
 Methods
 ^^^^^^^
 
-Creating new instance with various data types:
-*********************************************************
+.. raw:: html
+
+   <div class="separator">Create instance</div>
 
 .. automethod:: Code.unsigned(value: int, label: str | None = None, filter: str | None = None, score: float | None = None) -> Code
 
@@ -206,6 +248,8 @@ Creating new instance with various data types:
 
 .. automethod:: Code.string(value: str, label: str | None = None, filter: str | None = None, score: float | None = None) -> Code
 
-Creating new instance from dictionary:
-*********************************************************
+.. raw:: html
+
+   <div class="separator">Create from dictionary</div>
+
 .. automethod:: Code.from_dict(content: dict) -> Code

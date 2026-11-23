@@ -45,7 +45,6 @@ Returns:
 #[derive(Debug, Default)]
 pub struct Response {
     range: ArcLock<Option<DataRange>>,
-
     values: ArcLock<Vec<ArcLock<Code>>>,
 }
 
@@ -1199,14 +1198,24 @@ impl Code {
     /// Create a Code instance.
     ///
     /// Args:
-    ///     value (str | int | float): Response code value.
-    ///     label (str | None): Text label. None uses an empty label.
-    ///     filter (str | None): Response filter expression, or None for no filter.
-    ///     score (float | None): Score for statistical calculations, or None for no score.
+    ///     value (str | int | float):
+    ///         Response code value.
+    ///     label (str | None):
+    ///         Text label. None uses an empty label.
+    ///     filter (str | None):
+    ///         Response filter expression, or None for no filter.
+    ///     score (float | None):
+    ///         Score for statistical calculations, or None for no score.
     ///
     /// Raises:
     ///     NotImplementedError: Direct construction is not supported. Use Code.unsigned, Code.signed, Code.float, or Code.string.
     #[new]
+    #[pyo3(signature=(
+        value: "str|int|float",
+        label: "str" = None,
+        filter: "str" = None,
+        score: "str" = None
+    ))]
     #[allow(unused_variables)]
     fn py_new<'py>(
         value: &Bound<'py, PyAny>,

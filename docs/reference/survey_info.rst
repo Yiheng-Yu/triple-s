@@ -44,6 +44,10 @@ Attributes
 Methods
 -------------
 
+.. raw:: html
+
+   <div class="separator">Create & export</div>
+
 .. automethod:: SurveyInfo.from_dict(content: dict) -> SurveyInfo
    
 .. automethod:: SurveyInfo.to_dict() -> dict[str, Version | str | list[str] | list[Mode]]

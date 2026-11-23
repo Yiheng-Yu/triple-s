@@ -1,4 +1,6 @@
-"""Sphinx configuration for the Python documentation."""
+"""
+Sphinx configuration for the Python documentation.
+"""
 
 import re
 from pathlib import Path
@@ -19,7 +21,6 @@ extensions = [
 napoleon_use_ivar = False
 
 templates_path = ["_templates"]
-
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 python_maximum_signature_line_length = 80
 
