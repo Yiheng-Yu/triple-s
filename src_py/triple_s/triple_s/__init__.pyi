@@ -1574,7 +1574,7 @@ class Survey:
             Survey: The constructed Survey instance.
         """
     def __repr__(self, /) -> str: ...
-    def crosstab(self, /, row: "str", column: "list[str]" = None, show_row_total: "bool" = None, show_column_total: "bool" = None, colname_stats: "str" = "total", colname_label: "str" = "label", colname_code: "str" = "code", include_response_codes: "bool" = False, include_question_name: "bool" = False, output: "'polars'|'pandas'|DataFrameFormat" = None, normalise: "bool" = False) -> Any:
+    def crosstab(self, /, row: "str", columns: "str | list[str]" = None, show_row_total: "bool" = None, show_column_total: "bool" = None, colname_stats: "str" = "total", colname_label: "str" = "label", colname_code: "str" = "code", include_response_codes: "bool" = False, include_question_name: "bool" = False, output: "'polars'|'pandas'|DataFrameFormat" = None, normalise: "bool" = False) -> Any:
         """
         Create a cross tab for a question in the survey.
 
@@ -1588,7 +1588,7 @@ class Survey:
             row (str): Name of the question to show as rows, case insensitive.
 
         Keyword Args:
-            column (list[str], *optional*): Names of the questions to show as columns, case insensitive.
+            columns (str | list[str], *optional*): Names of the questions to show as columns, case insensitive.
             
             show_row_total (bool, *optional*):
                 Include the overall count column for the row question. Default ``True``.
@@ -1733,15 +1733,15 @@ class Survey:
         """
         List of question names loaded to the survey
         """
-    def quick_summary(self, /, columns: "list[str]" = None, ignore: "list[str]" = None, normalise: "bool" = False, skip_text: "bool" = True, skip_numeric: "bool" = True, skip_datetime: "bool" = True, skip_single: "bool" = False, skip_multiple: "bool" = False, colname_stats: "str" = "total", colname_label: "str" = "label", colname_code: "str" = "code", include_response_codes: "bool" = False, include_question_name: "bool" = False, output: "'polars'|'pandas'|DataFrameFormat" = None) -> list[tuple[str, Any]]:
+    def quick_summary(self, /, columns: "str|list[str]" = None, ignore: "list[str]" = None, normalise: "bool" = False, skip_text: "bool" = True, skip_numeric: "bool" = True, skip_datetime: "bool" = True, skip_single: "bool" = False, skip_multiple: "bool" = False, colname_stats: "str" = "total", colname_label: "str" = "label", colname_code: "str" = "code", include_response_codes: "bool" = False, include_question_name: "bool" = False, output: "'polars'|'pandas'|DataFrameFormat" = None) -> list[tuple[str, Any]]:
         """
         Creates a crosstab table for every selected question in the current instance,
         skipping questions listed in `ignore` and question type defined in `skip_type`.
 
         Keyword Args:
-            column (list[str], *optional*): Names of the questions to show as columns, case insensitive.
+            column (str | list[str], *optional*): Names of the questions to show as columns, case insensitive.
             
-            ignore (list[str], *optional*): Names of the questions ignore, case insensitive.    
+            ignore (str | list[str], *optional*): Names of the questions ignore, case insensitive.    
 
             normalise (bool, *optional*):
                 Return counts as relative frequencies normalised to 1.0, using

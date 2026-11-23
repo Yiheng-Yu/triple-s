@@ -21,11 +21,7 @@ use crate::{
 };
 #[cfg(feature = "pyo3")]
 use crate::{
-    SurveyInfo,
-    data::row_iterator::RowIterator,
-    options::{DataFrameFormat, ResponseDisplay},
-    prelude::*,
-    utils::{get_type_name, normalize_py_index, polars_to_pandas},
+    SurveyInfo, data::row_iterator::RowIterator, options::{DataFrameFormat, ResponseDisplay}, prelude::*, utils::{extract_to_vec_str, get_type_name, normalize_py_index, polars_to_pandas},
 };
 
 // rust docstring
@@ -379,6 +375,7 @@ impl Survey {
 
         let question_name =
             operation::find_column_name(&all_question_names, args.question_name)?;
+
         let target_columns = args
             .columns
             .into_iter()
@@ -1037,7 +1034,7 @@ impl Survey {
     ///     row (str): Name of the question to show as rows, case insensitive.
     ///
     /// Keyword Args:
-    ///     column (list[str], *optional*): Names of the questions to show as columns, case insensitive.
+    ///     columns (str | list[str], *optional*): Names of the questions to show as columns, case insensitive.
     ///     
     ///     show_row_total (bool, *optional*):
     ///         Include the overall count column for the row question. Default ``True``.
@@ -1108,7 +1105,7 @@ impl Survey {
         name = "crosstab",
         signature=(
             row: "str", 
-            column: "list[str]"=None,
+            columns: "str | list[str]"=None,
             show_row_total: "bool"=None,
             show_column_total: "bool"=None,
             colname_stats: "str" = "total",
@@ -1124,7 +1121,7 @@ impl Survey {
         &self,
         py: Python<'py>,
         row: &str,
-        column: Option<Vec<String>>,
+        columns: Option<&Bound<'py, PyAny>>,
         show_row_total: Option<bool>,
         show_column_total: Option<bool>,
         colname_stats: Option<&str>,
@@ -1135,12 +1132,11 @@ impl Survey {
         output: Option<Bound<'py, PyAny>>,
         normalise: Option<bool>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let columns: Vec<&str> = column
-            .as_deref()
-            .unwrap_or_default()
-            .iter()
-            .map(String::as_str)
-            .collect();
+
+        let column_names = columns.map(extract_to_vec_str)
+            .transpose()?
+            .unwrap_or_default();
+        let columns = column_names.iter().map(String::as_str).collect::<Vec<_>>();
 
         let label_options = LabelOptions::new()
             .with_include_question_name(include_question_name.unwrap_or(false))
@@ -1180,9 +1176,9 @@ impl Survey {
     /// skipping questions listed in `ignore` and question type defined in `skip_type`.
     ///
     /// Keyword Args:
-    ///     column (list[str], *optional*): Names of the questions to show as columns, case insensitive.
+    ///     column (str | list[str], *optional*): Names of the questions to show as columns, case insensitive.
     ///     
-    ///     ignore (list[str], *optional*): Names of the questions ignore, case insensitive.    
+    ///     ignore (str | list[str], *optional*): Names of the questions ignore, case insensitive.    
     ///
     ///     normalise (bool, *optional*):
     ///         Return counts as relative frequencies normalised to 1.0, using
@@ -1239,7 +1235,7 @@ impl Survey {
     #[pyo3(
         name = "quick_summary",
         signature = (
-            columns: "list[str]" = None,
+            columns: "str|list[str]" = None,
             ignore: "list[str]" = None,
             normalise: "bool" = false,
             skip_text: "bool" = true,
@@ -1258,8 +1254,8 @@ impl Survey {
     fn py_quick_summary<'py>(
         &self,
         py: Python<'py>,
-        columns: Option<Vec<String>>,
-        ignore: Option<Vec<String>>,
+        columns: Option<&Bound<'py, PyAny>>,
+        ignore: Option<&Bound<'py, PyAny>>,
         normalise: Option<bool>,
         skip_text: Option<bool>,
         skip_numeric: Option<bool>,
@@ -1276,10 +1272,14 @@ impl Survey {
         // Default arguments
         let normalise = normalise.unwrap_or(false);
 
-        let column_names = columns.unwrap_or_default();
+        let column_names = columns.map(extract_to_vec_str)
+            .transpose()?
+            .unwrap_or_default();
         let columns = column_names.iter().map(String::as_str).collect::<Vec<_>>();
 
-        let ignored_names = ignore.unwrap_or_default();
+        let ignored_names = ignore.map(extract_to_vec_str)
+            .transpose()?
+            .unwrap_or_default();
         let ignore = ignored_names.iter().map(String::as_str).collect::<Vec<_>>();
 
         let skip_types = SkipQType {
