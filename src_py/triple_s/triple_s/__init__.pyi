@@ -782,7 +782,7 @@ class Question:
         `'label'` (str|Text|dict):
             question title.
             See help(:py:meth:`Text.from_dict`) for allowed keys in the dictionary.
-            If unset, would defult to ``Text("")``
+            If unset, would defult to `Text("")`
         
         `'format'` (str|CodeFormat|None, *optional*):
             code format.
@@ -1111,9 +1111,9 @@ class QuestionData:
         """
         Count unique values of this question data.
         
-        This calls ``polars.Series.value_counts`` under the hood. For multiple-choice
+        This calls `polars.Series.value_counts` under the hood. For multiple-choice
         questions, each selected response is counted individually. The first row,
-        labelled ``Total``, counts respondents with non-null answers, including empty lists.
+        labelled `Total`, counts respondents with non-null answers, including empty lists.
         
         Keyword Args:
         
@@ -1131,7 +1131,7 @@ class QuestionData:
                 Default `'code'`
         
             include_question_name (bool, *optional*):
-                Include a ``question`` column with the question name in the first row
+                Include a `question` column with the question name in the first row
                 and nulls in the remaining rows.
                 Default `False`
         
@@ -1636,7 +1636,7 @@ class Survey:
         You can compare one question's answers by one or more other questions.
         Response labels are always shown. For multiple-choice questions, each
         selected response is counted separately.
-        Set ``normalise=True`` to return proportions instead of counts, keeping
+        Set `normalise=True` to return proportions instead of counts, keeping
         the first row as total counts.
         
         Args:
@@ -1646,56 +1646,56 @@ class Survey:
             columns (str | list[str], *optional*): Names of the questions to show as columns, case insensitive.
             
             show_row_total (bool, *optional*):
-                Include the overall count column for the row question. Default ``True``.
+                Include the overall count column for the row question. Default `True`.
             
             show_column_total (bool, *optional*):
                 Include the first row of totals. Each column shows its response count,
                 and the overall count shows respondents with non-null row answers.
-                Default ``True``.
+                Default `True`.
             
             colname_stats (str, *optional*):
-                Name of the overall count column. Used when ``show_row_total=True``.
-                Default ``'total'``.
+                Name of the overall count column. Used when `show_row_total=True`.
+                Default `'total'`.
             
             colname_label (str, *optional*):
-                Name of the row-response label column. Default ``'label'``.
+                Name of the row-response label column. Default `'label'`.
             
             colname_code (str, *optional*):
                 Name of the row-response code column. Used when
-                ``include_response_codes=True``. Default ``'code'``.
+                `include_response_codes=True`. Default `'code'`.
             
             include_response_codes (bool, *optional*):
                 Include the original row-response values in a separate column.
-                The total row has a null code value. Default ``False``.
+                The total row has a null code value. Default `False`.
             
             include_question_name (bool, *optional*):
-                Include a ``question`` column with the row question's name in the
-                first displayed row and nulls in the remaining rows. Default ``False``.
+                Include a `question` column with the row question's name in the
+                first displayed row and nulls in the remaining rows. Default `False`.
             
             output ('polars' | 'pandas' | DataFrameFormat, *optional*):
                 Choose a Polars or pandas dataframe, using a string or a
-                ``config.DataFrameFormat`` member. Default ``None`` follows
-                ``survey.dataframe_format`` without changing that setting.
+                `config.DataFrameFormat` member. Default `None` follows
+                `survey.dataframe_format` without changing that setting.
             
             normalise (bool, *optional*):
                 Return counts as relative frequencies normalised to 1.0, using
                 each column's total. The first row keeps the original total counts.
-                For example, ``0.75`` represents 75%. Default ``False``.
+                For example, `0.75` represents 75%. Default `False`.
         
         Returns:
             polars.DataFrame | pandas.DataFrame: Row labels, optional question and code
                 columns, and counts grouped by the column questions' response labels.
         
         Note:
-            You can pass ``None`` for any keyword option to use its default.
+            You can pass `None` for any keyword option to use its default.
             Missing answers are excluded from response counts. Empty multiple-choice
             lists count towards the overall respondent total but add no selections.
             Normalised results use floating-point columns. Totals are used as
-            denominators even when ``show_column_total=False``. For multiple-choice
+            denominators even when `show_column_total=False`. For multiple-choice
             row questions, proportions can add up to more than 1.0.
         
         Examples:
-            Suppose ``Q2`` asks "Do you cycle to work?" and ``Q4`` records the region.
+            Suppose `Q2` asks "Do you cycle to work?" and `Q4` records the region.
             You can compare the answers by region and include the response codes:
         
             .. code-block:: python
@@ -1706,10 +1706,10 @@ class Survey:
                 )
                 print(table)
         
-            This gives you ``question``, ``code``, ``label``, and ``answers`` columns,
-            followed by columns such as ``Q4 - North`` and ``Q4 - South``.
-            You can hide the first totals row with ``show_column_total=False``,
-            or request a pandas dataframe with ``output="pandas"``.
+            This gives you `question`, `code`, `label`, and `answers` columns,
+            followed by columns such as `Q4 - North` and `Q4 - South`.
+            You can hide the first totals row with `show_column_total=False`,
+            or request a pandas dataframe with `output="pandas"`.
         """
     @property
     def data(self, /) -> SurveyData:
@@ -1801,7 +1801,7 @@ class Survey:
             normalise (bool, *optional*):
                 Return counts as relative frequencies normalised to 1.0, using
                 each column's total. The first row keeps the original total counts.
-                For example, ``0.75`` represents 75%. Default ``False``.
+                Default `False`.
             
             skip_text (bool, *optional*):
                 Toggle on to skip `character` questions. Default `True`.
@@ -1819,33 +1819,32 @@ class Survey:
                 Toggle on to skip `multi`-choice questions. Default `False`.
         
             colname_stats (str, *optional*):
-                Name of the overall count column. Used when ``show_row_total=True``.
-                Default ``'total'``.
+                Name of the overall count column. Used when `show_row_total=True`.
+                Default `'total'`.
             
             colname_label (str, *optional*):
-                Name of the row-response label column. Default ``'label'``.
+                Name of the row-response label column. Default `'label'`.
             
             colname_code (str, *optional*):
                 Name of the row-response code column. Used when
-                ``include_response_codes=True``. Default ``'code'``.
+                `include_response_codes=True`. Default `'code'`.
             
             include_response_codes (bool, *optional*):
                 Include the original row-response values in a separate column.
-                The total row has a null code value. Default ``False``.
+                The total row has a null code value. Default `False`.
             
             include_question_name (bool, *optional*):
-                Include a ``question`` column with the row question's name in the
-                first displayed row and nulls in the remaining rows. Default ``False``.
+                Include a `question` column with the row question's name in the
+                first displayed row and nulls in the remaining rows. 
+                Default `False`.
             
-            output ('polars' | 'pandas' | DataFrameFormat, *optional*):
-                Choose a Polars or pandas dataframe, using a string or a
-                ``config.DataFrameFormat`` member. Default ``None`` follows
-                ``survey.dataframe_format`` without changing that setting.
+            output ("polars" | "pandas" | DataFrameFormat, *optional*):
+                Choose a Polars or pandas dataframe.
+                Default `None`
             
             normalise (bool, *optional*):
                 Return counts as relative frequencies normalised to 1.0, using
                 each column's total. The first row keeps the original total counts.
-                For example, ``0.75`` represents 75%. Default ``False``.
         
         Returns:
             [(String, polars.DataFrame | pandas.DataFrame)]:
@@ -1873,9 +1872,9 @@ class Survey:
             =================  ======
             column             dtype
             =================  ======
-            ``question_name``  String
-            ``response``       String
-            ``label``          String
+            `question_name`  String
+            `response`       String
+            `label`          String
             =================  ======
         
         Note:

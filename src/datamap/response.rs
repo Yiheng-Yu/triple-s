@@ -502,7 +502,7 @@ impl Response {
 
     /// Write to xml event
     ///
-    /// Mostly used internally `to_xml`` method calls, exposed as part of public
+    /// Mostly used internally `to_xml` method calls, exposed as part of public
     /// just in case.
     pub fn write_xml<W: std::io::Write>(
         &self,

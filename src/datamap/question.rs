@@ -285,6 +285,12 @@ impl Question {
         self.name.read().clone()
     }
 
+    /// Converts to polars::PlSmallStr
+    /// 
+    pub(crate) fn name_small_str(&self) -> PlSmallStr {
+        self.name().as_str().into()
+    }
+
     /// A writable access of quesiton name
     ///
     /// # Example:
@@ -1724,7 +1730,7 @@ impl Question {
     /// `'label'` (str|Text|dict):
     ///     question title.
     ///     See help(:py:meth:`Text.from_dict`) for allowed keys in the dictionary.
-    ///     If unset, would defult to ``Text("")``
+    ///     If unset, would defult to `Text("")`
     ///
     /// `'format'` (str|CodeFormat|None, *optional*):
     ///     code format.

@@ -577,9 +577,9 @@ impl QuestionData {
 
     /// Count unique values of this question data.
     ///
-    /// This calls ``polars.Series.value_counts`` under the hood. For multiple-choice
+    /// This calls `polars.Series.value_counts` under the hood. For multiple-choice
     /// questions, each selected response is counted individually. The first row,
-    /// labelled ``Total``, counts respondents with non-null answers, including empty lists.
+    /// labelled `Total`, counts respondents with non-null answers, including empty lists.
     ///
     /// Keyword Args:
     ///
@@ -597,7 +597,7 @@ impl QuestionData {
     ///         Default `'code'`
     ///
     ///     include_question_name (bool, *optional*):
-    ///         Include a ``question`` column with the question name in the first row
+    ///         Include a `question` column with the question name in the first row
     ///         and nulls in the remaining rows.
     ///         Default `False`
     ///
