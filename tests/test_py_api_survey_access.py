@@ -85,8 +85,8 @@ def test_survey_exports_respect_display_and_explicit_override(survey, method, di
     labelled = raw.with_columns(labelled_columns)
     survey.response_display = display
     for response_label in (None, False, True):
-        Keyword Arguments = {} if response_label is None else {"response_label": response_label}
-        result = getattr(survey, method)(**Keyword Arguments)
+        kwargs = {} if response_label is None else {"response_label": response_label}
+        result = getattr(survey, method)(**kwargs)
         show_labels = display == "label" if response_label is None else response_label
         expected = labelled if show_labels else raw
         if show_labels:
