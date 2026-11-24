@@ -142,11 +142,11 @@ fn test_crosstab_column_groups_and_row_total() {
                     AnalysisOptions {
                         question_name: "Q2",
                         columns: &["Q4", "Q5"][..num_groups],
-                        show_row_total,
-                        show_column_total: false,
                         normalise: false,
                     },
-                    LabelOptions::default(),
+                    LabelOptions::new()
+                        .with_show_row_total(show_row_total)
+                        .with_show_column_total(false),
                 )
                 .unwrap();
 
@@ -177,8 +177,6 @@ fn test_crosstab_same_question_as_row_and_column() {
             AnalysisOptions {
                 question_name: "Q2",
                 columns: &["Q2"],
-                show_row_total: true,
-                show_column_total: true,
                 normalise: false,
             },
             LabelOptions::default(),
@@ -236,11 +234,9 @@ fn test_crosstab_label_options() {
                     AnalysisOptions {
                         question_name: "Q2",
                         columns: &["Q4"],
-                        show_row_total: true,
-                        show_column_total: true,
                         normalise: false,
                     },
-                    LabelOptions::new()
+                    LabelOptions::default()
                         .with_include_question_name(true)
                         .with_fill_question_name_column(fill_question_name)
                         .with_include_response_codes(true)
@@ -299,11 +295,11 @@ fn test_crosstab_normalise() -> PolarsResult<()> {
                     AnalysisOptions {
                         question_name: "Q2",
                         columns: &["Q4", "Q5"][..num_groups],
-                        show_row_total,
-                        show_column_total,
                         normalise: true,
                     },
                     LabelOptions::new()
+                        .with_show_row_total(show_row_total)
+                        .with_show_column_total(show_column_total)
                         .with_include_response_codes(true)
                         .with_col_code(Some("response"))
                         .with_col_label(Some("answer"))
@@ -360,11 +356,9 @@ fn test_crosstab_column_totals_count_respondents() {
             AnalysisOptions {
                 question_name: "Q5",
                 columns: &columns,
-                show_row_total: true,
-                show_column_total: false,
                 normalise: false,
             },
-            LabelOptions::default(),
+            LabelOptions::new().with_show_column_total(false),
         )
         .unwrap();
     let result = survey
@@ -372,8 +366,6 @@ fn test_crosstab_column_totals_count_respondents() {
             AnalysisOptions {
                 question_name: "Q5",
                 columns: &columns,
-                show_row_total: true,
-                show_column_total: true,
                 normalise: false,
             },
             LabelOptions::default(),
@@ -420,8 +412,6 @@ fn test_crosstab_case_insensitive() {
                 AnalysisOptions {
                     question_name: &qname.to_ascii_lowercase(),
                     columns: &[&qname.to_ascii_lowercase()],
-                    show_row_total: true,
-                    show_column_total: true,
                     normalise: false,
                 },
                 LabelOptions::default(),
@@ -434,8 +424,6 @@ fn test_crosstab_case_insensitive() {
                 AnalysisOptions {
                     question_name: &qname.to_ascii_uppercase(),
                     columns: &[&qname.to_ascii_uppercase()],
-                    show_row_total: true,
-                    show_column_total: true,
                     normalise: false,
                 },
                 LabelOptions::default(),
@@ -462,8 +450,6 @@ fn test_read_stack_overflow_survey() {
             AnalysisOptions {
                 question_name: row,
                 columns: &[topbreak], //"JobEaseAI_1"],
-                show_row_total: true,
-                show_column_total: true,
                 normalise: false,
             },
             LabelOptions {
@@ -496,8 +482,6 @@ fn test_crosstab_question_against_itself() {
             AnalysisOptions {
                 question_name: "AIFreq_1",
                 columns: &["AIFreq_1"],
-                show_row_total: true,
-                show_column_total: true,
                 normalise: false,
             },
             LabelOptions::default(),

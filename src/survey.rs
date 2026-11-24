@@ -334,7 +334,8 @@ impl Survey {
 impl Survey {
     /// Gets a [topline table](https://en.wikipedia.org/wiki/Contingency_table) for a given question (`row`) with another question (`column`) as the header.
     ///
-    /// Uses [`AnalysisOptions`] to select the row question, column groups, and optional totals.
+    /// Uses [`AnalysisOptions`] to select the row question and column groups, and
+    /// [`LabelOptions`] to configure optional totals and output labels.
     ///
     /// An example output looks like:
     ///
@@ -348,11 +349,11 @@ impl Survey {
     ///     AnalysisOptions {
     ///         question_name: "Age",
     ///         columns: &["AIFreq_1", ],
-    ///         show_row_total: true,
-    ///         show_column_total: true,
     ///         normalise: false,
     ///     },
     ///     LabelOptions {
+    ///         show_row_total: true,
+    ///         show_column_total: true,
     ///         include_response_codes: false,
     ///         include_question_name: false,
     ///         ..Default::default()
@@ -406,8 +407,6 @@ impl Survey {
         self.crosstab_internal(
             question_name,
             &target_columns,
-            args.show_row_total,
-            args.show_column_total,
             args.normalise,
             label_options,
         )?
@@ -420,10 +419,7 @@ impl Survey {
     fn crosstab_internal<'a>(
         &self,
         question_name: &'a str,
-        // target_columns: Vec<&'a str>,
         target_columns: &'a [&'a str],
-        show_row_total: bool,
-        show_column_total: bool,
         normalise: bool,
         label_options: LabelOptions<'a>,
     ) -> PolarsResult<LazyFrame> {
@@ -447,7 +443,7 @@ impl Survey {
                     &original,
                     question_name,
                     first,
-                    show_column_total,
+                    label_options.show_column_total,
                     normalise,
                 )?;
                 self.label_output_column(tab, first)?
@@ -458,7 +454,7 @@ impl Survey {
                 &original,
                 question_name,
                 colname,
-                show_column_total,
+                label_options.show_column_total,
                 normalise,
             )?;
             let right = self.label_output_column(right, colname)?;
@@ -480,12 +476,12 @@ impl Survey {
         })?;
 
         // row total
-        if show_row_total {
+        if label_options.show_row_total {
             output = operation::frequency_counts(
                 original.clone(),
                 question_name,
                 Some(label_options.col_count.unwrap_or(LabelOptions::COUNT)),
-                show_column_total,
+                label_options.show_column_total,
                 normalise,
             )?
             .join(
@@ -643,8 +639,6 @@ impl Survey {
                         self.crosstab_internal(
                             &question_name,
                             &columns,
-                            true, // show_row_total
-                            true, // show_column_total
                             normalise,
                             label_options.clone(),
                         )
@@ -1160,6 +1154,8 @@ impl Survey {
         let columns = column_names.iter().map(String::as_str).collect::<Vec<_>>();
 
         let label_options = LabelOptions::new()
+            .with_show_row_total(show_row_total.unwrap_or(true))
+            .with_show_column_total(show_column_total.unwrap_or(true))
             .with_include_question_name(include_question_name.unwrap_or(false))
             .with_include_response_codes(include_response_codes.unwrap_or(false))
             // think this would be easier for the user and makes documentation less confusing
@@ -1173,8 +1169,6 @@ impl Survey {
         let arguments = AnalysisOptions {
             question_name: row,
             columns: &columns,
-            show_row_total: show_row_total.unwrap_or(true),
-            show_column_total: show_column_total.unwrap_or(true),
             normalise: normalise.unwrap_or(false),
         };
 
