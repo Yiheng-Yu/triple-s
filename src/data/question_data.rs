@@ -577,11 +577,11 @@ impl QuestionData {
 
     /// Count unique values of this question data.
     ///
-    /// This calls ``polars.Series.value_counts`` under the hood. For multiple-choice
+    /// This calls `polars.Series.value_counts` under the hood. For multiple-choice
     /// questions, each selected response is counted individually. The first row,
-    /// labelled ``Total``, counts respondents with non-null answers, including empty lists.
+    /// labelled `Total`, counts respondents with non-null answers, including empty lists.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///
     ///     colname_stats (str, *optional*):
     ///         Give the resulting count column a specific name (same as `polars.Series.value_counts`)
@@ -597,7 +597,7 @@ impl QuestionData {
     ///         Default `'code'`
     ///
     ///     include_question_name (bool, *optional*):
-    ///         Include a ``question`` column with the question name in the first row
+    ///         Include a `question` column with the question name in the first row
     ///         and nulls in the remaining rows.
     ///         Default `False`
     ///
@@ -661,7 +661,7 @@ impl QuestionData {
 
     /// Return the answers as a polars Series.
     ///
-    /// Kwargs:
+    /// Keyword Arguments:
     ///     response_label (bool, *optional*):
     ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
     ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
@@ -686,7 +686,7 @@ impl QuestionData {
 
     /// Export the answers as a pandas Series object.
     ///
-    /// Kwargs:
+    /// Keyword Arguments:
     ///     response_label (bool, *optional*):
     ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
     ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
@@ -708,7 +708,7 @@ impl QuestionData {
 
     /// Export the answers as a list.
     ///
-    /// Kwargs:
+    /// Keyword Arguments:
     ///     response_label (bool, *optional*):
     ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
     ///         Set `False` to show values instead (`[1, 1, 2, ...]`).

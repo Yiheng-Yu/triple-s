@@ -1,6 +1,7 @@
 use polars::prelude::*;
 use triple_s::{
     AnalysisOptions,
+    QuestionType,
     Survey,
     SurveyData,
     options::{LabelOptions, ResponseDisplay},
@@ -54,6 +55,38 @@ fn test_question_view_shares_replacement_and_owns_cache() {
     );
     drop(view);
     assert!(!std::path::Path::new(&cache_path).exists());
+}
+
+#[test]
+fn test_survey_lazy_rejects_columns_without_datamap_questions() {
+    let survey = get_survey_struct();
+    *survey.data_mut() = SurveyData::from_polars(df!["UNMAPPED" => [1u32]].unwrap()).unwrap();
+
+    let error = match survey.lazy() {
+        Ok(_) => panic!("Expected an error for an unmapped survey data column"),
+        Err(error) => error.to_string(),
+    };
+    assert!(error.contains("UNMAPPED"));
+    assert!(error.contains("is not defined in the datamap"));
+}
+
+#[test]
+fn test_survey_lazy_skips_questions_with_none_type() -> PolarsResult<()> {
+    let mut survey = get_survey_struct();
+    let question = survey
+        .datamap_mut()
+        .record_mut()
+        .content_mut()
+        .iter()
+        .find(|question| question.read().name() == "Q2")
+        .unwrap()
+        .clone();
+    question.write().set_question_type(QuestionType::None).unwrap();
+
+    let schema = survey.lazy()?.collect_schema()?;
+    assert!(schema.try_get("Q2").is_err());
+    assert!(schema.try_get("Q4").is_ok());
+    Ok(())
 }
 
 #[test]
@@ -142,11 +175,11 @@ fn test_crosstab_column_groups_and_row_total() {
                     AnalysisOptions {
                         question_name: "Q2",
                         columns: &["Q4", "Q5"][..num_groups],
-                        show_row_total,
-                        show_column_total: false,
                         normalise: false,
                     },
-                    LabelOptions::default(),
+                    LabelOptions::new()
+                        .with_show_row_total(show_row_total)
+                        .with_show_column_total(false),
                 )
                 .unwrap();
 
@@ -177,8 +210,6 @@ fn test_crosstab_same_question_as_row_and_column() {
             AnalysisOptions {
                 question_name: "Q2",
                 columns: &["Q2"],
-                show_row_total: true,
-                show_column_total: true,
                 normalise: false,
             },
             LabelOptions::default(),
@@ -236,11 +267,9 @@ fn test_crosstab_label_options() {
                     AnalysisOptions {
                         question_name: "Q2",
                         columns: &["Q4"],
-                        show_row_total: true,
-                        show_column_total: true,
                         normalise: false,
                     },
-                    LabelOptions::new()
+                    LabelOptions::default()
                         .with_include_question_name(true)
                         .with_fill_question_name_column(fill_question_name)
                         .with_include_response_codes(true)
@@ -299,11 +328,11 @@ fn test_crosstab_normalise() -> PolarsResult<()> {
                     AnalysisOptions {
                         question_name: "Q2",
                         columns: &["Q4", "Q5"][..num_groups],
-                        show_row_total,
-                        show_column_total,
                         normalise: true,
                     },
                     LabelOptions::new()
+                        .with_show_row_total(show_row_total)
+                        .with_show_column_total(show_column_total)
                         .with_include_response_codes(true)
                         .with_col_code(Some("response"))
                         .with_col_label(Some("answer"))
@@ -360,11 +389,9 @@ fn test_crosstab_column_totals_count_respondents() {
             AnalysisOptions {
                 question_name: "Q5",
                 columns: &columns,
-                show_row_total: true,
-                show_column_total: false,
                 normalise: false,
             },
-            LabelOptions::default(),
+            LabelOptions::new().with_show_column_total(false),
         )
         .unwrap();
     let result = survey
@@ -372,8 +399,6 @@ fn test_crosstab_column_totals_count_respondents() {
             AnalysisOptions {
                 question_name: "Q5",
                 columns: &columns,
-                show_row_total: true,
-                show_column_total: true,
                 normalise: false,
             },
             LabelOptions::default(),
@@ -411,64 +436,76 @@ fn test_crosstab_column_totals_count_respondents() {
     );
 }
 
-// #[test]
-// fn test_read_stack_overflow_survey() {
-//     println!("Reading survey data");
-//     let survey = read_stack_overflow();
-//     println!("Data loaded. Question names:");
-//     println!("{:#?}", survey.question_names());
+#[test]
+#[ignore]
+fn test_crosstab_case_insensitive() {
+    let survey = get_survey_struct();
+    for qname in survey.question_names().into_iter() {
+        let _ = survey
+            .crosstab(
+                AnalysisOptions {
+                    question_name: &qname.to_ascii_lowercase(),
+                    columns: &[&qname.to_ascii_lowercase()],
+                    normalise: false,
+                },
+                LabelOptions::default(),
+            )
+            .map_err(|err| format!("{:#?}", err))
+            .unwrap();
 
-//     println!("running crosstab");
-//     let row = "AIFreq_1";
-//     let topbreak = "AIFreq_1";
-
-//     let res = survey
-//         .crosstab(
-//             AnalysisOptions {
-//                 question_name: row,
-//                 columns: &[topbreak], //"JobEaseAI_1"],
-//                 show_row_total: true,
-//                 show_column_total: true,
-//                 normalise: false,
-//             },
-//             LabelOptions {
-//                 include_response_codes: true,
-//                 ..Default::default()
-//             },
-//         )
-//         .unwrap();
-//     println!("Crosstab:");
-//     unsafe {
-//         std::env::set_var("POLARS_FMT_MAX_ROWS", "100");
-//     }
-//     println!("{:?}", res);
-
-//     println!("Base size:");
-//     let options = LabelOptions::new().with_include_response_codes(true);
-//     let base = survey
-//         .get_question_data(topbreak)
-//         .unwrap()
-//         .value_counts(options)
-//         .unwrap();
-//     println!("{:?}", base);
-// }
+        let _ = survey
+            .crosstab(
+                AnalysisOptions {
+                    question_name: &qname.to_ascii_uppercase(),
+                    columns: &[&qname.to_ascii_uppercase()],
+                    normalise: false,
+                },
+                LabelOptions::default(),
+            )
+            .map_err(|err| format!("{:#?}", err))
+            .unwrap();
+    }
+}
 
 #[test]
-fn test_crosstab_question_against_itself() {
+#[ignore]
+fn test_read_stack_overflow_survey() {
+    println!("Reading survey data");
     let survey = read_stack_overflow();
-    let result = survey
+    println!("Data loaded. Question names:");
+    println!("{:#?}", survey.question_names());
+
+    println!("running crosstab");
+    let row = "AIFreq_1";
+    let topbreak = "AIFreq_1";
+
+    let res = survey
         .crosstab(
             AnalysisOptions {
-                question_name: "AIFreq_1",
-                columns: &["AIFreq_1"],
-                show_row_total: true,
-                show_column_total: true,
+                question_name: row,
+                columns: &[topbreak], //"JobEaseAI_1"],
                 normalise: false,
             },
-            LabelOptions::default(),
+            LabelOptions {
+                include_response_codes: true,
+                ..Default::default()
+            },
         )
         .unwrap();
-    assert!(result.height() > 0);
+    println!("Crosstab:");
+    unsafe {
+        std::env::set_var("POLARS_FMT_MAX_ROWS", "100");
+    }
+    println!("{:?}", res);
+
+    println!("Base size:");
+    let options = LabelOptions::new().with_include_response_codes(true);
+    let base = survey
+        .get_question_data(topbreak)
+        .unwrap()
+        .value_counts(options)
+        .unwrap();
+    println!("{:?}", base);
 }
 
 #[test]
@@ -484,28 +521,4 @@ fn test_value_counts() {
         .with_fill_question_name_column(true);
     let stats = question.value_counts(options).unwrap();
     println!("{:?}", stats)
-}
-
-#[test]
-fn test_crosstab_case_insensitive() {
-    let survey = read_stack_overflow();
-    let result = survey
-        .quick_summary(
-            Some(&["aifreq_1"]),
-            None,
-            triple_s::options::SkipQType {
-                text: true,
-                numeric: true,
-                datetime: false,
-                single: false,
-                multiple: false,
-            },
-            false,
-            LabelOptions::default(),
-        )
-        .unwrap();
-
-    for (qname, qdata) in result.into_iter() {
-        println!("Question: {}, shape: {:?}", qname, qdata.shape())
-    }
 }

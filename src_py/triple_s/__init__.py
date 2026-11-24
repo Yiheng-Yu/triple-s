@@ -57,4 +57,5 @@ __all__ = [
     "config",
     "read_datamap",
     "read_triple_s",
+    "read_data",
 ]

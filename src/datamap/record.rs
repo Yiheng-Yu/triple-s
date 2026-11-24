@@ -11,7 +11,7 @@ use std::{
 use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
-use polars::frame::row::Row;
+use polars::{frame::row::Row, prelude::*};
 #[cfg(feature = "pyo3")]
 use pyo3::{
     IntoPyObjectExt,
@@ -141,13 +141,17 @@ impl Record {
     /// Note that using an href attribute ties the specification to the Data
     /// File and may cause problems if the Metadata File and Data File are
     /// moved.
-    pub fn href(&self) -> &Option<String> {
-        &self.href
+    pub fn href(&self) -> Option<&str> {
+        self.href.as_deref()
     }
 
     /// returns a read-write borrow of the `href` field
-    pub fn href_mut(&mut self) -> &mut Option<String> {
-        &mut self.href
+    pub fn href_mut(&mut self) -> Option<&mut str> {
+        self.href.as_deref_mut()
+    }
+
+    pub(crate) fn _set_href(&mut self, href: Option<String>) {
+        self.href = href;
     }
 
     /// Indicating types of the data the current datamap file binds to
@@ -185,6 +189,9 @@ impl Record {
 }
 
 impl Record {
+    /// Get a question from it's name
+    ///
+    /// Used internally
     #[inline]
     fn find_question(&self, question_name: &str) -> Option<ArcLock<Question>> {
         self.content
@@ -236,6 +243,25 @@ impl Record {
                 content.push(lock_it_up(question));
             }
         }
+    }
+
+    /// Create polars schema based on the `question_type` of each questions
+    /// in the current collection.
+    pub fn schema(&self) -> Schema {
+        let iterator = self
+            .content()
+            .clone()
+            .into_iter()
+            .filter_map(|question| {
+                let question = question.read();
+                if question.is_none_type() {
+                    None
+                } else {
+                    Some((question.name().into(), question.polars_dtype()))
+                }
+            })
+            .into_iter();
+        Schema::from_iter(iterator)
     }
 
     /// export to triple-s classic.
@@ -614,8 +640,8 @@ impl Record {
     /// This corresponds to the href attribute of a <record> element.
     /// Setting it edits metadata only; use `read_data(datamap, path)` to load respondent data.
     #[getter(href)]
-    fn py_get_href(&self) -> PyResult<Option<String>> {
-        Ok(self.href().clone())
+    fn py_get_href(&self) -> PyResult<Option<&str>> {
+        Ok(self.href())
     }
 
     #[setter(href)]

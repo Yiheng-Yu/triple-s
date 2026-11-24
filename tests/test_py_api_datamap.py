@@ -90,3 +90,7 @@ def test_question_response_label_map():
     assert response_label[3] == Text("item 3")
     assert response_label[4] == Text("item 4")
     assert response_label[5] == Text("item 5")
+
+
+def test_create_new_datamap_api():
+    datamap = Datamap("S1", title=None, version=1.2)

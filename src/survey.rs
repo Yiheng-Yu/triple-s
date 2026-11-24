@@ -25,7 +25,7 @@ use crate::{
     data::row_iterator::RowIterator,
     options::{DataFrameFormat, ResponseDisplay},
     prelude::*,
-    utils::{get_type_name, normalize_py_index, polars_to_pandas},
+    utils::{extract_to_vec_str, get_type_name, normalize_py_index, polars_to_pandas},
 };
 
 // rust docstring
@@ -45,7 +45,7 @@ use crate::{
 Args:
     datamap (Datamap): Survey definition used to interpret the respondent data.
 
-Keyword Args:
+Keyword Arguments:
     data (SurveyData | None): Respondent data. None creates a survey without loaded data. Defaults to None.
 
 Returns:
@@ -162,6 +162,7 @@ impl Survey {
     /// │ Q8            ┆ "C"      ┆ More than 1 years time          │
     /// └───────────────┴──────────┴─────────────────────────────────┘
     /// ```
+    /// 
     pub fn response_label_map(&self) -> PolarsResult<DataFrame> {
         let maps = self.datamap.response_label_map();
 
@@ -193,11 +194,28 @@ impl Survey {
 /// ---
 impl Survey {
     /// Create new `Survey` instance
-    pub fn new(datamap: Datamap, data: SurveyData) -> Self {
-        Self {
-            datamap,
-            data: lock_it_up(data),
-            config: lock_it_up(SurveyOptions::default()),
+    pub fn new(datamap: Datamap, data: SurveyData) -> PolarsResult<Self> {
+        if !data.has_data() {
+            Ok(Self {
+                datamap,
+                data: lock_it_up(data),
+                config: lock_it_up(SurveyOptions::default()),
+            })
+        } else {
+            let columns = datamap
+                .schema()
+                .into_iter()
+                .map(|(colname, dtype)| col(colname).cast(dtype))
+                .collect::<Vec<Expr>>();
+
+            let lazyframe = data.lazy().unwrap().clone().with_columns(columns);
+            let data_new = SurveyData::from_lazyframe(lazyframe)?;
+
+            Ok(Self {
+                datamap,
+                data: lock_it_up(data_new),
+                config: lock_it_up(SurveyOptions::default()),
+            })
         }
     }
 
@@ -205,7 +223,7 @@ impl Survey {
     pub fn empty() -> Self {
         let datamap = Datamap::empty();
         let data = SurveyData::empty();
-        Self::new(datamap, data)
+        Self::new(datamap, data).unwrap()
     }
 
     /// List out number of responses loaded
@@ -294,13 +312,59 @@ impl Survey {
             .collect()
     }
 
+    /// Gets survey data as a lazy frame, using the question types in the datamap.
+    /// Questions with type [`QuestionType::None`](crate::QuestionType) are skipped.
+    /// An error is returned when a data column has no matching question.
+    pub fn lazy(&self) -> PolarsResult<LazyFrame> {
+        let dtype_lookup = self.datamap()
+            .record()
+            .content()
+            .clone()
+            .into_iter()
+            .map(|question| {
+                let question = question.read();
+                if question.is_none_type() {
+                    (question.name_small_str(), None)
+                } else {
+                    (question.name_small_str(), Some(question.polars_dtype()))
+                }
+            })
+            .collect::<HashMap<PlSmallStr, Option<DataType>>>();
+        
+        let mut lazyframe = self.data().lazy()?.clone();
+        let schema = lazyframe.collect_schema()?;
+        let mut columns: Vec<Expr> = Vec::with_capacity(schema.len());
+        schema.iter_names()
+            .try_for_each(|colname| {
+                let dtype_found = dtype_lookup
+                    .get(colname.as_str())
+                    .ok_or(PolarsError::ComputeError(format!(
+                        "Survey data column '{}' is not defined in the datamap.",
+                        colname
+                    ).into()))?
+                    .as_ref();
+
+                // Ignore `QuestionType::None`
+                if let Some(dtype) = dtype_found {
+                    columns.push(col(colname.as_str()).cast(dtype.clone()));
+                }
+                Ok::<(), PolarsError>(())
+            })?;
+
+        Ok(lazyframe
+            .select(columns)
+            .with_simplify_expr(true)
+            .with_comm_subexpr_elim(true)
+            .with_comm_subplan_elim(true))
+    }
+
     /// Export survey raw data to polars dataframe
     ///
     /// `response_label`:
     ///     Set `true` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`), set `false` to show values instead (`[1, 1, 2, ...]`).
     pub fn to_polars(&self, response_label: bool) -> PolarsResult<DataFrame> {
         if response_label {
-            let mut lf = self.data().lazy()?.clone();
+            let mut lf = self.lazy()?;
 
             let label_lookup = self.datamap().response_label_map();
             let query = Self::label_response_values(lf.collect_schema()?, &label_lookup)?;
@@ -317,7 +381,8 @@ impl Survey {
 impl Survey {
     /// Gets a [topline table](https://en.wikipedia.org/wiki/Contingency_table) for a given question (`row`) with another question (`column`) as the header.
     ///
-    /// Uses [`AnalysisOptions`] to select the row question, column groups, and optional totals.
+    /// Uses [`AnalysisOptions`] to select the row question and column groups, and
+    /// [`LabelOptions`] to configure optional totals and output labels.
     ///
     /// An example output looks like:
     ///
@@ -331,11 +396,11 @@ impl Survey {
     ///     AnalysisOptions {
     ///         question_name: "Age",
     ///         columns: &["AIFreq_1", ],
-    ///         show_row_total: true,
-    ///         show_column_total: true,
     ///         normalise: false,
     ///     },
     ///     LabelOptions {
+    ///         show_row_total: true,
+    ///         show_column_total: true,
     ///         include_response_codes: false,
     ///         include_question_name: false,
     ///         ..Default::default()
@@ -379,6 +444,7 @@ impl Survey {
 
         let question_name =
             operation::find_column_name(&all_question_names, args.question_name)?;
+
         let target_columns = args
             .columns
             .into_iter()
@@ -388,8 +454,6 @@ impl Survey {
         self.crosstab_internal(
             question_name,
             &target_columns,
-            args.show_row_total,
-            args.show_column_total,
             args.normalise,
             label_options,
         )?
@@ -402,15 +466,12 @@ impl Survey {
     fn crosstab_internal<'a>(
         &self,
         question_name: &'a str,
-        // target_columns: Vec<&'a str>,
         target_columns: &'a [&'a str],
-        show_row_total: bool,
-        show_column_total: bool,
         normalise: bool,
         label_options: LabelOptions<'a>,
     ) -> PolarsResult<LazyFrame> {
         // prep
-        let original = self.data().lazy()?.clone();
+        let original = self.lazy()?;
 
         // Skip the rest if no columns was defined
         if target_columns.is_empty() {
@@ -429,7 +490,7 @@ impl Survey {
                     &original,
                     question_name,
                     first,
-                    show_column_total,
+                    label_options.show_column_total,
                     normalise,
                 )?;
                 self.label_output_column(tab, first)?
@@ -440,7 +501,7 @@ impl Survey {
                 &original,
                 question_name,
                 colname,
-                show_column_total,
+                label_options.show_column_total,
                 normalise,
             )?;
             let right = self.label_output_column(right, colname)?;
@@ -462,12 +523,12 @@ impl Survey {
         })?;
 
         // row total
-        if show_row_total {
+        if label_options.show_row_total {
             output = operation::frequency_counts(
                 original.clone(),
                 question_name,
                 Some(label_options.col_count.unwrap_or(LabelOptions::COUNT)),
-                show_column_total,
+                label_options.show_column_total,
                 normalise,
             )?
             .join(
@@ -625,8 +686,6 @@ impl Survey {
                         self.crosstab_internal(
                             &question_name,
                             &columns,
-                            true, // show_row_total
-                            true, // show_column_total
                             normalise,
                             label_options.clone(),
                         )
@@ -672,16 +731,16 @@ impl Survey {
     /// Args:
     ///     datamap (Datamap): Survey definition used to interpret the respondent data.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     data (SurveyData | None): Respondent data. None creates a survey without loaded data. Defaults to None.
     ///
     /// Returns:
     ///     Survey: The constructed Survey instance.
     #[pyo3(signature=(datamap: "Datamap", data: "SurveyData"=None))]
     #[new]
-    fn py_new(datamap: Datamap, data: Option<SurveyData>) -> Self {
+    fn py_new(datamap: Datamap, data: Option<SurveyData>) -> PyResult<Self> {
         let data = data.unwrap_or_default();
-        Self::new(datamap, data)
+        Self::new(datamap, data).map_err(|err| PyPolarsErr::Polars(err).into())
     }
 
     fn __repr__(&self) -> PyResult<String> {
@@ -774,7 +833,8 @@ impl Survey {
     ///     number of rows locally. New iterators use subsequent changes.
     fn iter_rows(&self, py: Python<'_>) -> PyResult<Py<RowIterator>> {
         let source = self.data().clone();
-        let mut lazy = source.lazy()?.clone();
+        let mut lazy = self.lazy()
+            .map_err(PyPolarsErr::Polars)?;
 
         let label_query = if self.config().show_response_label() {
             let label_lookup = self.datamap().response_label_map();
@@ -916,9 +976,9 @@ impl Survey {
     ///     =================  ======
     ///     column             dtype
     ///     =================  ======
-    ///     ``question_name``  String
-    ///     ``response``       String
-    ///     ``label``          String
+    ///     `question_name`  String
+    ///     `response`       String
+    ///     `label`          String
     ///     =================  ======
     ///
     /// Note:
@@ -948,7 +1008,7 @@ impl Survey {
     /// └───────────────┴──────────┴─────────────────────────────────┘
     /// ```
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     output ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
     ///         'polars' | DataFrameFormat.Polars: polars.DataFrame
     ///         'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
@@ -957,6 +1017,7 @@ impl Survey {
     ///             consistent with the survey.dataframe_format
     /// Returns:
     ///     polars.DataFrame | pandas.DataFrame: Value counts with response labels.
+    /// 
     #[pyo3(name="response_label_map", signature=(
         output: "'polars'|'pandas'|None"=None
     ))]
@@ -991,7 +1052,7 @@ impl Survey {
 
     /// Export survey raw data to polars dataframe
     ///
-    /// Kwargs:
+    /// Keyword Arguments:
     ///     response_label (bool, *optional*):
     ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
     ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
@@ -1007,7 +1068,7 @@ impl Survey {
 
     /// Export survey raw data to pandas dataframe
     ///
-    /// Kwargs:
+    /// Keyword Arguments:
     ///     response_label (bool, *optional*):
     ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
     ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
@@ -1030,66 +1091,67 @@ impl Survey {
     /// You can compare one question's answers by one or more other questions.
     /// Response labels are always shown. For multiple-choice questions, each
     /// selected response is counted separately.
-    /// Set ``normalise=True`` to return proportions instead of counts, keeping
+    /// Set `normalise=True` to return proportions instead of counts, keeping
     /// the first row as total counts.
     ///
     /// Args:
     ///     row (str): Name of the question to show as rows, case insensitive.
     ///
-    /// Keyword Args:
-    ///     column (list[str], *optional*): Names of the questions to show as columns, case insensitive.
+    /// Keyword Arguments:
+    ///     columns (str | list[str], *optional*): 
+    ///         Names of the questions to show as columns, case insensitive.
     ///     
     ///     show_row_total (bool, *optional*):
-    ///         Include the overall count column for the row question. Default ``True``.
+    ///         Include the overall count column for the row question. Default `True`.
     ///     
     ///     show_column_total (bool, *optional*):
     ///         Include the first row of totals. Each column shows its response count,
     ///         and the overall count shows respondents with non-null row answers.
-    ///         Default ``True``.
+    ///         Default `True`.
     ///     
     ///     colname_stats (str, *optional*):
-    ///         Name of the overall count column. Used when ``show_row_total=True``.
-    ///         Default ``'total'``.
+    ///         Name of the overall count column. Used when `show_row_total=True`.
+    ///         Default `'total'`.
     ///     
     ///     colname_label (str, *optional*):
-    ///         Name of the row-response label column. Default ``'label'``.
+    ///         Name of the row-response label column. Default `'label'`.
     ///     
     ///     colname_code (str, *optional*):
     ///         Name of the row-response code column. Used when
-    ///         ``include_response_codes=True``. Default ``'code'``.
+    ///         `include_response_codes=True`. Default `'code'`.
     ///     
     ///     include_response_codes (bool, *optional*):
     ///         Include the original row-response values in a separate column.
-    ///         The total row has a null code value. Default ``False``.
+    ///         The total row has a null code value. Default `False`.
     ///     
     ///     include_question_name (bool, *optional*):
-    ///         Include a ``question`` column with the row question's name in the
-    ///         first displayed row and nulls in the remaining rows. Default ``False``.
+    ///         Include a `question` column with the row question's name in the
+    ///         first displayed row and nulls in the remaining rows. Default `False`.
     ///     
     ///     output ('polars' | 'pandas' | DataFrameFormat, *optional*):
     ///         Choose a Polars or pandas dataframe, using a string or a
-    ///         ``config.DataFrameFormat`` member. Default ``None`` follows
-    ///         ``survey.dataframe_format`` without changing that setting.
+    ///         `config.DataFrameFormat` member. Default `None` follows
+    ///         `survey.dataframe_format` without changing that setting.
     ///     
     ///     normalise (bool, *optional*):
     ///         Return counts as relative frequencies normalised to 1.0, using
     ///         each column's total. The first row keeps the original total counts.
-    ///         For example, ``0.75`` represents 75%. Default ``False``.
+    ///         For example, `0.75` represents 75%. Default `False`.
     ///
     /// Returns:
-    ///     polars.DataFrame | pandas.DataFrame: Row labels, optional question and code
-    ///         columns, and counts grouped by the column questions' response labels.
+    ///     polars.DataFrame | pandas.DataFrame: 
+    ///         Row labels, optional question and code columns, and counts grouped by the column questions' response labels.
     ///
     /// Note:
-    ///     You can pass ``None`` for any keyword option to use its default.
+    ///     You can pass `None` for any keyword option to use its default.
     ///     Missing answers are excluded from response counts. Empty multiple-choice
     ///     lists count towards the overall respondent total but add no selections.
     ///     Normalised results use floating-point columns. Totals are used as
-    ///     denominators even when ``show_column_total=False``. For multiple-choice
+    ///     denominators even when `show_column_total=False`. For multiple-choice
     ///     row questions, proportions can add up to more than 1.0.
     ///
     /// Examples:
-    ///     Suppose ``Q2`` asks "Do you cycle to work?" and ``Q4`` records the region.
+    ///     Suppose `Q2` asks "Do you cycle to work?" and `Q4` records the region.
     ///     You can compare the answers by region and include the response codes:
     ///
     ///     .. code-block:: python
@@ -1100,15 +1162,15 @@ impl Survey {
     ///         )
     ///         print(table)
     ///
-    ///     This gives you ``question``, ``code``, ``label``, and ``answers`` columns,
-    ///     followed by columns such as ``Q4 - North`` and ``Q4 - South``.
-    ///     You can hide the first totals row with ``show_column_total=False``,
-    ///     or request a pandas dataframe with ``output="pandas"``.
+    ///     This gives you `question`, `code`, `label`, and `answers` columns,
+    ///     followed by columns such as `Q4 - North` and `Q4 - South`.
+    ///     You can hide the first totals row with `show_column_total=False`,
+    ///     or request a pandas dataframe with `output="pandas"`.
     #[pyo3(
         name = "crosstab",
         signature=(
             row: "str", 
-            column: "list[str]"=None,
+            columns: "str | list[str]"=None,
             show_row_total: "bool"=None,
             show_column_total: "bool"=None,
             colname_stats: "str" = "total",
@@ -1124,7 +1186,7 @@ impl Survey {
         &self,
         py: Python<'py>,
         row: &str,
-        column: Option<Vec<String>>,
+        columns: Option<&Bound<'py, PyAny>>,
         show_row_total: Option<bool>,
         show_column_total: Option<bool>,
         colname_stats: Option<&str>,
@@ -1135,14 +1197,15 @@ impl Survey {
         output: Option<Bound<'py, PyAny>>,
         normalise: Option<bool>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let columns: Vec<&str> = column
-            .as_deref()
-            .unwrap_or_default()
-            .iter()
-            .map(String::as_str)
-            .collect();
+        let column_names = columns
+            .map(extract_to_vec_str)
+            .transpose()?
+            .unwrap_or_default();
+        let columns = column_names.iter().map(String::as_str).collect::<Vec<_>>();
 
         let label_options = LabelOptions::new()
+            .with_show_row_total(show_row_total.unwrap_or(true))
+            .with_show_column_total(show_column_total.unwrap_or(true))
             .with_include_question_name(include_question_name.unwrap_or(false))
             .with_include_response_codes(include_response_codes.unwrap_or(false))
             // think this would be easier for the user and makes documentation less confusing
@@ -1156,8 +1219,6 @@ impl Survey {
         let arguments = AnalysisOptions {
             question_name: row,
             columns: &columns,
-            show_row_total: show_row_total.unwrap_or(true),
-            show_column_total: show_column_total.unwrap_or(true),
             normalise: normalise.unwrap_or(false),
         };
 
@@ -1179,15 +1240,15 @@ impl Survey {
     /// Creates a crosstab table for every selected question in the current instance,
     /// skipping questions listed in `ignore` and question type defined in `skip_type`.
     ///
-    /// Keyword Args:
-    ///     column (list[str], *optional*): Names of the questions to show as columns, case insensitive.
+    /// Keyword Arguments:
+    ///     column (str | list[str], *optional*): Names of the questions to show as columns, case insensitive.
     ///     
-    ///     ignore (list[str], *optional*): Names of the questions ignore, case insensitive.    
+    ///     ignore (str | list[str], *optional*): Names of the questions ignore, case insensitive.    
     ///
     ///     normalise (bool, *optional*):
     ///         Return counts as relative frequencies normalised to 1.0, using
     ///         each column's total. The first row keeps the original total counts.
-    ///         For example, ``0.75`` represents 75%. Default ``False``.
+    ///         Default `False`.
     ///     
     ///     skip_text (bool, *optional*):
     ///         Toggle on to skip `character` questions. Default `True`.
@@ -1205,41 +1266,41 @@ impl Survey {
     ///         Toggle on to skip `multi`-choice questions. Default `False`.
     ///
     ///     colname_stats (str, *optional*):
-    ///         Name of the overall count column. Used when ``show_row_total=True``.
-    ///         Default ``'total'``.
+    ///         Name of the overall count column. Used when `show_row_total=True`.
+    ///         Default `'total'`.
     ///     
     ///     colname_label (str, *optional*):
-    ///         Name of the row-response label column. Default ``'label'``.
+    ///         Name of the row-response label column. Default `'label'`.
     ///     
     ///     colname_code (str, *optional*):
     ///         Name of the row-response code column. Used when
-    ///         ``include_response_codes=True``. Default ``'code'``.
+    ///         `include_response_codes=True`. Default `'code'`.
     ///     
     ///     include_response_codes (bool, *optional*):
     ///         Include the original row-response values in a separate column.
-    ///         The total row has a null code value. Default ``False``.
+    ///         The total row has a null code value. Default `False`.
     ///     
     ///     include_question_name (bool, *optional*):
-    ///         Include a ``question`` column with the row question's name in the
-    ///         first displayed row and nulls in the remaining rows. Default ``False``.
+    ///         Include a `question` column with the row question's name in the
+    ///         first displayed row and nulls in the remaining rows. 
+    ///         Default `False`.
     ///     
-    ///     output ('polars' | 'pandas' | DataFrameFormat, *optional*):
-    ///         Choose a Polars or pandas dataframe, using a string or a
-    ///         ``config.DataFrameFormat`` member. Default ``None`` follows
-    ///         ``survey.dataframe_format`` without changing that setting.
+    ///     output ("polars" | "pandas" | DataFrameFormat, *optional*):
+    ///         Choose a Polars or pandas dataframe.
+    ///         Default `None`
     ///     
     ///     normalise (bool, *optional*):
     ///         Return counts as relative frequencies normalised to 1.0, using
     ///         each column's total. The first row keeps the original total counts.
-    ///         For example, ``0.75`` represents 75%. Default ``False``.
     ///
     /// Returns:
     ///     [(String, polars.DataFrame | pandas.DataFrame)]:
     ///     List of (question_name, crosstab_data)
+    /// 
     #[pyo3(
         name = "quick_summary",
         signature = (
-            columns: "list[str]" = None,
+            columns: "str|list[str]" = None,
             ignore: "list[str]" = None,
             normalise: "bool" = false,
             skip_text: "bool" = true,
@@ -1258,8 +1319,8 @@ impl Survey {
     fn py_quick_summary<'py>(
         &self,
         py: Python<'py>,
-        columns: Option<Vec<String>>,
-        ignore: Option<Vec<String>>,
+        columns: Option<&Bound<'py, PyAny>>,
+        ignore: Option<&Bound<'py, PyAny>>,
         normalise: Option<bool>,
         skip_text: Option<bool>,
         skip_numeric: Option<bool>,
@@ -1276,10 +1337,16 @@ impl Survey {
         // Default arguments
         let normalise = normalise.unwrap_or(false);
 
-        let column_names = columns.unwrap_or_default();
+        let column_names = columns
+            .map(extract_to_vec_str)
+            .transpose()?
+            .unwrap_or_default();
         let columns = column_names.iter().map(String::as_str).collect::<Vec<_>>();
 
-        let ignored_names = ignore.unwrap_or_default();
+        let ignored_names = ignore
+            .map(extract_to_vec_str)
+            .transpose()?
+            .unwrap_or_default();
         let ignore = ignored_names.iter().map(String::as_str).collect::<Vec<_>>();
 
         let skip_types = SkipQType {
@@ -1303,13 +1370,15 @@ impl Survey {
             .transpose()?
             .unwrap_or(self.config().py_dataframe_format.clone());
 
-        py.detach(|| self.quick_summary(
-            Some(&columns),
-            Some(&ignore),
-            skip_types,
-            normalise,
-            label_options,
-        ))
+        py.detach(|| {
+            self.quick_summary(
+                Some(&columns),
+                Some(&ignore),
+                skip_types,
+                normalise,
+                label_options,
+            )
+        })
         .map_err(PyPolarsErr::Polars)?
         .into_iter()
         .map(|(qname, qdata)| {
@@ -1324,7 +1393,7 @@ impl Survey {
 }
 
 // ---------- Helpers -----------
-/// Iterates each ``QuestionData``` in a survey
+/// Iterates each `QuestionData` in a survey
 #[cfg(feature = "pyo3")]
 #[pyclass]
 pub(crate) struct QuestionDataIterator {
@@ -1347,6 +1416,7 @@ impl QuestionDataIterator {
             };
             question.read().clone()
         };
+
         let instance = QuestionData::new(
             Arc::clone(&self.survey.data),
             question,

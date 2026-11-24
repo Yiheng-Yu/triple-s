@@ -6,16 +6,16 @@ use std::{
 use anyhow::Result;
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
-use pyo3::prelude::*;
+use pyo3::{IntoPyObjectExt, exceptions, prelude::*, types::PyDict};
 #[cfg(feature = "pyo3")]
-use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
+use pyo3_polars::{PyDataFrame, PySeries, error::PyPolarsErr};
 use tempfile::TempPath;
 
 #[cfg(feature = "pyo3")]
 use super::row_iterator::RowIterator;
 use crate::error::{InvalidArg, NoDataError};
 #[cfg(feature = "pyo3")]
-use crate::utils::polars_to_pandas;
+use crate::utils::{get_type_name, normalize_py_index, polars_to_pandas};
 
 /// The backing file and its cleanup policy.
 #[derive(Debug)]
@@ -367,6 +367,49 @@ impl SurveyData {
         Py::new(py, iterator)
     }
 
+    pub(crate) fn __getitem__<'py>(
+        &self,
+        py: Python<'py>,
+        index: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        if let Ok(query) = index.extract::<String>() {
+            let mut lazy = self.lazy()?.clone();
+            let schema = lazy.collect_schema().map_err(PyPolarsErr::Polars)?;
+            let column_name = schema
+                .iter_names()
+                .find(|colname| colname.as_str().eq_ignore_ascii_case(&query))
+                .ok_or(exceptions::PyIndexError::new_err(query))?
+                .as_str();
+
+            let series = lazy
+                .select([col(column_name)])
+                .collect()
+                .and_then(|df| df.column(column_name).cloned())
+                .map_err(PyPolarsErr::Polars)?
+                .as_materialized_series_maintain_scalar();
+            let series = PySeries(series);
+            series.into_pyobject(py)
+        } else if let Ok(index) = index.extract::<isize>() {
+            let n_response = self.num_response().map_err(PyPolarsErr::Polars)?;
+            let row_index = normalize_py_index(index, n_response)
+                .ok_or(exceptions::PyIndexError::new_err(index.to_string()))?;
+            let row = self
+                .lazy()?
+                .clone()
+                .slice(row_index as i64, 1)
+                .collect()
+                .map_err(PyPolarsErr::Polars)?;
+            let row = PyDataFrame(row).into_bound_py_any(py)?;
+
+            // calling polars dataframe's to_dict() method to convert specific row data to dictionary
+            row.call_method0("to_dicts")?
+                .call_method1("__getitem__", (0,))
+        } else {
+            let type_name = get_type_name(&index)?;
+            Err(exceptions::PyTypeError::new_err(type_name))
+        }
+    }
+
     /// Create new empty [`SurveyData`] instance
     ///
     /// Returns:
@@ -391,6 +434,50 @@ impl SurveyData {
             frame: Some(frame.0.lazy()),
             cache: None,
         }
+    }
+
+    /// Create new [`SurveyData`] instance from `pandas.DataFrame`
+    ///
+    /// Args:
+    ///     pandas_frame (pd.DataFrame): survey data
+    ///
+    /// Keyword Arguments:
+    ///     include_index (bool, *optional*):
+    ///         toggle on/ off to include dataframe index.
+    ///         default False.
+    ///
+    ///     Note:
+    ///
+    ///         Similar to polars.DataFrame.from_pandas:
+    ///         If the input is a pandas DataFrame and has a nameless index which just enumerates the rows,
+    ///         then it will not be included in the result, regardless of this parameter.
+    ///         
+    ///         If you want to be sure to include it, please call .reset_index() prior to calling this function.
+    #[pyo3(
+        name = "from_pandas",
+        signature=(
+            pandas_frame: "pandas.DataFrame",
+            include_index: "bool"=false
+        )
+    )]
+    #[staticmethod]
+    fn py_from_pandas<'py>(
+        py: Python<'py>,
+        pandas_frame: &Bound<'py, PyAny>,
+        include_index: Option<bool>,
+    ) -> PyResult<Self> {
+        let polars_frame: DataFrame = {
+            let polars = py.import("polars")?;
+            let include_index = include_index.unwrap_or(false);
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("include_index", include_index)?;
+            polars
+                .call_method("from_pandas", (pandas_frame,), Some(&kwargs))?
+                .extract::<PyDataFrame>()?
+                .into()
+        };
+
+        Ok(Self::from_polars(polars_frame).map_err(PyPolarsErr::Polars)?)
     }
 
     /// Export data as polars DataFrame

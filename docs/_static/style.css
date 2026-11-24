@@ -26,6 +26,31 @@
   line-height: 1.35;
 }
 
+/* Keep API argument sections easy to scan without drawing separators. */
+dl.py > dd > dl.field-list > dt {
+  margin-top: 1.25rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+dl.py > dd > dl.field-list > dd {
+  margin-inline-start: 0.25rem;
+}
+
+dl.field-list > dd > ul.simple > li {
+  margin-block: 0.75rem;
+  line-height: 1.6;
+}
+
+dl.field-list > dd > ul.simple > li > p > strong {
+  border-radius: 0.25rem;
+  background: var(--color-background-secondary);
+  padding: 0.08rem 0.3rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92em;
+  font-weight: 600;
+}
+
 /* Typography and syntax colors from https://huggingface.co/docs/datasets/load_hub.
    Panel backgrounds use neutral grays.
    IBM Plex Mono is bundled under the adjacent SIL Open Font License. */
@@ -54,6 +79,26 @@ body {
   --code-keyword-style: normal;
   --code-builtin-style: normal;
   --code-function-style: normal;
+}
+
+body article .admonition {
+  border-radius: 8px;
+}
+
+body article .admonition-title {
+  font-weight: 700;
+}
+
+body article table.docutils {
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+body article table.docutils th,
+body article table.docutils td {
+  padding: 0.55rem 0.75rem;
 }
 
 body[data-theme="dark"] {
@@ -218,4 +263,32 @@ body article .highlight.highlight .gp { color: var(--code-meta); }
 .toc-tree li.scroll-current > .reference {
   color: var(--color-foreground-primary);
   font-weight: 700;
+}
+
+
+/*
+Source - https://stackoverflow.com/a/26634224
+Posted by MatTheCat, modified by community. See post 'Timeline' for change history
+Retrieved 2026-11-23, License - CC BY-SA 4.0
+*/
+.separator {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    width: 100%;
+}
+
+.separator::before,
+.separator::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid currentColor;
+}
+
+.separator:not(:empty)::before {
+    margin-right: .5em;
+}
+
+.separator:not(:empty)::after {
+    margin-left: .5em;
 }

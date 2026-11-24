@@ -62,12 +62,78 @@ impl Flag for Version {
     }
 }
 
+impl Version {
+    #[cfg(feature = "pyo3")]
+    pub(crate) fn from_pyo3_bound<'py>(bound: &Bound<'py, PyAny>) -> PyResult<Self> {
+        if let Ok(version) = bound.extract::<Self>() {
+            Ok(version)
+        } else if let Ok(version_str) = bound.extract::<&str>() {
+            Version::from_str(version_str).map_err(|_| {
+                exceptions::PyValueError::new_err(format!(
+                    "Unknown version: '{}', expect to be one of: [{}]",
+                    version_str,
+                    Self::available_options().join(", ")
+                ))
+            })
+        } else if let Ok(version) = bound.extract::<f64>() {
+            let version_str = format!("{:.1}", version);
+
+            Version::from_str(&version_str).map_err(|_| {
+                exceptions::PyValueError::new_err(format!(
+                    "Unknown version number: '{}', expect to be one of: {}",
+                    version,
+                    Self::available_options().join(", ")
+                ))
+            })
+        } else {
+            let type_name = get_type_name(bound)?;
+            Err(exceptions::PyTypeError::new_err(format!(
+                "Expect `version` to be one of: {}, got: '{}'",
+                Self::available_options().join(", "),
+                type_name
+            )))
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+impl<'py> TryFrom<Bound<'py, PyAny>> for Version {
+    type Error = pyo3::PyErr;
+
+    fn try_from(value: Bound<'py, PyAny>) -> Result<Self, Self::Error> {
+        Self::from_pyo3_bound(&value)
+    }
+}
+
+#[cfg(feature = "pyo3")]
+impl<'py> TryFrom<&Bound<'py, PyAny>> for Version {
+    type Error = pyo3::PyErr;
+
+    fn try_from(value: &Bound<'py, PyAny>) -> Result<Self, Self::Error> {
+        Self::from_pyo3_bound(value)
+    }
+}
+
 #[cfg(feature = "pyo3")]
 impl PyEnum for Version {}
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Version {
+    #[new]
+    fn py_new(value: &Bound<'_, PyAny>) -> PyResult<Self> {
+        Self::from_pyo3_bound(value)
+    }
+
+    #[pyo3(
+        name = "new",
+        signature=(value:"str|int|float")
+    )]
+    #[staticmethod]
+    fn py_create_new<'py>(value: &Bound<'py, PyAny>) -> PyResult<Self> {
+        Self::from_pyo3_bound(value)
+    }
+
     /// List the available Version values.
     ///
     /// Returns:
@@ -86,7 +152,7 @@ impl Version {
 Args:
     version (str | float): Triple-S version, such as "2.0" or 2.0.
 
-Keyword Args:
+Keyword Arguments:
     name (str | None): Survey name. None leaves this field unset. Defaults to None.
     title (str | None): Survey title. None leaves this field unset. Defaults to None.
     date (str | None): Survey date. None leaves this field unset. Defaults to None.
@@ -558,7 +624,7 @@ impl SurveyInfo {
     /// Args:
     ///     version (str | float): Triple-S version, such as "2.0" or 2.0.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     name (str | None): Survey name. None leaves this field unset. Defaults to None.
     ///     title (str | None): Survey title. None leaves this field unset. Defaults to None.
     ///     date (str | None): Survey date. None leaves this field unset. Defaults to None.

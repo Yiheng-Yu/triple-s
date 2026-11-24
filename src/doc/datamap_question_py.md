@@ -11,7 +11,7 @@ Args:
     question_type (triple_s.QuestionType | str | None): The XML `type` attribute: "single", "multiple", "logical", "quantity",
         "character", "date", or "time". Use `None` for a question with no response values.
 
-Keyword Args:
+Keyword Arguments:
     label (str, *Optional*): Question text (`<label>`); defaults to an empty `Text`.
 
     filter (str|None, *Optional*): Question filter (`<filter>`); defaults to `None`.

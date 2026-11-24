@@ -75,11 +75,6 @@ pub struct AnalysisOptions<'a> {
     /// List of question names to be used as the corsstab columns.
     pub columns: &'a [&'a str],
 
-    /// show row total
-    pub show_row_total: bool,
-
-    /// show column total
-    pub show_column_total: bool,
     /// Return counts as relative frequencies normalised to 1.0.
     ///
     /// Each response count is divided by its column total. The first row,
@@ -90,6 +85,12 @@ pub struct AnalysisOptions<'a> {
 /// Options for the labelling summary table outputs (e.g., [`QuestionData::value_counts`](crate::data::QuestionData), [`Survey::corsstab`](crate::survey::Survey))
 #[derive(Debug, Clone)]
 pub struct LabelOptions<'a> {
+    /// Include the overall count column in crosstabs. Default `true`.
+    pub show_row_total: bool,
+
+    /// Include the first row of totals in crosstabs. Default `true`.
+    pub show_column_total: bool,
+
     /// Toggle on to include a column of code values for each response item
     /// Used only for single/ multi-choice questions
     pub include_response_codes: bool,
@@ -116,6 +117,8 @@ pub struct LabelOptions<'a> {
 impl<'a> Default for LabelOptions<'a> {
     fn default() -> Self {
         Self {
+            show_row_total: true,
+            show_column_total: true,
             include_response_codes: false,
             include_question_name: false,
             fill_question_name_column: false,
@@ -128,6 +131,18 @@ impl<'a> Default for LabelOptions<'a> {
 }
 
 impl<'a> LabelOptions<'a> {
+    /// Toggle whether to include the overall count column.
+    pub fn with_show_row_total(mut self, value: bool) -> Self {
+        self.show_row_total = value;
+        self
+    }
+
+    /// Toggle whether to include the first row of totals.
+    pub fn with_show_column_total(mut self, value: bool) -> Self {
+        self.show_column_total = value;
+        self
+    }
+
     /// default value for field `col_code_value`
     pub const CODE: &'static str = "code";
     /// default value for field `col_count`

@@ -30,7 +30,7 @@ use crate::{
 #[cfg_attr(
     all(feature = "pyo3", not(doc)),
     doc = r###"
-Keyword Args:
+Keyword Arguments:
     range (DataRange | None): Allowed response range, or None for no range. Defaults to None.
     values (list[Code] | None): Response codes. None creates an empty list. Defaults to None.
 
@@ -45,7 +45,6 @@ Returns:
 #[derive(Debug, Default)]
 pub struct Response {
     range: ArcLock<Option<DataRange>>,
-
     values: ArcLock<Vec<ArcLock<Code>>>,
 }
 
@@ -503,7 +502,7 @@ impl Response {
 
     /// Write to xml event
     ///
-    /// Mostly used internally `to_xml`` method calls, exposed as part of public
+    /// Mostly used internally `to_xml` method calls, exposed as part of public
     /// just in case.
     pub fn write_xml<W: std::io::Write>(
         &self,
@@ -570,7 +569,7 @@ impl Response {
 impl Response {
     /// Create response codes with an optional range.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     range (DataRange | None): Allowed response range, or None for no range. Defaults to None.
     ///     values (list[Code] | None): Response codes. None creates an empty list. Defaults to None.
     ///
@@ -1199,14 +1198,24 @@ impl Code {
     /// Create a Code instance.
     ///
     /// Args:
-    ///     value (str | int | float): Response code value.
-    ///     label (str | None): Text label. None uses an empty label.
-    ///     filter (str | None): Response filter expression, or None for no filter.
-    ///     score (float | None): Score for statistical calculations, or None for no score.
+    ///     value (str | int | float):
+    ///         Response code value.
+    ///     label (str | None):
+    ///         Text label. None uses an empty label.
+    ///     filter (str | None):
+    ///         Response filter expression, or None for no filter.
+    ///     score (float | None):
+    ///         Score for statistical calculations, or None for no score.
     ///
     /// Raises:
     ///     NotImplementedError: Direct construction is not supported. Use Code.unsigned, Code.signed, Code.float, or Code.string.
     #[new]
+    #[pyo3(signature=(
+        value: "str|int|float",
+        label: "str" = None,
+        filter: "str" = None,
+        score: "str" = None
+    ))]
     #[allow(unused_variables)]
     fn py_new<'py>(
         value: &Bound<'py, PyAny>,
@@ -1233,7 +1242,7 @@ impl Code {
     /// Args:
     ///     value (int): Unsigned 32-bit code value.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     label (str | None): Text label. None uses an empty label. Defaults to None.
     ///     filter (str | None): Response filter expression, or None for no filter. Defaults to None.
     ///     score (float | None): Score for statistical calculations, or None for no score. Defaults to None.
@@ -1266,7 +1275,7 @@ impl Code {
     /// Args:
     ///     value (str): Literal code value.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     label (str | None): Text label. None uses an empty label. Defaults to None.
     ///     filter (str | None): Response filter expression, or None for no filter. Defaults to None.
     ///     score (float | None): Score for statistical calculations, or None for no score. Defaults to None.
@@ -1299,7 +1308,7 @@ impl Code {
     /// Args:
     ///     value (float): Floating-point code value.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     label (str | None): Text label. None uses an empty label. Defaults to None.
     ///     filter (str | None): Response filter expression, or None for no filter. Defaults to None.
     ///     score (float | None): Score for statistical calculations, or None for no score. Defaults to None.
@@ -1332,7 +1341,7 @@ impl Code {
     /// Args:
     ///     value (int): Signed 32-bit code value.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     label (str | None): Text label. None uses an empty label. Defaults to None.
     ///     filter (str | None): Response filter expression, or None for no filter. Defaults to None.
     ///     score (float | None): Score for statistical calculations, or None for no score. Defaults to None.

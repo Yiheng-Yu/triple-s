@@ -184,6 +184,7 @@ pub use options::{AnalysisOptions, LabelOptions};
 pub use prelude::DeepCopy;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+
 pub use survey::Survey;
 
 // TODO: SET UP DOCUMENTATION ON CREATING A NEW DATAMAP FROM PYTHON/ RUST SIDE!
@@ -215,13 +216,16 @@ pub fn read_triple_s(
             log::info!("Loading data..");
             let path_data = path_data.as_ref();
             let data = read_data(&datamap, path_data)?;
-            *datamap.record_mut().href_mut() = Some(path_data.to_string_lossy().into_owned());
+            datamap
+                .record_mut()
+                ._set_href(Some(path_data.to_string_lossy().into_owned()));
             *datamap.record_mut().data_format_mut() = Some(DataFormat::from_path(path_data)?);
             data
         }
     };
-    let survey = Survey::new(datamap, data);
-    Ok(survey)
+
+    Survey::new(datamap, data)
+        .map_err(|err| err.context_trace().into())
 }
 
 #[cfg(feature = "pyo3")]
@@ -281,7 +285,7 @@ mod triple_s {
     /// Args:
     ///     path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     path_data (str, *optional*): path to the `.asc` or `.csv` data file.
     ///
     /// Returns:
@@ -299,7 +303,9 @@ mod triple_s {
         path_datamap: &str,
         path_data: Option<&str>,
     ) -> PyResult<Survey> {
-        py.detach(|| read_triple_s(path_datamap, path_data).map_err(|err| err.into()))
+        py.detach(|| 
+            read_triple_s(path_datamap, path_data).map_err(|err| err.into())
+        )
     }
 
     /// Reads .asc or .csv datafile with datamap provided.

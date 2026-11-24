@@ -1,8 +1,8 @@
-import polars
-import pandas
 
+import pandas
+import polars as pl
 import pytest
-from triple_s import read_data, NoDataError, read_triple_s
+from triple_s import Code, Datamap, NoDataError, Question, Survey, SurveyData, read_data, read_triple_s
 
 PATH_SSS_EXAMPLE_1 = "tests/sss-examples/sss-2.0/example1.sss"
 PATH_DATA = "tests/sss-examples/sss-2.0/example1.asc"
@@ -102,7 +102,7 @@ def test_set_dataframe_format_config_success(survey):
     
     for question in survey.iter_questions():
         assert question.dataframe_format == 'polars'
-        assert type(question.value_counts()) == polars.DataFrame
+        assert type(question.value_counts()) == pl.DataFrame
     
     survey.dataframe_format = 'pandas'
     assert survey.dataframe_format == 'pandas'
@@ -121,3 +121,86 @@ def test_set_flag_toggle_response_display_success(survey):
     assert survey.response_display == "label"
     for question in survey.iter_questions():
         assert question.response_display == 'label'
+
+def test_survey_crosstab_input_types(survey):
+    name = "Q2"
+    column = "Q3"
+    _ = survey.crosstab(name, column)
+    _ = survey.crosstab(name, [column])
+
+
+@pytest.mark.parametrize(
+    "column, ignore",
+    [
+        pytest.param(None, ["Q3"], id="(col: None | ignore: list)"),
+        pytest.param("Q2", ["Q3"], id="(col: str | ignore: list)"),
+        pytest.param(["Q2"], ["Q3"], id="(col: list | ignore: list)"),
+        pytest.param(["Q2"], None, id="(col: list | ignore: None)"),
+        pytest.param(["Q2"], "Q3", id="(col: list | ignore: str)"),
+        
+        pytest.param("Q2", "Q3", id="(col: str | ignore: str)"),
+        pytest.param(["Q2", "Q3"], "Q3", id="(col: list[2] | ignore: str)"),
+        pytest.param(["Q2", "Q3"], ["Q2", "Q3"], id="(col: list[2] | ignore: list[2])"),
+        
+    ]
+)
+def test_survey_quick_summary_input_types(survey, column, ignore):
+    _ = survey.quick_summary(columns=column, ignore=ignore)
+
+
+@pytest.mark.parametrize(
+    "col1, col2",
+    [
+        pytest.param("Q1.a", "Q1.b", id="(original, original)"),
+        pytest.param("Q1.a".lower(), "Q1.b".lower(), id="(lower, lower)"),
+        pytest.param("Q1.a".upper(), "Q1.b".upper(), id="(upper, upper)"),
+    ]
+)
+def test_survey_quick_summary_case_insensitive(survey, col1, col2):
+    _ = survey.quick_summary(col1, col2)
+    
+    
+def test_survey_crosstab_case_insensitive(survey):
+    for name in survey.question_names:
+        _ = survey.crosstab(name.lower(), name.lower())
+        _ = survey.crosstab(name.upper(), name.upper())
+        
+
+# ============================================================================= 
+# For testing crosstab-related calculations
+# ============================================================================= 
+@pytest.fixture
+def survey_dummy():
+    df = pl.DataFrame(
+        {
+            "QA": ["a", "b", "a", "b", "c"],
+            "QB": [1, 2, 1, 3, 3],
+            "QC": [[5, 4], [4], [1,2], None, [1,2,3]],
+        }
+    )
+    
+    survey_data = SurveyData.from_polars(df)
+    
+    dummy_codes = [
+        Code.unsigned(1, "Code 1"),
+        Code.unsigned(2, "Code 2"),
+        Code.unsigned(3, "Code 3"),
+        Code.unsigned(4, "Code 4"),
+        Code.unsigned(5, "Code 5"),
+    ]
+    datamap = Datamap(
+        name=None,
+        title=None,
+        version=None,
+        questions=[
+            Question(name="QA", question_type="character"),
+            Question(name="QB", question_type="single", values=dummy_codes),
+            Question(name="QC", question_type="multiple", values=dummy_codes)
+        ]
+    )
+    
+    survey = Survey(datamap, survey_data)
+    return survey
+
+def test_create_survey_from_python(survey_dummy):
+    assert survey_dummy.num_response == 5
