@@ -503,7 +503,7 @@ fn test_read_stack_overflow_survey() {
     let base = survey
         .get_question_data(topbreak)
         .unwrap()
-        .value_counts(options)
+        .value_counts(true, options)
         .unwrap();
     println!("{:?}", base);
 }
@@ -519,6 +519,6 @@ fn test_value_counts() {
         .with_include_response_codes(true)
         .with_include_question_name(true)
         .with_fill_question_name_column(true);
-    let stats = question.value_counts(options).unwrap();
+    let stats = question.value_counts(false, options).unwrap();
     println!("{:?}", stats)
 }
