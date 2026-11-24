@@ -27,12 +27,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     button.addEventListener("click", async () => {
       if (text === undefined) {
-        if (pre.querySelector(".linenos")) {
-          const code = pre.cloneNode(true);
-          code.querySelectorAll(".linenos").forEach((line) => line.remove());
-          text = code.textContent;
+        const code = pre.cloneNode(true);
+        code.querySelectorAll(".linenos").forEach((line) => line.remove());
+        const source = code.textContent;
+        if (code.querySelector(".gp")) {
+          text = source
+            .split("\n")
+            .filter((line) => /^\s*(?:>>>|\.\.\.)\s?/.test(line))
+            .map((line) => line.replace(/^\s*(?:>>>|\.\.\.)\s?/, ""))
+            .join("\n");
         } else {
-          text = pre.textContent;
+          text = source;
         }
       }
       let copied = false;

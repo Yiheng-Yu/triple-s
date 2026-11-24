@@ -6,8 +6,8 @@ questions and a matching data file (``.asc`` or ``.csv``) containing responses.
 Import the installed package as ``triple_s``.
 
 
-Read triple-s files
-----------------------
+Create new `Survey` instance
+-------------------------------
 
 Load a survey with :func:`read_triple_s`:
 

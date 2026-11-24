@@ -478,7 +478,7 @@ impl Survey {
             return self
                 .get_question_data(question_name)
                 .ok_or::<PolarsError>(QuestionNotFound::new(question_name).into())?
-                .value_counts_internal(label_options);
+                .value_counts_internal(normalise, label_options);
         }
 
         let mut headers = target_columns.into_iter();
