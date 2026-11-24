@@ -94,6 +94,7 @@ For Rust usage, see the `Rust API documentation
    :maxdepth: 2
    :caption: Contents
 
+   guides/quickstart
    guides/survey
    guides/survey_data
    guides/datamap
