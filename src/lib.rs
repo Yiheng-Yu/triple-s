@@ -285,7 +285,7 @@ mod triple_s {
     /// Args:
     ///     path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     path_data (str, *optional*): path to the `.asc` or `.csv` data file.
     ///
     /// Returns:

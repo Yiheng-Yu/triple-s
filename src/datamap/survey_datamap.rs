@@ -253,7 +253,7 @@ impl Datamap {
 impl Datamap {
     /// Create new Datamap instance
     ///
-    /// Kwargs:
+    /// Keyword Arguments:
     ///     name (str, *optional*):
     ///         Survey id
     ///     

@@ -1197,7 +1197,7 @@ impl Question {
     ///     name (str): Question name.
     ///     question_type (QuestionType | str, *optional*): Question type flag or name, or None for no response values.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     label (str, *optional*):
     ///         Text label. None uses an empty label.
     ///         Defaults to None.
@@ -1509,7 +1509,7 @@ impl Question {
 
     /// Updates data location of the current question.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     start (int, *optional*): Starting position. None leaves this bound unchanged. Defaults to None.
     ///     finish (int, *optional*): Finishing position. None leaves this bound unchanged. Defaults to None.
     ///
@@ -1967,7 +1967,7 @@ impl Question {
 Args:
     start (int): Starting position, using Triple-S 1-based indexing.
 
-Keyword Args:
+Keyword Arguments:
     finish (int, *optional*): Inclusive finishing position. None uses start. Defaults to None.
 
 Returns:
@@ -2152,7 +2152,7 @@ impl Location {
     /// Args:
     ///     start (int): Starting position, using Triple-S 1-based indexing.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     finish (int, *optional*): Inclusive finishing position. None uses start. Defaults to None.
     ///
     /// Returns:
@@ -2362,7 +2362,7 @@ Examples:
 Args:
     num_subfields (int): Number of response subfields.
 
-Keyword Args:
+Keyword Arguments:
     subfield_width (int, *optional*): Width of each subfield, or None to leave it unspecified. Defaults to None.
 
 Returns:
@@ -2481,7 +2481,7 @@ impl Spread {
     /// Args:
     ///     num_subfields (int): Number of response subfields.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     subfield_width (int, *optional*): Width of each subfield, or None to leave it unspecified. Defaults to None.
     ///
     /// Returns:

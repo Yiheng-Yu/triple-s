@@ -288,10 +288,10 @@ def test_crosstab_response_codes_with_missing_answers(survey, row, values, label
     "include_response_codes", "include_question_name", "colname_stats", "colname_label", "colname_code", "output",
 ])
 def test_crosstab_none_options_use_defaults(survey, option):
-    kwargs = {"include_response_codes": True, "include_question_name": True} if option.startswith("colname_") else {}
+    Keyword Arguments = {"include_response_codes": True, "include_question_name": True} if option.startswith("colname_") else {}
     assert_frame_equal(
-        survey.crosstab("choice", ["group"], **{**kwargs, option: None}),
-        survey.crosstab("choice", ["group"], **kwargs),
+        survey.crosstab("choice", ["group"], **{**Keyword Arguments, option: None}),
+        survey.crosstab("choice", ["group"], **Keyword Arguments),
     )
 
 
@@ -545,10 +545,10 @@ def test_value_counts_uses_survey_default_output(survey, output, expected_type):
 @pytest.mark.parametrize("option", ["include_question_name", "include_response_codes", "colname_stats", "colname_label", "colname_code"])
 def test_value_counts_none_options_use_defaults(survey, option):
     question = survey["choice"]
-    kwargs = {"include_question_name": True, "include_response_codes": True} if option.startswith("colname_") else {}
+    Keyword Arguments = {"include_question_name": True, "include_response_codes": True} if option.startswith("colname_") else {}
     assert_frame_equal(
-        question.value_counts(**{**kwargs, option: None}),
-        question.value_counts(**kwargs),
+        question.value_counts(**{**Keyword Arguments, option: None}),
+        question.value_counts(**Keyword Arguments),
     )
 
 

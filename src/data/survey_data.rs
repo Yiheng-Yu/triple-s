@@ -441,7 +441,7 @@ impl SurveyData {
     /// Args:
     ///     pandas_frame (pd.DataFrame): survey data
     ///
-    /// Kwargs:
+    /// Keyword Arguments:
     ///     include_index (bool, *optional*):
     ///         toggle on/ off to include dataframe index.
     ///         default False.

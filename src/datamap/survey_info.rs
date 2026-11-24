@@ -152,7 +152,7 @@ impl Version {
 Args:
     version (str | float): Triple-S version, such as "2.0" or 2.0.
 
-Keyword Args:
+Keyword Arguments:
     name (str | None): Survey name. None leaves this field unset. Defaults to None.
     title (str | None): Survey title. None leaves this field unset. Defaults to None.
     date (str | None): Survey date. None leaves this field unset. Defaults to None.
@@ -624,7 +624,7 @@ impl SurveyInfo {
     /// Args:
     ///     version (str | float): Triple-S version, such as "2.0" or 2.0.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     name (str | None): Survey name. None leaves this field unset. Defaults to None.
     ///     title (str | None): Survey title. None leaves this field unset. Defaults to None.
     ///     date (str | None): Survey date. None leaves this field unset. Defaults to None.

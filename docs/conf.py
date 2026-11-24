@@ -19,6 +19,8 @@ extensions = [
 ]
 
 napoleon_use_ivar = False
+napoleon_use_param = True
+napoleon_use_keyword = True
 
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
@@ -119,8 +121,8 @@ def rebuild_navigation(app, env):
 
 def prepare_sidebar(app, pagename, templatename, context, doctree):
     """Keep API navigation at class/function level without changing the page TOC."""
-    def sidebar_toctree(**kwargs):
-        tree = TocTree(app.env).get_toctree_for(pagename, app.builder, **kwargs)
+    def sidebar_toctree(**kargs):
+        tree = TocTree(app.env).get_toctree_for(pagename, app.builder, **kargs)
         if tree is None:
             return ""
         page_uri = app.builder.get_target_uri(pagename)

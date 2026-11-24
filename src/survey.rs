@@ -45,7 +45,7 @@ use crate::{
 Args:
     datamap (Datamap): Survey definition used to interpret the respondent data.
 
-Keyword Args:
+Keyword Arguments:
     data (SurveyData | None): Respondent data. None creates a survey without loaded data. Defaults to None.
 
 Returns:
@@ -162,6 +162,7 @@ impl Survey {
     /// │ Q8            ┆ "C"      ┆ More than 1 years time          │
     /// └───────────────┴──────────┴─────────────────────────────────┘
     /// ```
+    /// 
     pub fn response_label_map(&self) -> PolarsResult<DataFrame> {
         let maps = self.datamap.response_label_map();
 
@@ -730,7 +731,7 @@ impl Survey {
     /// Args:
     ///     datamap (Datamap): Survey definition used to interpret the respondent data.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     data (SurveyData | None): Respondent data. None creates a survey without loaded data. Defaults to None.
     ///
     /// Returns:
@@ -1007,7 +1008,7 @@ impl Survey {
     /// └───────────────┴──────────┴─────────────────────────────────┘
     /// ```
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     output ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
     ///         'polars' | DataFrameFormat.Polars: polars.DataFrame
     ///         'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
@@ -1016,6 +1017,7 @@ impl Survey {
     ///             consistent with the survey.dataframe_format
     /// Returns:
     ///     polars.DataFrame | pandas.DataFrame: Value counts with response labels.
+    /// 
     #[pyo3(name="response_label_map", signature=(
         output: "'polars'|'pandas'|None"=None
     ))]
@@ -1050,7 +1052,7 @@ impl Survey {
 
     /// Export survey raw data to polars dataframe
     ///
-    /// Kwargs:
+    /// Keyword Arguments:
     ///     response_label (bool, *optional*):
     ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
     ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
@@ -1066,7 +1068,7 @@ impl Survey {
 
     /// Export survey raw data to pandas dataframe
     ///
-    /// Kwargs:
+    /// Keyword Arguments:
     ///     response_label (bool, *optional*):
     ///         Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
     ///         Set `False` to show values instead (`[1, 1, 2, ...]`).
@@ -1095,8 +1097,9 @@ impl Survey {
     /// Args:
     ///     row (str): Name of the question to show as rows, case insensitive.
     ///
-    /// Keyword Args:
-    ///     columns (str | list[str], *optional*): Names of the questions to show as columns, case insensitive.
+    /// Keyword Arguments:
+    ///     columns (str | list[str], *optional*): 
+    ///         Names of the questions to show as columns, case insensitive.
     ///     
     ///     show_row_total (bool, *optional*):
     ///         Include the overall count column for the row question. Default `True`.
@@ -1136,8 +1139,8 @@ impl Survey {
     ///         For example, `0.75` represents 75%. Default `False`.
     ///
     /// Returns:
-    ///     polars.DataFrame | pandas.DataFrame: Row labels, optional question and code
-    ///         columns, and counts grouped by the column questions' response labels.
+    ///     polars.DataFrame | pandas.DataFrame: 
+    ///         Row labels, optional question and code columns, and counts grouped by the column questions' response labels.
     ///
     /// Note:
     ///     You can pass `None` for any keyword option to use its default.
@@ -1237,7 +1240,7 @@ impl Survey {
     /// Creates a crosstab table for every selected question in the current instance,
     /// skipping questions listed in `ignore` and question type defined in `skip_type`.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     column (str | list[str], *optional*): Names of the questions to show as columns, case insensitive.
     ///     
     ///     ignore (str | list[str], *optional*): Names of the questions ignore, case insensitive.    
@@ -1294,7 +1297,6 @@ impl Survey {
     ///     [(String, polars.DataFrame | pandas.DataFrame)]:
     ///     List of (question_name, crosstab_data)
     /// 
-    #[doc(hidden)]
     #[pyo3(
         name = "quick_summary",
         signature = (
@@ -1414,6 +1416,7 @@ impl QuestionDataIterator {
             };
             question.read().clone()
         };
+
         let instance = QuestionData::new(
             Arc::clone(&self.survey.data),
             question,

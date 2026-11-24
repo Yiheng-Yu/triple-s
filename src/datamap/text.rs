@@ -111,7 +111,7 @@ impl PyEnum for Mode {}
 Args:
     value (str): Text content.
 
-Keyword Args:
+Keyword Arguments:
     variants (list[Variant] | None): Text variants. None creates an empty list. Defaults to None.
 
 Returns:
@@ -486,7 +486,7 @@ impl Text {
     /// Args:
     ///     value (str): Text content.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     variants (list[Variant] | None): Text variants. None creates an empty list. Defaults to None.
     ///
     /// Returns:
@@ -681,7 +681,7 @@ impl Text {
     /// Args:
     ///     variant (Variant | str): Existing variant or text used to construct a variant.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     mode (str | None): Mode for a string variant: "analysis" or "interview". Ignored for an existing Variant. Defaults to None.
     ///     language (str | None): Language tag for the text variant, or None for no language. Defaults to None.
     ///
@@ -785,7 +785,7 @@ Example sss xml 2.0 text, note that one entry can contain both `label` and
 Args:
     value (str): Text content.
 
-Keyword Args:
+Keyword Arguments:
     mode (Mode | str | None): Text mode: "analysis", "interview", or None. Defaults to None.
     language (str | None): Language tag for the text variant, or None for no language. Defaults to None.
 
@@ -1020,7 +1020,7 @@ impl Variant {
     /// Args:
     ///     value (str): Text content.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     mode (Mode | str | None): Text mode: "analysis", "interview", or None. Defaults to None.
     ///     language (str | None): Language tag for the text variant, or None for no language. Defaults to None.
     ///

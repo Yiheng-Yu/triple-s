@@ -30,7 +30,7 @@ use crate::{
 #[cfg_attr(
     all(feature = "pyo3", not(doc)),
     doc = r###"
-Keyword Args:
+Keyword Arguments:
     range (DataRange | None): Allowed response range, or None for no range. Defaults to None.
     values (list[Code] | None): Response codes. None creates an empty list. Defaults to None.
 
@@ -569,7 +569,7 @@ impl Response {
 impl Response {
     /// Create response codes with an optional range.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     range (DataRange | None): Allowed response range, or None for no range. Defaults to None.
     ///     values (list[Code] | None): Response codes. None creates an empty list. Defaults to None.
     ///
@@ -1242,7 +1242,7 @@ impl Code {
     /// Args:
     ///     value (int): Unsigned 32-bit code value.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     label (str | None): Text label. None uses an empty label. Defaults to None.
     ///     filter (str | None): Response filter expression, or None for no filter. Defaults to None.
     ///     score (float | None): Score for statistical calculations, or None for no score. Defaults to None.
@@ -1275,7 +1275,7 @@ impl Code {
     /// Args:
     ///     value (str): Literal code value.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     label (str | None): Text label. None uses an empty label. Defaults to None.
     ///     filter (str | None): Response filter expression, or None for no filter. Defaults to None.
     ///     score (float | None): Score for statistical calculations, or None for no score. Defaults to None.
@@ -1308,7 +1308,7 @@ impl Code {
     /// Args:
     ///     value (float): Floating-point code value.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     label (str | None): Text label. None uses an empty label. Defaults to None.
     ///     filter (str | None): Response filter expression, or None for no filter. Defaults to None.
     ///     score (float | None): Score for statistical calculations, or None for no score. Defaults to None.
@@ -1341,7 +1341,7 @@ impl Code {
     /// Args:
     ///     value (int): Signed 32-bit code value.
     ///
-    /// Keyword Args:
+    /// Keyword Arguments:
     ///     label (str | None): Text label. None uses an empty label. Defaults to None.
     ///     filter (str | None): Response filter expression, or None for no filter. Defaults to None.
     ///     score (float | None): Score for statistical calculations, or None for no score. Defaults to None.

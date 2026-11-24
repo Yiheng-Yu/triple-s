@@ -50,7 +50,7 @@ class Code:
         Args:
             value (float): Floating-point code value.
         
-        Keyword Args:
+        Keyword Arguments:
             label (str | None): Text label. None uses an empty label. Defaults to None.
             filter (str | None): Response filter expression, or None for no filter. Defaults to None.
             score (float | None): Score for statistical calculations, or None for no score. Defaults to None.
@@ -105,7 +105,7 @@ class Code:
         Args:
             value (int): Signed 32-bit code value.
         
-        Keyword Args:
+        Keyword Arguments:
             label (str | None): Text label. None uses an empty label. Defaults to None.
             filter (str | None): Response filter expression, or None for no filter. Defaults to None.
             score (float | None): Score for statistical calculations, or None for no score. Defaults to None.
@@ -121,7 +121,7 @@ class Code:
         Args:
             value (str): Literal code value.
         
-        Keyword Args:
+        Keyword Arguments:
             label (str | None): Text label. None uses an empty label. Defaults to None.
             filter (str | None): Response filter expression, or None for no filter. Defaults to None.
             score (float | None): Score for statistical calculations, or None for no score. Defaults to None.
@@ -137,7 +137,7 @@ class Code:
         Args:
             value (int): Unsigned 32-bit code value.
         
-        Keyword Args:
+        Keyword Arguments:
             label (str | None): Text label. None uses an empty label. Defaults to None.
             filter (str | None): Response filter expression, or None for no filter. Defaults to None.
             score (float | None): Score for statistical calculations, or None for no score. Defaults to None.
@@ -410,7 +410,7 @@ class Datamap:
         """
         Create new Datamap instance
         
-        Kwargs:
+        Keyword Arguments:
             name (str, *optional*):
                 Survey id
             
@@ -524,7 +524,7 @@ class Location:
     Args:
         start (int): Starting position, using Triple-S 1-based indexing.
     
-    Keyword Args:
+    Keyword Arguments:
         finish (int, *optional*): Inclusive finishing position. None uses start. Defaults to None.
     
     Returns:
@@ -538,7 +538,7 @@ class Location:
         Args:
             start (int): Starting position, using Triple-S 1-based indexing.
         
-        Keyword Args:
+        Keyword Arguments:
             finish (int, *optional*): Inclusive finishing position. None uses start. Defaults to None.
         
         Returns:
@@ -623,7 +623,7 @@ class Question:
         question_type (triple_s.QuestionType | str | None): The XML `type` attribute: "single", "multiple", "logical", "quantity",
             "character", "date", or "time". Use `None` for a question with no response values.
     
-    Keyword Args:
+    Keyword Arguments:
         label (str, *Optional*): Question text (`<label>`); defaults to an empty `Text`.
     
         filter (str|None, *Optional*): Question filter (`<filter>`); defaults to `None`.
@@ -660,7 +660,7 @@ class Question:
             name (str): Question name.
             question_type (QuestionType | str, *optional*): Question type flag or name, or None for no response values.
         
-        Keyword Args:
+        Keyword Arguments:
             label (str, *optional*):
                 Text label. None uses an empty label.
                 Defaults to None.
@@ -910,7 +910,7 @@ class Question:
         """
         Updates data location of the current question.
         
-        Keyword Args:
+        Keyword Arguments:
             start (int, *optional*): Starting position. None leaves this bound unchanged. Defaults to None.
             finish (int, *optional*): Finishing position. None leaves this bound unchanged. Defaults to None.
         
@@ -1067,7 +1067,7 @@ class QuestionData:
         """
         Export the answers as a list.
         
-        Kwargs:
+        Keyword Arguments:
             response_label (bool, *optional*):
                 Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
                 Set `False` to show values instead (`[1, 1, 2, ...]`).
@@ -1080,7 +1080,7 @@ class QuestionData:
         """
         Export the answers as a pandas Series object.
         
-        Kwargs:
+        Keyword Arguments:
             response_label (bool, *optional*):
                 Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
                 Set `False` to show values instead (`[1, 1, 2, ...]`).
@@ -1093,7 +1093,7 @@ class QuestionData:
         """
         Return the answers as a polars Series.
         
-        Kwargs:
+        Keyword Arguments:
             response_label (bool, *optional*):
                 Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
                 Set `False` to show values instead (`[1, 1, 2, ...]`).
@@ -1115,7 +1115,7 @@ class QuestionData:
         questions, each selected response is counted individually. The first row,
         labelled `Total`, counts respondents with non-null answers, including empty lists.
         
-        Keyword Args:
+        Keyword Arguments:
         
             colname_stats (str, *optional*):
                 Give the resulting count column a specific name (same as `polars.Series.value_counts`)
@@ -1384,7 +1384,7 @@ class Response:
     truncating fractional numbers when converting to integers.
     
     
-    Keyword Args:
+    Keyword Arguments:
         range (DataRange | None): Allowed response range, or None for no range. Defaults to None.
         values (list[Code] | None): Response codes. None creates an empty list. Defaults to None.
     
@@ -1396,7 +1396,7 @@ class Response:
         """
         Create response codes with an optional range.
         
-        Keyword Args:
+        Keyword Arguments:
             range (DataRange | None): Allowed response range, or None for no range. Defaults to None.
             values (list[Code] | None): Response codes. None creates an empty list. Defaults to None.
         
@@ -1539,7 +1539,7 @@ class Spread:
     Args:
         num_subfields (int): Number of response subfields.
     
-    Keyword Args:
+    Keyword Arguments:
         subfield_width (int, *optional*): Width of each subfield, or None to leave it unspecified. Defaults to None.
     
     Returns:
@@ -1551,7 +1551,7 @@ class Spread:
         Args:
             num_subfields (int): Number of response subfields.
         
-        Keyword Args:
+        Keyword Arguments:
             subfield_width (int, *optional*): Width of each subfield, or None to leave it unspecified. Defaults to None.
         
         Returns:
@@ -1604,7 +1604,7 @@ class Survey:
     Args:
         datamap (Datamap): Survey definition used to interpret the respondent data.
     
-    Keyword Args:
+    Keyword Arguments:
         data (SurveyData | None): Respondent data. None creates a survey without loaded data. Defaults to None.
     
     Returns:
@@ -1622,7 +1622,7 @@ class Survey:
         Args:
             datamap (Datamap): Survey definition used to interpret the respondent data.
         
-        Keyword Args:
+        Keyword Arguments:
             data (SurveyData | None): Respondent data. None creates a survey without loaded data. Defaults to None.
         
         Returns:
@@ -1642,8 +1642,9 @@ class Survey:
         Args:
             row (str): Name of the question to show as rows, case insensitive.
         
-        Keyword Args:
-            columns (str | list[str], *optional*): Names of the questions to show as columns, case insensitive.
+        Keyword Arguments:
+            columns (str | list[str], *optional*): 
+                Names of the questions to show as columns, case insensitive.
             
             show_row_total (bool, *optional*):
                 Include the overall count column for the row question. Default `True`.
@@ -1683,8 +1684,8 @@ class Survey:
                 For example, `0.75` represents 75%. Default `False`.
         
         Returns:
-            polars.DataFrame | pandas.DataFrame: Row labels, optional question and code
-                columns, and counts grouped by the column questions' response labels.
+            polars.DataFrame | pandas.DataFrame: 
+                Row labels, optional question and code columns, and counts grouped by the column questions' response labels.
         
         Note:
             You can pass `None` for any keyword option to use its default.
@@ -1793,7 +1794,7 @@ class Survey:
         Creates a crosstab table for every selected question in the current instance,
         skipping questions listed in `ignore` and question type defined in `skip_type`.
         
-        Keyword Args:
+        Keyword Arguments:
             column (str | list[str], *optional*): Names of the questions to show as columns, case insensitive.
             
             ignore (str | list[str], *optional*): Names of the questions ignore, case insensitive.    
@@ -1904,7 +1905,7 @@ class Survey:
         └───────────────┴──────────┴─────────────────────────────────┘
         ```
         
-        Keyword Args:
+        Keyword Arguments:
             output ('polars' | 'pandas' | DataFrameFormat, *optional*): Select what kind of dataframe to output:
                 'polars' | DataFrameFormat.Polars: polars.DataFrame
                 'pandas' | DataFrameFormat.Pandas: pandas.DataFrame
@@ -1925,7 +1926,7 @@ class Survey:
         """
         Export survey raw data to pandas dataframe
         
-        Kwargs:
+        Keyword Arguments:
             response_label (bool, *optional*):
                 Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
                 Set `False` to show values instead (`[1, 1, 2, ...]`).
@@ -1935,7 +1936,7 @@ class Survey:
         """
         Export survey raw data to polars dataframe
         
-        Kwargs:
+        Keyword Arguments:
             response_label (bool, *optional*):
                 Set `True` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`),
                 Set `False` to show values instead (`[1, 1, 2, ...]`).
@@ -1982,7 +1983,7 @@ class SurveyData:
         Args:
             pandas_frame (pd.DataFrame): survey data
         
-        Kwargs:
+        Keyword Arguments:
             include_index (bool, *optional*):
                 toggle on/ off to include dataframe index.
                 default False.
@@ -2043,7 +2044,7 @@ class SurveyInfo:
     Args:
         version (str | float): Triple-S version, such as "2.0" or 2.0.
     
-    Keyword Args:
+    Keyword Arguments:
         name (str | None): Survey name. None leaves this field unset. Defaults to None.
         title (str | None): Survey title. None leaves this field unset. Defaults to None.
         date (str | None): Survey date. None leaves this field unset. Defaults to None.
@@ -2066,7 +2067,7 @@ class SurveyInfo:
         Args:
             version (str | float): Triple-S version, such as "2.0" or 2.0.
         
-        Keyword Args:
+        Keyword Arguments:
             name (str | None): Survey name. None leaves this field unset. Defaults to None.
             title (str | None): Survey title. None leaves this field unset. Defaults to None.
             date (str | None): Survey date. None leaves this field unset. Defaults to None.
@@ -2227,7 +2228,7 @@ class Text:
     Args:
         value (str): Text content.
     
-    Keyword Args:
+    Keyword Arguments:
         variants (list[Variant] | None): Text variants. None creates an empty list. Defaults to None.
     
     Returns:
@@ -2243,7 +2244,7 @@ class Text:
         Args:
             value (str): Text content.
         
-        Keyword Args:
+        Keyword Arguments:
             variants (list[Variant] | None): Text variants. None creates an empty list. Defaults to None.
         
         Returns:
@@ -2266,7 +2267,7 @@ class Text:
         Args:
             variant (Variant | str): Existing variant or text used to construct a variant.
         
-        Keyword Args:
+        Keyword Arguments:
             mode (str | None): Mode for a string variant: "analysis" or "interview". Ignored for an existing Variant. Defaults to None.
             language (str | None): Language tag for the text variant, or None for no language. Defaults to None.
         
@@ -2404,7 +2405,7 @@ class Variant:
     Args:
         value (str): Text content.
     
-    Keyword Args:
+    Keyword Arguments:
         mode (Mode | str | None): Text mode: "analysis", "interview", or None. Defaults to None.
         language (str | None): Language tag for the text variant, or None for no language. Defaults to None.
     
@@ -2433,7 +2434,7 @@ class Variant:
         Args:
             value (str): Text content.
         
-        Keyword Args:
+        Keyword Arguments:
             mode (Mode | str | None): Text mode: "analysis", "interview", or None. Defaults to None.
             language (str | None): Language tag for the text variant, or None for no language. Defaults to None.
         
@@ -2614,7 +2615,7 @@ def read_triple_s(path_datamap: "str", path_data: "str" = None) -> Survey:
     Args:
         path_datamap (str): path to the triple-s datamap file, supports both classic and xml format.
     
-    Keyword Args:
+    Keyword Arguments:
         path_data (str, *optional*): path to the `.asc` or `.csv` data file.
     
     Returns:
