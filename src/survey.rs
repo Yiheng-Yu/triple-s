@@ -311,13 +311,47 @@ impl Survey {
             .collect()
     }
 
+    /// Gets survey data as a lazy frame, using the question types in the datamap.
+    /// Questions with type [`QuestionType::None`](crate::QuestionType) are skipped.
+    /// Every data column must have a matching question in the datamap.
+    pub fn lazy(&self) -> PolarsResult<LazyFrame> {
+        let mut lazyframe = self.data().lazy()?.clone();
+        let data_schema = lazyframe.collect_schema()?;
+        let question_names = self.question_names();
+        for (column_name, _) in data_schema.iter() {
+            if !question_names.iter().any(|name| name == column_name.as_str()) {
+                return Err(PolarsError::ComputeError(
+                    format!("Survey data column '{column_name}' is not defined in the datamap.")
+                        .into(),
+                ));
+            }
+        }
+
+        let columns = self.datamap()
+            .schema()
+            .into_iter()
+            .filter_map(|(colname, dtype)| {
+                data_schema
+                    .try_get(&colname)
+                    .ok()
+                    .map(|_| col(colname).cast(dtype))
+            })
+            .collect::<Vec<Expr>>();
+
+        Ok(lazyframe
+            .select(columns)
+            .with_simplify_expr(true)
+            .with_comm_subexpr_elim(true)
+            .with_comm_subplan_elim(true))
+    }
+
     /// Export survey raw data to polars dataframe
     ///
     /// `response_label`:
     ///     Set `true` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`), set `false` to show values instead (`[1, 1, 2, ...]`).
     pub fn to_polars(&self, response_label: bool) -> PolarsResult<DataFrame> {
         if response_label {
-            let mut lf = self.data().lazy()?.clone();
+            let mut lf = self.lazy()?;
 
             let label_lookup = self.datamap().response_label_map();
             let query = Self::label_response_values(lf.collect_schema()?, &label_lookup)?;
@@ -424,7 +458,7 @@ impl Survey {
         label_options: LabelOptions<'a>,
     ) -> PolarsResult<LazyFrame> {
         // prep
-        let original = self.data().lazy()?.clone();
+        let original = self.lazy()?;
 
         // Skip the rest if no columns was defined
         if target_columns.is_empty() {
@@ -786,7 +820,8 @@ impl Survey {
     ///     number of rows locally. New iterators use subsequent changes.
     fn iter_rows(&self, py: Python<'_>) -> PyResult<Py<RowIterator>> {
         let source = self.data().clone();
-        let mut lazy = source.lazy()?.clone();
+        let mut lazy = self.lazy()
+            .map_err(PyPolarsErr::Polars)?;
 
         let label_query = if self.config().show_response_label() {
             let label_lookup = self.datamap().response_label_map();

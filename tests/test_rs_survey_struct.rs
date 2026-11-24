@@ -1,6 +1,7 @@
 use polars::prelude::*;
 use triple_s::{
     AnalysisOptions,
+    QuestionType,
     Survey,
     SurveyData,
     options::{LabelOptions, ResponseDisplay},
@@ -54,6 +55,35 @@ fn test_question_view_shares_replacement_and_owns_cache() {
     );
     drop(view);
     assert!(!std::path::Path::new(&cache_path).exists());
+}
+
+#[test]
+fn test_survey_lazy_rejects_columns_without_datamap_questions() {
+    let survey = get_survey_struct();
+    *survey.data_mut() = SurveyData::from_polars(df!["UNMAPPED" => [1u32]].unwrap()).unwrap();
+
+    let error = survey.lazy().unwrap_err().to_string();
+    assert!(error.contains("UNMAPPED"));
+    assert!(error.contains("is not defined in the datamap"));
+}
+
+#[test]
+fn test_survey_lazy_skips_questions_with_none_type() -> PolarsResult<()> {
+    let mut survey = get_survey_struct();
+    let question = survey
+        .datamap_mut()
+        .record_mut()
+        .content_mut()
+        .iter()
+        .find(|question| question.read().name() == "Q2")
+        .unwrap()
+        .clone();
+    question.write().set_question_type(QuestionType::None).unwrap();
+
+    let schema = survey.lazy()?.collect_schema()?;
+    assert!(schema.try_get("Q2").is_err());
+    assert!(schema.try_get("Q4").is_ok());
+    Ok(())
 }
 
 #[test]

@@ -202,10 +202,5 @@ def survey_dummy():
     survey = Survey(datamap, survey_data)
     return survey
 
-def test_dummy_groupby(survey_dummy):
-    print()
-    
-    crosstab = survey_dummy.quick_summary("QB")
-    for (qname, summary) in crosstab:
-        print(qname)
-    # print(len(crosstab))
+def test_create_survey_from_python(survey_dummy):
+    assert survey_dummy.num_response == 5
