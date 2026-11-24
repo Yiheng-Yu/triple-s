@@ -204,3 +204,25 @@ def survey_dummy():
 
 def test_create_survey_from_python(survey_dummy):
     assert survey_dummy.num_response == 5
+
+
+def test_value_counts_and_corss_tab_compare(survey_dummy):
+    """QuestionData.value_counts() should return same result as crosstab() with columns=None
+    """
+    
+    qname = "QC"
+    value_counts = survey_dummy[qname].value_counts(normalise=False)
+    value_percent = survey_dummy[qname].value_counts(normalise=True)
+    
+    crosstab_count = survey_dummy.crosstab(qname, normalise=False)
+    crosstab_percent = survey_dummy.crosstab(qname, normalise=True)
+    
+    assert (value_counts.to_pandas() == crosstab_count.to_pandas()).all().all()
+    assert (value_percent.to_pandas() == crosstab_percent.to_pandas()).all().all()
+    
+    value_counts_with_code_value = survey_dummy[qname].value_counts(normalise=False, include_response_codes=True)
+    crosstab_count_with_code_value = survey_dummy.crosstab(qname, normalise=False, include_response_codes=True)
+    compare = value_counts_with_code_value.to_pandas().convert_dtypes().compare(
+        crosstab_count_with_code_value.to_pandas().convert_dtypes()
+    )
+    assert compare.empty, repr(compare)

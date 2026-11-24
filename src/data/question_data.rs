@@ -28,11 +28,7 @@ use crate::{
     },
 };
 use crate::{
-    QuestionType,
-    data::survey_data::SurveyData,
-    datamap::{Question, text::Text},
-    options::{LabelOptions, ResponseDisplay, SurveyOptions},
-    utils::ArcLock,
+    QuestionType, data::{operation, survey_data::SurveyData}, datamap::{Question, text::Text}, options::{LabelOptions, ResponseDisplay, SurveyOptions}, utils::ArcLock,
 };
 
 /// Data for a single question.
@@ -198,11 +194,17 @@ impl QuestionData {
     /// ```
     ///
     /// _The first row is the total count of not-null values_
+    /// 
     #[allow(clippy::mutable_key_type)]
-    pub fn value_counts(&self, options: LabelOptions<'_>) -> PolarsResult<DataFrame> {
+    pub fn value_counts(
+        &self,
+        normalise: bool,
+        options: LabelOptions<'_>
+    ) -> PolarsResult<DataFrame> {
+        
         // calling `value_counts_internal` instead of putting contents of `value_counts_internal` here
         // because `value_counts_internal` gets used elsewhere in parallel iterator later.
-        let plan = self.value_counts_internal(options)?;
+        let plan = self.value_counts_internal(normalise, options)?;
         plan.collect()
     }
 
@@ -210,48 +212,28 @@ impl QuestionData {
     /// This is used for multi-threading, internal only.
     pub(crate) fn value_counts_internal(
         &self,
+        normalise: bool,
         options: LabelOptions<'_>,
     ) -> PolarsResult<LazyFrame> {
         let question_name = self.name();
-        let raw_data = self.to_value_column()?;
-
-        // Base size
-        let base_size = (raw_data.len() - raw_data.null_count()) as IdxSize;
-
-        // value counts
-        let values = if matches!(raw_data.dtype(), DataType::List(_)) {
-            // Count respondents before exploding multiple-choice answers.
-            raw_data.explode(ExplodeOptions {
-                empty_as_null: true,
-                keep_nulls: true,
-            })?
-        } else {
-            raw_data
-        };
-
-        // stacking base size and value counts together
-        let colname_stats = options.col_count.unwrap_or("total");
-        let counts = values
-            .drop_nulls()
-            .as_materialized_series()
-            .value_counts(false, false, colname_stats.into(), false)?
-            .sort(
-                [&question_name],
-                SortMultipleOptions::default().with_multithreaded(false),
-            )?;
-        let result = DataFrame::new(
-            1,
-            vec![
-                Column::full_null(question_name.clone().into(), 1, values.dtype()),
-                Column::new(colname_stats.into(), [base_size]),
-            ],
-        )?
-        .vstack(&counts)?
-        .lazy();
+        
+        let lazyframe = self.data.read()
+            .lazy()?
+            .clone()
+            .select([
+                col(&question_name).cast(self.datamap().polars_dtype()) 
+                ]);
+        
+        let result = operation::frequency_counts(
+            lazyframe, 
+            &question_name, 
+            options.col_count, 
+            true, 
+            normalise
+        )?;
 
         // get response labels
-        let match_expression =
-            options.match_response_label(&question_name, self.response_label_map())?;
+        let match_expression = options.match_response_label(&question_name, self.response_label_map())?;
         let result = result.with_column(match_expression);
 
         // Fianl formatting: rename column names, add quesiton names etc.,
@@ -582,7 +564,11 @@ impl QuestionData {
     /// labelled `Total`, counts respondents with non-null answers, including empty lists.
     ///
     /// Keyword Arguments:
-    ///
+    ///     
+    ///     normalise: (bool, *optional*):
+    ///         Return counts as relative frequencies normalised to 1.0.
+    ///         Default `False`
+    /// 
     ///     colname_stats (str, *optional*):
     ///         Give the resulting count column a specific name (same as `polars.Series.value_counts`)
     ///         Default `'total'`
@@ -617,6 +603,7 @@ impl QuestionData {
     #[pyo3(
         name = "value_counts", 
         signature=(
+            normalise: "bool" = false,
             colname_stats: "str" = "total",
             colname_label: "str" = "label",
             colname_code: "str" = "code",
@@ -628,6 +615,7 @@ impl QuestionData {
     fn py_value_counts<'py>(
         &self,
         py: Python<'py>,
+        normalise: Option<bool>,
         colname_stats: Option<&str>,
         colname_label: Option<&str>,
         colname_code: Option<&str>,
@@ -646,7 +634,8 @@ impl QuestionData {
             .with_col_label(colname_label)
             .with_col_code(colname_code);
 
-        let result = self.value_counts(options).map_err(PyPolarsErr::Polars)?;
+        let normalise = normalise.unwrap_or(false);
+        let result = self.value_counts(normalise, options).map_err(PyPolarsErr::Polars)?;
 
         // prep output
         let format = output

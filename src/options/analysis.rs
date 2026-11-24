@@ -244,6 +244,8 @@ impl<'a> LabelOptions<'a> {
 }
 
 impl<'a> LabelOptions<'a> {
+    
+    /// Returns a column expression
     #[allow(clippy::mutable_key_type)]
     pub(crate) fn match_response_label(
         &'a self,
