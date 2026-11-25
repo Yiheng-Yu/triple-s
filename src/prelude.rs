@@ -1,8 +1,16 @@
+//! Contains two trait implementations:
+//! - Flag
+//! - DeepCopy
+
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::PyAnyMethods};
 
+/// Enum flags
 pub trait Flag: strum::IntoEnumIterator {
+    /// Convert enums to strings
     fn to_string(&self) -> String;
+
+    /// List out all availabel enum options as a list of strings
     fn available_options() -> Vec<String> {
         Self::iter().map(|version| version.to_string()).collect()
     }

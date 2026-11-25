@@ -21,6 +21,22 @@ cargo add triple_s
 
 More detailed documentations can be foud in [docs.rs](https://docs.rs/triple_s/latest/triple_s/index.html)
 
+### Rust: datamap-only builds
+
+The crate can be built for datamap parsing and editing without the
+respondent-data/Polars stack:
+
+```toml
+triple_s = { version = "...", default-features = false, features = ["datamap-only"] }
+```
+
+This feature removes `read_triple_s`'s data-path overload, `read_data`,
+`SurveyData`, `QuestionData`, the Polars-backed analysis options, and
+data/analysis methods on `Survey`, `Datamap`, `Record`, and `Question`.
+`read_triple_s` in this build accepts only the datamap path. Use
+`read_datamap`, `read_from_string`, or `read_from_reader` when respondent data
+is not needed.
+
 ## Python
 
 Python API mirrors that of Rusts', with some minor tweaks to accomdate python's typing system.

@@ -482,7 +482,7 @@ impl fmt::Display for NoDataError {
     }
 }
 
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 impl From<NoDataError> for polars::error::PolarsError {
     fn from(value: NoDataError) -> Self {
         polars::error::PolarsError::NoData(value.to_string().into())
@@ -515,7 +515,7 @@ impl fmt::Display for QuestionNotFound {
 
 impl Error for QuestionNotFound {}
 
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 impl From<QuestionNotFound> for polars::error::PolarsError {
     fn from(value: QuestionNotFound) -> Self {
         polars::error::PolarsError::SchemaFieldNotFound(value.to_string().into())

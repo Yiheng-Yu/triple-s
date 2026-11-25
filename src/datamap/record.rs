@@ -2,20 +2,19 @@
 
 #[cfg(feature = "pyo3")]
 use std::str::FromStr;
-
-#[cfg(not(feature="datamap-only"))]
-use std::{fs::File, path::Path, io::{BufRead, BufReader}};
+#[cfg(not(feature = "datamap-only"))]
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    path::Path,
+};
 
 use anyhow::{Context, Result};
-
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
-
 use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
-
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 use polars::{frame::row::Row, prelude::*};
-
 #[cfg(feature = "pyo3")]
 use pyo3::{
     IntoPyObjectExt,
@@ -24,23 +23,20 @@ use pyo3::{
     types::{PyDict, PySlice, PyTuple},
 };
 use quick_xml::Writer;
-
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 use rayon::prelude::*;
 use strum::{EnumIter, EnumString};
 
 #[cfg(feature = "pyo3")]
 use crate::utils::{extract_indicies, get_type_name, normalize_py_index, py_value_error};
-
-#[cfg(not(feature="datamap-only"))]
-use crate::{datamap::parsing::ResponseParser, utils::TextReader, error};
-
 use crate::{
     Question,
     error::InvalidArg,
     prelude::{DeepCopy, Flag},
     utils::{ArcLock, lock_it_up},
 };
+#[cfg(not(feature = "datamap-only"))]
+use crate::{datamap::parsing::ResponseParser, error, utils::TextReader};
 
 /// Flags that collects all allowed values of `format` attribute of a `<record>`
 /// element. This is used to indicate types of the data the current datamap file
@@ -83,7 +79,7 @@ impl DeepCopy for DataFormat {
     }
 }
 
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 impl DataFormat {
     /// Create new instance from path given
     pub(crate) fn from_path(path: &Path) -> Result<Self, InvalidArg> {
@@ -257,7 +253,7 @@ impl Record {
 
     /// Create polars schema based on the `question_type` of each questions
     /// in the current collection.
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     pub fn schema(&self) -> Schema {
         let iterator = self
             .content()
@@ -329,7 +325,7 @@ impl Record {
 ///
 /// ---
 impl Record {
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     pub(crate) fn scan_data_file(
         &self,
         path_data: &Path,
@@ -369,7 +365,7 @@ impl Record {
         }
     }
 
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     #[inline(always)]
     fn parsing_plan(&self) -> Result<Vec<ResponseParser>> {
         self.content
@@ -379,7 +375,7 @@ impl Record {
             .collect()
     }
 
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     fn scan_fixed_width(
         &self,
         mut reader: BufReader<TextReader<BufReader<File>>>,
@@ -422,7 +418,7 @@ impl Record {
         }
     }
 
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     fn scan_csv(
         &self,
         reader: BufReader<TextReader<BufReader<File>>>,
@@ -452,7 +448,7 @@ impl Record {
     /// Invalid Unicode sequences become `�` (U+FFFD).
     ///
     /// This method simply validates data file and would not alter any existing fields.
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     pub fn validate_data(&self, path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
         let data_format = DataFormat::from_path(path)?;
@@ -513,7 +509,7 @@ impl Record {
     }
 
     /// extract one row of data from a fixed width data read
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     fn read_one_record<R: BufRead>(reader: &mut R, record_width: usize) -> Result<String> {
         anyhow::ensure!(record_width > 0, "Record width must be positive");
 
@@ -967,13 +963,13 @@ impl RecordIterator {
     }
 }
 
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 #[cfg(test)]
 mod tests {
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     use super::*;
 
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     #[test]
     fn test_unicode_fixed_records_across_buffers() {
         for capacity in 1..=12 {
@@ -987,7 +983,7 @@ mod tests {
         }
     }
 
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     #[test]
     fn test_fixed_width_record_separators_preserve_fields() {
         for separator in ["\n", "\r\n", ""] {

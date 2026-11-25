@@ -83,7 +83,10 @@ fn test_survey_lazy_skips_questions_with_none_type() -> PolarsResult<()> {
         .find(|question| question.read().name() == "Q2")
         .unwrap()
         .clone();
-    question.write().set_question_type(QuestionType::None).unwrap();
+    question
+        .write()
+        .set_question_type(QuestionType::None)
+        .unwrap();
 
     let schema = survey.lazy()?.collect_schema()?;
     assert!(schema.try_get("Q2").is_err());

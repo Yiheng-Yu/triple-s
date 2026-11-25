@@ -2,6 +2,14 @@ A Triple-S datamap containing survey metadata ([`SurveyInfo`](crate::datamap::su
 definitions ([`Record`](crate::datamap::record::Record)). Use [`Survey`](crate::survey::Survey) to work with a datamap and
 respondent data together.
 
+## Feature availability
+
+The datamap and metadata parts of `Datamap` are available with both the
+default build and the `datamap-only` feature. Polars-backed methods and
+respondent-data loading are unavailable when `datamap-only` is enabled.
+In particular, `Datamap::schema` and `Datamap::response_label_map` require
+the default feature set.
+
 See the [Triple-S documentation](https://triple-s.org/documentation/manuals/)
 for the format specifications.
 
@@ -50,7 +58,12 @@ Use [`Datamap::record`] to access the full record.
 
 # Load and export respondent data
 
-Call [`read_data`](crate::read_data). The extension
+> **`datamap-only` availability:** The following section, including
+> `read_data`, `SurveyData`, and `Survey::to_polars`, is turned off by the
+> `datamap-only` crate feature. Use a datamap-only build only for datamap
+> parsing and editing.
+
+Call `read_data`. The extension
 selects fixed-width (`.asc`) or CSV (`.csv`) parsing, using the record's
 question definitions. CSV fields use question locations.
 
@@ -66,7 +79,7 @@ let frame = data.to_polars()?;
 # Ok::<(), anyhow::Error>(())
 ```
 
-Loading returns a [`SurveyData`](crate::data::SurveyData) backed by a temporary Parquet cache.
+Loading returns a `SurveyData` backed by a temporary Parquet cache.
 
 To read both files into a survey, use [`read_triple_s`](crate::read_triple_s) instead.
 

@@ -5,12 +5,10 @@ use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime, Timelike};
 use either::Either;
 use parking_lot::RwLockReadGuard;
-
-#[cfg(feature="datamap-only")]
-use polars_core::prelude::{AnyValue, PolarsResult, PolarsContext};
-
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 use polars::{frame::row::Row, prelude::*};
+#[cfg(feature = "datamap-only")]
+use polars_core::prelude::{AnyValue, PolarsContext, PolarsResult};
 use rayon::prelude::*;
 
 use crate::{Question, Spread, datamap::QuestionType, error::DataReadError};

@@ -8,36 +8,31 @@ pub(crate) mod survey_datamap;
 pub mod survey_info;
 pub mod text;
 
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 mod parsing;
 
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 use std::{fs::File, path::Path};
 
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 use polars::{
     frame::row::{AnyValueBuffer, Row},
     prelude::*,
 };
-
 pub(crate) use question::{Location, Question, QuestionType, Spread, Usage};
-pub use read::{read_datamap, read_from_reader, read_from_string};
 
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 pub(crate) use record::DataFormat;
-
 pub(crate) use response::{Code, Response};
 pub use survey_datamap::Datamap;
-
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 use tempfile::NamedTempFile;
-
 pub(crate) use text::{Text, Variant};
 
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 use crate::data::SurveyData;
 
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 const BATCH_SIZE: usize = 4096; // no. rows when writing to paquet cache
 
 /// Reads .asc or .csv datafile with datamap provided.
@@ -65,7 +60,7 @@ const BATCH_SIZE: usize = 4096; // no. rows when writing to paquet cache
 ///
 /// # Ok::<(), anyhow::Error>(())
 /// ```
-#[cfg(not(feature="datamap-only"))] 
+#[cfg(not(feature = "datamap-only"))]
 pub fn read_data(datamap: &Datamap, path_data: impl AsRef<Path>) -> PolarsResult<SurveyData> {
     let path_data = path_data.as_ref();
     let path_string = path_data.to_string_lossy(); // for logging error
@@ -115,7 +110,7 @@ pub fn read_data(datamap: &Datamap, path_data: impl AsRef<Path>) -> PolarsResult
 
 /// Write batches of rows into a parquet database with given schema.
 #[inline]
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 fn write_batch(
     writer: &mut polars::io::parquet::write::BatchedWriter<File>,
     schema: &Schema,

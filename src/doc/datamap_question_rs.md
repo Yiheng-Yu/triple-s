@@ -82,6 +82,11 @@ Classic output omits XML-only attributes such as `usage`.
 Respondent data is returned by [`read_data`](crate::read_data); use
 [`SurveyData::to_polars`](crate::data::SurveyData) to export it.
 
+> **`datamap-only` availability:** `read_data`, `SurveyData`, and the
+> Polars-backed dtype/schema/response-label methods on `Question` are turned
+> off by the `datamap-only` crate feature. Datamap metadata, response
+> definitions, locations, and mutation methods remain available.
+
 
 # Fields
 
@@ -164,4 +169,3 @@ Also note that `question_type` field *controls how question data gets read/ pars
 ### `response` ([`Response`])
 Response definition, basically each of the selectable items in a single/ multi-choice question, as well as 
 the data range/ maximum allowed values for quantity/ date/ time kind of questions.
-
