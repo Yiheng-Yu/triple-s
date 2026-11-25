@@ -251,6 +251,12 @@ impl Record {
         }
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Create polars schema based on the `question_type` of each questions
     /// in the current collection.
     #[cfg(not(feature = "datamap-only"))]
@@ -444,6 +450,12 @@ impl Record {
         }
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Validate an `.asc` or `.csv` file against the record's questions and skip setting.
     /// Invalid Unicode sequences become `�` (U+FFFD).
     ///

@@ -20,7 +20,6 @@ use polars::{
     prelude::*,
 };
 pub(crate) use question::{Location, Question, QuestionType, Spread, Usage};
-
 #[cfg(not(feature = "datamap-only"))]
 pub(crate) use record::DataFormat;
 pub(crate) use response::{Code, Response};

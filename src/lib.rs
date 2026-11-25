@@ -22,23 +22,23 @@
 //! (triple-s classic & xml) up to triple-s 2.0.  
 //!
 //! # Crate features
-//! 
+//!
 //! The current crate comes with three feature flags:
-//! 
+//!
 //! - `default`:
 //!     - Activated on default, this feature allows you to read triple-s survey as well as it's data.
-//! 
-//! - `datamap-only`: 
+//!
+//! - `datamap-only`:
 //!     - Reads only triple-s datamap, turning this on will disable data-reading behaviour, which should significantly reduce the compile time (it skips a LOT of polars dependencies).
 //!     - Activated by: setting `default-features` to be `false` and adding `datamap-only` to the list of features:
 //!     
 //!     ```text
 //!     triple_s = { .., default-features = false, feature = ["datamap-only"] }
 //!     ```
-//! 
+//!
 //! - `pyo3`:
 //!     - Used for binding with python
-//! 
+//!
 //! # Quick start
 //!
 //! ## Read datamap
@@ -173,23 +173,17 @@ mod survey;
 pub mod prelude;
 mod utils;
 
-use crate::datamap::read::FileType;
 use std::{
     fs::File,
+    io::{BufRead, BufReader, Cursor, Read},
     path::Path,
-    io::{BufReader, Cursor, BufRead, Read}
 };
-use log::warn;
-use quick_xml::reader::Reader as XmlReader;
 
-use anyhow::{Result, Context};
-
+use anyhow::{Context, Result};
 #[cfg(not(feature = "datamap-only"))]
 pub use data::{QuestionData, SurveyData};
-
 #[cfg(not(feature = "datamap-only"))]
 pub use datamap::read_data;
-
 pub use datamap::{
     question::{
         self,
@@ -207,14 +201,17 @@ pub use datamap::{
     survey_info::{self, SurveyInfo, Version},
     text::{self, Mode, Text, Variant},
 };
-
 use error::EventLog;
+use log::warn;
 #[cfg(not(feature = "datamap-only"))]
 pub use options::{AnalysisOptions, LabelOptions};
 pub use prelude::DeepCopy;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use quick_xml::reader::Reader as XmlReader;
 pub use survey::Survey;
+
+use crate::datamap::read::FileType;
 
 // TODO: SET UP DOCUMENTATION ON CREATING A NEW DATAMAP FROM PYTHON/ RUST SIDE!
 
@@ -228,7 +225,6 @@ pub use survey::Survey;
 ///
 /// Returns:
 /// [`Survey`] containing the datamap.
-/// 
 #[cfg(feature = "datamap-only")]
 pub fn read_triple_s(path_sss: impl AsRef<Path>) -> Result<Survey> {
     log::info!("Reading datamap..");
@@ -346,9 +342,9 @@ pub fn read_from_reader<R: BufRead>(mut input: R) -> Result<(Datamap, EventLog)>
     let builder = match file_type {
         FileType::Classic => {
             let input = BufReader::new(Cursor::new(prefix).chain(input));
-            crate::datamap::read::classic::create_survey_builder(input.lines()).with_context(|| {
-                "trying to create survey builder from the data file".to_string()
-            })?
+            crate::datamap::read::classic::create_survey_builder(input.lines()).with_context(
+                || "trying to create survey builder from the data file".to_string(),
+            )?
         }
         FileType::Xml => {
             let read_result = {
@@ -376,6 +372,7 @@ mod triple_s {
     #[pymodule_export]
     pub use pyo3_polars::error::NoDataError;
 
+    use super::{read_from_reader, read_triple_s};
     #[pymodule_export]
     pub use crate::data::{QuestionData, SurveyData};
     #[pymodule_export]
@@ -389,10 +386,8 @@ mod triple_s {
     };
     #[pymodule_export]
     pub use crate::error::MissingKeyError;
-
     #[pymodule_export]
     pub use crate::survey::Survey;
-    use super::{read_from_reader, read_triple_s};
 
     #[pymodule]
     pub mod config {

@@ -111,12 +111,24 @@ impl Survey {
         &mut self.datamap
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Read access to shared survey data.
     #[cfg(not(feature = "datamap-only"))]
     pub fn data(&self) -> RwLockReadGuard<'_, SurveyData> {
         self.data.read()
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Write access to respondent data. Replacing it updates existing question views.
     #[cfg(not(feature = "datamap-only"))]
     pub fn data_mut(&self) -> RwLockWriteGuard<'_, SurveyData> {
@@ -138,6 +150,12 @@ impl Survey {
         self.config.write()
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Creates a dataframe collating response labels for all questions in the survey.
     /// Very handy for look up some values.
     ///
@@ -216,6 +234,12 @@ impl Survey {
         })
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Create new `Survey` instance
     #[cfg(not(feature = "datamap-only"))]
     pub fn new(datamap: Datamap, data: SurveyData) -> PolarsResult<Self> {
@@ -249,6 +273,12 @@ impl Survey {
         Self::new(Datamap::empty()).unwrap()
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Creates a new empty `Survey` instance
     #[cfg(not(feature = "datamap-only"))]
     pub fn empty() -> Self {
@@ -257,6 +287,12 @@ impl Survey {
         Self::new(datamap, data).unwrap()
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// List out number of responses loaded
     ///
     /// This function may fail during polars' [`LazyFrame::collect()`] function call
@@ -269,12 +305,24 @@ impl Survey {
         }
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Check if data loaded or not
     #[cfg(not(feature = "datamap-only"))]
     pub fn has_data(&self) -> bool {
         self.data().has_data()
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Gets a shared [`QuestionData`] view, or `None` if the question name doesn't exist.
     #[cfg(not(feature = "datamap-only"))]
     pub fn get_question_data(&self, name: &str) -> Option<QuestionData> {
@@ -286,6 +334,12 @@ impl Survey {
         ))
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Get data for specific row
     ///
     /// Args:
@@ -348,6 +402,12 @@ impl Survey {
             .collect()
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Gets survey data as a lazy frame, using the question types in the datamap.
     /// Questions with type [`QuestionType::None`](crate::QuestionType) are skipped.
     /// An error is returned when a data column has no matching question.
@@ -398,6 +458,12 @@ impl Survey {
             .with_comm_subplan_elim(true))
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Export survey raw data to polars dataframe
     ///
     /// `response_label`:

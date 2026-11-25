@@ -100,6 +100,12 @@ impl Datamap {
         self.record.get(question_name)
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Create polars schema based on the `question_type` of each questions
     /// in the current records.
     #[cfg(not(feature = "datamap-only"))]
@@ -135,6 +141,12 @@ impl Datamap {
         Ok(output)
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Returns a hashmap of:
     /// {question_name: {respons_code: response_label}}
     ///

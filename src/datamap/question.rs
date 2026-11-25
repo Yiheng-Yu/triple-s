@@ -514,6 +514,12 @@ impl Question {
         &mut self.response
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Gather the lookup table for items in the [`Response::values()`] under current instances' [`response()`](Question::response) field,
     /// formatted as: { [`Code::value`]: [`Code::label()`] }
     ///
@@ -747,6 +753,12 @@ impl Question {
 ///
 /// # Reading data
 impl Question {
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Get [`polars::prelude::Field`] for the current question, it looks like this:
     ///
     /// ```text
@@ -761,6 +773,12 @@ impl Question {
         Field::new(self.name().into(), self.polars_dtype())
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Returns the Polars [`DataType`] for this question's type and code format as follows:
     ///
     /// | Question type | Code format | Polars data type |

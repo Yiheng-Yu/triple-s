@@ -1,21 +1,12 @@
 pub(crate) mod classic;
 pub(crate) mod xml;
-use std::{
-    collections::HashMap,
-    hash::Hash,
-    range::Range,
-    str::FromStr,
-    sync::Arc,
-};
+use std::{collections::HashMap, hash::Hash, range::Range, str::FromStr, sync::Arc};
 
 use anyhow::{Context, Result};
-
 #[cfg(not(feature = "datamap-only"))]
 use polars::prelude::AnyValue;
-
 #[cfg(feature = "datamap-only")]
 use polars_core::prelude::AnyValue;
-
 
 use crate::{
     DataRange,

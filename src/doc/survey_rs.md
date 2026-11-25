@@ -5,12 +5,7 @@ Survey object
 ## `datamap-only` feature
 
 With the `datamap-only` feature enabled, `Survey` contains only the datamap
-and its configuration. All respondent-data fields and methods are compiled
-out: `Survey::data`, `Survey::data_mut`, `Survey::num_response`,
-`Survey::has_data`, `Survey::get_question_data`, `Survey::get_row`,
-`Survey::lazy`, `Survey::to_polars`, `Survey::response_label_map`,
-crosstab/summary analysis, and the separate `SurveyData`/`QuestionData`
-types.
+and its configuration.
 
 In this build:
 
