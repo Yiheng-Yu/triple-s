@@ -28,7 +28,11 @@ use crate::{
     },
 };
 use crate::{
-    QuestionType, data::{operation, survey_data::SurveyData}, datamap::{Question, text::Text}, options::{LabelOptions, ResponseDisplay, SurveyOptions}, utils::ArcLock,
+    QuestionType,
+    data::{operation, survey_data::SurveyData},
+    datamap::{Question, text::Text},
+    options::{LabelOptions, ResponseDisplay, SurveyOptions},
+    utils::ArcLock,
 };
 
 /// Data for a single question.
@@ -194,14 +198,12 @@ impl QuestionData {
     /// ```
     ///
     /// _The first row is the total count of not-null values_
-    /// 
     #[allow(clippy::mutable_key_type)]
     pub fn value_counts(
         &self,
         normalise: bool,
-        options: LabelOptions<'_>
+        options: LabelOptions<'_>,
     ) -> PolarsResult<DataFrame> {
-        
         // calling `value_counts_internal` instead of putting contents of `value_counts_internal` here
         // because `value_counts_internal` gets used elsewhere in parallel iterator later.
         let plan = self.value_counts_internal(normalise, options)?;
@@ -216,24 +218,25 @@ impl QuestionData {
         options: LabelOptions<'_>,
     ) -> PolarsResult<LazyFrame> {
         let question_name = self.name();
-        
-        let lazyframe = self.data.read()
+
+        let lazyframe = self
+            .data
+            .read()
             .lazy()?
             .clone()
-            .select([
-                col(&question_name).cast(self.datamap().polars_dtype()) 
-                ]);
-        
+            .select([col(&question_name).cast(self.datamap().polars_dtype())]);
+
         let result = operation::frequency_counts(
-            lazyframe, 
-            &question_name, 
-            options.col_count, 
-            true, 
-            normalise
+            lazyframe,
+            &question_name,
+            options.col_count,
+            true,
+            normalise,
         )?;
 
         // get response labels
-        let match_expression = options.match_response_label(&question_name, self.response_label_map())?;
+        let match_expression =
+            options.match_response_label(&question_name, self.response_label_map())?;
         let result = result.with_column(match_expression);
 
         // Fianl formatting: rename column names, add quesiton names etc.,
@@ -568,7 +571,7 @@ impl QuestionData {
     ///     normalise: (bool, *optional*):
     ///         Return counts as relative frequencies normalised to 1.0.
     ///         Default `False`
-    /// 
+    ///
     ///     colname_stats (str, *optional*):
     ///         Give the resulting count column a specific name (same as `polars.Series.value_counts`)
     ///         Default `'total'`
@@ -635,7 +638,9 @@ impl QuestionData {
             .with_col_code(colname_code);
 
         let normalise = normalise.unwrap_or(false);
-        let result = self.value_counts(normalise, options).map_err(PyPolarsErr::Polars)?;
+        let result = self
+            .value_counts(normalise, options)
+            .map_err(PyPolarsErr::Polars)?;
 
         // prep output
         let format = output

@@ -1,9 +1,9 @@
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 use std::collections::HashMap;
 
 use anyhow::Result;
 use parking_lot::{ArcRwLockReadGuard, RawRwLock, RwLockReadGuard, RwLockWriteGuard};
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*, types::PyDict};
@@ -100,9 +100,15 @@ impl Datamap {
         self.record.get(question_name)
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Create polars schema based on the `question_type` of each questions
     /// in the current records.
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     pub fn schema(&self) -> Schema {
         self.record().schema()
     }
@@ -135,13 +141,19 @@ impl Datamap {
         Ok(output)
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Returns a hashmap of:
     /// {question_name: {respons_code: response_label}}
     ///
     /// This method will only get response labels from questions of
     /// categorical response type (single choice, multi choice & logical questions).
     #[allow(clippy::mutable_key_type)]
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     pub fn response_label_map(
         &self,
     ) -> HashMap<PlSmallStr, HashMap<AnyValue<'static>, ArcLock<String>>> {
@@ -599,7 +611,7 @@ pub mod test {
         assert!(survey.to_xml().is_err());
     }
 
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     #[test]
     fn test_read_asc() {
         const PATH_ASC: &str = "tests/sss-examples/sss-2.0/example1.asc";

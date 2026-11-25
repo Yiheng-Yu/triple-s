@@ -1,25 +1,12 @@
 pub(crate) mod classic;
 pub(crate) mod xml;
-use std::{
-    collections::HashMap,
-    fs::File,
-    hash::Hash,
-    io::{BufRead, BufReader, Cursor, Read},
-    path::Path,
-    range::Range,
-    str::FromStr,
-    sync::Arc,
-};
+use std::{collections::HashMap, hash::Hash, range::Range, str::FromStr, sync::Arc};
 
 use anyhow::{Context, Result};
-use log::warn;
-
-#[cfg(feature="datamap-only")]
-use polars_core::prelude::AnyValue;
-
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 use polars::prelude::AnyValue;
-use quick_xml::reader::Reader as XmlReader;
+#[cfg(feature = "datamap-only")]
+use polars_core::prelude::AnyValue;
 
 use crate::{
     DataRange,
@@ -50,11 +37,11 @@ use crate::{
         Warning,
     },
     prelude::*,
-    utils::{create_reader, lock_it_up, validate_date, validate_time},
+    utils::{lock_it_up, validate_date, validate_time},
 };
 
 #[derive(Debug, PartialEq)]
-pub enum FileType {
+pub(crate) enum FileType {
     Classic,
     Xml,
 }
@@ -69,100 +56,6 @@ impl FileType {
             ))),
         }
     }
-}
-
-/// Read triple-s datamap.
-///
-/// This functions auto detects triple-s version (classic/ xml), and currently
-/// supports up till triple-s version 2.0 with non-hierarchial data. Triple-s
-/// 3.0 stuff _should_be_ mostly okay, but fully tested (yet).
-/// Invalid UTF-8 sequences in XML input are replaced with U+FFFD (`�`).
-///
-/// ## Example usage:
-///
-/// ```no_run
-/// use triple_s::read_datamap;
-///
-/// let survey = read_datamap("../path/to/survey.sss").unwrap();
-/// println!("{:?}", survey.title());
-///
-/// Ok::<(), Box<dyn std::error::Error>>(());
-/// ```
-pub fn read_datamap(sss_path: impl AsRef<Path>) -> Result<Datamap> {
-    let path = sss_path.as_ref();
-    let input = File::open(path)
-        .map_err(error::FileReadError::from)
-        .with_context(|| format!("When opening '{}'", path.display()))?;
-
-    let source = BufReader::new(input);
-    let decoder = create_reader(source);
-    let reader = BufReader::new(decoder);
-    let (survey, read_log) = read_from_reader(reader)
-        .with_context(|| format!("When reading '{}'", path.display()))?;
-
-    let context = format!("Reading datamap: '{:?}'", path.as_os_str());
-    if let Some(summary) = read_log.warning_summary(context) {
-        warn!("{}", summary);
-    }
-
-    Ok(survey)
-}
-
-/// create datamap instance from utf-8 string, auto detects file types (sss
-/// classic/ xml)
-pub fn read_from_string(data: impl AsRef<str>) -> Result<Datamap> {
-    let (survey, read_log) = read_from_reader(data.as_ref().as_bytes())?;
-    if let Some(summary) = read_log.warning_summary("Reading from string") {
-        warn!("{}", summary);
-    }
-
-    Ok(survey)
-}
-
-/// create datamap instance from a reader/ stream, auto detects file types (sss
-/// classic/ xml)
-/// Invalid UTF-8 sequences in XML input are replaced with U+FFFD (`�`).
-pub fn read_from_reader<R: BufRead>(mut input: R) -> Result<(Datamap, EventLog)> {
-    let mut prefix = Vec::new();
-    let mut first_line = true;
-    loop {
-        if input.read_until(b'\n', &mut prefix)? == 0 {
-            return Err(error::FileReadError::new("file seems to be empty").into());
-        }
-        if first_line && prefix.starts_with(b"\xef\xbb\xbf") {
-            prefix.drain(..3);
-        }
-        first_line = false;
-        if let Some(start) = prefix.iter().position(|byte| !byte.is_ascii_whitespace()) {
-            prefix.drain(..start);
-            break;
-        }
-        prefix.clear();
-    }
-    let file_type = FileType::parse(std::str::from_utf8(&prefix[..1])?)?;
-    let builder = match file_type {
-        FileType::Classic => {
-            let input = BufReader::new(Cursor::new(prefix).chain(input));
-            classic::create_survey_builder(input.lines()).with_context(|| {
-                "trying to create survey builder from the data file".to_string()
-            })?
-        }
-        FileType::Xml => {
-            let read_result = {
-                input.read_to_end(&mut prefix)?;
-                let text = std::str::from_utf8(&prefix)?;
-                let mut reader = XmlReader::from_str(text);
-
-                reader.config_mut().trim_text(true);
-                xml::create_survey_builder(reader)
-            };
-
-            read_result.with_context(|| {
-                "trying to create survey builder from the data file".to_string()
-            })?
-        }
-    };
-    builder.build()
 }
 
 pub trait ParseRange<T>

@@ -1,10 +1,6 @@
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 use std::io;
-
-use std::{
-    io::Read,
-    sync::Arc,
-};
+use std::{io::Read, sync::Arc};
 
 use anyhow::{Context, Result};
 use encoding_rs::UTF_8;
@@ -220,10 +216,10 @@ pub(crate) fn create_reader<R: Read>(source: R) -> DecodeReaderBytes<R, Vec<u8>>
 
 /// Streams UTF-8 or BOM-marked UTF-16 as valid UTF-8.
 /// Malformed sequences are replaced with U+FFFD.
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 pub(crate) struct TextReader<R: Read>(DecodeReaderBytes<R, Vec<u8>>);
 
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 impl<R: Read> TextReader<R> {
     pub(crate) fn new(source: R) -> Self {
         Self(
@@ -236,7 +232,7 @@ impl<R: Read> TextReader<R> {
     }
 }
 
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 impl<R: Read> Read for TextReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.0.read(buf)
@@ -245,8 +241,9 @@ impl<R: Read> Read for TextReader<R> {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     use std::io::{BufReader, Read};
+
     use super::*;
 
     #[test]
@@ -260,7 +257,7 @@ mod tests {
         assert_eq!(validate_language_tag("en-US").unwrap(), "en-US");
     }
 
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     #[test]
     fn test_utf16_streaming_handles_split_code_units() {
         let text = "中文😀\r\n".repeat(3000);
@@ -282,7 +279,7 @@ mod tests {
         }
     }
 
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     #[test]
     fn test_malformed_sequences_are_replaced_across_buffer_boundaries() {
         let bytes = b"A\x96B\xc3\xa9\xf0\x9f\x98\x80\xe2\x82!\xff\xc3".repeat(3000);
@@ -301,7 +298,7 @@ mod tests {
         assert_eq!(decoded, "�");
     }
 
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     #[test]
     fn text_reader_handles_empty_reads_and_eof() {
         for (input, expected) in [(b"".as_slice(), ""), (b"\xef\xbb\xbf", "")] {
@@ -317,7 +314,7 @@ mod tests {
         }
     }
 
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     #[test]
     fn text_reader_handles_mixed_read_sizes() {
         let input = b"A\xc3\xa9\xf0\x9f\x98\x80\x96Z".repeat(3000);

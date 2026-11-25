@@ -3,12 +3,12 @@
 #![cfg(not(feature = "datamap-only"))]
 
 use std::{hint::black_box, io::Write, time::Instant};
+
 use triple_s::{Datamap, QuestionOptions, QuestionType, read_data};
 
 const ROWS: usize = 50_000;
 const COLUMNS: usize = 3_000;
 const ROUNDS: usize = 3;
-
 
 fn benchmark_read_data(extension: &str, rows: usize, rounds: usize) {
     let mut datamap = Datamap::empty();

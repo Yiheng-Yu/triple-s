@@ -36,8 +36,6 @@ fn test_read_xml_datamap_ver_2_example_2() {
 
 #[test]
 fn test_read_xml_replaces_invalid_utf8_in_text() {
-    use std::io::Write;
-
     let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
 <sss version="2.0"><survey><title>Café INVALID &amp; survey</title>
 <record ident="A"><variable ident="1" type="single">
@@ -52,9 +50,11 @@ fn test_read_xml_replaces_invalid_utf8_in_text() {
         }
         invalid.extend_from_slice(part.as_bytes());
     }
-    let mut file = tempfile::Builder::new().suffix(".sss").tempfile().unwrap();
-    file.write_all(&invalid).unwrap();
-    let datamap = read_datamap(file.path()).unwrap();
+    let path =
+        std::env::temp_dir().join(format!("triple_s_invalid_utf8_{}.sss", std::process::id()));
+    std::fs::write(&path, invalid).unwrap();
+    let datamap = read_datamap(&path).unwrap();
+    std::fs::remove_file(path).unwrap();
     assert_eq!(datamap.title().as_deref(), Some("Café � & survey"));
     let record = datamap.record();
     let questions = record.content();

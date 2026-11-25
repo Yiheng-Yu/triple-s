@@ -132,6 +132,15 @@ impl<'a> Default for LabelOptions<'a> {
 }
 
 impl<'a> LabelOptions<'a> {
+    /// default value for field `col_code_value`
+    pub const CODE: &'static str = "code";
+    /// default value for field `col_count`
+    pub const COUNT: &'static str = "total";
+    /// default value for field `col_code_label`
+    pub const LABEL: &'static str = "label";
+    /// default value for field `col_question`
+    pub const QUESTION: &'static str = "question";
+
     /// Toggle whether to include the overall count column.
     pub fn with_show_row_total(mut self, value: bool) -> Self {
         self.show_row_total = value;
@@ -143,15 +152,6 @@ impl<'a> LabelOptions<'a> {
         self.show_column_total = value;
         self
     }
-
-    /// default value for field `col_code_value`
-    pub const CODE: &'static str = "code";
-    /// default value for field `col_count`
-    pub const COUNT: &'static str = "total";
-    /// default value for field `col_code_label`
-    pub const LABEL: &'static str = "label";
-    /// default value for field `col_question`
-    pub const QUESTION: &'static str = "question";
 
     /// Create new instance with default options
     pub fn new() -> Self {
@@ -245,7 +245,6 @@ impl<'a> LabelOptions<'a> {
 }
 
 impl<'a> LabelOptions<'a> {
-    
     /// Returns a column expression
     #[allow(clippy::mutable_key_type)]
     pub(crate) fn match_response_label(

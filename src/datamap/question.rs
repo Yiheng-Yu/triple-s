@@ -1,19 +1,16 @@
 //! Datamap for questions in a survey, corresponds to the `<variable>` tag.
 #![doc = include_str!("../doc/datamap_question_rs.md")]
 
-#[cfg(not(feature="datamap-only"))]
+#[cfg(not(feature = "datamap-only"))]
 use std::collections::HashMap;
-
 use std::{range::Range, str::FromStr};
 
 use anyhow::{Context, Result};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
-
+#[cfg(not(feature = "datamap-only"))]
+use polars::prelude::*;
 #[cfg(feature = "datamap-only")]
 use polars_core::prelude::AnyValue;
-
-#[cfg(not(feature="datamap-only"))]
-use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions, prelude::*, types::PyDict};
 use quick_xml::{events::BytesText, writer::Writer};
@@ -25,20 +22,15 @@ use crate::{
     error::missing_key_err,
     utils::{get_type_name, py_value_error, single_quote},
 };
-
-#[cfg(not(feature="datamap-only"))]
-use crate::{
-    datamap::parsing::ResponseParser,
-    error::InternalError,
-};
-
 use crate::{
     EventLog,
-    datamap::{Code, Response, Text, },
+    datamap::{Code, Response, Text},
     error::{self, InvalidArg, RangeError},
     prelude::{DeepCopy, *},
     utils::{ArcLock, lock_it_up},
 };
+#[cfg(not(feature = "datamap-only"))]
+use crate::{datamap::parsing::ResponseParser, error::InternalError};
 
 /// Creating new question with options given.
 ///
@@ -301,7 +293,7 @@ impl Question {
     }
 
     /// Converts to polars::PlSmallStr
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     pub(crate) fn name_small_str(&self) -> PlSmallStr {
         self.name().as_str().into()
     }
@@ -522,6 +514,12 @@ impl Question {
         &mut self.response
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Gather the lookup table for items in the [`Response::values()`] under current instances' [`response()`](Question::response) field,
     /// formatted as: { [`Code::value`]: [`Code::label()`] }
     ///
@@ -529,7 +527,7 @@ impl Question {
     /// code label elsewhere will the hashmap returned from this function. Details on this mutation
     /// behaviour can be found in the documentation in [`Response::response_label_map`].
     #[allow(clippy::mutable_key_type)]
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     pub fn response_label_map(&self) -> HashMap<AnyValue<'static>, ArcLock<String>> {
         self.response().response_label_map()
     }
@@ -755,6 +753,12 @@ impl Question {
 ///
 /// # Reading data
 impl Question {
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Get [`polars::prelude::Field`] for the current question, it looks like this:
     ///
     /// ```text
@@ -764,11 +768,17 @@ impl Question {
     /// }
     /// ```
     #[inline]
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     pub fn polars_field(&self) -> Field {
         Field::new(self.name().into(), self.polars_dtype())
     }
 
+    /// <div class="warning">
+    ///
+    /// This method is skipped by feature `datamap-only`.
+    ///
+    /// </div>
+    ///
     /// Returns the Polars [`DataType`] for this question's type and code format as follows:
     ///
     /// | Question type | Code format | Polars data type |
@@ -782,7 +792,7 @@ impl Question {
     /// | `Quantity` | Any | `Float64` |
     /// | `Date` | Any | `Date` |
     /// | `Time` | Any | `Time` |
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     pub fn polars_dtype(&self) -> DataType {
         match self.question_type.read().clone() {
             QuestionType::None => DataType::Null,
@@ -807,7 +817,7 @@ impl Question {
     }
 
     /// Locate data from one entire row based on current data range for csv width (.asc) data
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     pub(crate) fn locate_data_csv<'a>(&self, row: &'a csv::StringRecord) -> Result<&'a str> {
         let position: usize = *self.location().start() as usize;
         let column_index = position.checked_sub(1).ok_or_else(|| {
@@ -827,7 +837,7 @@ impl Question {
 
     /// Locate fixed-width data using Unicode scalar positions, not byte offsets.
     /// Chinese characters and supplementary characters each occupy one position.
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     pub(crate) fn locate_data_asc<'a>(&self, row: &'a str) -> Result<&'a str> {
         let data_location = self.get_data_range();
 
@@ -860,7 +870,7 @@ impl Question {
     }
 
     /// validate one line of respondant data from a '.asc' file
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     pub(crate) fn validate_asc_entry(&self, row: &str) -> Result<()> {
         let data = self.locate_data_asc(row)?;
         let parser = ResponseParser::from_question(self)?;
@@ -869,7 +879,7 @@ impl Question {
     }
 
     /// validate one line of respondant data from a '.csv' file
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     pub(crate) fn validate_csv_entry(&self, row: &csv::StringRecord) -> Result<()> {
         let data = self.locate_data_csv(row)?;
         let parser = ResponseParser::from_question(self)?;
@@ -2885,7 +2895,7 @@ mod test {
         question
     }
 
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     #[test]
     fn test_polars_field() {
         let question = QuestionOptions::new("AGE")
@@ -2898,7 +2908,7 @@ mod test {
         );
     }
 
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     #[test]
     fn test_polars_dtype() {
         for (question_type, format, expected) in [
@@ -3224,7 +3234,7 @@ mod test {
         assert_eq!(normalize_xml(original), normalize_xml(&exported))
     }
 
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     #[test]
     fn test_locate_data_asc() {
         let row = "0123456789101112";
@@ -3245,7 +3255,7 @@ mod test {
         }
     }
 
-    #[cfg(not(feature="datamap-only"))]
+    #[cfg(not(feature = "datamap-only"))]
     #[test]
     fn test_fixed_width_locations_count_unicode_characters() {
         let row = "中é😀文 42";

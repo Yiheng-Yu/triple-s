@@ -24,7 +24,7 @@ pub(crate) struct RowIterator {
     max_buffer_rows: usize,
     final_buffer: bool,
     finished: bool,
-    
+
     // Own the source's temporary-file guard.
     // Drop this after the current buffer and query have been released.
     _source: SurveyData,
@@ -108,7 +108,7 @@ impl RowIterator {
             let options = PyDict::new(py);
             options.set_item("named", true)?;
             options.set_item("buffer_size", self.buffer_rows)?;
-            
+
             // Polars converts a whole small buffer to native Python values once.
             // Its iterator creates each result dictionary only when requested.
             let rows = PyDataFrame(frame)
