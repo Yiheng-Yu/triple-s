@@ -13,6 +13,11 @@ use std::{
 
 use anyhow::{Context, Result};
 use log::warn;
+
+#[cfg(feature="datamap-only")]
+use polars_core::prelude::AnyValue;
+
+#[cfg(not(feature="datamap-only"))]
 use polars::prelude::AnyValue;
 use quick_xml::reader::Reader as XmlReader;
 
