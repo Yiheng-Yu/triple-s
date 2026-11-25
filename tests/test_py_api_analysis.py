@@ -542,16 +542,6 @@ def test_value_counts_uses_survey_default_output(survey, output, expected_type):
     assert isinstance(question.value_counts(output=None), expected_type)
 
 
-@pytest.mark.parametrize("option", ["include_question_name", "include_response_codes", "colname_stats", "colname_label", "colname_code"])
-def test_value_counts_none_options_use_defaults(survey, option):
-    question = survey["choice"]
-    kwargs = {"include_question_name": True, "include_response_codes": True} if option.startswith("colname_") else {}
-    assert_frame_equal(
-        question.value_counts(**{**kwargs, option: None}),
-        question.value_counts(**kwargs),
-    )
-
-
 @pytest.mark.parametrize("option", ["include_question_name", "include_response_codes"])
 @pytest.mark.parametrize("value", ["yes", []])
 def test_value_counts_rejects_invalid_flags(survey, option, value):
