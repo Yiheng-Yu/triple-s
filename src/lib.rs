@@ -184,7 +184,7 @@ pub use datamap::{
 };
 
 #[cfg(not(feature="datamap-only"))] 
-pub use read_data;
+pub use datamap::read_data;
 
 use error::EventLog;
 #[cfg(not(feature="datamap-only"))]

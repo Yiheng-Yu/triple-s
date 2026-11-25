@@ -101,6 +101,7 @@ pyo3-build-config = { version = ">=0.29.2", features = [
 
 
 [features]
+all = ["default", "pyo3"]
 default = [
     "dep:polars",
     "dep:csv",

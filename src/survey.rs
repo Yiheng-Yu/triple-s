@@ -22,6 +22,7 @@ use crate::{
     error::QuestionNotFound,
 };
 
+#[cfg(feature="datamap-only")]
 use anyhow::Result;
 
 use crate::{
