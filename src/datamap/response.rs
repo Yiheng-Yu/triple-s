@@ -4,6 +4,11 @@ use std::{cmp::Ordering, collections::HashMap};
 
 use anyhow::{Context, Result};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
+
+#[cfg(feature = "datamap-only")]
+use polars_core::prelude::{AnyValue, DataType};
+
+#[cfg(not(feature="datamap-only"))]
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{
@@ -930,8 +935,7 @@ impl Code {
             }
 
             AnyValue::String(val) => {
-                let string_value: PlSmallStr = val.to_string().into();
-                *self.value.write() = AnyValue::StringOwned(string_value);
+                *self.value.write() = AnyValue::StringOwned(val.to_string().into());
                 Ok(())
             }
 

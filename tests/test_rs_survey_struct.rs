@@ -1,3 +1,5 @@
+#![cfg(not(feature = "datamap-only"))]
+
 use polars::prelude::*;
 use triple_s::{
     AnalysisOptions,

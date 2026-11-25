@@ -1,22 +1,32 @@
+#[cfg(not(feature="datamap-only"))]
 use std::collections::HashMap;
 #[cfg(feature = "pyo3")]
 use std::sync::Arc;
-
+#[cfg(not(feature="datamap-only"))]
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
+#[cfg(not(feature="datamap-only"))]
 use polars::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::{IntoPyObjectExt, exceptions, prelude::*};
 #[cfg(feature = "pyo3")]
 use pyo3_polars::{PyDataFrame, error::PyPolarsErr};
+
+#[cfg(not(feature = "datamap-only"))]
 use rayon::prelude::*;
 
+#[cfg(not(feature="datamap-only"))]
 use crate::{
-    LabelOptions,
     data::{QuestionData, SurveyData, operation},
-    datamap::Datamap,
+    options::{AnalysisOptions, SkipQType, LabelOptions},
     error::QuestionNotFound,
-    options::{AnalysisOptions, SkipQType, SurveyOptions},
+};
+
+use anyhow::Result;
+
+use crate::{
+    options::SurveyOptions,
+    datamap::Datamap,
     utils::{ArcLock, lock_it_up},
 };
 #[cfg(feature = "pyo3")]
@@ -59,7 +69,10 @@ Returns:
 #[derive(Debug, Clone)]
 pub struct Survey {
     datamap: Datamap,
+
+    #[cfg(not(feature="datamap-only"))]
     data: ArcLock<SurveyData>,
+    
     config: ArcLock<SurveyOptions>,
 }
 
@@ -100,11 +113,13 @@ impl Survey {
     }
 
     /// Read access to shared survey data.
+    #[cfg(not(feature="datamap-only"))]
     pub fn data(&self) -> RwLockReadGuard<'_, SurveyData> {
         self.data.read()
     }
 
     /// Write access to respondent data. Replacing it updates existing question views.
+    #[cfg(not(feature="datamap-only"))]
     pub fn data_mut(&self) -> RwLockWriteGuard<'_, SurveyData> {
         self.data.write()
     }
@@ -162,7 +177,7 @@ impl Survey {
     /// │ Q8            ┆ "C"      ┆ More than 1 years time          │
     /// └───────────────┴──────────┴─────────────────────────────────┘
     /// ```
-    /// 
+    #[cfg(not(feature="datamap-only"))]
     pub fn response_label_map(&self) -> PolarsResult<DataFrame> {
         let maps = self.datamap.response_label_map();
 
@@ -193,7 +208,17 @@ impl Survey {
 ///
 /// ---
 impl Survey {
+    /// Create new `Survey` instance from datamap
+    #[cfg(feature="datamap-only")]
+    pub fn new(datamap: Datamap) -> Result<Self> {
+        Ok(Self { 
+            datamap,
+            config: lock_it_up(SurveyOptions::default())
+        })
+    }
+
     /// Create new `Survey` instance
+    #[cfg(not(feature="datamap-only"))]
     pub fn new(datamap: Datamap, data: SurveyData) -> PolarsResult<Self> {
         if !data.has_data() {
             Ok(Self {
@@ -220,6 +245,13 @@ impl Survey {
     }
 
     /// Creates a new empty `Survey` instance
+    #[cfg(feature="datamap-only")]
+    pub fn empty() -> Self {
+        Self::new(Datamap::empty()).unwrap()
+    }
+
+    /// Creates a new empty `Survey` instance
+    #[cfg(not(feature="datamap-only"))]
     pub fn empty() -> Self {
         let datamap = Datamap::empty();
         let data = SurveyData::empty();
@@ -229,6 +261,7 @@ impl Survey {
     /// List out number of responses loaded
     ///
     /// This function may fail during polars' [`LazyFrame::collect()`] function call
+    #[cfg(not(feature="datamap-only"))]
     pub fn num_response(&self) -> PolarsResult<usize> {
         if self.has_data() {
             self.data().num_response()
@@ -238,11 +271,13 @@ impl Survey {
     }
 
     /// Check if data loaded or not
+    #[cfg(not(feature="datamap-only"))]
     pub fn has_data(&self) -> bool {
         self.data().has_data()
     }
 
     /// Gets a shared [`QuestionData`] view, or `None` if the question name doesn't exist.
+    #[cfg(not(feature="datamap-only"))]
     pub fn get_question_data(&self, name: &str) -> Option<QuestionData> {
         let question = self.datamap.get(name)?.clone();
         Some(QuestionData::new(
@@ -259,6 +294,7 @@ impl Survey {
     /// `response_label`:
     ///     - Set `true` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`)
     ///     - Set `false` to show values instead (`[1, 1, 2, ...]`).
+    #[cfg(not(feature="datamap-only"))]
     pub fn get_row(&self, row_index: usize, response_label: bool) -> PolarsResult<DataFrame> {
         let data = self.data().get_row(row_index)?;
         if !response_label {
@@ -271,6 +307,7 @@ impl Survey {
     }
 
     /// Creates a polars expr for replacing categorical answers with response label texts
+    #[cfg(not(feature="datamap-only"))]
     fn label_response_values(
         schema: SchemaRef,
         label_lookup: &HashMap<PlSmallStr, HashMap<AnyValue<'static>, ArcLock<String>>>,
@@ -315,6 +352,7 @@ impl Survey {
     /// Gets survey data as a lazy frame, using the question types in the datamap.
     /// Questions with type [`QuestionType::None`](crate::QuestionType) are skipped.
     /// An error is returned when a data column has no matching question.
+    #[cfg(not(feature="datamap-only"))]
     pub fn lazy(&self) -> PolarsResult<LazyFrame> {
         let dtype_lookup = self.datamap()
             .record()
@@ -362,6 +400,7 @@ impl Survey {
     ///
     /// `response_label`:
     ///     Set `true` to display response label text for single and multi-choice questions (`["London", "London", "Scotland", ...]`), set `false` to show values instead (`[1, 1, 2, ...]`).
+    #[cfg(not(feature="datamap-only"))]
     pub fn to_polars(&self, response_label: bool) -> PolarsResult<DataFrame> {
         if response_label {
             let mut lf = self.lazy()?;
@@ -378,6 +417,7 @@ impl Survey {
 /// Creating quick analysis
 ///
 /// ---
+#[cfg(not(feature="datamap-only"))]
 impl Survey {
     /// Gets a [topline table](https://en.wikipedia.org/wiki/Contingency_table) for a given question (`row`) with another question (`column`) as the header.
     ///
@@ -1428,6 +1468,7 @@ impl QuestionDataIterator {
     }
 }
 
+#[cfg(not(feature="datamap-only"))]
 #[cfg(test)]
 mod test {
     use super::*;

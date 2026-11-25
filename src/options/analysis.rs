@@ -1,4 +1,5 @@
 //! Options for running various survey data analysis methods
+
 use std::{collections::HashMap, ops::Sub};
 
 use parking_lot::RwLockReadGuard;

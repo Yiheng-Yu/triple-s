@@ -145,6 +145,7 @@
 //! assert_eq!(original.value(), "A".to_string());
 //! ```
 
+#[cfg(not(feature="datamap-only"))]
 mod data;
 pub mod datamap;
 pub mod error;
@@ -157,7 +158,10 @@ mod utils;
 use std::path::Path;
 
 use anyhow::Result;
+
+#[cfg(not(feature="datamap-only"))]
 pub use data::{QuestionData, SurveyData};
+
 pub use datamap::{
     question::{
         self,
@@ -169,7 +173,6 @@ pub use datamap::{
         Spread,
         Usage,
     },
-    read_data,
     read_datamap,
     read_from_reader,
     read_from_string,
@@ -179,7 +182,12 @@ pub use datamap::{
     survey_info::{self, SurveyInfo, Version},
     text::{self, Mode, Text, Variant},
 };
+
+#[cfg(not(feature="datamap-only"))] 
+pub use read_data;
+
 use error::EventLog;
+#[cfg(not(feature="datamap-only"))]
 pub use options::{AnalysisOptions, LabelOptions};
 pub use prelude::DeepCopy;
 #[cfg(feature = "pyo3")]
@@ -196,6 +204,22 @@ pub use survey::Survey;
 /// Arguments:
 /// `path_sss`:
 ///     path to the triple-s datamap file.
+///
+/// Returns:
+/// [`Survey`] containing the datamap and respondent data. Without `path_data`,
+/// its [`SurveyData`] is empty.
+#[cfg(feature="datamap-only")]
+pub fn read_triple_s(path_sss: impl AsRef<Path>) -> Result<Survey> {
+    log::info!("Reading datamap..");
+    let datamap = read_datamap(path_sss)?;
+    Survey::new(datamap)
+}
+
+/// Read triple_s file.
+///
+/// Arguments:
+/// `path_sss`:
+///     path to the triple-s datamap file.
 /// `path_data`:
 ///     path to the `.asc` or `.csv` data file that pairs with.
 ///     if provided, loads respondent data and updates the record's source metadata.
@@ -204,12 +228,14 @@ pub use survey::Survey;
 /// Returns:
 /// [`Survey`] containing the datamap and respondent data. Without `path_data`,
 /// its [`SurveyData`] is empty.
+#[cfg(not(feature = "datamap-only"))]
 pub fn read_triple_s(
     path_sss: impl AsRef<Path>,
     path_data: Option<impl AsRef<Path>>,
 ) -> Result<Survey> {
     log::info!("Reading datamap..");
     let mut datamap = read_datamap(path_sss)?;
+
     let data = match path_data {
         None => SurveyData::default(), // an empty SurveyData instance
         Some(path_data) => {

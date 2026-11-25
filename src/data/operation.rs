@@ -1,6 +1,6 @@
 //! Functions for running various tabulation operations
 //! Mostly used for creating summary tables for the survey data.
-
+#[cfg(not(feature="datamap-only"))]
 use polars::prelude::*;
 
 /// Count unique values of this Series and a column "counts" with dtype IdxType

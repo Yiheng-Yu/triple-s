@@ -5,6 +5,11 @@ use anyhow::Result;
 use chrono::{NaiveDate, NaiveTime, Timelike};
 use either::Either;
 use parking_lot::RwLockReadGuard;
+
+#[cfg(feature="datamap-only")]
+use polars_core::prelude::{AnyValue, PolarsResult, PolarsContext};
+
+#[cfg(not(feature="datamap-only"))]
 use polars::{frame::row::Row, prelude::*};
 use rayon::prelude::*;
 
@@ -80,7 +85,7 @@ impl ResponseParser {
 
     #[inline]
     pub(crate) fn parse(&self, field: &str) -> PolarsResult<AnyValue<'static>> {
-        polars::prelude::PolarsContext::with_context(
+        PolarsContext::with_context(
             parse_cell_value(
                 field,
                 &self.question_type,

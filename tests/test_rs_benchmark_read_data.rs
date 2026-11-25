@@ -1,12 +1,14 @@
 //! Run `cargo test --release --test test_rs_benchmark_read_data -- --ignored --nocapture`.
 //! Includes decoding, parsing, DataFrame conversion, and temporary Parquet writes.
-use std::{hint::black_box, io::Write, time::Instant};
+#![cfg(not(feature = "datamap-only"))]
 
-use triple_s::{Datamap, QuestionOptions, QuestionType, read_data};
+use std::{hint::black_box, io::Write, time::Instant};
+use triple_s::{Datamap, QuestionOptions, QuestionType};
 
 const ROWS: usize = 50_000;
 const COLUMNS: usize = 3_000;
 const ROUNDS: usize = 3;
+
 
 fn benchmark_read_data(extension: &str, rows: usize, rounds: usize) {
     let mut datamap = Datamap::empty();
